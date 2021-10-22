@@ -78,6 +78,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 			ClapArg::with_name(arg_name::GRID)
 				.help("Adds a grid of image geometries (`{columns}x{rows}@{geometry}``)")
 				.takes_value(true)
+				.multiple(true)
 				.long("grid"),
 		)
 		.arg(
