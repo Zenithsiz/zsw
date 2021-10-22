@@ -3,6 +3,7 @@
 // Imports
 use crate::Rect;
 use anyhow::Context;
+use cgmath::{Point2, Vector2};
 use clap::{App as ClapApp, Arg as ClapArg};
 use std::{path::PathBuf, time::Duration};
 
@@ -152,11 +153,11 @@ pub fn get() -> Result<Args, anyhow::Error> {
 			for column in 0..columns {
 				for row in 0..rows {
 					image_geometries.push(Rect {
-						pos:  [
+						pos:  Point2::new(
 							geometry.pos[0] + (column * geometry.size[0]) / columns,
 							geometry.pos[1] + (row * geometry.size[1]) / rows,
-						],
-						size: [geometry.size[0] / columns, geometry.size[1] / rows],
+						),
+						size: Vector2::new(geometry.size[0] / columns, geometry.size[1] / rows),
 					});
 				}
 			}

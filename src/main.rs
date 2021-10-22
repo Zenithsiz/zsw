@@ -1,7 +1,7 @@
 //! Zenithsiz's scrolling wallpaper
 
 // Features
-#![feature(never_type, format_args_capture, available_parallelism, drain_filter)]
+#![feature(never_type, format_args_capture, available_parallelism, drain_filter, array_zip)]
 
 // Modules
 mod args;
@@ -20,7 +20,7 @@ pub use vertex::Vertex;
 
 // Imports
 use anyhow::Context;
-use cgmath::{Matrix4, Vector3};
+use cgmath::{EuclideanSpace, Matrix4, Point2, Vector3};
 use glium::{
 	glutin::{
 		self,
@@ -78,7 +78,10 @@ fn main() -> Result<(), anyhow::Error> {
 	}
 
 	// Create the loader and start loading images
-	let mut image_loader = ImageLoader::new(args.images_dir, args.image_backlog, args.window_geometry.size)
+	let mut image_loader = ImageLoader::new(args.images_dir, args.image_backlog, [
+		args.window_geometry.size.x,
+		args.window_geometry.size.y,
+	])
 		.context("Unable to create image loader")?;
 
 	// Get the window size
@@ -114,7 +117,7 @@ fn main() -> Result<(), anyhow::Error> {
 				GlImage::new(
 					&display,
 					image_loader.next_image().context("Unable to get next image")?,
-					geometry.size,
+					[geometry.size.x, geometry.size.y],
 				)
 				.context("Unable to create image")
 			};
@@ -129,12 +132,18 @@ fn main() -> Result<(), anyhow::Error> {
 		.collect::<Result<Vec<_>, anyhow::Error>>()
 		.context("Unable to load images for all geometries")?;
 
+	// Current cursor position
+	let mut cursor_pos = Point2::origin();
+
 	event_loop.run(move |event, _, control_flow| match event {
 		Event::WindowEvent { event, .. } => match event {
 			// If we got a close request, exit and return
 			WindowEvent::CloseRequested | WindowEvent::Destroyed => {
 				*control_flow = GlutinControlFlow::Exit;
 			},
+
+			#[allow(clippy::cast_possible_truncation)] // We're fine with truncating the values
+			WindowEvent::CursorMoved { position, .. } => cursor_pos = Point2::new(position.x as f32, position.y as f32),
 
 			_ => (),
 		},
@@ -161,6 +170,7 @@ fn main() -> Result<(), anyhow::Error> {
 					&display,
 					&mut image_loader,
 					window_size,
+					cursor_pos,
 				);
 			}
 
@@ -226,9 +236,9 @@ unsafe fn set_display_always_below(display: &glium::Display) {
 fn draw_update(
 	target: &mut glium::Frame, geometry_state: &mut GeometryState, duration: Duration, fade: f32,
 	indices: &glium::IndexBuffer<u32>, program: &glium::Program, display: &glium::Display,
-	image_loader: &mut ImageLoader, window_size: [u32; 2],
+	image_loader: &mut ImageLoader, window_size: [u32; 2], cursor_pos: Point2<f32>,
 ) {
-	if let Err(err) = self::draw(target, geometry_state, fade, indices, program, window_size) {
+	if let Err(err) = self::draw(target, geometry_state, fade, indices, program, window_size, cursor_pos) {
 		// Note: We just want to ensure we don't get a panic by dropping an unwrapped target
 		let _ = target.set_finish();
 		log::warn!("Unable to draw: {err:?}");
@@ -292,7 +302,7 @@ fn update(
 #[allow(clippy::cast_precision_loss)] // Image and window sizes are far below 2^23
 fn draw(
 	target: &mut glium::Frame, geometry_state: &mut GeometryState, fade: f32, indices: &glium::IndexBuffer<u32>,
-	program: &glium::Program, window_size: [u32; 2],
+	program: &glium::Program, window_size: [u32; 2], cursor_pos: Point2<f32>,
 ) -> Result<(), anyhow::Error> {
 	// Calculate the base alpha and progress to apply to the images
 	let (base_alpha, next_progress) = match geometry_state.progress {

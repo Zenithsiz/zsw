@@ -2,17 +2,17 @@
 
 // Imports
 use anyhow::Context;
-use cgmath::num_traits::Num;
+use cgmath::{num_traits::Num, Point2, Vector2};
 use std::error::Error;
 
 /// A rectangle
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct Rect<T> {
 	/// Position
-	pub pos: [T; 2],
+	pub pos: Point2<T>,
 
 	/// Size
-	pub size: [T; 2],
+	pub size: Vector2<T>,
 }
 
 impl<T> Rect<T> {
@@ -31,21 +31,21 @@ impl<T> Rect<T> {
 		// Split at the first `x` to get the width and height
 		let (width, height) = size.split_once('x').context("Unable to find `x` in size")?;
 
-		let size = [
+		let size = Vector2::new(
 			T::from_str_radix(width, 10).context("Unable to parse width")?,
 			T::from_str_radix(height, 10).context("Unable to parse height")?,
-		];
+		);
 
 		// Optionally get the position if it exists
 		let pos = match pos {
 			Some(s) => {
 				let (x, y) = s.split_once('+').context("Unable to find `+` in position")?;
-				[
+				Point2::new(
 					T::from_str_radix(x, 10).context("Unable to parse x")?,
 					T::from_str_radix(y, 10).context("Unable to parse y")?,
-				]
+				)
 			},
-			None => [T::zero(), T::zero()],
+			None => Point2::new(T::zero(), T::zero()),
 		};
 
 		Ok(Self { pos, size })
