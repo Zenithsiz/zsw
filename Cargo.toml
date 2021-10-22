@@ -1,0 +1,37 @@
+[package]
+edition = "2021"
+name = "zsw"
+version = "0.1.0"
+
+[dependencies]
+
+# Windowing / Gl
+glium = "0.30.2"
+
+# X11
+x11 = {version = "2.18.2", features = ["xlib"]}
+
+# Math
+cgmath = "0.18.0"
+
+# Image
+image = "0.23.14"
+
+# Random
+rand = "0.8.4"
+
+# Error handling
+anyhow = "1.0.40"
+
+# Logging
+log = "0.4.14"
+simplelog = "0.10.0"
+
+# Cmd
+clap = "2.33.3"
+
+# Util
+num-rational = "0.4.0"
+
+# Filesystem
+notify = "4.0.17"
