@@ -3,7 +3,7 @@
 // Imports
 use crate::Rect;
 use anyhow::Context;
-use cgmath::{Point2, Vector2};
+use cgmath::{EuclideanSpace, Point2, Vector2};
 use clap::{App as ClapApp, Arg as ClapArg};
 use std::{path::PathBuf, time::Duration};
 
@@ -164,9 +164,12 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		}
 	}
 
-	// If there are no image geometries, add one with the window geometry
+	// If there are no image geometries, add one with the window geometry (but without any offset)
 	if image_geometries.is_empty() {
-		image_geometries.push(window_geometry);
+		image_geometries.push(Rect {
+			pos:  Point2::origin(),
+			size: window_geometry.size,
+		});
 	}
 
 
