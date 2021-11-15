@@ -1,7 +1,14 @@
 //! Zenithsiz's scrolling wallpaper
 
 // Features
-#![feature(never_type, format_args_capture, available_parallelism, drain_filter, array_zip)]
+#![feature(
+	never_type,
+	format_args_capture,
+	available_parallelism,
+	drain_filter,
+	array_zip,
+	control_flow_enum
+)]
 
 // Modules
 mod args;
@@ -82,7 +89,7 @@ fn main() -> Result<(), anyhow::Error> {
 		args.window_geometry.size.x,
 		args.window_geometry.size.y,
 	])
-		.context("Unable to create image loader")?;
+	.context("Unable to create image loader")?;
 
 	// Get the window size
 	let window_size = display.gl_window().window().inner_size();
@@ -302,7 +309,7 @@ fn update(
 #[allow(clippy::cast_precision_loss)] // Image and window sizes are far below 2^23
 fn draw(
 	target: &mut glium::Frame, geometry_state: &mut GeometryState, fade: f32, indices: &glium::IndexBuffer<u32>,
-	program: &glium::Program, window_size: [u32; 2], cursor_pos: Point2<f32>,
+	program: &glium::Program, window_size: [u32; 2], _cursor_pos: Point2<f32>,
 ) -> Result<(), anyhow::Error> {
 	// Calculate the base alpha and progress to apply to the images
 	let (base_alpha, next_progress) = match geometry_state.progress {

@@ -9,6 +9,7 @@ use rand::prelude::SliceRandom;
 use std::{
 	cmp::Ordering,
 	num::NonZeroUsize,
+	ops::ControlFlow,
 	path::{Path, PathBuf},
 	sync::mpsc::{self, RecvError, SendError},
 	thread,
@@ -19,6 +20,15 @@ use std::{
 pub type ImageBuffer = image::ImageBuffer<Rgba<u8>, Vec<u8>>;
 
 /// Image loader
+///
+/// Responsible for loading images from the given directory and
+/// supplying it them once ready.
+///
+/// ## Architecture
+/// The current architecture uses N + 1 background threads, where
+/// N is the `available_parallelism`. The N threads receive an image
+/// path, load them, and send the image across a channel back to this image loader.
+/// The 1 thread is responsible for assigning the image paths to each thread.
 pub struct ImageLoader {
 	/// Receiver end for the image loading.
 	image_rx: mpsc::Receiver<ImageBuffer>,
@@ -36,7 +46,7 @@ impl ImageLoader {
 	pub fn new(path: PathBuf, image_backlog: usize, window_size: [u32; 2]) -> Result<Self, anyhow::Error> {
 		// Create the event channel, for transmitting filesystem
 		// events to every thread
-		let (mut event_tx, event_rx) = mpsc::channel();
+		let (event_tx, event_rx) = mpsc::channel();
 
 		// Then start the watcher and start watching the path
 		let mut watcher =
@@ -46,9 +56,15 @@ impl ImageLoader {
 			.context("Unable to start watching directory")?;
 
 		// And send existing files over the sender
-		thread::spawn(move || match self::send_files_dir(&path, &mut event_tx) {
-			Ok(files_loaded) => log::info!("Found {files_loaded} files"),
-			Err(err) => log::error!("Unable to find files: {err:?}"),
+		thread::spawn(move || {
+			let mut visitor = |path| match event_tx.send(notify::DebouncedEvent::Create(path)) {
+				Ok(()) => ControlFlow::CONTINUE,
+				Err(_) => ControlFlow::Break(()),
+			};
+			match self::visit_files_dir(&path, &mut visitor) {
+				Ok(files_loaded) => log::info!("Found {files_loaded} files"),
+				Err(()) => (),
+			}
 		});
 
 		// Start all loading threads
@@ -68,20 +84,8 @@ impl ImageLoader {
 			})
 			.collect::<Vec<_>>();
 
-		// Then start the thread responsible for distributing the filesystem events
-		// TODO: Do something smarter than this, a rename shouldn't move the loop forward, or some
-		//       threads will have less images than others
-		thread::spawn(move || loop {
-			for loader_event_tx in &loader_event_txs {
-				match event_rx.recv() {
-					Ok(value) => match loader_event_tx.send(value) {
-						Ok(()) => (),
-						Err(_) => return,
-					},
-					Err(_) => return,
-				}
-			}
-		});
+		// Star the image distributer thread
+		thread::spawn(move || image_distributer(loader_event_txs, event_rx));
 
 		Ok(Self {
 			image_rx,
@@ -113,6 +117,29 @@ impl ImageLoader {
 			Err(mpsc::TryRecvError::Disconnected) => anyhow::bail!("All loader threads exited"),
 		}
 	}
+}
+
+/// Image distributer for all background threads
+#[allow(clippy::needless_pass_by_value)] // There is no one else to own them, so we can own them.
+fn image_distributer(
+	loader_event_txs: Vec<mpsc::Sender<notify::DebouncedEvent>>, event_rx: mpsc::Receiver<notify::DebouncedEvent>,
+) {
+	// All paths we have
+	//let mut paths = vec![];
+
+	'main_loop: loop {
+		for loader_event_tx in &loader_event_txs {
+			match event_rx.recv() {
+				Ok(value) => match loader_event_tx.send(value) {
+					Ok(()) => (),
+					Err(_) => break 'main_loop,
+				},
+				Err(_) => break 'main_loop,
+			}
+		}
+	}
+
+	log::info!("Image distributer thread exiting");
 }
 
 /// Image loader to run in a background thread
@@ -292,29 +319,53 @@ enum ScrollDir {
 }
 
 
-/// Reads all files in `path`, recursively, and sends them to `tx`.
+/// Visits all files in `path`, recursively.
 ///
-/// Returns the number of files loaded
-// TODO: Parameter to toggle recursion
-fn send_files_dir(path: &Path, tx: &mut mpsc::Sender<notify::DebouncedEvent>) -> Result<usize, anyhow::Error> {
+/// # Errors
+/// Ignores all errors reading directories, simply logging them.
+///
+/// # Return
+/// Returns the number of files successfully loaded
+fn visit_files_dir<E>(path: &Path, f: &mut impl FnMut(PathBuf) -> ControlFlow<E>) -> Result<usize, E> {
 	let mut files_loaded = 0;
-	for entry in std::fs::read_dir(path).context("Unable to read directory")? {
-		let entry = entry.context("Unable to read directory entry")?;
-		let file_type = entry.file_type().context("Unable to get entry file type")?;
+	let dir = match std::fs::read_dir(path) {
+		Ok(dir) => dir,
+		Err(err) => {
+			log::warn!("Unable to read directory `{path:?}`: {:?}", anyhow::anyhow!(err));
+			return Ok(0);
+		},
+	};
+	for entry in dir {
+		// Read the entry and file type
+		let entry = match entry {
+			Ok(entry) => entry,
+			Err(err) => {
+				log::warn!("Unable to read file entry in `{path:?}`: {:?}", anyhow::anyhow!(err));
+				continue;
+			},
+		};
+		let entry_path = entry.path();
+		let file_type = match entry.file_type() {
+			Ok(file_type) => file_type,
+			Err(err) => {
+				log::warn!(
+					"Unable to read file type for `{entry_path:?}`: {:?}",
+					anyhow::anyhow!(err)
+				);
+				continue;
+			},
+		};
 
 		match file_type.is_dir() {
 			// Recurse on directories
 			true => {
-				files_loaded +=
-					self::send_files_dir(&entry.path(), tx).context("Unable to send files for sub-directory")?;
+				files_loaded += self::visit_files_dir(&entry.path(), f)?;
 			},
 
-			// And send files + others
-			false => {
-				// Try to send it
-				tx.send(notify::DebouncedEvent::Create(entry.path()))
-					.context("Unable to send event")?;
-				files_loaded += 1;
+			// Visit files
+			false => match f(entry_path) {
+				ControlFlow::Continue(()) => files_loaded += 1,
+				ControlFlow::Break(err) => return Err(err),
 			},
 		}
 	}
