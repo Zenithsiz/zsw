@@ -53,7 +53,7 @@ use x11::xlib;
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
 	simplelog::TermLogger::init(
-		log::LevelFilter::Debug,
+		log::LevelFilter::Trace,
 		simplelog::Config::default(),
 		simplelog::TerminalMode::Stderr,
 		simplelog::ColorChoice::Auto,
@@ -89,9 +89,22 @@ fn main() -> Result<(), anyhow::Error> {
 	}
 
 	// Create the loader and start loading images
+	// TODO: Not have to make this pessimistic approach
+	let max_geometry_width = args
+		.image_geometries
+		.iter()
+		.map(|image_geometry| image_geometry.size.x)
+		.max()
+		.unwrap_or(args.window_geometry.size.x);
+	let max_geometry_height = args
+		.image_geometries
+		.iter()
+		.map(|image_geometry| image_geometry.size.y)
+		.max()
+		.unwrap_or(args.window_geometry.size.y);
 	let mut image_loader = ImageLoader::new(args.images_dir.clone(), args.image_backlog, [
-		args.window_geometry.size.x,
-		args.window_geometry.size.y,
+		max_geometry_width,
+		max_geometry_height,
 	])
 	.context("Unable to create image loader")?;
 

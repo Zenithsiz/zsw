@@ -49,6 +49,7 @@ impl ImageLoader {
 	///
 	/// # Errors
 	/// Returns error if unable to create a directory watcher.
+	// TODO: Somehow allow different window sizes per images by asking and giving out tokens or something?
 	// TODO: Add a max-threads parameter
 	pub fn new(path: PathBuf, image_backlog: usize, window_size: [u32; 2]) -> Result<Self, anyhow::Error> {
 		// Create the modify-receive channel with all of the initial images
@@ -286,6 +287,7 @@ fn load_image(path: &Path, [window_width, window_height]: [u32; 2]) -> Result<Im
 	log::trace!("Scrolling image with directory: {scroll_dir:?}");
 
 	// Then get the size we'll be resizing to, if any
+	log::trace!("{scroll_dir:?} - {image_width:?}x{image_height:?} -> {window_width:?}x{window_height:?}");
 	let resize_size = match scroll_dir {
 		// If we're scrolling vertically, resize if the image width is larger than the window width
 		ScrollDir::Vertically if image_width > window_width => {
