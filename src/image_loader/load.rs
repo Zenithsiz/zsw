@@ -156,12 +156,6 @@ enum ScrollDir {
 fn upscale(
 	path: &Path, image: &DynamicImage, resize_width: u32, resize_height: u32, scroll_dir: ScrollDir,
 ) -> Result<DynamicImage, anyhow::Error> {
-	/// Mutex for only upscaling one image at a time
-	static UPSCALE_MUTEX: Mutex<()> = parking_lot::const_mutex(());
-
-	// Get the mutex
-	let _guard = UPSCALE_MUTEX.lock();
-
 	// Select which upscale fits best
 	let (image_width, image_height) = (image.width(), image.height());
 	let scale = match scroll_dir {
@@ -195,6 +189,12 @@ fn upscale(
 
 	// If the output path doesn't exist, create it
 	if !output_path.exists() {
+		/// Mutex for only upscaling one image at a time
+		static UPSCALE_MUTEX: Mutex<()> = parking_lot::const_mutex(());
+
+		// Get the mutex
+		let _guard = UPSCALE_MUTEX.lock();
+
 		// Else boot up `waifu2x` to do it
 		// TODO: Use proper commands instead of just the ones that don't lag my computer to hell
 		log::trace!("Starting upscale of {path:?} to {output_path:?} (x{scale})");
