@@ -33,8 +33,11 @@ use glium::{
 	glutin::{
 		self,
 		event::{Event, StartCause, WindowEvent},
-		event_loop::ControlFlow as GlutinControlFlow,
-		platform::unix::{EventLoopExtUnix, WindowBuilderExtUnix, WindowExtUnix, XWindowType},
+		event_loop::{ControlFlow as GlutinControlFlow, EventLoopWindowTarget},
+		platform::{
+			run_return::EventLoopExtRunReturn,
+			unix::{EventLoopExtUnix, WindowBuilderExtUnix, WindowExtUnix, XWindowType},
+		},
 	},
 	index::PrimitiveType,
 	program::ProgramCreationInput,
@@ -62,7 +65,7 @@ fn main() -> Result<(), anyhow::Error> {
 	log::debug!("Found arguments {args:?}");
 
 	// Create the event loop and build the display.
-	let event_loop =
+	let mut event_loop =
 		glium::glutin::event_loop::EventLoop::<!>::new_x11().context("Unable to create an x11 event loop")?;
 	let window_builder = glutin::window::WindowBuilder::new()
 		.with_position(glutin::dpi::PhysicalPosition {
@@ -86,15 +89,11 @@ fn main() -> Result<(), anyhow::Error> {
 	}
 
 	// Create the loader and start loading images
-	let mut image_loader = ImageLoader::new(args.images_dir, args.image_backlog, [
+	let mut image_loader = ImageLoader::new(args.images_dir.clone(), args.image_backlog, [
 		args.window_geometry.size.x,
 		args.window_geometry.size.y,
 	])
 	.context("Unable to create image loader")?;
-
-	// Get the window size
-	let window_size = display.gl_window().window().inner_size();
-	let window_size = [window_size.width, window_size.height];
 
 	// Create the indices buffer
 	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
@@ -140,10 +139,40 @@ fn main() -> Result<(), anyhow::Error> {
 		.collect::<Result<Vec<_>, anyhow::Error>>()
 		.context("Unable to load images for all geometries")?;
 
+
+	// Get the event handler, and then run until it returns
+	let event_handler = self::event_handler(
+		display,
+		&mut geometry_states,
+		&args,
+		indices,
+		program,
+		&mut image_loader,
+	);
+	event_loop.run_return(event_handler);
+
+
+	// At the end, join all loader threads for the image loader if we're in debug mode
+	#[cfg(debug_assertions)]
+	image_loader
+		.join_all()
+		.context("Unable to join all image loader threads")?;
+
+	Ok(())
+}
+
+fn event_handler<'a>(
+	display: glium::Display, geometry_states: &'a mut [GeometryState], args: &'a args::Args,
+	indices: glium::IndexBuffer<u32>, program: glium::Program, image_loader: &'a mut ImageLoader,
+) -> impl 'a + FnMut(Event<'_, !>, &EventLoopWindowTarget<!>, &mut glutin::event_loop::ControlFlow) {
 	// Current cursor position
 	let mut cursor_pos = Point2::origin();
 
-	event_loop.run(move |event, _, control_flow| match event {
+	// Get the window size
+	let window_size = display.gl_window().window().inner_size();
+	let window_size = [window_size.width, window_size.height];
+
+	move |event, _, control_flow| match event {
 		Event::WindowEvent { event, .. } => match event {
 			// If we got a close request, exit and return
 			WindowEvent::CloseRequested | WindowEvent::Destroyed => {
@@ -167,7 +196,7 @@ fn main() -> Result<(), anyhow::Error> {
 			target.clear_color(0.0, 0.0, 0.0, 1.0);
 
 			// Draw each image geometry
-			for geometry_state in &mut geometry_states {
+			for geometry_state in geometry_states.iter_mut() {
 				self::draw_update(
 					&mut target,
 					geometry_state,
@@ -176,7 +205,7 @@ fn main() -> Result<(), anyhow::Error> {
 					&indices,
 					&program,
 					&display,
-					&mut image_loader,
+					image_loader,
 					window_size,
 					cursor_pos,
 				);
@@ -188,7 +217,7 @@ fn main() -> Result<(), anyhow::Error> {
 			}
 		},
 		_ => (),
-	});
+	}
 }
 
 /// Sets the display as always below

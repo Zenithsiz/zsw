@@ -11,11 +11,12 @@ use num_rational::Ratio;
 use rand::prelude::SliceRandom;
 use std::{
 	cmp::Ordering,
+	mem,
 	num::NonZeroUsize,
 	ops::ControlFlow,
 	path::{Path, PathBuf},
 	sync::mpsc,
-	thread,
+	thread::{self, JoinHandle},
 	time::Duration,
 };
 
@@ -35,6 +36,12 @@ pub type ImageBuffer = image::ImageBuffer<Rgba<u8>, Vec<u8>>;
 pub struct ImageLoader {
 	/// Receiver end for the image loading.
 	image_rx: mpsc::Receiver<ImageBuffer>,
+
+	/// All loader threads
+	loader_threads: Vec<JoinHandle<()>>,
+
+	/// Distributer thread
+	distributer_thread: JoinHandle<()>,
 }
 
 impl ImageLoader {
@@ -54,16 +61,28 @@ impl ImageLoader {
 		// Then start all loading threads
 		let (image_tx, image_rx) = mpsc::sync_channel(image_backlog);
 		let available_parallelism = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		for _ in 0..available_parallelism {
-			let image_tx = image_tx.clone();
-			let paths_rx = paths_rx.clone();
-			thread::spawn(move || self::image_loader(paths_rx, window_size, &image_tx));
-		}
+		let loader_threads = (0..available_parallelism)
+			.map(|thread_idx| {
+				let image_tx = image_tx.clone();
+				let paths_rx = paths_rx.clone();
+				thread::spawn(move || match self::image_loader(paths_rx, window_size, &image_tx) {
+					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
+					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
+				})
+			})
+			.collect();
 
 		// And start the image distributer thread
-		thread::spawn(move || image_distributer(&path, &paths_modifier));
+		let distributer_thread = thread::spawn(move || match image_distributer(&path, &paths_modifier) {
+			Ok(()) => log::debug!("Image distributer successfully quit"),
+			Err(err) => log::error!("Image distributer returned `Err`: {err:?}"),
+		});
 
-		Ok(Self { image_rx })
+		Ok(Self {
+			image_rx,
+			loader_threads,
+			distributer_thread,
+		})
 	}
 
 	/// Returns the next image, waiting if not yet available
@@ -90,10 +109,35 @@ impl ImageLoader {
 			Err(mpsc::TryRecvError::Disconnected) => anyhow::bail!("All loader threads exited"),
 		}
 	}
+
+	/// Joins all loader threads and the distributer thread
+	///
+	/// # Errors
+	/// Returns an error if unable to join a loader thread or the distributer thread
+	pub fn join_all(self) -> Result<(), anyhow::Error> {
+		// Drop our image receiver
+		mem::drop(self.image_rx);
+
+		// Then join all the loader threads
+		for (thread_idx, loader_thread) in self.loader_threads.into_iter().enumerate() {
+			log::debug!("Joining loader thread #{thread_idx}");
+			loader_thread
+				.join()
+				.map_err(|_| anyhow::anyhow!("Unable to join loader thread #{thread_idx}"))?;
+		}
+
+		// And finally join the distributer thread
+		log::debug!("Joining distributer thread");
+		self.distributer_thread
+			.join()
+			.map_err(|_| anyhow::anyhow!("Unable to join distributer thread"))?;
+
+		Ok(())
+	}
 }
 
 /// Image distributer for all loader threads
-fn image_distributer(path: &Path, modifier: &paths::Modifier) -> Result<!, anyhow::Error> {
+fn image_distributer(path: &Path, modifier: &paths::Modifier) -> Result<(), anyhow::Error> {
 	// Start the watcher and start watching the path
 	let (fs_tx, fs_rx) = mpsc::channel();
 	let mut watcher = notify::watcher(fs_tx, Duration::from_secs(2)).context("Unable to create directory watcher")?;
@@ -102,55 +146,75 @@ fn image_distributer(path: &Path, modifier: &paths::Modifier) -> Result<!, anyho
 		.context("Unable to start watching directory")?;
 
 	// Start the reset-wait loop on our modifier
-	modifier.reset_wait(|paths| {
+	modifier.reset_wait_loop(|paths| {
 		// Check if we have any filesystem events
 		// Note: For rename and remove events, we simply ignore the
 		//       file that no longer exists. The loader threads will
 		//       mark the path for removal once they find it.
 		while let Ok(event) = fs_rx.try_recv() {
-			#[allow(clippy::match_same_arms)] // They're logically in different parts
-			match event {
-				// Add the new path
-				notify::DebouncedEvent::Create(path) | notify::DebouncedEvent::Rename(_, path) => {
-					log::info!("Adding {path:?}");
-					paths.push(path);
-				},
-				notify::DebouncedEvent::Remove(_) => (),
+			self::handle_fs_event(event, path, paths);
+		}
 
-				// Clear all paths and rescan
-				notify::DebouncedEvent::Rescan => {
-					log::warn!("Re-scanning");
-					paths.clear();
-					scan_dir(paths, path);
-				},
-
-				// Note: Ignore any R/W events
-				// TODO: Check if we should be doing this?
-				notify::DebouncedEvent::NoticeWrite(_) |
-				notify::DebouncedEvent::NoticeRemove(_) |
-				notify::DebouncedEvent::Write(_) |
-				notify::DebouncedEvent::Chmod(_) => (),
-
-				// Log the error
-				notify::DebouncedEvent::Error(err, path) => match path {
-					Some(path) => log::warn!("Found error for path {path:?}: {:?}", anyhow::anyhow!(err)),
-					None => log::warn!("Found error for unknown path: {:?}", anyhow::anyhow!(err)),
-				},
+		// If we have no paths, wait for a filesystem event, or return, if unable to
+		while paths.is_empty() {
+			log::warn!("No paths found, waiting for new files from the filesystem watcher");
+			match fs_rx.recv() {
+				Ok(event) => self::handle_fs_event(event, path, paths),
+				Err(_) => anyhow::bail!("No paths are available and the filesystem watcher closed their channel"),
 			}
 		}
 
 		// Then shuffle the paths we have and send them to each loader thread
 		log::trace!("Shuffling all files");
 		paths.shuffle(&mut rand::thread_rng());
-	});
+
+		Ok(())
+	})
+}
+
+/// Handles a filesystem event
+fn handle_fs_event(event: notify::DebouncedEvent, path: &Path, paths: &mut Vec<PathBuf>) {
+	log::trace!("Receive filesystem event: {event:?}");
+
+	#[allow(clippy::match_same_arms)] // They're logically in different parts
+	match event {
+		// Add the new path
+		notify::DebouncedEvent::Create(path) | notify::DebouncedEvent::Rename(_, path) => {
+			log::info!("Adding {path:?}");
+			paths.push(path);
+		},
+		notify::DebouncedEvent::Remove(_) => (),
+
+		// Clear all paths and rescan
+		notify::DebouncedEvent::Rescan => {
+			log::warn!("Re-scanning");
+			paths.clear();
+			self::scan_dir(paths, path);
+		},
+
+		// Note: Ignore any R/W events
+		// TODO: Check if we should be doing this?
+		notify::DebouncedEvent::NoticeWrite(_) |
+		notify::DebouncedEvent::NoticeRemove(_) |
+		notify::DebouncedEvent::Write(_) |
+		notify::DebouncedEvent::Chmod(_) => (),
+
+		// Log the error
+		notify::DebouncedEvent::Error(err, path) => match path {
+			Some(path) => log::warn!("Found error for path {path:?}: {:?}", anyhow::anyhow!(err)),
+			None => log::warn!("Found error for unknown path: {:?}", anyhow::anyhow!(err)),
+		},
+	}
 }
 
 /// Image loader to run in a background thread
 #[allow(clippy::needless_pass_by_value)] // It's better for this function to own the sender
-fn image_loader(paths_rx: paths::Receiver, window_size: [u32; 2], image_tx: &mpsc::SyncSender<ImageBuffer>) {
+fn image_loader(
+	paths_rx: paths::Receiver, window_size: [u32; 2], image_tx: &mpsc::SyncSender<ImageBuffer>,
+) -> Result<(), anyhow::Error> {
 	loop {
 		// Get the path
-		let (idx, path) = paths_rx.recv();
+		let (idx, path) = paths_rx.recv().context("Unable to get next path")?;
 
 		// Then try to load it
 		let image = match self::load_image(&path, window_size) {
@@ -162,9 +226,10 @@ fn image_loader(paths_rx: paths::Receiver, window_size: [u32; 2], image_tx: &mps
 			},
 		};
 
-		// And try to send it
+		// And try to send it, or join and return `Ok()` if we're no longer sending images
 		if image_tx.send(image).is_err() {
-			break;
+			paths_rx.join();
+			break Ok(());
 		}
 	}
 }

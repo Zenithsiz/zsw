@@ -2,10 +2,11 @@
 
 // Imports
 use parking_lot::{Condvar, Mutex};
-use std::{path::PathBuf, sync::Arc};
+use std::{mem, path::PathBuf, sync::Arc};
 
 
 /// All paths
+#[derive(Clone, Debug)]
 struct Paths {
 	/// All paths
 	paths: Vec<PathBuf>,
@@ -17,11 +18,19 @@ struct Paths {
 	to_remove: Vec<usize>,
 
 	/// Current iteration
-	// Note: This is used to synchronize the values `to_remove`, since they're by index.
+	///
+	/// This is used to synchronize the values `to_remove`, since they're by index, so
+	/// they must use the same iteration.
 	cur_it: usize,
+
+	/// Poisoned
+	///
+	/// The paths will be poisoned, if the modifier function returns `Err`
+	poisoned: bool,
 }
 
 /// Path receiver
+#[derive(Clone, Debug)]
 pub struct Receiver {
 	/// The paths
 	paths: Arc<Mutex<Paths>>,
@@ -45,18 +54,21 @@ pub struct RecvIdx {
 
 impl Receiver {
 	/// Retrieves the next path
-	pub fn recv(&self) -> (RecvIdx, PathBuf) {
+	pub fn recv(&self) -> Result<(RecvIdx, PathBuf), anyhow::Error> {
 		// Lock the paths
 		let mut paths = self.paths.lock();
 
 		loop {
+			// If we're poisoned, return an error
+			anyhow::ensure!(!paths.poisoned, "Paths were poisoned");
+
 			// Get our index and bump it
 			let idx = paths.cur_idx;
 			paths.cur_idx += 1;
 
 			// Try to get it
 			match paths.paths.get(idx) {
-				Some(path) => return (RecvIdx { idx, it: paths.cur_it }, path.clone()),
+				Some(path) => return Ok((RecvIdx { idx, it: paths.cur_it }, path.clone())),
 
 				// If we didn't get it, let the modifier to go, and wait on the cond var
 				None => {
@@ -82,19 +94,17 @@ impl Receiver {
 		// Else add it to the `to_remove`
 		paths.to_remove.push(idx.idx);
 	}
-}
 
-impl Clone for Receiver {
-	fn clone(&self) -> Self {
-		Self {
-			paths:             Arc::clone(&self.paths),
-			modifier_cond_var: Arc::clone(&self.modifier_cond_var),
-			receiver_cond_var: Arc::clone(&self.receiver_cond_var),
-		}
+	/// Joins this receiver, setting it as no longer listening
+	pub fn join(self) {
+		// Drop our paths arc and notify the modifier
+		mem::drop(self.paths);
+		self.modifier_cond_var.notify_one();
 	}
 }
 
 /// Path Modifier
+#[derive(Debug)]
 pub struct Modifier {
 	/// The paths
 	paths: Arc<Mutex<Paths>>,
@@ -107,23 +117,38 @@ pub struct Modifier {
 }
 
 impl Modifier {
-	/// Enters a reset-wait loop on this modifier
-	pub fn reset_wait(&self, mut f: impl FnMut(&mut Vec<PathBuf>)) -> ! {
+	/// Enters a reset-wait loop on this modifier.
+	///
+	/// Returns if all receivers exited.
+	pub fn reset_wait_loop<E>(&self, mut f: impl FnMut(&mut Vec<PathBuf>) -> Result<(), E>) -> Result<(), E> {
 		// Lock the paths
 		let mut paths_lock = self.paths.lock();
 
 		loop {
 			let paths = &mut *paths_lock;
 
+			// If there are no more receivers, return
+			if Arc::strong_count(&self.paths) == 1 {
+				return Ok(());
+			}
+
 			// For each path we need to remove, remove it
 			for idx in paths.to_remove.drain(..) {
 				paths.paths.swap_remove(idx);
 			}
 
-			// Call `f` and reset the current index
-			f(&mut paths.paths);
+			// Reset our index and advance our iteration
 			paths.cur_idx = 0;
 			paths.cur_it += 1;
+
+			// Then attempt to update the paths.
+			// Note: If we receive an error, poison and notify all receivers
+			if let Err(err) = f(&mut paths.paths) {
+				paths.poisoned = true;
+				self.receiver_cond_var.notify_all();
+				return Err(err);
+			}
+
 
 			// Then wait until all receivers are done
 			self.receiver_cond_var.notify_all();
@@ -139,6 +164,7 @@ pub fn channel(paths: Vec<PathBuf>) -> (Modifier, Receiver) {
 		cur_idx: 0,
 		to_remove: vec![],
 		cur_it: 0,
+		poisoned: false,
 	}));
 
 	let modifier_cond_var = Arc::new(Condvar::new());
