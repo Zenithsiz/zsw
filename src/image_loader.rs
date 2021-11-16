@@ -1,5 +1,8 @@
 //! Image loader
 
+// Modules
+mod paths;
+
 // Imports
 use anyhow::Context;
 use image::{imageops::FilterType, GenericImageView, Rgba};
@@ -11,7 +14,7 @@ use std::{
 	num::NonZeroUsize,
 	ops::ControlFlow,
 	path::{Path, PathBuf},
-	sync::mpsc::{self, RecvError, SendError},
+	sync::mpsc,
 	thread,
 	time::Duration,
 };
@@ -32,9 +35,6 @@ pub type ImageBuffer = image::ImageBuffer<Rgba<u8>, Vec<u8>>;
 pub struct ImageLoader {
 	/// Receiver end for the image loading.
 	image_rx: mpsc::Receiver<ImageBuffer>,
-
-	/// Watcher
-	_watcher: notify::RecommendedWatcher,
 }
 
 impl ImageLoader {
@@ -44,53 +44,26 @@ impl ImageLoader {
 	/// Returns error if unable to create a directory watcher.
 	// TODO: Add a max-threads parameter
 	pub fn new(path: PathBuf, image_backlog: usize, window_size: [u32; 2]) -> Result<Self, anyhow::Error> {
-		// Create the event channel, for transmitting filesystem
-		// events to every thread
-		let (event_tx, event_rx) = mpsc::channel();
+		// Create the modify-receive channel with all of the initial images
+		let (paths_modifier, paths_rx) = {
+			let mut paths = vec![];
+			scan_dir(&mut paths, &path);
+			paths::channel(paths)
+		};
 
-		// Then start the watcher and start watching the path
-		let mut watcher =
-			notify::watcher(event_tx.clone(), Duration::from_secs(2)).context("Unable to create directory watcher")?;
-		watcher
-			.watch(&path, notify::RecursiveMode::Recursive)
-			.context("Unable to start watching directory")?;
-
-		// And send existing files over the sender
-		thread::spawn(move || {
-			let mut visitor = |path| match event_tx.send(notify::DebouncedEvent::Create(path)) {
-				Ok(()) => ControlFlow::CONTINUE,
-				Err(_) => ControlFlow::Break(()),
-			};
-			match self::visit_files_dir(&path, &mut visitor) {
-				Ok(files_loaded) => log::info!("Found {files_loaded} files"),
-				Err(()) => (),
-			}
-		});
-
-		// Start all loading threads
+		// Then start all loading threads
 		let (image_tx, image_rx) = mpsc::sync_channel(image_backlog);
 		let available_parallelism = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		let loader_event_txs = (0..available_parallelism)
-			.map(|thread_idx| {
-				let image_tx = image_tx.clone();
-				let (loader_event_tx, loader_event_rx) = mpsc::channel();
-				thread::spawn(
-					move || match self::image_loader(loader_event_rx, window_size, image_tx, thread_idx) {
-						Ok(never) => never,
-						Err(err) => log::error!("Loader thread #{thread_idx} returned error: {err:?}"),
-					},
-				);
-				loader_event_tx
-			})
-			.collect::<Vec<_>>();
+		for _ in 0..available_parallelism {
+			let image_tx = image_tx.clone();
+			let paths_rx = paths_rx.clone();
+			thread::spawn(move || self::image_loader(paths_rx, window_size, &image_tx));
+		}
 
-		// Star the image distributer thread
-		thread::spawn(move || image_distributer(loader_event_txs, event_rx));
+		// And start the image distributer thread
+		thread::spawn(move || image_distributer(&path, &paths_modifier));
 
-		Ok(Self {
-			image_rx,
-			_watcher: watcher,
-		})
+		Ok(Self { image_rx })
 	}
 
 	/// Returns the next image, waiting if not yet available
@@ -119,114 +92,93 @@ impl ImageLoader {
 	}
 }
 
-/// Image distributer for all background threads
-#[allow(clippy::needless_pass_by_value)] // There is no one else to own them, so we can own them.
-fn image_distributer(
-	loader_event_txs: Vec<mpsc::Sender<notify::DebouncedEvent>>, event_rx: mpsc::Receiver<notify::DebouncedEvent>,
-) {
-	// All paths we have
-	//let mut paths = vec![];
+/// Image distributer for all loader threads
+fn image_distributer(path: &Path, modifier: &paths::Modifier) -> Result<!, anyhow::Error> {
+	// Start the watcher and start watching the path
+	let (fs_tx, fs_rx) = mpsc::channel();
+	let mut watcher = notify::watcher(fs_tx, Duration::from_secs(2)).context("Unable to create directory watcher")?;
+	watcher
+		.watch(&path, notify::RecursiveMode::Recursive)
+		.context("Unable to start watching directory")?;
 
-	'main_loop: loop {
-		for loader_event_tx in &loader_event_txs {
-			match event_rx.recv() {
-				Ok(value) => match loader_event_tx.send(value) {
-					Ok(()) => (),
-					Err(_) => break 'main_loop,
+	// Start the reset-wait loop on our modifier
+	modifier.reset_wait(|paths| {
+		// Check if we have any filesystem events
+		// Note: For rename and remove events, we simply ignore the
+		//       file that no longer exists. The loader threads will
+		//       mark the path for removal once they find it.
+		while let Ok(event) = fs_rx.try_recv() {
+			#[allow(clippy::match_same_arms)] // They're logically in different parts
+			match event {
+				// Add the new path
+				notify::DebouncedEvent::Create(path) | notify::DebouncedEvent::Rename(_, path) => {
+					log::info!("Adding {path:?}");
+					paths.push(path);
 				},
-				Err(_) => break 'main_loop,
+				notify::DebouncedEvent::Remove(_) => (),
+
+				// Clear all paths and rescan
+				notify::DebouncedEvent::Rescan => {
+					log::warn!("Re-scanning");
+					paths.clear();
+					scan_dir(paths, path);
+				},
+
+				// Note: Ignore any R/W events
+				// TODO: Check if we should be doing this?
+				notify::DebouncedEvent::NoticeWrite(_) |
+				notify::DebouncedEvent::NoticeRemove(_) |
+				notify::DebouncedEvent::Write(_) |
+				notify::DebouncedEvent::Chmod(_) => (),
+
+				// Log the error
+				notify::DebouncedEvent::Error(err, path) => match path {
+					Some(path) => log::warn!("Found error for path {path:?}: {:?}", anyhow::anyhow!(err)),
+					None => log::warn!("Found error for unknown path: {:?}", anyhow::anyhow!(err)),
+				},
 			}
 		}
-	}
 
-	log::info!("Image distributer thread exiting");
+		// Then shuffle the paths we have and send them to each loader thread
+		log::trace!("Shuffling all files");
+		paths.shuffle(&mut rand::thread_rng());
+	});
 }
 
 /// Image loader to run in a background thread
 #[allow(clippy::needless_pass_by_value)] // It's better for this function to own the sender
-fn image_loader(
-	event_rx: mpsc::Receiver<notify::DebouncedEvent>, window_size: [u32; 2], image_tx: mpsc::SyncSender<ImageBuffer>,
-	thread_idx: usize,
-) -> Result<!, ImageLoaderError> {
-	let mut paths = vec![];
-
+fn image_loader(paths_rx: paths::Receiver, window_size: [u32; 2], image_tx: &mpsc::SyncSender<ImageBuffer>) {
 	loop {
-		// Receives the next event, waiting if we're empty
-		let next_event = |is_empty| match is_empty {
-			true => {
-				log::warn!("#{thread_idx}: No images found, waiting for new files");
-				Ok(Some(event_rx.recv()?))
-			},
-			false => match event_rx.try_recv() {
-				Ok(path) => Ok(Some(path)),
-				Err(mpsc::TryRecvError::Disconnected) => Err(mpsc::RecvError),
-				Err(mpsc::TryRecvError::Empty) => Ok(None),
+		// Get the path
+		let (idx, path) = paths_rx.recv();
+
+		// Then try to load it
+		let image = match self::load_image(&path, window_size) {
+			Ok(value) => value,
+			Err(err) => {
+				log::info!("Unable to load {path:?}: {err:?}");
+				paths_rx.remove(idx);
+				continue;
 			},
 		};
 
-		// Check for new paths, or, if we're out, wait
-		while let Some(event) = next_event(paths.is_empty()).map_err(ImageLoaderError::ReceiveEvent)? {
-			// Note: No need to match `Remove`, the `drain_filter` below will remove it.
-			// Note: On `Rename`, the original path will be removed by the `drain_filter` below
-			match event {
-				notify::DebouncedEvent::Create(path) | notify::DebouncedEvent::Rename(_, path) => {
-					log::trace!("#{thread_idx}: Adding {path:?}");
-					paths.push(path);
-				},
-				notify::DebouncedEvent::Error(err, path) => {
-					log::warn!("#{thread_idx}: Received error from directory watcher for {path:?}: {err:?}");
-				},
-				_ => (),
-			}
-		}
-
-		// Shuffles all paths
-		log::trace!("#{thread_idx}: Shuffling all files");
-		paths.shuffle(&mut rand::thread_rng());
-
-		// Then load them all and send them
-		let mut send_err = None;
-		paths.drain_filter(|path| {
-			// If we have a sending error, just return
-			if send_err.is_some() {
-				return false;
-			}
-
-			// ELse try to load it
-			let image = match self::load_image(path, window_size) {
-				Ok(value) => value,
-				Err(err) => {
-					log::info!("#{thread_idx}: Unable to load {path:?}: {err:?}");
-					return true;
-				},
-			};
-
-			// Then try to send it
-			if let Err(err) = image_tx.send(image) {
-				send_err = Some(err);
-			}
-
-			false
-		});
-
-		// If we got a send error, return Err
-		if let Some(err) = send_err {
-			return Err(ImageLoaderError::SendImage(err));
+		// And try to send it
+		if image_tx.send(image).is_err() {
+			break;
 		}
 	}
 }
 
-#[derive(Debug)]
-enum ImageLoaderError {
-	/// Unable to send image
-	SendImage(SendError<ImageBuffer>),
-
-	/// Unable to receive fs event
-	ReceiveEvent(RecvError),
-}
-
 /// Loads an image from a path
 fn load_image(path: &Path, [window_width, window_height]: [u32; 2]) -> Result<ImageBuffer, anyhow::Error> {
+	/// Image scrolling direction
+	#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+	enum ScrollDir {
+		Vertically,
+		Horizontally,
+		None,
+	}
+
 	// Try to open the image by guessing it's format
 	let image_reader = image::io::Reader::open(&path)
 		.context("Unable to open image")?
@@ -310,14 +262,14 @@ fn load_image(path: &Path, [window_width, window_height]: [u32; 2]) -> Result<Im
 	Ok(image)
 }
 
-/// Image scrolling direction
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-enum ScrollDir {
-	Vertically,
-	Horizontally,
-	None,
+/// Scans a directory and insert all it's paths onto `paths`
+fn scan_dir(paths: &mut Vec<PathBuf>, path: &Path) {
+	let mut visitor = |path| {
+		paths.push(path);
+		ControlFlow::CONTINUE
+	};
+	self::visit_files_dir::<!, _>(path, &mut visitor).into_ok();
 }
-
 
 /// Visits all files in `path`, recursively.
 ///
@@ -326,7 +278,10 @@ enum ScrollDir {
 ///
 /// # Return
 /// Returns the number of files successfully loaded
-fn visit_files_dir<E>(path: &Path, f: &mut impl FnMut(PathBuf) -> ControlFlow<E>) -> Result<usize, E> {
+fn visit_files_dir<E, F>(path: &Path, f: &mut F) -> Result<usize, E>
+where
+	F: FnMut(PathBuf) -> ControlFlow<E>,
+{
 	let mut files_loaded = 0;
 	let dir = match std::fs::read_dir(path) {
 		Ok(dir) => dir,

@@ -35,3 +35,6 @@ num-rational = "0.4.0"
 
 # Filesystem
 notify = "4.0.17"
+
+# Threads
+parking_lot = "0.11.2"

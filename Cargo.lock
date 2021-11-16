@@ -1884,6 +1884,7 @@ dependencies = [
  "log",
  "notify",
  "num-rational 0.4.0",
+ "parking_lot",
  "rand",
  "simplelog",
  "x11",

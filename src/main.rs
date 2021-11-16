@@ -7,7 +7,8 @@
 	available_parallelism,
 	drain_filter,
 	array_zip,
-	control_flow_enum
+	control_flow_enum,
+	unwrap_infallible
 )]
 
 // Modules

@@ -27,7 +27,8 @@ allow = [
   "clippy::shadow_same",
   "clippy::else_if_without_else",
   "clippy::self_named_module_files",
-  "clippy::items_after_statements", #
+  "clippy::items_after_statements",
+  "clippy::module_name_repetitions", #
   ## Performance
   # The compiler should transform the code into that, not us
   "clippy::suboptimal_flops",
