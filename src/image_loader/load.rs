@@ -8,7 +8,6 @@ use num_rational::Ratio;
 use parking_lot::Mutex;
 use std::{
 	cmp::Ordering,
-	collections::hash_map::DefaultHasher,
 	ffi::OsStr,
 	hash::{Hash, Hasher},
 	path::Path,
@@ -181,7 +180,7 @@ fn upscale(
 
 	// Get the hash of the image to make sure it's the same image
 	let image_hash = {
-		let mut hasher = DefaultHasher::new();
+		let mut hasher = twox_hash::XxHash64::with_seed(0);
 		image.hash(&mut hasher);
 
 		hasher.finish()
@@ -191,7 +190,7 @@ fn upscale(
 	// TODO: Use a proper cache for this instead of a hardcoded path
 	// TODO: Not use png if we can't find it and instead use the same file type as `image`?
 	let path_ext = path.extension().and_then(OsStr::to_str).unwrap_or("png");
-	let output_path = format!("/home/filipe/.cache/zsw/upscale/{image_hash}-upscaled-{scale}.{path_ext}");
+	let output_path = format!("/home/filipe/.cache/zsw/upscale/{image_hash:016x}-upscaled-{scale}x.{path_ext}");
 	let output_path = Path::new(&output_path);
 
 	// If the output path doesn't exist, create it
