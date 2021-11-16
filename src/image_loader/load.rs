@@ -16,7 +16,9 @@ use std::{
 };
 
 /// Loads an image from a path given the window it's going to be displayed in
-pub fn load_image(path: &Path, [window_width, window_height]: [u32; 2]) -> Result<ImageBuffer, anyhow::Error> {
+pub fn load_image(
+	path: &Path, [window_width, window_height]: [u32; 2], upscale_waifu2x: bool,
+) -> Result<ImageBuffer, anyhow::Error> {
 	// Try to open the image by guessing it's format
 	let image_reader = image::io::Reader::open(&path)
 		.context("Unable to open image")?
@@ -28,8 +30,7 @@ pub fn load_image(path: &Path, [window_width, window_height]: [u32; 2]) -> Resul
 	let (image_width, image_height) = (image.width(), image.height());
 	let image_aspect_ratio = Ratio::new(image_width, image_height);
 	let window_aspect_ratio = Ratio::new(window_width, window_height);
-
-	log::trace!("Loaded {path:?} ({image_width}x{image_height})");
+	log::debug!("Loaded {path:?} ({image_width}x{image_height})");
 
 	// Then check what direction we'll be scrolling the image
 	let scroll_dir = match (image_width.cmp(&image_height), window_width.cmp(&window_height)) {
@@ -56,10 +57,8 @@ pub fn load_image(path: &Path, [window_width, window_height]: [u32; 2]) -> Resul
 			}
 		},
 	};
-	log::trace!("Scrolling image with directory: {scroll_dir:?}");
 
 	// Then get the size we'll be resizing to, if any
-	log::trace!("{scroll_dir:?} - {image_width:?}x{image_height:?} -> {window_width:?}x{window_height:?}");
 	let resize = match scroll_dir {
 		// If we're scrolling vertically, downscale if the image width is larger than the window width, else upscale
 		ScrollDir::Vertically => Resize {
@@ -104,16 +103,19 @@ pub fn load_image(path: &Path, [window_width, window_height]: [u32; 2]) -> Resul
 		(f64::from(image_width) * f64::from(image_height));
 	let image = match resize.kind {
 		ResizeKind::Downscale => {
-			log::trace!(
-				"Downscaling from {image_width}x{image_height} to {resize_width}x{resize_height} ({resize_scale:.2}%)",
+			log::debug!(
+				"Downscaling {path:?} from {image_width}x{image_height} to {resize_width}x{resize_height} \
+				 ({resize_scale:.2}%)",
 			);
 			image.resize_exact(resize_width, resize_height, FilterType::CatmullRom)
 		},
 		ResizeKind::Upscale => {
-			log::trace!(
-				"Upscaling from {image_width}x{image_height} to {resize_width}x{resize_height} ({resize_scale:.2}%)",
+			log::debug!(
+				"Upscaling {path:?} from {image_width}x{image_height} to {resize_width}x{resize_height} \
+				 ({resize_scale:.2}%)",
 			);
-			self::upscale(path, &image, resize_width, resize_height, scroll_dir).context("Unable to upscale image")?
+			self::upscale(path, image, resize_width, resize_height, scroll_dir, upscale_waifu2x)
+				.context("Unable to upscale image")?
 		},
 	};
 
@@ -154,7 +156,7 @@ enum ScrollDir {
 
 /// Upscales an image
 fn upscale(
-	path: &Path, image: &DynamicImage, resize_width: u32, resize_height: u32, scroll_dir: ScrollDir,
+	path: &Path, image: DynamicImage, resize_width: u32, resize_height: u32, scroll_dir: ScrollDir, use_waifu2x: bool,
 ) -> Result<DynamicImage, anyhow::Error> {
 	// Select which upscale fits best
 	let (image_width, image_height) = (image.width(), image.height());
@@ -189,15 +191,17 @@ fn upscale(
 
 	// If the output path doesn't exist, create it
 	if !output_path.exists() {
-		/// Mutex for only upscaling one image at a time
-		static UPSCALE_MUTEX: Mutex<()> = parking_lot::const_mutex(());
+		// If we shouldn't use waifu2x, return the original image
+		if !use_waifu2x {
+			return Ok(image);
+		}
 
 		// Get the mutex
 		let _guard = UPSCALE_MUTEX.lock();
 
 		// Else boot up `waifu2x` to do it
 		// TODO: Use proper commands instead of just the ones that don't lag my computer to hell
-		log::trace!("Starting upscale of {path:?} to {output_path:?} (x{scale})");
+		log::debug!("Starting upscale of {path:?} to {output_path:?} (x{scale})");
 
 		let start_time = Instant::now();
 		let mut proc = process::Command::new("waifu2x-ncnn-vulkan")
@@ -214,12 +218,12 @@ fn upscale(
 			.context("Unable to run the `waifu2x-ncnn-vulkan` to upscale")?;
 		proc.wait().context("`waifu2x-ncnn-vulkan` returned an error status")?;
 
-		log::trace!(
+		log::debug!(
 			"Took {:.2}s to upscale {path:?}",
 			Instant::now().duration_since(start_time).as_secs_f64()
 		);
 	} else {
-		log::trace!("Upscaled version of {path:?} already exists at {output_path:?}");
+		log::debug!("Upscaled version of {path:?} already exists at {output_path:?}");
 	}
 
 	// Then load it
@@ -232,3 +236,6 @@ fn upscale(
 		.context("Unable to decode upscaled image")?
 		.resize_exact(resize_width, resize_height, FilterType::CatmullRom))
 }
+
+/// Mutex for only upscaling one image at a time
+static UPSCALE_MUTEX: Mutex<()> = parking_lot::const_mutex(());

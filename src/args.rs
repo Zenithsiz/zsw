@@ -27,6 +27,12 @@ pub struct Args {
 
 	/// Image backlog per-thread
 	pub image_backlog: usize,
+
+	/// Loader threads
+	pub loader_threads: Option<usize>,
+
+	/// If upscaling should be done with waifu 2x
+	pub upscale_waifu2x: bool,
 }
 
 /// Parses all arguments
@@ -41,6 +47,8 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		pub const FADE_POINT: &str = "fade-point";
 		pub const IMAGE_BACKLOG: &str = "image-backlog";
 		pub const GRID: &str = "grid";
+		pub const LOADER_THREADS: &str = "loader-threads";
+		pub const UPSCALE_WAIFU2X: &str = "upscale-waifu2x";
 	}
 
 
@@ -113,6 +121,19 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.takes_value(true)
 				.long("image-backlog")
 				.default_value("0"),
+		)
+		.arg(
+			ClapArg::with_name(arg_name::LOADER_THREADS)
+				.help("Loader threads")
+				.long_help("Number of loader threads to use")
+				.takes_value(true)
+				.long("loader-threads"),
+		)
+		.arg(
+			ClapArg::with_name(arg_name::UPSCALE_WAIFU2X)
+				.help("Upscale using waifu2x")
+				.long_help("If images should be upscaled using `waifu2x`")
+				.long("upscale-waifu2x"),
 		)
 		.get_matches();
 
@@ -194,8 +215,17 @@ pub fn get() -> Result<Args, anyhow::Error> {
 
 	let image_backlog = matches
 		.value_of(arg_name::IMAGE_BACKLOG)
-		.context("Argument with default value was missing")?;
-	let image_backlog = image_backlog.parse().context("Unable to parse image backlog")?;
+		.context("Argument with default value was missing")?
+		.parse()
+		.context("Unable to parse image backlog")?;
+
+	let loader_threads = matches
+		.value_of(arg_name::LOADER_THREADS)
+		.map(str::parse)
+		.transpose()
+		.context("Unable to parse loader threads")?;
+
+	let upscale_waifu2x = matches.is_present(arg_name::UPSCALE_WAIFU2X);
 
 	Ok(Args {
 		window_geometry,
@@ -204,5 +234,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		images_dir,
 		fade_point,
 		image_backlog,
+		loader_threads,
+		upscale_waifu2x,
 	})
 }

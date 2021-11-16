@@ -53,7 +53,7 @@ use x11::xlib;
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
 	simplelog::TermLogger::init(
-		log::LevelFilter::Trace,
+		log::LevelFilter::Debug,
 		simplelog::Config::default(),
 		simplelog::TerminalMode::Stderr,
 		simplelog::ColorChoice::Auto,
@@ -89,7 +89,7 @@ fn main() -> Result<(), anyhow::Error> {
 	}
 
 	// Create the loader and start loading images
-	// TODO: Not have to make this pessimistic approach
+	// TODO: Not have to make this pessimistic approach, especially because it doesn't work with aspect ratios.
 	let max_geometry_width = args
 		.image_geometries
 		.iter()
@@ -102,10 +102,13 @@ fn main() -> Result<(), anyhow::Error> {
 		.map(|image_geometry| image_geometry.size.y)
 		.max()
 		.unwrap_or(args.window_geometry.size.y);
-	let mut image_loader = ImageLoader::new(args.images_dir.clone(), args.image_backlog, [
-		max_geometry_width,
-		max_geometry_height,
-	])
+	let mut image_loader = ImageLoader::new(
+		args.images_dir.clone(),
+		args.image_backlog,
+		[max_geometry_width, max_geometry_height],
+		args.loader_threads,
+		args.upscale_waifu2x,
+	)
 	.context("Unable to create image loader")?;
 
 	// Create the indices buffer

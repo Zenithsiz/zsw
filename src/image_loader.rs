@@ -50,7 +50,10 @@ impl ImageLoader {
 	/// Returns error if unable to create a directory watcher.
 	// TODO: Somehow allow different window sizes per images by asking and giving out tokens or something?
 	// TODO: Add a max-threads parameter
-	pub fn new(path: PathBuf, image_backlog: usize, window_size: [u32; 2]) -> Result<Self, anyhow::Error> {
+	pub fn new(
+		path: PathBuf, image_backlog: usize, window_size: [u32; 2], loader_threads: Option<usize>,
+		upscale_waifu2x: bool,
+	) -> Result<Self, anyhow::Error> {
 		// Create the modify-receive channel with all of the initial images
 		// Note: we also shuffle them here at the beginning
 		let (paths_modifier, paths_rx) = {
@@ -62,15 +65,18 @@ impl ImageLoader {
 
 		// Then start all loading threads
 		let (image_tx, image_rx) = mpsc::sync_channel(image_backlog);
-		let available_parallelism = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		let loader_threads = (0..available_parallelism)
+		let loader_threads =
+			loader_threads.unwrap_or_else(|| thread::available_parallelism().map_or(1, NonZeroUsize::get));
+		let loader_threads = (0..loader_threads)
 			.map(|thread_idx| {
 				let image_tx = image_tx.clone();
 				let paths_rx = paths_rx.clone();
-				thread::spawn(move || match self::image_loader(paths_rx, window_size, &image_tx) {
-					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
-					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
-				})
+				thread::spawn(
+					move || match self::image_loader(paths_rx, window_size, &image_tx, upscale_waifu2x) {
+						Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
+						Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
+					},
+				)
 			})
 			.collect();
 
@@ -212,14 +218,14 @@ fn handle_fs_event(event: notify::DebouncedEvent, path: &Path, paths: &mut Vec<P
 /// Image loader to run in a background thread
 #[allow(clippy::needless_pass_by_value)] // It's better for this function to own the sender
 fn image_loader(
-	paths_rx: paths::Receiver, window_size: [u32; 2], image_tx: &mpsc::SyncSender<ImageBuffer>,
+	paths_rx: paths::Receiver, window_size: [u32; 2], image_tx: &mpsc::SyncSender<ImageBuffer>, upscale_waifu2x: bool,
 ) -> Result<(), anyhow::Error> {
 	loop {
 		// Get the path
 		let (idx, path) = paths_rx.recv().context("Unable to get next path")?;
 
 		// Then try to load it
-		let image = match load::load_image(&path, window_size) {
+		let image = match load::load_image(&path, window_size, upscale_waifu2x) {
 			Ok(value) => value,
 			Err(err) => {
 				log::info!("Unable to load {path:?}: {err:?}");
