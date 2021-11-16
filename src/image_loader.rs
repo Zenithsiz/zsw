@@ -52,9 +52,11 @@ impl ImageLoader {
 	// TODO: Add a max-threads parameter
 	pub fn new(path: PathBuf, image_backlog: usize, window_size: [u32; 2]) -> Result<Self, anyhow::Error> {
 		// Create the modify-receive channel with all of the initial images
+		// Note: we also shuffle them here at the beginning
 		let (paths_modifier, paths_rx) = {
 			let mut paths = vec![];
 			scan_dir(&mut paths, &path);
+			paths.shuffle(&mut rand::thread_rng());
 			paths::channel(paths)
 		};
 
