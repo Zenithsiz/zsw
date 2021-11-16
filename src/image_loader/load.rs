@@ -228,5 +228,8 @@ fn upscale(
 		.context("Unable to open upscaled image")?
 		.with_guessed_format()
 		.context("Unable to parse upscaled image")?;
-	image_reader.decode().context("Unable to decode upscaled image")
+	Ok(image_reader
+		.decode()
+		.context("Unable to decode upscaled image")?
+		.resize_exact(resize_width, resize_height, FilterType::CatmullRom))
 }
