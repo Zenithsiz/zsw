@@ -51,24 +51,41 @@ pub struct Requester<Req, Res> {
 	inner: Arc<Inner<Req, Res>>,
 }
 
+impl<Req, Res> Drop for Requester<Req, Res> {
+	fn drop(&mut self) {
+		// Lock the buffer and notify the other end that we're quitting
+		let _buffer = self.inner.buffer.lock();
+		self.inner.responder_condvar.notify_all();
+	}
+}
+
 impl<Req, Res> Requester<Req, Res> {
 	/// Posts a new request and waits until responded
-	pub fn request_wait(&self, request: Req) -> Res {
+	pub fn request(&self, request: Req) -> Result<Res, RequestError> {
 		// Lock the buffer
 		let mut buffer = self.inner.buffer.lock();
 
-		// Insert the request
+		// If the responder quit, return Err
+		if Arc::strong_count(&self.inner) == 1 {
+			return Err(RequestError);
+		}
+
+		// Else insert the request
 		buffer.request = Some(request);
 
 		// Then wake a responder, and wait until they respond
 		self.inner.responder_condvar.notify_one();
 		self.inner.requester_condvar.wait(&mut buffer);
 
-		// Then get the response
-		#[allow(clippy::expect_used)] // This is an internal assertion and shouldn't happen
-		buffer.response.take().expect("Responder didn't leave a response")
+		// Then get the response, or return an error if they didn't respond
+		buffer.response.take().ok_or(RequestError)
 	}
 }
+
+/// Error for `request_wait`
+#[derive(Debug, thiserror::Error)]
+#[error("All responders quit")]
+pub struct RequestError;
 
 /// A request-response channel responder
 #[derive(Debug)]
@@ -85,27 +102,51 @@ impl<Req, Res> Clone for Responder<Req, Res> {
 	}
 }
 
+impl<Req, Res> Drop for Responder<Req, Res> {
+	fn drop(&mut self) {
+		// Lock the buffer and notify the other end that we're quitting
+		let _buffer = self.inner.buffer.lock();
+		self.inner.requester_condvar.notify_one();
+	}
+}
+
 impl<Req, Res> Responder<Req, Res> {
 	/// Waits for a request, and responds to it using `f`
-	pub fn wait_request<T>(&self, f: impl FnOnce(Req) -> (T, Res)) -> T {
+	pub fn respond<T>(&self, f: impl FnOnce(Req) -> (T, Res)) -> Result<T, RespondError> {
 		// Lock the buffer
 		let mut buffer = self.inner.buffer.lock();
 
-		// Then wait until we get a notification
+		// If we have a request, respond
+		if let Some(request) = buffer.request.take() {
+			let (value, response) = f(request);
+			buffer.response = Some(response);
+			return Ok(value);
+		}
+
+		// Else if the requester quit, return Err
+		if Arc::strong_count(&self.inner) == 1 {
+			return Err(RespondError);
+		}
+
+		// Else wait until we get a notification
 		self.inner.responder_condvar.wait(&mut buffer);
 
-		// Once we get one, respond
-		#[allow(clippy::expect_used)] // This is an internal assertion and shouldn't happen
-		let request = buffer.request.take().expect("Requester didn't leave a request");
+		// Once we get one, respond, if we got one, else return `Err`
+		let request = buffer.request.take().ok_or(RespondError)?;
 		let (value, response) = f(request);
 		buffer.response = Some(response);
 
 		// And notify the requester
 		self.inner.requester_condvar.notify_one();
 
-		value
+		Ok(value)
 	}
 }
+
+/// Error for `wait_request`
+#[derive(Debug, thiserror::Error)]
+#[error("Requester quit")]
+pub struct RespondError;
 
 /// Creates a new channel
 pub fn channel<Req, Res>() -> (Requester<Req, Res>, Responder<Req, Res>) {

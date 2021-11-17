@@ -101,10 +101,14 @@ impl ImageLoader {
 		&self, size: Vector2<u32>,
 	) -> Result<once_channel::Receiver<Result<ImageBuffer, ResponseError>>, anyhow::Error> {
 		// Get the path from the distributer
-		let (idx, path) = self.paths_rx.recv().context("Distributer thread quit")?;
+		let (idx, path) = self.paths_rx.recv().context("Unable to get path from distributer")?;
 
 		// Then send a request
-		Ok(self.requester.request_wait(ImageRequest { size, path, idx }))
+		let receiver = self
+			.requester
+			.request(ImageRequest { size, path, idx })
+			.context("Unable to request loader threads")?;
+		Ok(receiver)
 	}
 
 	/// Returns a failed request to be removed
@@ -217,10 +221,12 @@ fn image_loader(
 ) -> Result<(), anyhow::Error> {
 	loop {
 		// Wait for a request
-		let (sender, request) = responder.wait_request(|request| {
-			let (sender, receiver) = once_channel::channel();
-			((sender, request), receiver)
-		});
+		let (sender, request) = responder
+			.respond(|request| {
+				let (sender, receiver) = once_channel::channel();
+				((sender, request), receiver)
+			})
+			.context("Unable to receive response from loader threads")?;
 
 		// Then try to load it
 		let image = match load::load_image(&request.path, request.size, upscale_waifu2x) {
