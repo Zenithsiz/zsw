@@ -116,23 +116,27 @@ impl<Req, Res> Responder<Req, Res> {
 		// Lock the buffer
 		let mut buffer = self.inner.buffer.lock();
 
-		// If we have a request, respond
-		if let Some(request) = buffer.request.take() {
-			let (value, response) = f(request);
-			buffer.response = Some(response);
-			return Ok(value);
-		}
+		// Get the request
+		let request = match buffer.request.take() {
+			// If we had it, use it
+			Some(request) => request,
 
-		// Else if the requester quit, return Err
-		if Arc::strong_count(&self.inner) == 1 {
-			return Err(RespondError);
-		}
+			// Else make sure the requested is still alive and wait for it
+			None => {
+				// Else if the requester quit, return Err
+				if Arc::strong_count(&self.inner) == 1 {
+					return Err(RespondError);
+				}
 
-		// Else wait until we get a notification
-		self.inner.responder_condvar.wait(&mut buffer);
+				// Else wait until we get a notification
+				self.inner.responder_condvar.wait(&mut buffer);
 
-		// Once we get one, respond, if we got one, else return `Err`
-		let request = buffer.request.take().ok_or(RespondError)?;
+				// Then get it, or return `Err` if they quit
+				buffer.request.take().ok_or(RespondError)?
+			},
+		};
+
+		// Then respond
 		let (value, response) = f(request);
 		buffer.response = Some(response);
 

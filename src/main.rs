@@ -119,7 +119,10 @@ fn main() -> Result<(), anyhow::Error> {
 		.image_geometries
 		.iter()
 		.map(|&geometry| {
-			let get_image = || GlImage::new(&display, &image_loader, geometry.size).context("Unable to create image");
+			let get_image = || {
+				GlImage::new(&display, args.image_backlog, &image_loader, geometry.size)
+					.context("Unable to create image")
+			};
 			Ok(GeometryState {
 				geometry,
 				cur_image: get_image()?,
@@ -135,13 +138,6 @@ fn main() -> Result<(), anyhow::Error> {
 	// Get the event handler, and then run until it returns
 	let event_handler = self::event_handler(display, &mut geometry_states, &args, indices, program, &image_loader);
 	event_loop.run_return(event_handler);
-
-
-	// At the end, join all loader threads for the image loader if we're in debug mode
-	#[cfg(debug_assertions)]
-	image_loader
-		.join_all()
-		.context("Unable to join all image loader threads")?;
 
 	Ok(())
 }

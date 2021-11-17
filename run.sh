@@ -9,7 +9,7 @@ set -e
 #	--fade-point 0.8 \
 #	--image-backlog 0 \
 
-cargo run --release -- \
+cargo run -- \
 	~/.wallpaper/active \
 	--image-duration 5.0 \
 	--window-geometry "3280x1080+0+0" \
