@@ -2,7 +2,7 @@
 
 // Imports
 use parking_lot::{Condvar, Mutex};
-use std::{mem, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 
 /// All paths
@@ -93,13 +93,6 @@ impl Receiver {
 
 		// Else add it to the `to_remove`
 		paths.to_remove.push(idx.idx);
-	}
-
-	/// Joins this receiver, setting it as no longer listening
-	pub fn join(self) {
-		// Drop our paths arc and notify the modifier
-		mem::drop(self.paths);
-		self.modifier_cond_var.notify_one();
 	}
 }
 

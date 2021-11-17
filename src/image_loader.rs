@@ -1,16 +1,24 @@
 //! Image loader
+//!
+//! See the [`ImageLoader`] type for more details on how image loading
+//! works.
 
 // Modules
 mod load;
 mod paths;
+mod request;
+
+// Exports
+pub use self::request::{ImageRequest, ResponseError};
 
 // Imports
+use crate::sync::{once_channel, rrc};
 use anyhow::Context;
+use cgmath::Vector2;
 use image::Rgba;
 use notify::Watcher;
 use rand::prelude::SliceRandom;
 use std::{
-	mem,
 	num::NonZeroUsize,
 	ops::ControlFlow,
 	path::{Path, PathBuf},
@@ -24,17 +32,14 @@ pub type ImageBuffer = image::ImageBuffer<Rgba<u8>, Vec<u8>>;
 
 /// Image loader
 ///
-/// Responsible for loading images from the given directory and
-/// supplying it them once ready.
-///
-/// ## Architecture
-/// The current architecture uses N + 1 background threads, where
-/// N is the `available_parallelism`. The N threads receive an image
-/// path, load them, and send the image across a channel back to this image loader.
-/// The 1 thread is responsible for assigning the image paths to each thread.
+/// Responsible for loading all images from a directory and
+/// supplying them.
 pub struct ImageLoader {
-	/// Receiver end for the image loading.
-	image_rx: mpsc::Receiver<ImageBuffer>,
+	/// Paths receiver
+	paths_rx: paths::Receiver,
+
+	/// Request-receiver channel to request images on the distributer
+	requester: rrc::Requester<ImageRequest, once_channel::Receiver<Result<ImageBuffer, ResponseError>>>,
 
 	/// All loader threads
 	loader_threads: Vec<JoinHandle<()>>,
@@ -50,10 +55,7 @@ impl ImageLoader {
 	/// Returns error if unable to create a directory watcher.
 	// TODO: Somehow allow different window sizes per images by asking and giving out tokens or something?
 	// TODO: Add a max-threads parameter
-	pub fn new(
-		path: PathBuf, image_backlog: usize, window_size: [u32; 2], loader_threads: Option<usize>,
-		upscale_waifu2x: bool,
-	) -> Result<Self, anyhow::Error> {
+	pub fn new(path: PathBuf, loader_threads: Option<usize>, upscale_waifu2x: bool) -> Result<Self, anyhow::Error> {
 		// Create the modify-receive channel with all of the initial images
 		// Note: we also shuffle them here at the beginning
 		let (paths_modifier, paths_rx) = {
@@ -64,19 +66,16 @@ impl ImageLoader {
 		};
 
 		// Then start all loading threads
-		let (image_tx, image_rx) = mpsc::sync_channel(image_backlog);
+		let (requester, responder) = rrc::channel();
 		let loader_threads =
 			loader_threads.unwrap_or_else(|| thread::available_parallelism().map_or(1, NonZeroUsize::get));
 		let loader_threads = (0..loader_threads)
 			.map(|thread_idx| {
-				let image_tx = image_tx.clone();
-				let paths_rx = paths_rx.clone();
-				thread::spawn(
-					move || match self::image_loader(paths_rx, window_size, &image_tx, upscale_waifu2x) {
-						Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
-						Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
-					},
-				)
+				let responder = responder.clone();
+				thread::spawn(move || match self::image_loader(responder, upscale_waifu2x) {
+					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
+					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
+				})
 			})
 			.collect();
 
@@ -87,35 +86,30 @@ impl ImageLoader {
 		});
 
 		Ok(Self {
-			image_rx,
+			paths_rx,
+			requester,
 			loader_threads,
 			distributer_thread,
 		})
 	}
 
-	/// Returns the next image, waiting if not yet available
+	/// Queues a new image to be processed at a given resolution
 	///
 	/// # Errors
-	/// Returns an error if all loader threads exited
-	pub fn next_image(&mut self) -> Result<ImageBuffer, anyhow::Error> {
-		self.image_rx.recv().context("All loader threads exited")
+	/// Returns an error if unable to queue the image
+	pub fn queue_image(
+		&self, size: Vector2<u32>,
+	) -> Result<once_channel::Receiver<Result<ImageBuffer, ResponseError>>, anyhow::Error> {
+		// Get the path from the distributer
+		let (idx, path) = self.paths_rx.recv().context("Distributer thread quit")?;
+
+		// Then send a request
+		Ok(self.requester.request_wait(ImageRequest { size, path, idx }))
 	}
 
-	/// Returns the next image, returning `None` if not yet loaded
-	///
-	/// # Errors
-	/// Returns an error if all loader threads exited
-	pub fn try_next_image(&mut self) -> Result<Option<ImageBuffer>, anyhow::Error> {
-		match self.image_rx.try_recv() {
-			// if we got it, return it
-			Ok(image) => Ok(Some(image)),
-
-			// If it wasn't ready, return `None`
-			Err(mpsc::TryRecvError::Empty) => Ok(None),
-
-			// If unable to, wait and increase the timeout
-			Err(mpsc::TryRecvError::Disconnected) => anyhow::bail!("All loader threads exited"),
-		}
+	/// Returns a failed request to be removed
+	pub fn on_failed_request(&self, err: &ResponseError) {
+		self.paths_rx.remove(err.idx);
 	}
 
 	/// Joins all loader threads and the distributer thread
@@ -124,7 +118,7 @@ impl ImageLoader {
 	/// Returns an error if unable to join a loader thread or the distributer thread
 	pub fn join_all(self) -> Result<(), anyhow::Error> {
 		// Drop our image receiver
-		mem::drop(self.image_rx);
+		//mem::drop(self.image_rx);
 
 		// Then join all the loader threads
 		for (thread_idx, loader_thread) in self.loader_threads.into_iter().enumerate() {
@@ -218,25 +212,32 @@ fn handle_fs_event(event: notify::DebouncedEvent, path: &Path, paths: &mut Vec<P
 /// Image loader to run in a background thread
 #[allow(clippy::needless_pass_by_value)] // It's better for this function to own the sender
 fn image_loader(
-	paths_rx: paths::Receiver, window_size: [u32; 2], image_tx: &mpsc::SyncSender<ImageBuffer>, upscale_waifu2x: bool,
+	responder: rrc::Responder<ImageRequest, once_channel::Receiver<Result<ImageBuffer, ResponseError>>>,
+	upscale_waifu2x: bool,
 ) -> Result<(), anyhow::Error> {
 	loop {
-		// Get the path
-		let (idx, path) = paths_rx.recv().context("Unable to get next path")?;
+		// Wait for a request
+		let (sender, request) = responder.wait_request(|request| {
+			let (sender, receiver) = once_channel::channel();
+			((sender, request), receiver)
+		});
 
 		// Then try to load it
-		let image = match load::load_image(&path, window_size, upscale_waifu2x) {
+		let image = match load::load_image(&request.path, request.size, upscale_waifu2x) {
 			Ok(value) => value,
+			// Return `Err` if we couldn't
 			Err(err) => {
-				log::info!("Unable to load {path:?}: {err:?}");
-				paths_rx.remove(idx);
+				log::info!("Unable to load {:?}: {err:?}", request.path);
+				if sender.send(Err(ResponseError { idx: request.idx })).is_err() {
+					break Ok(());
+				}
 				continue;
 			},
 		};
 
 		// And try to send it, or join and return `Ok()` if we're no longer sending images
-		if image_tx.send(image).is_err() {
-			paths_rx.join();
+		if sender.send(Ok(image)).is_err() {
+			// TODO: Join?
 			break Ok(());
 		}
 	}

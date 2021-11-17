@@ -8,7 +8,8 @@
 	drain_filter,
 	array_zip,
 	control_flow_enum,
-	unwrap_infallible
+	unwrap_infallible,
+	derive_default_enum
 )]
 
 // Modules
@@ -17,6 +18,7 @@ mod gl_image;
 mod image_loader;
 mod image_uvs;
 mod rect;
+mod sync;
 mod vertex;
 
 // Exports
@@ -89,27 +91,8 @@ fn main() -> Result<(), anyhow::Error> {
 	}
 
 	// Create the loader and start loading images
-	// TODO: Not have to make this pessimistic approach, especially because it doesn't work with aspect ratios.
-	let max_geometry_width = args
-		.image_geometries
-		.iter()
-		.map(|image_geometry| image_geometry.size.x)
-		.max()
-		.unwrap_or(args.window_geometry.size.x);
-	let max_geometry_height = args
-		.image_geometries
-		.iter()
-		.map(|image_geometry| image_geometry.size.y)
-		.max()
-		.unwrap_or(args.window_geometry.size.y);
-	let mut image_loader = ImageLoader::new(
-		args.images_dir.clone(),
-		args.image_backlog,
-		[max_geometry_width, max_geometry_height],
-		args.loader_threads,
-		args.upscale_waifu2x,
-	)
-	.context("Unable to create image loader")?;
+	let image_loader = ImageLoader::new(args.images_dir.clone(), args.loader_threads, args.upscale_waifu2x)
+		.context("Unable to create image loader")?;
 
 	// Create the indices buffer
 	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
@@ -136,14 +119,7 @@ fn main() -> Result<(), anyhow::Error> {
 		.image_geometries
 		.iter()
 		.map(|&geometry| {
-			let mut get_image = || {
-				GlImage::new(
-					&display,
-					image_loader.next_image().context("Unable to get next image")?,
-					[geometry.size.x, geometry.size.y],
-				)
-				.context("Unable to create image")
-			};
+			let get_image = || GlImage::new(&display, &image_loader, geometry.size).context("Unable to create image");
 			Ok(GeometryState {
 				geometry,
 				cur_image: get_image()?,
@@ -157,14 +133,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 
 	// Get the event handler, and then run until it returns
-	let event_handler = self::event_handler(
-		display,
-		&mut geometry_states,
-		&args,
-		indices,
-		program,
-		&mut image_loader,
-	);
+	let event_handler = self::event_handler(display, &mut geometry_states, &args, indices, program, &image_loader);
 	event_loop.run_return(event_handler);
 
 
@@ -179,7 +148,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 fn event_handler<'a>(
 	display: glium::Display, geometry_states: &'a mut [GeometryState], args: &'a args::Args,
-	indices: glium::IndexBuffer<u32>, program: glium::Program, image_loader: &'a mut ImageLoader,
+	indices: glium::IndexBuffer<u32>, program: glium::Program, image_loader: &'a ImageLoader,
 ) -> impl 'a + FnMut(Event<'_, !>, &EventLoopWindowTarget<!>, &mut glutin::event_loop::ControlFlow) {
 	// Current cursor position
 	let mut cursor_pos = Point2::origin();
@@ -288,8 +257,8 @@ unsafe fn set_display_always_below(display: &glium::Display) {
 #[allow(clippy::too_many_arguments)] // TODO: Refactor, closure doesn't work, though
 fn draw_update(
 	target: &mut glium::Frame, geometry_state: &mut GeometryState, duration: Duration, fade: f32,
-	indices: &glium::IndexBuffer<u32>, program: &glium::Program, display: &glium::Display,
-	image_loader: &mut ImageLoader, window_size: [u32; 2], cursor_pos: Point2<f32>,
+	indices: &glium::IndexBuffer<u32>, program: &glium::Program, display: &glium::Display, image_loader: &ImageLoader,
+	window_size: [u32; 2], cursor_pos: Point2<f32>,
 ) {
 	if let Err(err) = self::draw(target, geometry_state, fade, indices, program, window_size, cursor_pos) {
 		// Note: We just want to ensure we don't get a panic by dropping an unwrapped target
@@ -305,7 +274,7 @@ fn draw_update(
 /// Updates
 fn update(
 	geometry_state: &mut GeometryState, duration: Duration, fade: f32, display: &glium::Display,
-	image_loader: &mut ImageLoader,
+	image_loader: &ImageLoader,
 ) -> Result<(), anyhow::Error> {
 	// Increase the progress
 	geometry_state.progress += (1.0 / 60.0) / duration.as_secs_f32();

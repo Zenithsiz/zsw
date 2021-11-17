@@ -3,6 +3,7 @@
 // Imports
 use crate::ImageBuffer;
 use anyhow::Context;
+use cgmath::Vector2;
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use num_rational::Ratio;
 use parking_lot::Mutex;
@@ -16,9 +17,7 @@ use std::{
 };
 
 /// Loads an image from a path given the window it's going to be displayed in
-pub fn load_image(
-	path: &Path, [window_width, window_height]: [u32; 2], upscale_waifu2x: bool,
-) -> Result<ImageBuffer, anyhow::Error> {
+pub fn load_image(path: &Path, window_size: Vector2<u32>, upscale_waifu2x: bool) -> Result<ImageBuffer, anyhow::Error> {
 	// Try to open the image by guessing it's format
 	let image_reader = image::io::Reader::open(&path)
 		.context("Unable to open image")?
@@ -27,13 +26,13 @@ pub fn load_image(
 	let image = image_reader.decode().context("Unable to decode image")?;
 
 	// Get it's width and aspect ratio
-	let (image_width, image_height) = (image.width(), image.height());
-	let image_aspect_ratio = Ratio::new(image_width, image_height);
-	let window_aspect_ratio = Ratio::new(window_width, window_height);
-	log::debug!("Loaded {path:?} ({image_width}x{image_height})");
+	let image_size = Vector2::new(image.width(), image.height());
+	let image_aspect_ratio = Ratio::new(image_size.x, image_size.y);
+	let window_aspect_ratio = Ratio::new(window_size.x, window_size.y);
+	log::debug!("Loaded {path:?} ({}x{})", image_size.x, image_size.y);
 
 	// Then check what direction we'll be scrolling the image
-	let scroll_dir = match (image_width.cmp(&image_height), window_width.cmp(&window_height)) {
+	let scroll_dir = match (image_size.x.cmp(&image_size.y), window_size.x.cmp(&window_size.y)) {
 		// If they're both square, no scrolling occurs
 		(Ordering::Equal, Ordering::Equal) => ScrollDir::None,
 
@@ -62,9 +61,8 @@ pub fn load_image(
 	let resize = match scroll_dir {
 		// If we're scrolling vertically, downscale if the image width is larger than the window width, else upscale
 		ScrollDir::Vertically => Resize {
-			width:  window_width,
-			height: (window_width * image_height) / image_width,
-			kind:   if image_width > window_width {
+			size: Vector2::new(window_size.x, (window_size.x * image_size.y) / image_size.x),
+			kind: if image_size.x > window_size.x {
 				ResizeKind::Downscale
 			} else {
 				ResizeKind::Upscale
@@ -73,9 +71,8 @@ pub fn load_image(
 
 		// If we're scrolling horizontally, downscale if the image height is larger than the window height, else upscale
 		ScrollDir::Horizontally => Resize {
-			width:  (window_height * image_width) / image_height,
-			height: window_height,
-			kind:   if image_height > window_height {
+			size: Vector2::new((window_size.y * image_size.x) / image_size.y, window_size.y),
+			kind: if image_size.y > window_size.y {
 				ResizeKind::Downscale
 			} else {
 				ResizeKind::Upscale
@@ -86,9 +83,8 @@ pub fn load_image(
 		// Note: Since we're not scrolling, we know aspect ratio is the same and so
 		//       we only need to check the width.
 		ScrollDir::None => Resize {
-			width:  window_width,
-			height: window_height,
-			kind:   if image_width > window_width {
+			size: Vector2::new(window_size.x, window_size.y),
+			kind: if image_size.x > window_size.x {
 				ResizeKind::Downscale
 			} else {
 				ResizeKind::Upscale
@@ -97,25 +93,28 @@ pub fn load_image(
 	};
 
 	// And resize if necessary
-	let resize_width = resize.width;
-	let resize_height = resize.height;
-	let resize_scale = 100.0 * (f64::from(resize_width) * f64::from(resize_height)) /
-		(f64::from(image_width) * f64::from(image_height));
+	let resize_scale = 100.0 * (f64::from(resize.size.x) * f64::from(resize.size.y)) /
+		(f64::from(image_size.x) * f64::from(image_size.y));
 	let image = match resize.kind {
 		ResizeKind::Downscale => {
 			log::debug!(
-				"Downscaling {path:?} from {image_width}x{image_height} to {resize_width}x{resize_height} \
-				 ({resize_scale:.2}%)",
+				"Downscaling {path:?} from {}x{} to {}x{} ({resize_scale:.2}%)",
+				image_size.x,
+				image_size.y,
+				resize.size.x,
+				resize.size.y,
 			);
-			image.resize_exact(resize_width, resize_height, FilterType::CatmullRom)
+			image.resize_exact(resize.size.x, resize.size.y, FilterType::CatmullRom)
 		},
 		ResizeKind::Upscale => {
 			log::debug!(
-				"Upscaling {path:?} from {image_width}x{image_height} to {resize_width}x{resize_height} \
-				 ({resize_scale:.2}%)",
+				"Upscaling {path:?} from {}x{} to {}x{} ({resize_scale:.2}%)",
+				image_size.x,
+				image_size.y,
+				resize.size.x,
+				resize.size.y,
 			);
-			self::upscale(path, image, resize_width, resize_height, scroll_dir, upscale_waifu2x)
-				.context("Unable to upscale image")?
+			self::upscale(path, image, resize.size, scroll_dir, upscale_waifu2x).context("Unable to upscale image")?
 		},
 	};
 
@@ -126,11 +125,8 @@ pub fn load_image(
 /// Resize
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 struct Resize {
-	/// Width
-	width: u32,
-
-	/// Height
-	height: u32,
+	/// Size
+	size: Vector2<u32>,
 
 	/// Kind
 	kind: ResizeKind,
@@ -156,13 +152,13 @@ enum ScrollDir {
 
 /// Upscales an image
 fn upscale(
-	path: &Path, image: DynamicImage, resize_width: u32, resize_height: u32, scroll_dir: ScrollDir, use_waifu2x: bool,
+	path: &Path, image: DynamicImage, resize_size: Vector2<u32>, scroll_dir: ScrollDir, use_waifu2x: bool,
 ) -> Result<DynamicImage, anyhow::Error> {
 	// Select which upscale fits best
-	let (image_width, image_height) = (image.width(), image.height());
+	let image_size = Vector2::new(image.width(), image.height());
 	let scale = match scroll_dir {
-		ScrollDir::Vertically | ScrollDir::None => f64::from(resize_width) / f64::from(image_width),
-		ScrollDir::Horizontally => f64::from(resize_height) / f64::from(image_height),
+		ScrollDir::Vertically | ScrollDir::None => f64::from(resize_size.x) / f64::from(image_size.x),
+		ScrollDir::Horizontally => f64::from(resize_size.y) / f64::from(image_size.y),
 	};
 	let scale = match scale {
 		scale if scale <= 1.0 => unreachable!("Should be upscaling"),
@@ -234,7 +230,7 @@ fn upscale(
 	Ok(image_reader
 		.decode()
 		.context("Unable to decode upscaled image")?
-		.resize_exact(resize_width, resize_height, FilterType::CatmullRom))
+		.resize_exact(resize_size.x, resize_size.y, FilterType::CatmullRom))
 }
 
 /// Mutex for only upscaling one image at a time

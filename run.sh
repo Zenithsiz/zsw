@@ -9,7 +9,7 @@ set -e
 #	--fade-point 0.8 \
 #	--image-backlog 0 \
 
-cargo run --release -- \
+cargo run -- \
 	~/.wallpaper/active \
 	--image-duration 30.0 \
 	--window-geometry "3280x1080+0+0" \
@@ -17,7 +17,6 @@ cargo run --release -- \
 	--fade-point 0.8 \
 	--image-backlog 0 \
 	--loader-threads 4 \
-	--upscale-waifu2x \
 
 #cargo run -- \
 #	~/.wallpaper/active \

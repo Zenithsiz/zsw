@@ -26,6 +26,7 @@ pub struct Args {
 	pub fade_point: f32,
 
 	/// Image backlog per-thread
+	// TODO: Remove
 	pub image_backlog: usize,
 
 	/// Loader threads

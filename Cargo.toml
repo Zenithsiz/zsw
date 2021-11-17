@@ -22,6 +22,7 @@ rand = "0.8.4"
 
 # Error handling
 anyhow = "1.0.40"
+thiserror = "1.0.30"
 
 # Logging
 log = "0.4.14"
