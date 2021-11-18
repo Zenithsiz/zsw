@@ -9,9 +9,6 @@ use std::path::PathBuf;
 pub struct ImageRequest {
 	/// Window size
 	pub window_size: Vector2<u32>,
-
-	/// Path
-	pub path: PathBuf,
 }
 
 /// Load response error

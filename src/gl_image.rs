@@ -1,13 +1,13 @@
 //! Image
 
-use anyhow::Context;
-use cgmath::Vector2;
-
 // Imports
 use crate::{
 	image_loader::{ImageLoader, ImageReceiver},
 	ImageUvs, Vertex,
 };
+use anyhow::Context;
+use cgmath::Vector2;
+use std::collections::VecDeque;
 
 /// Image
 #[derive(Debug)]
@@ -19,30 +19,42 @@ pub struct GlImage {
 	pub uvs: ImageUvs,
 
 	/// Vertex buffer
+	///
+	/// This should always have `image_backlog` elements (except
+	/// when being modified)
 	pub vertex_buffer: glium::VertexBuffer<Vertex>,
 
-	/// Next image receiver
-	pub next_image_receiver: Option<ImageReceiver>,
+	/// Next image receivers
+	pub next_image_receivers: VecDeque<ImageReceiver>,
 
 	/// Window size
 	pub window_size: Vector2<u32>,
 }
 
 impl GlImage {
+	/// High priority
+	const PRIORITY_HIGH: usize = 1;
+	/// Low priority
+	const PRIORITY_LOW: usize = 0;
+
 	/// Creates a new image
 	///
 	/// # Errors
 	/// Returns error if unable to create the gl texture or the vertex buffer
 	pub fn new(
-		facade: &glium::Display, _image_backlog: usize, image_loader: &ImageLoader, window_size: Vector2<u32>,
+		facade: &glium::Display, image_backlog: usize, image_loader: &ImageLoader, window_size: Vector2<u32>,
 	) -> Result<Self, anyhow::Error> {
 		let image = image_loader
-			.queue(window_size)
+			.queue(window_size, Self::PRIORITY_HIGH)
 			.context("Unable to queue image")?
-			.recv(image_loader)
+			.recv(image_loader, Self::PRIORITY_HIGH)
 			.context("Unable to get image")?;
 
-		let next_image_receiver = image_loader.queue(window_size).context("Unable to queue next image")?;
+		// Note: Make sure we have at least 1 receiver
+		let next_image_receivers = (0..image_backlog.max(1))
+			.map(|_| image_loader.queue(window_size, Self::PRIORITY_LOW))
+			.collect::<Result<_, _>>()
+			.context("Unable to queue next image")?;
 
 		let image_dims = image.dimensions();
 		let texture = glium::texture::Texture2d::new(
@@ -66,7 +78,7 @@ impl GlImage {
 			texture,
 			uvs,
 			vertex_buffer,
-			next_image_receiver: Some(next_image_receiver),
+			next_image_receivers,
 			window_size,
 		})
 	}
@@ -78,35 +90,48 @@ impl GlImage {
 	pub fn try_update(
 		&mut self, facade: &glium::Display, image_loader: &ImageLoader, force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
-		// Get the next image receiver, or create a new one, if we don't have any
-		let cur_image_receiver = match self.next_image_receiver.take() {
-			Some(receiver) => receiver,
-			None => image_loader.queue(self.window_size).context("Unable to queue image")?,
-		};
+		// Get the first loaded image
+		let mut cur_idx = 0;
+		let image = loop {
+			// Get the receiver
+			// Note: We know for sure we have at least 1 receiver
+			#[allow(clippy::expect_used)]
+			let receiver = self.next_image_receivers.pop_front().expect("No receivers");
 
-		// Try to get the next image
-		let image = match force_wait {
-			true => cur_image_receiver
-				.recv(image_loader)
-				.context("Unable to get next image")?,
-			false => match cur_image_receiver
-				.try_recv(image_loader)
+			// If we've already looped once, check if we need to force wait on the next one
+			// TODO: Use some facility to be able to `recv` all of them instead of
+			//       just on the first one.
+			if cur_idx > self.next_image_receivers.len() {
+				match force_wait {
+					true => {
+						break receiver
+							.recv(image_loader, Self::PRIORITY_HIGH)
+							.context("Unable to get next image")?
+					},
+					false => {
+						self.next_image_receivers.push_back(receiver);
+						return Ok(false);
+					},
+				}
+			}
+
+			// Then try to receive it
+			match receiver
+				.try_recv(image_loader, Self::PRIORITY_LOW)
 				.context("Unable to get next image")?
 			{
-				Ok(image) => image,
-				Err(receiver) => {
-					self.next_image_receiver = Some(receiver);
-					return Ok(false);
-				},
-			},
+				Ok(image) => break image,
+				Err(receiver) => self.next_image_receivers.push_back(receiver),
+			}
+
+			cur_idx += 1;
 		};
 
-		// Then queue up another image if we got the current one
-		// Note: By here, we know for sure we don't have a receiver currently
+		// Then queue up another
 		let next_image_receiver = image_loader
-			.queue(self.window_size)
+			.queue(self.window_size, Self::PRIORITY_LOW)
 			.context("Unable to queue next image")?;
-		self.next_image_receiver = Some(next_image_receiver);
+		self.next_image_receivers.push_back(next_image_receiver);
 
 		// Then update our texture
 		let image_dims = image.dimensions();

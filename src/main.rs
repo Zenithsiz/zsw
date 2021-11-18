@@ -67,6 +67,7 @@ fn main() -> Result<(), anyhow::Error> {
 	log::debug!("Found arguments {args:?}");
 
 	// Create the event loop and build the display.
+	log::debug!("Building the window");
 	let mut event_loop =
 		glium::glutin::event_loop::EventLoop::<!>::new_x11().context("Unable to create an x11 event loop")?;
 	let window_builder = glutin::window::WindowBuilder::new()
@@ -91,6 +92,7 @@ fn main() -> Result<(), anyhow::Error> {
 	}
 
 	// Create the loader and start loading images
+	log::debug!("Starting the image loader");
 	let image_loader = ImageLoader::new(args.images_dir.clone(), args.loader_threads, args.upscale_waifu2x)
 		.context("Unable to create image loader")?;
 
@@ -115,6 +117,7 @@ fn main() -> Result<(), anyhow::Error> {
 	.context("Unable to build program")?;
 
 	// All geometry states
+	log::debug!("Creating all geometries");
 	let mut geometry_states = args
 		.image_geometries
 		.iter()
@@ -128,7 +131,7 @@ fn main() -> Result<(), anyhow::Error> {
 				cur_image: get_image()?,
 				next_image: get_image()?,
 				progress: rand::random(),
-				next_image_is_loaded: false,
+				next_image_is_loaded: true,
 			})
 		})
 		.collect::<Result<Vec<_>, anyhow::Error>>()
@@ -136,6 +139,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 
 	// Get the event handler, and then run until it returns
+	log::debug!("Entering event handler");
 	let event_handler = self::event_handler(display, &mut geometry_states, &args, indices, program, &image_loader);
 	event_loop.run_return(event_handler);
 
@@ -378,6 +382,7 @@ fn draw(
 }
 
 /// Geometry state
+#[derive(Debug)]
 struct GeometryState {
 	/// Geometry
 	geometry: Rect<u32>,

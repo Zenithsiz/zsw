@@ -1,7 +1,7 @@
 //! Image loader
 
 // Imports
-use crate::ImageBuffer;
+use crate::{image_loader::request::ImageRequest, ImageBuffer};
 use anyhow::Context;
 use cgmath::Vector2;
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
@@ -16,14 +16,21 @@ use std::{
 	time::Instant,
 };
 
-/// Loads an image from a path given the window it's going to be displayed in
-pub fn load_image(path: &Path, window_size: Vector2<u32>, upscale_waifu2x: bool) -> Result<ImageBuffer, anyhow::Error> {
+/// Loads an image from a path
+pub fn load_image(path: &Path) -> Result<DynamicImage, anyhow::Error> {
 	// Try to open the image by guessing it's format
 	let image_reader = image::io::Reader::open(&path)
 		.context("Unable to open image")?
 		.with_guessed_format()
 		.context("Unable to parse image")?;
-	let image = image_reader.decode().context("Unable to decode image")?;
+	image_reader.decode().context("Unable to decode image")
+}
+
+/// Processes an image according to a request
+pub fn process_image(
+	path: &Path, image: DynamicImage, request: &ImageRequest, upscale_waifu2x: bool,
+) -> Result<ImageBuffer, anyhow::Error> {
+	let &ImageRequest { window_size } = request;
 
 	// Get it's width and aspect ratio
 	let image_size = Vector2::new(image.width(), image.height());
@@ -215,8 +222,8 @@ fn upscale(
 		proc.wait().context("`waifu2x-ncnn-vulkan` returned an error status")?;
 
 		log::debug!(
-			"Took {:.2}s to upscale {path:?}",
-			Instant::now().duration_since(start_time).as_secs_f64()
+			"Took {:.2?} to upscale {path:?}",
+			Instant::now().duration_since(start_time)
 		);
 	} else {
 		log::debug!("Upscaled version of {path:?} already exists at {output_path:?}");

@@ -15,7 +15,7 @@ cargo run -- \
 	--window-geometry "3280x1080+0+0" \
 	--image-geometry "1920x1080+1360+0" \
 	--fade-point 0.8 \
-	--image-backlog 0 \
+	--image-backlog 4 \
 	--loader-threads 4 \
 
 #cargo run -- \

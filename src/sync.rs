@@ -3,4 +3,4 @@
 
 // Modules
 pub mod once_channel;
-pub mod rrc;
+pub mod priority_spmc;

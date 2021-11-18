@@ -9,7 +9,7 @@ mod request;
 
 // Imports
 use self::request::{ImageRequest, LoadImageError};
-use crate::sync::{once_channel, rrc};
+use crate::sync::{once_channel, priority_spmc};
 use anyhow::Context;
 use cgmath::Vector2;
 use image::Rgba;
@@ -28,24 +28,16 @@ use std::{
 /// Image buffer
 pub type ImageBuffer = image::ImageBuffer<Rgba<u8>, Vec<u8>>;
 
-/// Image response
-type ImageResponse = once_channel::Receiver<Result<ImageBuffer, LoadImageError>>;
+/// Responder for the path distributer
+type PathResponder = once_channel::Sender<Result<(), LoadImageError>>;
 
-/// Path response
-type PathResponse = once_channel::Receiver<Result<(), LoadImageError>>;
+/// Responder for an image loader
+type ImageResponder = once_channel::Sender<Result<ImageBuffer, ()>>;
 
 /// Image loader
 pub struct ImageLoader {
-	/// Image request
-	///
-	/// Used to request images from the loader threads
-	image_requester: rrc::Requester<ImageRequest, ImageResponse>,
-
-	/// Path responder
-	///
-	/// Used to accept paths from the distributer thread, as well as respond to it,
-	/// on whether or not to remove a certain path
-	path_responder: rrc::Responder<PathBuf, PathResponse>,
+	/// Image request sender
+	image_request_sender: priority_spmc::Sender<(ImageRequest, ImageResponder)>,
 
 	/// Filesystem watcher
 	_fs_watcher: notify::RecommendedWatcher,
@@ -67,32 +59,36 @@ impl ImageLoader {
 			.watch(&base_path, notify::RecursiveMode::Recursive)
 			.context("Unable to start watching directory")?;
 
-		// Create the image and path channels
-		let (image_requester, image_responder) = rrc::channel();
-		let (path_requester, path_responder) = rrc::channel();
-
 		// Start the distributer thread
+		let (path_sender, path_receiver) = priority_spmc::channel();
 		thread::Builder::new()
 			.name("Path distributer".to_owned())
-			.spawn(move || self::path_distributer(&base_path, &path_requester, &fs_rx))
+			.spawn(move || match self::path_distributer(&base_path, &path_sender, &fs_rx) {
+				Ok(()) => log::debug!("Path distributer successfully quit"),
+				Err(err) => log::warn!("Path distributer returned `Err`: {err:?}"),
+			})
 			.context("Unable to spawn distributer thread")?;
 
-		// Start all loader threads
-		let loader_threads = loader_threads.unwrap_or_else(default_loader_threads);
+		// Start the image loader distribution thread
+		let (image_request_sender, image_request_receiver) = priority_spmc::channel();
+		let loader_threads = loader_threads.unwrap_or_else(default_loader_threads).max(1);
 		for thread_idx in 0..loader_threads {
-			let responder = image_responder.clone();
+			let request_receiver = image_request_receiver.clone();
+			let path_receiver = path_receiver.clone();
 			thread::Builder::new()
-				.name(format!("Loader thread #{thread_idx}"))
-				.spawn(move || match self::image_loader(&responder, upscale_waifu2x) {
-					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
-					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
-				})
-				.context("Unable to spawn loader thread")?;
+				.name(format!("Image loader #{thread_idx}"))
+				.spawn(
+					move || match self::image_loader(&request_receiver, &path_receiver, upscale_waifu2x) {
+						Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
+						Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
+					},
+				)
+				.context("Unable to spawn image loader")?;
 		}
 
+
 		Ok(Self {
-			image_requester,
-			path_responder,
+			image_request_sender,
 			_fs_watcher: fs_watcher,
 		})
 	}
@@ -102,25 +98,15 @@ impl ImageLoader {
 	/// # Errors
 	/// Returns an error if unable to get a path to queue up, or if unable to
 	/// send a request to a loader thread.
-	pub fn queue(&self, window_size: Vector2<u32>) -> Result<ImageReceiver, anyhow::Error> {
-		// Get the path from the distributer
-		let (path, path_response_sender) = self
-			.path_responder
-			.respond(|path| {
-				let (sender, receiver) = once_channel::channel();
-				((path, sender), receiver)
-			})
-			.context("Unable to respond to distributer path")?;
-
-		// Then send a request
-		let image_receiver = self
-			.image_requester
-			.request(ImageRequest { window_size, path })
-			.context("Unable to request image from a loader thread")?;
+	pub fn queue(&self, window_size: Vector2<u32>, priority: usize) -> Result<ImageReceiver, anyhow::Error> {
+		// Send a request
+		let (image_sender, image_receiver) = once_channel::channel();
+		self.image_request_sender
+			.send((ImageRequest { window_size }, image_sender), priority)
+			.context("Unable to send request to image loader")?;
 
 		Ok(ImageReceiver {
 			window_size,
-			path_response_sender,
 			image_receiver,
 		})
 	}
@@ -132,54 +118,36 @@ pub struct ImageReceiver {
 	/// Window size
 	window_size: Vector2<u32>,
 
-	/// Path responder
-	path_response_sender: once_channel::Sender<Result<(), LoadImageError>>,
-
 	/// Image requester
-	image_receiver: once_channel::Receiver<Result<ImageBuffer, LoadImageError>>,
+	image_receiver: once_channel::Receiver<Result<ImageBuffer, ()>>,
 }
 
 impl ImageReceiver {
-	/// Sends an image result as the path response and returns the image, if any
-	fn send_image_result_path_response(
-		res: Result<ImageBuffer, LoadImageError>, sender: once_channel::Sender<Result<(), LoadImageError>>,
-	) -> Result<Option<ImageBuffer>, anyhow::Error> {
-		let (image, res) = match res {
-			Ok(image) => (Some(image), Ok(())),
-			Err(err) => (None, Err(err)),
-		};
-		sender
-			.send(res)
-			.context("Unable to send response to distributer thread")?;
-		Ok(image)
-	}
-
 	/// Receives the image, waiting if not ready yet
-	pub fn recv(self, image_loader: &ImageLoader) -> Result<ImageBuffer, anyhow::Error> {
+	pub fn recv(self, image_loader: &ImageLoader, retry_priority: usize) -> Result<ImageBuffer, anyhow::Error> {
 		// Get the result
 		let res = self
 			.image_receiver
 			.recv()
 			.context("Unable to get image from loader thread")?;
 
-		// Then extract the image and send the result to the distributer thread
-		let image = Self::send_image_result_path_response(res, self.path_response_sender)?;
-
 		// And check if we got the image
-		match image {
+		match res {
 			// If we did, return it
-			Some(image) => Ok(image),
+			Ok(image) => Ok(image),
 
 			// Else retry
-			None => image_loader
-				.queue(self.window_size)
+			Err(()) => image_loader
+				.queue(self.window_size, retry_priority)
 				.context("Unable to re-queue image")?
-				.recv(image_loader),
+				.recv(image_loader, retry_priority),
 		}
 	}
 
 	/// Attempts to receive the image, returning `Ok(Err)` if not ready yet
-	pub fn try_recv(mut self, image_loader: &ImageLoader) -> Result<Result<ImageBuffer, Self>, anyhow::Error> {
+	pub fn try_recv(
+		mut self, image_loader: &ImageLoader, retry_priority: usize,
+	) -> Result<Result<ImageBuffer, Self>, anyhow::Error> {
 		// Try to get the result
 		let res = match self.image_receiver.try_recv() {
 			Ok(res) => res,
@@ -190,17 +158,14 @@ impl ImageReceiver {
 			Err(_) => anyhow::bail!("Unable to get image from loader thread"),
 		};
 
-		// Then extract the image and send the result to the distributer thread
-		let image = Self::send_image_result_path_response(res, self.path_response_sender)?;
-
 		// And check if we got the image
-		match image {
+		match res {
 			// If we did, return it
-			Some(image) => Ok(Ok(image)),
+			Ok(image) => Ok(Ok(image)),
 
 			// Else requeue and return
-			None => Ok(Err(image_loader
-				.queue(self.window_size)
+			Err(()) => Ok(Err(image_loader
+				.queue(self.window_size, retry_priority)
 				.context("Unable to re-queue image")?)),
 		}
 	}
@@ -210,7 +175,7 @@ impl ImageReceiver {
 ///
 /// Responsible for distributing paths to the image loader
 fn path_distributer(
-	base_path: &Path, path_requester: &rrc::Requester<PathBuf, PathResponse>,
+	base_path: &Path, path_sender: &priority_spmc::Sender<(PathBuf, PathResponder)>,
 	fs_rx: &mpsc::Receiver<notify::DebouncedEvent>,
 ) -> Result<(), anyhow::Error> {
 	// Load all paths
@@ -218,7 +183,7 @@ fn path_distributer(
 	self::scan_dir(&mut paths, base_path);
 
 	// All response receivers
-	let mut response_receivers: Vec<PathResponse> = vec![];
+	let mut response_receivers: Vec<once_channel::Receiver<Result<(), LoadImageError>>> = vec![];
 
 	// Start the reset-wait loop on our modifier
 	loop {
@@ -260,9 +225,14 @@ fn path_distributer(
 
 		// And request responses from them all
 		for path in paths.iter().cloned() {
-			match path_requester.request(path) {
-				Ok(receiver) => response_receivers.push(receiver),
-				Err(_) => anyhow::bail!("Unable to request path"),
+			// Create the channel for responding
+			let (sender, receiver) = once_channel::channel();
+			response_receivers.push(receiver);
+
+			// Then send it and quit if we're done
+			// Note: Priority for the path sender isn't mega relevant
+			if path_sender.send((path, sender), 0).is_err() {
+				return Ok(());
 			}
 		}
 	}
@@ -312,41 +282,61 @@ fn handle_fs_event(event: notify::DebouncedEvent, path: &Path, paths: &mut Vec<P
 ///
 /// Responsible for receiving requests and loading them.
 fn image_loader(
-	responder: &rrc::Responder<ImageRequest, ImageResponse>, upscale_waifu2x: bool,
+	request_receiver: &priority_spmc::Receiver<(ImageRequest, ImageResponder)>,
+	path_receiver: &priority_spmc::Receiver<(PathBuf, PathResponder)>, upscale_waifu2x: bool,
 ) -> Result<(), anyhow::Error> {
 	loop {
-		// Wait for a request
-		let (sender, request) = responder
-			.respond(|request| {
-				let (sender, receiver) = once_channel::channel();
-				((sender, request), receiver)
-			})
-			.context("Unable to receive response from loader threads")?;
-		log::debug!(
-			"Received request for {:?} ({}x{})",
-			request.path,
-			request.window_size.x,
-			request.window_size.y
-		);
+		// Get the path
+		let (path, path_response_sender) = match path_receiver.recv() {
+			Ok(path) => path,
+			Err(_) => return Ok(()),
+		};
+
+		// Load the image
+		let image = match load::load_image(&path) {
+			Ok(image) => {
+				log::debug!("Finished loading {path:?}");
+				image
+			},
+			// If we didn't get it, send an error response and try again
+			Err(err) => {
+				log::info!("Unable to load {path:?}: {err:?}");
+				if path_response_sender.send(Err(LoadImageError { path })).is_err() {
+					return Ok(());
+				}
+				continue;
+			},
+		};
+
+		// Get the next request
+		let (request, sender) = match request_receiver.recv() {
+			Ok(value) => value,
+			Err(_) => return Ok(()),
+		};
 
 		// Then try to load it
 		// Note: We can ignore errors on sending, since other senders might still be alive
 		#[allow(clippy::let_underscore_drop)]
-		let _ = match load::load_image(&request.path, request.window_size, upscale_waifu2x) {
+		match load::process_image(&path, image, &request, upscale_waifu2x) {
 			// If we got it, send it
 			Ok(image) => {
-				log::debug!("Finished loading {:?}", request.path);
-				sender.send(Ok(image))
+				log::debug!("Finished processing {path:?}");
+				let _ = sender.send(Ok(image));
+				if path_response_sender.send(Ok(())).is_err() {
+					return Ok(());
+				}
 			},
 			// If we couldn't, send an error
 			Err(err) => {
-				log::info!("Unable to load {:?}: {err:?}", request.path);
-				sender.send(Err(LoadImageError { path: request.path }))
+				log::info!("Unable to process {path:?}: {err:?}");
+				let _ = sender.send(Err(()));
+				if path_response_sender.send(Err(LoadImageError { path })).is_err() {
+					return Ok(());
+				}
 			},
 		};
 	}
 }
-
 
 /// Scans a directory and insert all it's paths onto `paths`
 fn scan_dir(paths: &mut Vec<PathBuf>, path: &Path) {
