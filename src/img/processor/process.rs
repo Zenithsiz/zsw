@@ -1,7 +1,7 @@
-//! Image loader
+//! Image processing
 
 // Imports
-use crate::{image_loader::request::ImageRequest, ImageBuffer};
+use crate::{img::ImageRequest, ProcessedImage};
 use anyhow::Context;
 use cgmath::Vector2;
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
@@ -16,27 +16,16 @@ use std::{
 	time::Instant,
 };
 
-/// Loads an image from a path
-pub fn load_image(path: &Path) -> Result<DynamicImage, anyhow::Error> {
-	// Try to open the image by guessing it's format
-	let image_reader = image::io::Reader::open(&path)
-		.context("Unable to open image")?
-		.with_guessed_format()
-		.context("Unable to parse image")?;
-	image_reader.decode().context("Unable to decode image")
-}
-
 /// Processes an image according to a request
 pub fn process_image(
-	path: &Path, image: DynamicImage, request: &ImageRequest, upscale_waifu2x: bool,
-) -> Result<ImageBuffer, anyhow::Error> {
-	let &ImageRequest { window_size } = request;
+	path: &Path, image: DynamicImage, request: ImageRequest, upscale_waifu2x: bool,
+) -> Result<ProcessedImage, anyhow::Error> {
+	let ImageRequest { window_size } = request;
 
 	// Get it's width and aspect ratio
 	let image_size = Vector2::new(image.width(), image.height());
 	let image_aspect_ratio = Ratio::new(image_size.x, image_size.y);
 	let window_aspect_ratio = Ratio::new(window_size.x, window_size.y);
-	log::debug!("Loaded {path:?} ({}x{})", image_size.x, image_size.y);
 
 	// Then check what direction we'll be scrolling the image
 	let scroll_dir = match (image_size.x.cmp(&image_size.y), window_size.x.cmp(&window_size.y)) {

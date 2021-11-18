@@ -2,7 +2,7 @@
 
 // Imports
 use parking_lot::{Condvar, Mutex};
-use std::{collections::BinaryHeap, sync::Arc};
+use std::{collections::BinaryHeap, num::NonZeroUsize, sync::Arc};
 
 /// A value by priority
 #[derive(Debug)]
@@ -39,13 +39,17 @@ impl<T> Ord for ValueByPriority<T> {
 struct Buffer<T> {
 	/// Queue
 	queue: BinaryHeap<ValueByPriority<T>>,
+
+	/// Queue max capacity
+	capacity: Option<NonZeroUsize>,
 }
 
 impl<T> Buffer<T> {
 	/// Creates an empty buffer
-	pub fn empty() -> Self {
+	pub fn empty(capacity: Option<NonZeroUsize>) -> Self {
 		Self {
 			queue: BinaryHeap::new(),
+			capacity,
 		}
 	}
 }
@@ -57,7 +61,10 @@ struct Inner<T> {
 	buffer: Mutex<Buffer<T>>,
 
 	/// Receiver condition variable
-	condvar: Condvar,
+	receiver_condvar: Condvar,
+
+	/// Sender condition variable
+	sender_condvar: Condvar,
 }
 
 /// A channel sender
@@ -69,9 +76,9 @@ pub struct Sender<T> {
 
 impl<T> Drop for Sender<T> {
 	fn drop(&mut self) {
-		// Lock the buffer and notify the other end that we're quitting
+		// Lock the buffer and notify all receivers that we're quitting
 		let _buffer = self.inner.buffer.lock();
-		self.inner.condvar.notify_all();
+		self.inner.receiver_condvar.notify_all();
 	}
 }
 
@@ -86,11 +93,23 @@ impl<T> Sender<T> {
 			return Err(SendError);
 		}
 
-		// Else insert the value
+		// Check the buffer's capacity
+		loop {
+			match buffer.capacity {
+				// If none, or we're within the limit, continue
+				None => break,
+				Some(capacity) if buffer.queue.len() < capacity.get() => break,
+
+				// Else wait on the condvar for a receiver to wake us up
+				Some(_) => self.inner.sender_condvar.wait(&mut buffer),
+			}
+		}
+
+		// Then insert the value
 		buffer.queue.push(ValueByPriority { value, priority });
 
-		// Then wake a receiver
-		self.inner.condvar.notify_one();
+		// And wake a receiver
+		self.inner.receiver_condvar.notify_one();
 
 		Ok(())
 	}
@@ -123,9 +142,9 @@ impl<T> Receiver<T> {
 		let mut buffer = self.inner.buffer.lock();
 
 		// Get the request
-		match buffer.queue.pop() {
+		let value = match buffer.queue.pop() {
 			// If we had it, return it
-			Some(value) => Ok(value.value),
+			Some(value) => value.value,
 
 			// Else make sure the requested is still alive and wait for it
 			None => {
@@ -134,13 +153,17 @@ impl<T> Receiver<T> {
 					return Err(RecvError);
 				}
 
-				// Else wait until we get a notification
-				self.inner.condvar.wait(&mut buffer);
+				// Else wait until the sender sends a value
+				self.inner.receiver_condvar.wait(&mut buffer);
 
 				// Then get it, or return `Err` if they quit
-				buffer.queue.pop().map(|value| value.value).ok_or(RecvError)
+				buffer.queue.pop().ok_or(RecvError)?.value
 			},
-		}
+		};
+
+		// Then wake up the sender if they're waiting and return
+		self.inner.sender_condvar.notify_one();
+		Ok(value)
 	}
 
 	/// Tries to receive a value
@@ -149,19 +172,18 @@ impl<T> Receiver<T> {
 		// Lock the buffer
 		let mut buffer = self.inner.buffer.lock();
 
-		// Get the request
+		// Try to get the request
 		match buffer.queue.pop() {
-			// If we had it, return it
-			Some(value) => Ok(value.value),
+			// If we had it, wake up the sender and return
+			Some(value) => {
+				self.inner.sender_condvar.notify_one();
+				Ok(value.value)
+			},
 
 			// Else make sure the requested is still alive and return
-			None => {
-				// Else if the sender quit, return Err
-				if Arc::strong_count(&self.inner) == 1 {
-					Err(TryRecvError::SenderQuit)
-				} else {
-					Err(TryRecvError::NotReady)
-				}
+			None => match Arc::strong_count(&self.inner) {
+				1 => Err(TryRecvError::SenderQuit),
+				_ => Err(TryRecvError::NotReady),
 			},
 		}
 	}
@@ -185,11 +207,12 @@ pub enum TryRecvError {
 }
 
 /// Creates a new channel
-pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
+pub fn channel<T>(capacity: Option<NonZeroUsize>) -> (Sender<T>, Receiver<T>) {
 	// Create the shared inner
 	let inner = Arc::new(Inner {
-		buffer:  Mutex::new(Buffer::empty()),
-		condvar: Condvar::new(),
+		buffer:           Mutex::new(Buffer::empty(capacity)),
+		receiver_condvar: Condvar::new(),
+		sender_condvar:   Condvar::new(),
 	});
 
 	(

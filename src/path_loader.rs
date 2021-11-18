@@ -6,6 +6,7 @@ use anyhow::Context;
 use notify::Watcher;
 use rand::prelude::SliceRandom;
 use std::{
+	num::NonZeroUsize,
 	ops::ControlFlow,
 	path::{Path, PathBuf},
 	sync::{mpsc, Arc},
@@ -41,7 +42,9 @@ impl PathLoader {
 			.context("Unable to start watching directory")?;
 
 		// Create both channels
-		let (path_sender, path_receiver) = priority_spmc::channel();
+		// Note: Since we can hand out paths quickly, we can use a relatively low capacity
+		#[allow(clippy::expect_used)] // It won't panic
+		let (path_sender, path_receiver) = priority_spmc::channel(Some(NonZeroUsize::new(16).expect("16 isn't 0")));
 
 		// Then start the path loader thread
 		thread::Builder::new()
