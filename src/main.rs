@@ -17,14 +17,17 @@ mod args;
 mod gl_image;
 mod image_loader;
 mod image_uvs;
+mod path_loader;
 mod rect;
 mod sync;
+mod util;
 mod vertex;
 
 // Exports
 pub use gl_image::GlImage;
 pub use image_loader::{ImageBuffer, ImageLoader};
 pub use image_uvs::ImageUvs;
+pub use path_loader::PathLoader;
 pub use rect::Rect;
 pub use vertex::Vertex;
 
@@ -91,9 +94,13 @@ fn main() -> Result<(), anyhow::Error> {
 		self::set_display_always_below(&display);
 	}
 
+	// Create the path loader
+	log::debug!("Starting the path loader");
+	let path_loader = PathLoader::new(args.images_dir.clone()).context("Unable to create path loader")?;
+
 	// Create the loader and start loading images
 	log::debug!("Starting the image loader");
-	let image_loader = ImageLoader::new(args.images_dir.clone(), args.loader_threads, args.upscale_waifu2x)
+	let image_loader = ImageLoader::new(&path_loader, args.loader_threads, args.upscale_waifu2x)
 		.context("Unable to create image loader")?;
 
 	// Create the indices buffer
