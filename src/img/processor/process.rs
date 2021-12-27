@@ -58,7 +58,7 @@ pub fn process_image(
 		// If we're scrolling vertically, downscale if the image width is larger than the window width, else upscale
 		ScrollDir::Vertically => Resize {
 			size: Vector2::new(window_size.x, (window_size.x * image_size.y) / image_size.x),
-			kind: if image_size.x > window_size.x {
+			kind: if image_size.x >= window_size.x {
 				ResizeKind::Downscale
 			} else {
 				ResizeKind::Upscale
@@ -68,7 +68,7 @@ pub fn process_image(
 		// If we're scrolling horizontally, downscale if the image height is larger than the window height, else upscale
 		ScrollDir::Horizontally => Resize {
 			size: Vector2::new((window_size.y * image_size.x) / image_size.y, window_size.y),
-			kind: if image_size.y > window_size.y {
+			kind: if image_size.y >= window_size.y {
 				ResizeKind::Downscale
 			} else {
 				ResizeKind::Upscale
@@ -80,7 +80,7 @@ pub fn process_image(
 		//       we only need to check the width.
 		ScrollDir::None => Resize {
 			size: Vector2::new(window_size.x, window_size.y),
-			kind: if image_size.x > window_size.x {
+			kind: if image_size.x >= window_size.x {
 				ResizeKind::Downscale
 			} else {
 				ResizeKind::Upscale
@@ -93,7 +93,7 @@ pub fn process_image(
 		(f64::from(image_size.x) * f64::from(image_size.y));
 	let image = match resize.kind {
 		ResizeKind::Downscale => {
-			log::debug!(
+			log::trace!(
 				"Downscaling {path:?} from {}x{} to {}x{} ({resize_scale:.2}%)",
 				image_size.x,
 				image_size.y,
@@ -103,7 +103,7 @@ pub fn process_image(
 			image.resize_exact(resize.size.x, resize.size.y, FilterType::CatmullRom)
 		},
 		ResizeKind::Upscale => {
-			log::debug!(
+			log::trace!(
 				"Upscaling {path:?} from {}x{} to {}x{} ({resize_scale:.2}%)",
 				image_size.x,
 				image_size.y,
@@ -157,7 +157,7 @@ fn upscale(
 		ScrollDir::Horizontally => f64::from(resize_size.y) / f64::from(image_size.y),
 	};
 	let scale = match scale {
-		scale if scale <= 1.0 => unreachable!("Should be upscaling"),
+		scale if scale <= 1.0 => unreachable!("Should be upscaling {:?}, found scale of {:?}", path, scale),
 		scale if scale <= 2.0 => "2",
 		scale if scale <= 4.0 => "4",
 		scale if scale <= 8.0 => "8",
@@ -193,7 +193,7 @@ fn upscale(
 
 		// Else boot up `waifu2x` to do it
 		// TODO: Use proper commands instead of just the ones that don't lag my computer to hell
-		log::debug!("Starting upscale of {path:?} to {output_path:?} (x{scale})");
+		log::trace!("Starting upscale of {path:?} to {output_path:?} (x{scale})");
 
 		let start_time = Instant::now();
 		let mut proc = process::Command::new("waifu2x-ncnn-vulkan")
@@ -210,12 +210,12 @@ fn upscale(
 			.context("Unable to run the `waifu2x-ncnn-vulkan` to upscale")?;
 		proc.wait().context("`waifu2x-ncnn-vulkan` returned an error status")?;
 
-		log::debug!(
+		log::trace!(
 			"Took {:.2?} to upscale {path:?}",
 			Instant::now().duration_since(start_time)
 		);
 	} else {
-		log::debug!("Upscaled version of {path:?} already exists at {output_path:?}");
+		log::trace!("Upscaled version of {path:?} already exists at {output_path:?}");
 	}
 
 	// Then load it

@@ -98,11 +98,11 @@ fn image_loader(
 		};
 
 		// Try to load the image
-		log::debug!("Loading {path:?}");
+		log::trace!("Loading {path:?}");
 		match load::load_image(&path) {
 			// If we did, send it
 			Ok(image) => {
-				log::debug!("Finished loading {path:?}");
+				log::trace!("Finished loading {path:?}");
 				if image_sender.send((path, image)).is_err() {
 					return Ok(());
 				}

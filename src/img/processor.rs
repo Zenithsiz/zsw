@@ -126,11 +126,11 @@ fn image_processor(
 			match process::process_image(&path, image, request, upscale_waifu2x) {
 				// If we got it, send it
 				Ok(image) => {
-					log::debug!("Finished processing {path:?}");
+					log::trace!("Finished processing {path:?}");
 					let _ = sender.send(image);
 					break;
 				},
-				// If we didn't manage to, retry
+				// If we didn't manage to, log and try again with another path
 				Err(err) => log::info!("Unable to process {path:?}: {err:?}"),
 			};
 		}
