@@ -3,7 +3,6 @@
 // Features
 #![feature(
 	never_type,
-	format_args_capture,
 	available_parallelism,
 	drain_filter,
 	array_zip,
@@ -47,7 +46,7 @@ use glium::{
 	Surface,
 };
 use std::{
-	mem,
+	fs, mem,
 	time::{Duration, Instant},
 };
 use x11::xlib;
@@ -55,13 +54,10 @@ use x11::xlib;
 #[allow(clippy::too_many_lines)] // TODO: Refactor
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
-	simplelog::TermLogger::init(
-		log::LevelFilter::Debug,
-		simplelog::Config::default(),
-		simplelog::TerminalMode::Stderr,
-		simplelog::ColorChoice::Auto,
-	)
-	.context("Unable to initialize logger")?;
+	match self::init_log() {
+		Ok(()) => log::debug!("Initialized logging"),
+		Err(err) => eprintln!("Unable to initialize logger: {err:?}"),
+	}
 
 	// Get arguments
 	let args = args::get().context("Unable to retrieve arguments")?;
@@ -406,4 +402,42 @@ struct GeometryState {
 
 	/// If the next image is loaded
 	next_image_is_loaded: bool,
+}
+
+/// Initializes the logging
+fn init_log() -> Result<(), anyhow::Error> {
+	/// Creates the file logger
+	fn file_logger() -> Result<Box<simplelog::WriteLogger<fs::File>>, anyhow::Error> {
+		let file = fs::File::create("latest.log").context("Unable to create file `latest.log`")?;
+		Ok(simplelog::WriteLogger::new(
+			log::LevelFilter::Trace,
+			simplelog::Config::default(),
+			file,
+		))
+	}
+
+	// All loggers
+	let mut loggers = Vec::with_capacity(2);
+
+	// Create the term logger
+	let term_logger = simplelog::TermLogger::new(
+		log::LevelFilter::Info,
+		simplelog::Config::default(),
+		simplelog::TerminalMode::Stderr,
+		simplelog::ColorChoice::Auto,
+	);
+	loggers.push(term_logger as Box<_>);
+
+	// Then try to create the file logger
+	let file_logger_res = file_logger().map(|file_logger| loggers.push(file_logger as _));
+
+	// Finally initialize them all
+	simplelog::CombinedLogger::init(loggers).context("Unable to initialize loggers")?;
+
+	// Then check if we got any errors
+	if let Err(err) = file_logger_res {
+		log::warn!("Unable to initialize file logger: {err:?}");
+	}
+
+	Ok(())
 }
