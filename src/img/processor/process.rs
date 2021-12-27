@@ -18,7 +18,7 @@ use std::{
 
 /// Processes an image according to a request
 pub fn process_image(
-	path: &Path, image: DynamicImage, request: ImageRequest, upscale_waifu2x: bool,
+	path: &Path, image: DynamicImage, request: ImageRequest, upscale: bool, downscale: bool, upscale_waifu2x: bool,
 ) -> Result<ProcessedImage, anyhow::Error> {
 	let ImageRequest { window_size } = request;
 
@@ -92,7 +92,7 @@ pub fn process_image(
 	let resize_scale = 100.0 * (f64::from(resize.size.x) * f64::from(resize.size.y)) /
 		(f64::from(image_size.x) * f64::from(image_size.y));
 	let image = match resize.kind {
-		ResizeKind::Downscale => {
+		ResizeKind::Downscale if downscale => {
 			log::trace!(
 				"Downscaling {path:?} from {}x{} to {}x{} ({resize_scale:.2}%)",
 				image_size.x,
@@ -102,7 +102,7 @@ pub fn process_image(
 			);
 			image.resize_exact(resize.size.x, resize.size.y, FilterType::CatmullRom)
 		},
-		ResizeKind::Upscale => {
+		ResizeKind::Upscale if upscale => {
 			log::trace!(
 				"Upscaling {path:?} from {}x{} to {}x{} ({resize_scale:.2}%)",
 				image_size.x,
@@ -112,9 +112,10 @@ pub fn process_image(
 			);
 			self::upscale(path, image, resize.size, scroll_dir, upscale_waifu2x).context("Unable to upscale image")?
 		},
+		_ => image,
 	};
 
-	let image = image.flipv().to_rgba8();
+	let image = image.to_rgba8();
 	Ok(image)
 }
 

@@ -8,13 +8,13 @@ mod request;
 mod uvs;
 
 // Exports
-pub use loader::{ImageLoader, RawImageReceiver};
+pub use loader::{ImageLoader, LoadedImageReceiver};
 pub use processor::{ImageProcessor, ProcessedImageReceiver};
 pub use request::ImageRequest;
 pub use uvs::ImageUvs;
 
-/// Raw image
-pub type RawImage = image::DynamicImage;
+/// Loaded image
+pub type LoadedImage = image::DynamicImage;
 
 /// Processed image
 pub type ProcessedImage = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;

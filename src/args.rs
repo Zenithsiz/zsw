@@ -36,6 +36,12 @@ pub struct Args {
 
 	/// If upscaling should be done with waifu 2x
 	pub upscale_waifu2x: bool,
+
+	/// If any upscaling should be done
+	pub upscale: bool,
+
+	/// If any downscaling should be done
+	pub downscale: bool,
 }
 
 /// Parses all arguments
@@ -53,6 +59,8 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		pub const LOADER_THREADS: &str = "loader-threads";
 		pub const PROCESSOR_THREADS: &str = "processor-threads";
 		pub const UPSCALE_WAIFU2X: &str = "upscale-waifu2x";
+		pub const UPSCALE: &str = "upscale";
+		pub const DOWNSCALE: &str = "downscale";
 	}
 
 
@@ -144,6 +152,18 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.help("Upscale using waifu2x")
 				.long_help("If images should be upscaled using `waifu2x`")
 				.long("upscale-waifu2x"),
+		)
+		.arg(
+			ClapArg::with_name(arg_name::UPSCALE)
+				.help("Upscale")
+				.long_help("If images should be upscaled")
+				.long("upscale"),
+		)
+		.arg(
+			ClapArg::with_name(arg_name::DOWNSCALE)
+				.help("Downscale")
+				.long_help("If images should be downscaled")
+				.long("downscale"),
 		)
 		.get_matches();
 
@@ -243,6 +263,8 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		.context("Unable to parse processor threads")?;
 
 	let upscale_waifu2x = matches.is_present(arg_name::UPSCALE_WAIFU2X);
+	let upscale = matches.is_present(arg_name::UPSCALE);
+	let downscale = matches.is_present(arg_name::DOWNSCALE);
 
 	Ok(Args {
 		window_geometry,
@@ -254,5 +276,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		loader_threads,
 		processor_threads,
 		upscale_waifu2x,
+		upscale,
+		downscale,
 	})
 }

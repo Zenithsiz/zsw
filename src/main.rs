@@ -8,7 +8,8 @@
 	array_zip,
 	control_flow_enum,
 	unwrap_infallible,
-	derive_default_enum
+	derive_default_enum,
+	decl_macro
 )]
 
 // Modules
@@ -99,8 +100,14 @@ fn main() -> Result<(), anyhow::Error> {
 
 	// Create the processor
 	log::debug!("Starting the image processor");
-	let image_processor = ImageProcessor::new(&image_loader, args.processor_threads, args.upscale_waifu2x)
-		.context("Unable to create image processor")?;
+	let image_processor = ImageProcessor::new(
+		&image_loader,
+		args.processor_threads,
+		args.upscale,
+		args.downscale,
+		args.upscale_waifu2x,
+	)
+	.context("Unable to create image processor")?;
 
 	// Create the indices buffer
 	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
@@ -360,7 +367,7 @@ fn draw(
 			-1.0 + x_scale + 2.0 * x_offset,
 			1.0 - y_scale - 2.0 * y_offset,
 			0.0,
-		)) * Matrix4::from_nonuniform_scale(x_scale, y_scale, 1.0);
+		)) * Matrix4::from_nonuniform_scale(x_scale, -y_scale, 1.0);
 
 		// Setup the uniforms with all the data
 		let sampler = image.texture.sampled();

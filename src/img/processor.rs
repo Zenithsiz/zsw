@@ -4,10 +4,10 @@
 mod process;
 
 // Imports
-use super::{ImageRequest, RawImageReceiver};
+use super::{ImageRequest, LoadedImageReceiver};
 use crate::{
 	sync::{once_channel, priority_spmc},
-	ImageLoader, ProcessedImage,
+	util, ImageLoader, ProcessedImage,
 };
 use anyhow::Context;
 use std::{num::NonZeroUsize, thread};
@@ -24,7 +24,8 @@ impl ImageProcessor {
 	/// # Errors
 	/// Returns an error if unable to spawn all processor threads
 	pub fn new(
-		image_loader: &ImageLoader, processor_threads: Option<usize>, upscale_waifu2x: bool,
+		image_loader: &ImageLoader, processor_threads: Option<usize>, upscale: bool, downscale: bool,
+		upscale_waifu2x: bool,
 	) -> Result<Self, anyhow::Error> {
 		// Start the image loader threads
 		// Note: Requests shouldn't be limited,
@@ -36,12 +37,18 @@ impl ImageProcessor {
 			let raw_image_receiver = image_loader.receiver();
 			thread::Builder::new()
 				.name(format!("Image processor #{thread_idx}"))
-				.spawn(
-					move || match self::image_processor(&request_receiver, &raw_image_receiver, upscale_waifu2x) {
+				.spawn(move || {
+					match self::image_processor(
+						&request_receiver,
+						&raw_image_receiver,
+						upscale,
+						downscale,
+						upscale_waifu2x,
+					) {
 						Ok(()) => log::debug!("Image processor #{thread_idx} successfully quit"),
 						Err(err) => log::warn!("Image processor #{thread_idx} returned `Err`: {err:?}"),
-					},
-				)
+					}
+				})
 				.context("Unable to spawn image processor")?;
 		}
 
@@ -104,7 +111,7 @@ fn default_process_threads() -> usize {
 /// Responsible for receiving requests and processing images for them.
 fn image_processor(
 	request_receiver: &priority_spmc::Receiver<(ImageRequest, once_channel::Sender<ProcessedImage>)>,
-	raw_image_receiver: &RawImageReceiver, upscale_waifu2x: bool,
+	raw_image_receiver: &LoadedImageReceiver, upscale: bool, downscale: bool, upscale_waifu2x: bool,
 ) -> Result<(), anyhow::Error> {
 	loop {
 		// Get the next request
@@ -113,7 +120,8 @@ fn image_processor(
 			Err(_) => return Ok(()),
 		};
 
-		loop {
+		// Then try to get images until we send ones
+		'get_img: loop {
 			// Then get the image
 			let (path, image) = match raw_image_receiver.recv() {
 				Ok(value) => value,
@@ -123,15 +131,15 @@ fn image_processor(
 			// And try to process it
 			// Note: We can ignore errors on sending, since other senders might still be alive
 			#[allow(clippy::let_underscore_drop)]
-			match process::process_image(&path, image, request, upscale_waifu2x) {
+			match util::measure(|| process::process_image(&path, image, request, upscale, downscale, upscale_waifu2x)) {
 				// If we got it, send it
-				Ok(image) => {
-					log::trace!("Finished processing {path:?}");
+				(Ok(image), duration) => {
+					log::trace!("Took {duration:?} to process {path:?}");
 					let _ = sender.send(image);
-					break;
+					break 'get_img;
 				},
 				// If we didn't manage to, log and try again with another path
-				Err(err) => log::info!("Unable to process {path:?}: {err:?}"),
+				(Err(err), _) => log::info!("Unable to process {path:?}: {err:?}"),
 			};
 		}
 	}

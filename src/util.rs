@@ -16,3 +16,21 @@ pub fn measure<T>(f: impl FnOnce() -> T) -> (T, Duration) {
 	let duration = Instant::now().saturating_duration_since(start_time);
 	(value, duration)
 }
+
+pub macro measure_dbg {
+    () => {
+        ::std::eprintln!("[{}:{}]", ::std::file!(), ::std::line!())
+    },
+    ($value:expr $(,)?) => {
+        match $crate::util::measure(move || $value) {
+            (value, duration) => {
+                ::std::eprintln!("[{}:{}] {} took {:?}",
+                    ::std::file!(), ::std::line!(), ::std::stringify!($value), duration);
+                value
+            }
+        }
+    },
+    ($($val:expr),+ $(,)?) => {
+        ($(::std::dbg!($val)),+,)
+    }
+}
