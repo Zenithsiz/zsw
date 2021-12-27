@@ -48,3 +48,7 @@ twox-hash = "1.6.1"
 # meaningfully tests most things
 [profile.dev.package."*"]
 opt-level = 3
+
+# Add debug to release for profiling
+[profile.release]
+debug = true

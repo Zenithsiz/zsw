@@ -13,16 +13,15 @@ use std::{
 ///
 /// # Return
 /// Returns the number of files successfully loaded
-pub fn visit_files_dir<E, F>(path: &Path, f: &mut F) -> Result<usize, E>
+pub fn visit_files_dir<E, F>(path: &Path, f: &mut F) -> Result<(), E>
 where
 	F: FnMut(PathBuf) -> ControlFlow<E>,
 {
-	let mut files_loaded = 0;
 	let dir = match std::fs::read_dir(path) {
 		Ok(dir) => dir,
 		Err(err) => {
 			log::warn!("Unable to read directory `{path:?}`: {:?}", anyhow::anyhow!(err));
-			return Ok(0);
+			return Ok(());
 		},
 	};
 	for entry in dir {
@@ -48,17 +47,16 @@ where
 
 		match file_type.is_dir() {
 			// Recurse on directories
-			true => {
-				files_loaded += self::visit_files_dir(&entry.path(), f)?;
-			},
+			true => self::visit_files_dir(&entry.path(), f)?,
 
 			// Visit files
-			false => match f(entry_path) {
-				ControlFlow::Continue(()) => files_loaded += 1,
-				ControlFlow::Break(err) => return Err(err),
+			false => {
+				if let ControlFlow::Break(err) = f(entry_path) {
+					return Err(err);
+				}
 			},
 		}
 	}
 
-	Ok(files_loaded)
+	Ok(())
 }
