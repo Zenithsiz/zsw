@@ -175,8 +175,6 @@ fn loader_thread(
 
 /// Handles a filesystem event
 fn handle_fs_event(event: notify::DebouncedEvent, _base_path: &Path, paths: &mut Vec<Arc<PathBuf>>) {
-	log::trace!("Receive filesystem event: {event:?}");
-
 	#[allow(clippy::match_same_arms)] // They're logically in different parts
 	match event {
 		// Add the path

@@ -47,7 +47,7 @@ use glium::{
 	Surface,
 };
 use std::{
-	fs, mem,
+	fs,
 	time::{Duration, Instant},
 };
 use x11::xlib;
@@ -134,19 +134,12 @@ fn main() -> Result<(), anyhow::Error> {
 	let mut geometry_states = args
 		.image_geometries
 		.iter()
-		.map(|&geometry| {
-			let get_image =
-				|| GlImage::new(&display, &image_processor, geometry.size).context("Unable to create image");
-			Ok(GeometryState {
-				geometry,
-				cur_image: get_image()?,
-				next_image: get_image()?,
-				progress: rand::random(),
-				next_image_is_loaded: true,
-			})
+		.map(|&geometry| GeometryState {
+			geometry,
+			images: GeometryImageState::Empty,
+			progress: rand::random(),
 		})
-		.collect::<Result<Vec<_>, anyhow::Error>>()
-		.context("Unable to load images for all geometries")?;
+		.collect::<Vec<_>>();
 
 
 	// Get the event handler, and then run until it returns
@@ -272,8 +265,6 @@ fn draw_update(
 	image_processor: &ImageProcessor, window_size: [u32; 2], cursor_pos: Point2<f32>,
 ) {
 	if let Err(err) = self::draw(target, geometry_state, fade, indices, program, window_size, cursor_pos) {
-		// Note: We just want to ensure we don't get a panic by dropping an unwrapped target
-		let _ = target.set_finish();
 		log::warn!("Unable to draw: {err:?}");
 	}
 
@@ -290,43 +281,45 @@ fn update(
 	// Increase the progress
 	geometry_state.progress += (1.0 / 60.0) / duration.as_secs_f32();
 
-	// If the next image isn't loaded, try to load it
-	if !geometry_state.next_image_is_loaded {
-		// If our progress is >= fade start, then we have to force wait for the image.
-		let force_wait = geometry_state.progress >= fade;
+	// If we need to force wait for the next image
+	let force_wait = geometry_state.progress >= fade;
 
-		if force_wait {
-			log::warn!("Next image hasn't arrived yet at the end of current image, waiting for it");
-		}
+	// If we finished the current image
+	let finished = geometry_state.progress >= 1.0;
 
-		// Then try to load it
-		geometry_state.next_image_is_loaded ^= geometry_state
-			.next_image
+	// Check the image state
+	let geometry = geometry_state.geometry;
+	geometry_state.images = match std::mem::replace(&mut geometry_state.images, GeometryImageState::Empty) {
+		// Regardless of progress, we must wait for the first image
+		GeometryImageState::Empty => {
+			let image = GlImage::new(display, image_processor, geometry.size).context("Unable to create image")?;
+			GeometryImageState::PrimaryOnly(image)
+		},
+
+		// If we only have the primary, load a new image if we need to force wait
+		// TODO: Try to load it earlier
+		GeometryImageState::PrimaryOnly(cur) if force_wait => {
+			let next = GlImage::new(display, image_processor, geometry.size).context("Unable to create image")?;
+			GeometryImageState::Both { cur, next }
+		},
+		state @ GeometryImageState::PrimaryOnly(_) => state,
+
+		// If we got both, change to swapped if we've reached the end, else don't do anything
+		GeometryImageState::Both { cur, next } if finished => {
+			geometry_state.progress = 1.0 - fade;
+			GeometryImageState::Swapped { cur: next, prev: cur }
+		},
+		state @ GeometryImageState::Both { .. } => state,
+
+		// If they've been swapped, try to update the previous
+		GeometryImageState::Swapped { mut prev, cur } => match prev
 			.try_update(display, image_processor, force_wait)
-			.context("Unable to update image")?;
-
-		// If we force waited but the next image isn't loaded, return Err
-		if force_wait && !geometry_state.next_image_is_loaded {
-			return Err(anyhow::anyhow!("Unable to load next image even while force-waiting"));
-		}
-	}
-
-	// If we reached the end, swap the next to current and try to load the next
-	if geometry_state.progress >= 1.0 {
-		// Reset the progress to where we where during the fade
-		geometry_state.progress = 1.0 - fade;
-
-		// Swap the images
-		mem::swap(&mut geometry_state.cur_image, &mut geometry_state.next_image);
-		geometry_state.next_image_is_loaded = false;
-
-		// And try to update the next image
-		geometry_state.next_image_is_loaded ^= geometry_state
-			.next_image
-			.try_update(display, image_processor, false)
-			.context("Unable to update image")?;
-	}
-
+			.context("Unable to get next image")?
+		{
+			true => GeometryImageState::Both { cur, next: prev },
+			false => GeometryImageState::Swapped { prev, cur },
+		},
+	};
 
 	Ok(())
 }
@@ -338,30 +331,32 @@ fn draw(
 	program: &glium::Program, window_size: [u32; 2], _cursor_pos: Point2<f32>,
 ) -> Result<(), anyhow::Error> {
 	// Calculate the base alpha and progress to apply to the images
-	let (base_alpha, next_progress) = match geometry_state.progress {
-		f if f >= fade => (
-			(geometry_state.progress - fade) / (1.0 - fade),
-			geometry_state.progress - fade,
-		),
+	let cur_progress = geometry_state.progress;
+	let (base_alpha, next_progress) = match cur_progress {
+		f if f >= fade => ((cur_progress - fade) / (1.0 - fade), cur_progress - fade),
 		_ => (0.0, 0.0),
 	};
 
+	let (cur, next) = match &mut geometry_state.images {
+		GeometryImageState::Empty => (None, None),
+		GeometryImageState::PrimaryOnly(cur) | GeometryImageState::Swapped { cur, .. } => {
+			(Some((cur, 1.0, cur_progress)), None)
+		},
+		GeometryImageState::Both { cur, next } => (
+			Some((cur, 1.0 - base_alpha, cur_progress)),
+			Some((next, base_alpha, next_progress)),
+		),
+	};
+
 	// Then draw
-	for (image, alpha, progress) in [
-		(&mut geometry_state.cur_image, 1.0 - base_alpha, geometry_state.progress),
-		(&mut geometry_state.next_image, base_alpha, next_progress),
-	] {
-		// If alpha is 0, don't render
-		if alpha == 0.0 {
-			continue;
-		}
-
+	let geometry = geometry_state.geometry;
+	for (image, alpha, progress) in [cur, next].into_iter().flatten() {
 		// Calculate the matrix for the geometry
-		let x_scale = geometry_state.geometry.size[0] as f32 / window_size[0] as f32;
-		let y_scale = geometry_state.geometry.size[1] as f32 / window_size[1] as f32;
+		let x_scale = geometry.size[0] as f32 / window_size[0] as f32;
+		let y_scale = geometry.size[1] as f32 / window_size[1] as f32;
 
-		let x_offset = geometry_state.geometry.pos[0] as f32 / window_size[0] as f32;
-		let y_offset = geometry_state.geometry.pos[1] as f32 / window_size[1] as f32;
+		let x_offset = geometry.pos[0] as f32 / window_size[0] as f32;
+		let y_offset = geometry.pos[1] as f32 / window_size[1] as f32;
 
 		let mat = Matrix4::from_translation(Vector3::new(
 			-1.0 + x_scale + 2.0 * x_offset,
@@ -398,17 +393,48 @@ struct GeometryState {
 	/// Geometry
 	geometry: Rect<u32>,
 
-	/// Current image
-	cur_image: GlImage,
-
-	/// Next image
-	next_image: GlImage,
+	/// Images
+	images: GeometryImageState,
 
 	/// Progress
 	progress: f32,
+}
 
-	/// If the next image is loaded
-	next_image_is_loaded: bool,
+/// Image state of the geometry
+#[derive(Debug)]
+enum GeometryImageState {
+	/// Empty
+	///
+	/// This means that no images have been assigned to this geometry yet.
+	Empty,
+
+	/// Primary only
+	///
+	/// The primary image is loaded. The back image is still not available
+	PrimaryOnly(GlImage),
+
+	/// Both
+	///
+	/// Both images are loaded to be faded in between
+	Both {
+		/// Current image
+		cur: GlImage,
+
+		/// Next
+		next: GlImage,
+	},
+
+	/// Swapped
+	///
+	/// Front and back images have been swapped, and the next image needs
+	/// to be loaded
+	Swapped {
+		/// Previous image
+		prev: GlImage,
+
+		/// Current image
+		cur: GlImage,
+	},
 }
 
 /// Initializes the logging

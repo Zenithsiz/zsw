@@ -34,13 +34,13 @@ impl ImageProcessor {
 		let processor_threads = processor_threads.unwrap_or_else(default_process_threads).max(1);
 		for thread_idx in 0..processor_threads {
 			let request_receiver = request_receiver.clone();
-			let raw_image_receiver = image_loader.receiver();
+			let loaded_image_receiver = image_loader.receiver();
 			thread::Builder::new()
 				.name(format!("Image processor #{thread_idx}"))
 				.spawn(move || {
 					match self::image_processor(
 						&request_receiver,
-						&raw_image_receiver,
+						&loaded_image_receiver,
 						upscale,
 						downscale,
 						upscale_waifu2x,
@@ -111,7 +111,7 @@ fn default_process_threads() -> usize {
 /// Responsible for receiving requests and processing images for them.
 fn image_processor(
 	request_receiver: &priority_spmc::Receiver<(ImageRequest, once_channel::Sender<ProcessedImage>)>,
-	raw_image_receiver: &LoadedImageReceiver, upscale: bool, downscale: bool, upscale_waifu2x: bool,
+	loaded_image_receiver: &LoadedImageReceiver, upscale: bool, downscale: bool, upscale_waifu2x: bool,
 ) -> Result<(), anyhow::Error> {
 	loop {
 		// Get the next request
@@ -123,7 +123,7 @@ fn image_processor(
 		// Then try to get images until we send ones
 		'get_img: loop {
 			// Then get the image
-			let (path, image) = match raw_image_receiver.recv() {
+			let (path, image) = match loaded_image_receiver.recv() {
 				Ok(value) => value,
 				Err(_) => return Ok(()),
 			};
