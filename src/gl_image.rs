@@ -144,6 +144,7 @@ impl GlImage {
 	}
 }
 
+// TODO: Redo all of this, seems to cause some CPU pinning *sometimes*
 fn get_image(
 	image_rxs: &mut VecDeque<ImageReceiver>, image_loader: &ImageLoader, request: ImageRequest, force_wait: bool,
 ) -> Option<Image> {
@@ -152,7 +153,7 @@ fn get_image(
 	loop {
 		// If we're not force waiting and we've gone through all image receivers,
 		// quit
-		if !force_wait && cur_idx == image_rxs.len() {
+		if !force_wait && cur_idx >= image_rxs.len() {
 			return None;
 		}
 
@@ -170,8 +171,7 @@ fn get_image(
 		}
 
 		// If we're force waiting and we reached the end, sleep for a bit
-		if force_wait && cur_idx + 1 == image_rxs.len() {
-			log::trace!("No image receivers were ready");
+		if force_wait && (cur_idx + 1) % image_rxs.len() == 0 {
 			std::thread::sleep(timeout);
 		}
 

@@ -37,12 +37,12 @@ impl ImageLoader {
 			let request_rx = request_rx.clone();
 			let path_rx = path_loader.receiver();
 			thread::Builder::new()
-				.name(format!("Image processor #{thread_idx}"))
+				.name(format!("Image loader #{thread_idx}"))
 				.spawn(move || match self::image_loader(&request_rx, &path_rx, args) {
-					Ok(()) => log::debug!("Image processor #{thread_idx} successfully quit"),
-					Err(err) => log::warn!("Image processor #{thread_idx} returned `Err`: {err:?}"),
+					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
+					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
 				})
-				.context("Unable to spawn image processor")?;
+				.context("Unable to spawn image loader")?;
 		}
 
 		Ok(Self { request_tx })
