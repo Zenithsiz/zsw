@@ -293,30 +293,64 @@ fn update(
 
 		// If we only have the primary, load a new image if we need to force wait
 		// TODO: Try to load it earlier
+		// Note: The reason we don't just load this at the beginning is to improve time-to-first-image
 		GeometryImageState::PrimaryOnly(cur) if force_wait => {
 			let next = GlImage::new(display, image_loader, geometry.size).context("Unable to create image")?;
 			GeometryImageState::Both { cur, next }
 		},
 		state @ GeometryImageState::PrimaryOnly(_) => state,
 
-		// If we got both, change to swapped if we've reached the end, else don't do anything
+		// If we got both and finished, try to update as swapped, else stay as-is
 		GeometryImageState::Both { cur, next } if finished => {
 			geometry_state.progress = 1.0 - fade;
-			GeometryImageState::Swapped { cur: next, prev: cur }
+			self::update_swapped(cur, next, None, display, image_loader, force_wait)
+				.context("Unable to update swapped image")?
 		},
 		state @ GeometryImageState::Both { .. } => state,
 
-		// If they've been swapped, try to update the previous
-		GeometryImageState::Swapped { mut prev, cur } => match prev
-			.try_update(display, image_loader, force_wait)
-			.context("Unable to get next image")?
-		{
-			true => GeometryImageState::Both { cur, next: prev },
-			false => GeometryImageState::Swapped { prev, cur },
+		// If we're swapped, try to update
+		GeometryImageState::Swapped { prev, cur, since } => {
+			self::update_swapped(prev, cur, Some(since), display, image_loader, force_wait)
+				.context("Unable to update swapped image")?
 		},
 	};
 
 	Ok(())
+}
+
+/// Updates a swapped image state and returns the next state
+fn update_swapped(
+	mut prev: GlImage, cur: GlImage, mut since: Option<Instant>, display: &glium::Display, image_loader: &ImageLoader,
+	force_wait: bool,
+) -> Result<GeometryImageState, anyhow::Error> {
+	// If we're force waiting and don't have a `since`, create it,
+	// so we can keep track of how long the request took
+	if force_wait && since.is_none() {
+		since = Some(Instant::now());
+	}
+
+	let state = match prev
+		.try_update(display, image_loader, force_wait)
+		.context("Unable to get next image")?
+	{
+		// If we updated, switch to `Both`
+		true => {
+			// If we didn't just update it, log how long it took
+			if let Some(since) = since {
+				let duration = Instant::now().saturating_duration_since(since);
+				log::trace!("Waited {duration:?} for the next image");
+			}
+			GeometryImageState::Both { cur, next: prev }
+		},
+
+		// Else stay in `Swapped`
+		false => GeometryImageState::Swapped {
+			prev,
+			cur,
+			since: since.unwrap_or_else(Instant::now),
+		},
+	};
+	Ok(state)
 }
 
 /// Draws
@@ -429,6 +463,9 @@ enum GeometryImageState {
 
 		/// Current image
 		cur: GlImage,
+
+		/// Instant we were swapped
+		since: Instant,
 	},
 }
 

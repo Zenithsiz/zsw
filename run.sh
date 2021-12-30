@@ -4,7 +4,7 @@ set -e
 
 cargo run -- \
 	~/.wallpaper/active \
-	--image-duration 5.0 \
+	--image-duration 1.0 \
 	--window-geometry "3280x1080+0+0" \
 	--image-geometry "1920x1080+1360+0" \
 	--image-geometry "1360x768+0+312" \
