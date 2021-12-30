@@ -8,7 +8,7 @@ cargo run -- \
 	--window-geometry "3280x1080+0+0" \
 	--image-geometry "1920x1080+1360+0" \
 	--fade-point 0.8 \
-	--image-backlog 1 \
+	--image-backlog 4 \
 	--image-loader-args "image-loader-args.json"
 
 # "1360x768+0+312"
