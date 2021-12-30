@@ -20,8 +20,11 @@ use std::{
 
 /// Loads an image from a path
 pub fn load_image(path: &Path, request: ImageRequest, args: ImageLoaderArgs) -> Result<DynamicImage, anyhow::Error> {
+	// Canonicalize the path before loading
+	let path = path.canonicalize().context("Unable to canonicalize path")?;
+
 	// Open the image
-	let image_file = fs::File::open(path).context("Unable to open image file")?;
+	let image_file = fs::File::open(&path).context("Unable to open image file")?;
 	let mut image_file = BufReader::new(image_file);
 
 	// Then guess it's format
@@ -31,7 +34,7 @@ pub fn load_image(path: &Path, request: ImageRequest, args: ImageLoaderArgs) -> 
 	let image_size = self::image_size(&mut image_file, format)?;
 
 	// Check if we're doing any downscaling
-	match self::load_image_downscaled(path, request, &mut image_file, format, image_size, args) {
+	match self::load_image_downscaled(&path, request, &mut image_file, format, image_size, args) {
 		Ok(Some(image)) => return Ok(image),
 		Ok(None) => (),
 		Err(err) => log::warn!("Unable to load downscaled image {path:?}: {err:?}"),

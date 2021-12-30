@@ -179,16 +179,11 @@ fn handle_fs_event(event: notify::DebouncedEvent, _base_path: &Path, paths: &mut
 	match event {
 		// Add the path
 		notify::DebouncedEvent::Create(path) => {
-			// Canonicalize the path
-			let path = self::try_canonicalize(path);
-
 			log::debug!("Adding {path:?}");
 			paths.push(Arc::new(path));
 		},
 		// Replace the path
 		notify::DebouncedEvent::Rename(old_path, new_path) => {
-			let old_path = self::try_canonicalize(old_path);
-			let new_path = self::try_canonicalize(new_path);
 			log::debug!("Renaming {old_path:?} to {new_path:?}");
 			for path in paths {
 				if **path == old_path {
@@ -199,9 +194,8 @@ fn handle_fs_event(event: notify::DebouncedEvent, _base_path: &Path, paths: &mut
 		},
 		// Remove the path
 		notify::DebouncedEvent::Remove(path_to_remove) => {
-			let path_to_remove = self::try_canonicalize(path_to_remove);
 			log::debug!("Removing {path_to_remove:?}");
-			paths.retain(|path| **path != path_to_remove);
+			paths.retain(|path| **dbg!(path) != path_to_remove);
 		},
 
 		// Clear all paths and rescan
@@ -218,17 +212,6 @@ fn handle_fs_event(event: notify::DebouncedEvent, _base_path: &Path, paths: &mut
 		notify::DebouncedEvent::Error(err, path) => match path {
 			Some(path) => log::warn!("Found error for path {path:?}: {:?}", anyhow::anyhow!(err)),
 			None => log::warn!("Found error for unknown path: {:?}", anyhow::anyhow!(err)),
-		},
-	}
-}
-
-/// Tries to canonicalize a path
-fn try_canonicalize(path: PathBuf) -> PathBuf {
-	match path.canonicalize() {
-		Ok(path) => path,
-		Err(err) => {
-			log::warn!("Unable to canonicalize {path:?}: {:?}", anyhow::anyhow!(err));
-			path
 		},
 	}
 }
