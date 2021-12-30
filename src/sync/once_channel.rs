@@ -98,9 +98,7 @@ impl<T> Receiver<T> {
 			return Ok(value);
 		}
 
-		// If sender quit, return `Err`
-		// Note: We need to check this while locked, or else we can enter
-		//       a sleep we never return from.
+		// Else check which error we return
 		if Arc::strong_count(&self.inner) == 1 {
 			return Err(TryRecvError::SenderQuit);
 		}

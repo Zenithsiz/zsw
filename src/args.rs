@@ -25,6 +25,9 @@ pub struct Args {
 	/// Fade point (0.5..1.0)
 	pub fade_point: f32,
 
+	/// Image backlog
+	pub image_backlog: Option<usize>,
+
 	/// Image loader arguments
 	pub image_loader_args: ImageLoaderArgs,
 }
@@ -40,6 +43,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		pub const IMAGE_DURATION: &str = "image-duration";
 		pub const FADE_POINT: &str = "fade-point";
 		pub const GRID: &str = "grid";
+		pub const IMAGE_BACKLOG: &str = "image-backlog";
 		pub const IMAGE_LOADER_ARGS: &str = "image-loader-args";
 	}
 
@@ -105,6 +109,13 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.takes_value(true)
 				.long("fade-point")
 				.default_value("0.8"),
+		)
+		.arg(
+			ClapArg::with_name(arg_name::IMAGE_BACKLOG)
+				.help("Image backlog per geometry")
+				.long_help("Number of images to have in the backlog for each geometry")
+				.takes_value(true)
+				.long("image-backlog"),
 		)
 		.arg(
 			ClapArg::with_name(arg_name::IMAGE_LOADER_ARGS)
@@ -192,6 +203,12 @@ pub fn get() -> Result<Args, anyhow::Error> {
 	let fade_point = fade.parse().context("Unable to parse fade")?;
 	anyhow::ensure!((0.5..=1.0).contains(&fade_point), "Fade must be within 0.5 .. 1.0");
 
+	let image_backlog = matches
+		.value_of(arg_name::IMAGE_BACKLOG)
+		.map(str::parse)
+		.transpose()
+		.context("Unable to parse image backlog")?;
+
 	let image_loader_args = match matches.value_of_os(arg_name::IMAGE_LOADER_ARGS) {
 		Some(path) => {
 			let file = fs::File::open(path).context("Unable to open image loader args")?;
@@ -206,6 +223,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		image_duration,
 		images_dir,
 		fade_point,
+		image_backlog,
 		image_loader_args,
 	})
 }

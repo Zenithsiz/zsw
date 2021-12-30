@@ -18,19 +18,19 @@ pub fn measure<T>(f: impl FnOnce() -> T) -> (T, Duration) {
 }
 
 pub macro measure_dbg {
-    () => {
-        ::std::eprintln!("[{}:{}]", ::std::file!(), ::std::line!())
-    },
-    ($value:expr $(,)?) => {
-        match $crate::util::measure(move || $value) {
-            (value, duration) => {
-                ::std::eprintln!("[{}:{}] {} took {:?}",
-                    ::std::file!(), ::std::line!(), ::std::stringify!($value), duration);
-                value
-            }
-        }
-    },
-    ($($val:expr),+ $(,)?) => {
-        ($(::std::dbg!($val)),+,)
-    }
+	() => {
+		::std::eprintln!("[{}:{}]", ::std::file!(), ::std::line!())
+	},
+	($value:expr $(,)?) => {
+		match $crate::util::measure(move || $value) {
+			(value, duration) => {
+				::std::eprintln!("[{}:{}] {} took {:?}",
+					::std::file!(), ::std::line!(), ::std::stringify!($value), duration);
+				value
+			}
+		}
+	},
+	($($val:expr),+ $(,)?) => {
+		($(::std::dbg!($val)),+,)
+	}
 }

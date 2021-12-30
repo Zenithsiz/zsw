@@ -187,6 +187,7 @@ fn event_handler<'a>(
 					image_loader,
 					window_size,
 					cursor_pos,
+					args.image_backlog.unwrap_or(1).max(1),
 				);
 			}
 
@@ -252,13 +253,13 @@ unsafe fn set_display_always_below(display: &glium::Display) {
 fn draw_update(
 	target: &mut glium::Frame, geometry_state: &mut GeometryState, duration: Duration, fade: f32,
 	indices: &glium::IndexBuffer<u32>, program: &glium::Program, display: &glium::Display, image_loader: &ImageLoader,
-	window_size: [u32; 2], cursor_pos: Point2<f32>,
+	window_size: [u32; 2], cursor_pos: Point2<f32>, image_backlog: usize,
 ) {
 	if let Err(err) = self::draw(target, geometry_state, fade, indices, program, window_size, cursor_pos) {
 		log::warn!("Unable to draw: {err:?}");
 	}
 
-	if let Err(err) = self::update(geometry_state, duration, fade, display, image_loader) {
+	if let Err(err) = self::update(geometry_state, duration, fade, display, image_loader, image_backlog) {
 		log::warn!("Unable to update: {err:?}");
 	}
 }
@@ -266,7 +267,7 @@ fn draw_update(
 /// Updates
 fn update(
 	geometry_state: &mut GeometryState, duration: Duration, fade: f32, display: &glium::Display,
-	image_loader: &ImageLoader,
+	image_loader: &ImageLoader, image_backlog: usize,
 ) -> Result<(), anyhow::Error> {
 	// Increase the progress
 	geometry_state.progress += (1.0 / 60.0) / duration.as_secs_f32();
@@ -282,7 +283,8 @@ fn update(
 	geometry_state.images = match std::mem::replace(&mut geometry_state.images, GeometryImageState::Empty) {
 		// Regardless of progress, we must wait for the first image
 		GeometryImageState::Empty => {
-			let image = GlImage::new(display, image_loader, geometry.size).context("Unable to create image")?;
+			let image =
+				GlImage::new(display, image_loader, geometry.size, image_backlog).context("Unable to create image")?;
 			GeometryImageState::PrimaryOnly(image)
 		},
 
@@ -290,7 +292,8 @@ fn update(
 		// TODO: Try to load it earlier
 		// Note: The reason we don't just load this at the beginning is to improve time-to-first-image
 		GeometryImageState::PrimaryOnly(cur) if force_wait => {
-			let next = GlImage::new(display, image_loader, geometry.size).context("Unable to create image")?;
+			let next =
+				GlImage::new(display, image_loader, geometry.size, image_backlog).context("Unable to create image")?;
 			GeometryImageState::Both { cur, next }
 		},
 		state @ GeometryImageState::PrimaryOnly(_) => state,

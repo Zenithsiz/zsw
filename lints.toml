@@ -6,9 +6,6 @@ warn = [
 deny = [
   # Must use `expect` instead of unwrap
   "clippy::unwrap_used", #
-  # Shouldn't panic, unless really needed
-  "clippy::panic",
-  "clippy::expect_used", #
   # Must use `unsafe` in `unsafe fn`
   "unsafe_op_in_unsafe_fn",
 ]

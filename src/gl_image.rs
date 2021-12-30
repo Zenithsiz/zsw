@@ -2,11 +2,12 @@
 
 // Imports
 use crate::{
-	img::{ImageLoader, ImageReceiver, ImageRequest},
+	img::{Image, ImageLoader, ImageReceiver, ImageRequest},
 	ImageUvs, Vertex,
 };
 use anyhow::Context;
 use cgmath::Vector2;
+use std::{collections::VecDeque, time::Duration};
 
 /// Image
 #[derive(Debug)]
@@ -20,9 +21,8 @@ pub struct GlImage {
 	/// Vertex buffer
 	pub vertex_buffer: glium::VertexBuffer<Vertex>,
 
-	/// Next image receiver
-	// TODO: Have multiple receivers in case one gets stuck on a large image
-	pub next_image_receiver: Option<ImageReceiver>,
+	/// All image receivers
+	pub image_rxs: VecDeque<ImageReceiver>,
 
 	/// Request
 	pub request: ImageRequest,
@@ -39,20 +39,18 @@ impl GlImage {
 	/// # Errors
 	/// Returns error if unable to create the gl texture or the vertex buffer
 	pub fn new(
-		facade: &glium::Display, image_loader: &ImageLoader, window_size: Vector2<u32>,
+		facade: &glium::Display, image_loader: &ImageLoader, window_size: Vector2<u32>, image_backlog: usize,
 	) -> Result<Self, anyhow::Error> {
 		let request = ImageRequest { window_size };
 
-		let image = image_loader
-			.request(request, Self::PRIORITY_HIGH)
-			.context("Unable to request image")?
+		let image = self::request(image_loader, request, Self::PRIORITY_HIGH)
 			.recv()
 			.context("Unable to get image")?;
 
 		// Note: Make sure we have at least 1 receiver
-		let next_image_receiver = image_loader
-			.request(request, Self::PRIORITY_LOW)
-			.context("Unable to queue next image")?;
+		let image_rxs = (0..image_backlog)
+			.map(|_| self::request(image_loader, request, Self::PRIORITY_LOW))
+			.collect();
 
 		let image_dims = image.dimensions();
 		let texture = glium::texture::Texture2d::new(
@@ -76,7 +74,7 @@ impl GlImage {
 			texture,
 			uvs,
 			vertex_buffer,
-			next_image_receiver: Some(next_image_receiver),
+			image_rxs,
 			request,
 		})
 	}
@@ -88,32 +86,13 @@ impl GlImage {
 	pub fn try_update(
 		&mut self, facade: &glium::Display, image_loader: &ImageLoader, force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
-		// Get the next image receiver, or create a new one, if we don't have any
-		let cur_image_receiver = match self.next_image_receiver.take() {
-			Some(receiver) => receiver,
-			None => image_loader
-				.request(self.request, Self::priority(force_wait))
-				.context("Unable to queue image")?,
-		};
-
-		// Try to get the next image
-		let image = match force_wait {
-			true => cur_image_receiver.recv().context("Unable to get next image")?,
-			false => match cur_image_receiver.try_recv().context("Unable to get next image")? {
-				Ok(image) => image,
-				Err(receiver) => {
-					self.next_image_receiver = Some(receiver);
-					return Ok(false);
-				},
+		let image = match self::get_image(&mut self.image_rxs, image_loader, self.request, force_wait) {
+			Some(image) => image,
+			None => {
+				assert!(!force_wait, "Received no image while force waiting");
+				return Ok(false);
 			},
 		};
-
-		// Then queue up another image if we got the current one
-		// Note: By here, we know for sure we don't have a receiver currently
-		let next_image_receiver = image_loader
-			.request(self.request, Self::priority(self.next_image_receiver.is_none()))
-			.context("Unable to request next image")?;
-		self.next_image_receiver = Some(next_image_receiver);
 
 		// Then update our texture
 		let image_dims = image.dimensions();
@@ -163,12 +142,46 @@ impl GlImage {
 			},
 		]
 	}
+}
 
-	/// Returns the priority given if it's high or not
-	const fn priority(high: bool) -> usize {
-		match high {
-			true => Self::PRIORITY_HIGH,
-			false => Self::PRIORITY_LOW,
+fn get_image(
+	image_rxs: &mut VecDeque<ImageReceiver>, image_loader: &ImageLoader, request: ImageRequest, force_wait: bool,
+) -> Option<Image> {
+	let timeout = Duration::from_millis(200); // TODO: Adjust timeout
+	let mut cur_idx = 0;
+	loop {
+		// If we're not force waiting and we've gone through all image receivers,
+		// quit
+		if !force_wait && cur_idx == image_rxs.len() {
+			return None;
 		}
+
+		// Else pop the front receiver and try to receiver it
+		let image_rx = image_rxs.pop_front().expect("No image receivers found");
+		match image_rx.try_recv().expect("Unable to load next image") {
+			// If we got it, create a new request and return the image
+			Ok(image) => {
+				let image_rx = self::request(image_loader, request, GlImage::PRIORITY_LOW);
+				image_rxs.push_back(image_rx);
+				return Some(image);
+			},
+			// Else push the receiver back
+			Err(image_rx) => image_rxs.push_back(image_rx),
+		}
+
+		// If we're force waiting and we reached the end, sleep for a bit
+		if force_wait && cur_idx + 1 == image_rxs.len() {
+			log::trace!("No image receivers were ready");
+			std::thread::sleep(timeout);
+		}
+
+		cur_idx += 1;
 	}
+}
+
+/// Requests an image
+fn request(image_loader: &ImageLoader, request: ImageRequest, priority: usize) -> ImageReceiver {
+	image_loader
+		.request(request, priority)
+		.expect("Unable to request image")
 }

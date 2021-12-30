@@ -129,9 +129,12 @@ fn image_loader(
 ) -> Result<(), anyhow::Error> {
 	loop {
 		// Get the next request
-		let (_request, sender) = match request_rx.recv() {
-			Ok(value) => value,
-			Err(_) => return Ok(()),
+		let (_request, sender) = match util::measure(|| request_rx.recv()) {
+			(Ok(value), duration) => {
+				log::trace!("Spent {duration:?} waiting for a request");
+				value
+			},
+			(Err(_), _) => return Ok(()),
 		};
 
 		// Then try to get images until we send ones
