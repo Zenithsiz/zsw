@@ -2,7 +2,7 @@
 
 // Imports
 use crate::{
-	img::{ImageProcessor, ImageRequest, ProcessedImageReceiver},
+	img::{ImageLoader, ImageReceiver, ImageRequest},
 	ImageUvs, Vertex,
 };
 use anyhow::Context;
@@ -21,7 +21,7 @@ pub struct GlImage {
 	pub vertex_buffer: glium::VertexBuffer<Vertex>,
 
 	/// Next image receiver
-	pub next_image_receiver: Option<ProcessedImageReceiver>,
+	pub next_image_receiver: Option<ImageReceiver>,
 
 	/// Request
 	pub request: ImageRequest,
@@ -38,18 +38,18 @@ impl GlImage {
 	/// # Errors
 	/// Returns error if unable to create the gl texture or the vertex buffer
 	pub fn new(
-		facade: &glium::Display, image_processor: &ImageProcessor, window_size: Vector2<u32>,
+		facade: &glium::Display, image_loader: &ImageLoader, window_size: Vector2<u32>,
 	) -> Result<Self, anyhow::Error> {
 		let request = ImageRequest { window_size };
 
-		let image = image_processor
+		let image = image_loader
 			.request(request, Self::PRIORITY_HIGH)
 			.context("Unable to request image")?
 			.recv()
 			.context("Unable to get image")?;
 
 		// Note: Make sure we have at least 1 receiver
-		let next_image_receiver = image_processor
+		let next_image_receiver = image_loader
 			.request(request, Self::PRIORITY_LOW)
 			.context("Unable to queue next image")?;
 
@@ -85,12 +85,12 @@ impl GlImage {
 	/// # Errors
 	/// Returns error if unable to load an image or create a new gl texture
 	pub fn try_update(
-		&mut self, facade: &glium::Display, image_processor: &ImageProcessor, force_wait: bool,
+		&mut self, facade: &glium::Display, image_loader: &ImageLoader, force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
 		// Get the next image receiver, or create a new one, if we don't have any
 		let cur_image_receiver = match self.next_image_receiver.take() {
 			Some(receiver) => receiver,
-			None => image_processor
+			None => image_loader
 				.request(self.request, Self::priority(force_wait))
 				.context("Unable to queue image")?,
 		};
@@ -109,7 +109,7 @@ impl GlImage {
 
 		// Then queue up another image if we got the current one
 		// Note: By here, we know for sure we don't have a receiver currently
-		let next_image_receiver = image_processor
+		let next_image_receiver = image_loader
 			.request(self.request, Self::priority(self.next_image_receiver.is_none()))
 			.context("Unable to request next image")?;
 		self.next_image_receiver = Some(next_image_receiver);

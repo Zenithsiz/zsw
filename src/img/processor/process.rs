@@ -1,5 +1,7 @@
 //! Image processing
 
+//! TODO: Adapt all of this onto the `load` module.
+
 // Imports
 use crate::{img::ImageRequest, ProcessedImage};
 use anyhow::Context;

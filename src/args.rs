@@ -25,14 +25,8 @@ pub struct Args {
 	/// Fade point (0.5..1.0)
 	pub fade_point: f32,
 
-	/// Image backlog per-thread
-	pub image_backlog: Option<usize>,
-
 	/// Loader threads
 	pub loader_threads: Option<usize>,
-
-	/// Processor threads
-	pub processor_threads: Option<usize>,
 
 	/// If upscaling should be done with waifu 2x
 	pub upscale_waifu2x: bool,
@@ -54,10 +48,8 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		pub const IMAGES_DIR: &str = "images-dir";
 		pub const IMAGE_DURATION: &str = "image-duration";
 		pub const FADE_POINT: &str = "fade-point";
-		pub const IMAGE_BACKLOG: &str = "image-backlog";
 		pub const GRID: &str = "grid";
 		pub const LOADER_THREADS: &str = "loader-threads";
-		pub const PROCESSOR_THREADS: &str = "processor-threads";
 		pub const UPSCALE_WAIFU2X: &str = "upscale-waifu2x";
 		pub const UPSCALE: &str = "upscale";
 		pub const DOWNSCALE: &str = "downscale";
@@ -127,25 +119,11 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.default_value("0.8"),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::IMAGE_BACKLOG)
-				.help("Image backlog")
-				.long_help("Image backlog ")
-				.takes_value(true)
-				.long("image-backlog"),
-		)
-		.arg(
 			ClapArg::with_name(arg_name::LOADER_THREADS)
 				.help("Loader threads")
 				.long_help("Number of loader threads to use")
 				.takes_value(true)
 				.long("loader-threads"),
-		)
-		.arg(
-			ClapArg::with_name(arg_name::PROCESSOR_THREADS)
-				.help("Processor threads")
-				.long_help("Number of processor threads to use")
-				.takes_value(true)
-				.long("processor-threads"),
 		)
 		.arg(
 			ClapArg::with_name(arg_name::UPSCALE_WAIFU2X)
@@ -244,23 +222,11 @@ pub fn get() -> Result<Args, anyhow::Error> {
 	let fade_point = fade.parse().context("Unable to parse fade")?;
 	anyhow::ensure!((0.5..=1.0).contains(&fade_point), "Fade must be within 0.5 .. 1.0");
 
-	let image_backlog = matches
-		.value_of(arg_name::IMAGE_BACKLOG)
-		.map(str::parse)
-		.transpose()
-		.context("Unable to parse image backlog")?;
-
 	let loader_threads = matches
 		.value_of(arg_name::LOADER_THREADS)
 		.map(str::parse)
 		.transpose()
 		.context("Unable to parse loader threads")?;
-
-	let processor_threads = matches
-		.value_of(arg_name::PROCESSOR_THREADS)
-		.map(str::parse)
-		.transpose()
-		.context("Unable to parse processor threads")?;
 
 	let upscale_waifu2x = matches.is_present(arg_name::UPSCALE_WAIFU2X);
 	let upscale = matches.is_present(arg_name::UPSCALE);
@@ -272,9 +238,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		image_duration,
 		images_dir,
 		fade_point,
-		image_backlog,
 		loader_threads,
-		processor_threads,
 		upscale_waifu2x,
 		upscale,
 		downscale,

@@ -4,14 +4,12 @@ set -e
 
 cargo run -- \
 	~/.wallpaper/active \
-	--image-duration 1.0 \
+	--image-duration 5.0 \
 	--window-geometry "3280x1080+0+0" \
 	--image-geometry "1920x1080+1360+0" \
 	--image-geometry "1360x768+0+312" \
 	--fade-point 0.8 \
-	--image-backlog 4 \
-	--loader-threads 4 \
-	--processor-threads 4
+	--loader-threads 4
 
 #cargo run -- \
 #	~/.wallpaper/active \
@@ -31,5 +29,4 @@ cargo run -- \
 #	--grid "2x3@1920x1080+1360+0" \
 #	--fade-point 0.8 \
 #	--image-backlog 0 \
-#	--loader-threads 4 \
-#	--processor-threads 4 \
+#	--loader-threads 4

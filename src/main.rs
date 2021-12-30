@@ -22,14 +22,15 @@ mod sync;
 mod util;
 mod vertex;
 
-// Exports
-pub use gl_image::GlImage;
-pub use img::{ImageLoader, ImageProcessor, ImageUvs, ProcessedImage};
-pub use path_loader::PathLoader;
-pub use rect::Rect;
-pub use vertex::Vertex;
 
 // Imports
+use crate::{
+	gl_image::GlImage,
+	img::{ImageLoader, ImageLoaderArgs, ImageUvs},
+	path_loader::PathLoader,
+	rect::Rect,
+	vertex::Vertex,
+};
 use anyhow::Context;
 use cgmath::{EuclideanSpace, Matrix4, Point2, Vector3};
 use glium::{
@@ -95,19 +96,13 @@ fn main() -> Result<(), anyhow::Error> {
 
 	// Create the loader
 	log::debug!("Starting the image loader");
-	let image_loader = ImageLoader::new(&path_loader, args.image_backlog, args.loader_threads)
-		.context("Unable to create image loader")?;
-
-	// Create the processor
-	log::debug!("Starting the image processor");
-	let image_processor = ImageProcessor::new(
-		&image_loader,
-		args.processor_threads,
-		args.upscale,
-		args.downscale,
-		args.upscale_waifu2x,
-	)
-	.context("Unable to create image processor")?;
+	let image_loader_args = ImageLoaderArgs {
+		loader_threads:  args.loader_threads,
+		upscale:         args.upscale,
+		upscale_waifu2x: args.upscale_waifu2x,
+		downscale:       args.downscale,
+	};
+	let image_loader = ImageLoader::new(&path_loader, image_loader_args).context("Unable to create image loader")?;
 
 	// Create the indices buffer
 	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
@@ -144,7 +139,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 	// Get the event handler, and then run until it returns
 	log::debug!("Entering event handler");
-	let event_handler = self::event_handler(display, &mut geometry_states, &args, indices, program, &image_processor);
+	let event_handler = self::event_handler(display, &mut geometry_states, &args, indices, program, &image_loader);
 	event_loop.run_return(event_handler);
 
 	Ok(())
@@ -152,7 +147,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 fn event_handler<'a>(
 	display: glium::Display, geometry_states: &'a mut [GeometryState], args: &'a args::Args,
-	indices: glium::IndexBuffer<u32>, program: glium::Program, image_processor: &'a ImageProcessor,
+	indices: glium::IndexBuffer<u32>, program: glium::Program, image_loader: &'a ImageLoader,
 ) -> impl 'a + FnMut(Event<'_, !>, &EventLoopWindowTarget<!>, &mut glutin::event_loop::ControlFlow) {
 	// Current cursor position
 	let mut cursor_pos = Point2::origin();
@@ -194,7 +189,7 @@ fn event_handler<'a>(
 					&indices,
 					&program,
 					&display,
-					image_processor,
+					image_loader,
 					window_size,
 					cursor_pos,
 				);
@@ -261,14 +256,14 @@ unsafe fn set_display_always_below(display: &glium::Display) {
 #[allow(clippy::too_many_arguments)] // TODO: Refactor, closure doesn't work, though
 fn draw_update(
 	target: &mut glium::Frame, geometry_state: &mut GeometryState, duration: Duration, fade: f32,
-	indices: &glium::IndexBuffer<u32>, program: &glium::Program, display: &glium::Display,
-	image_processor: &ImageProcessor, window_size: [u32; 2], cursor_pos: Point2<f32>,
+	indices: &glium::IndexBuffer<u32>, program: &glium::Program, display: &glium::Display, image_loader: &ImageLoader,
+	window_size: [u32; 2], cursor_pos: Point2<f32>,
 ) {
 	if let Err(err) = self::draw(target, geometry_state, fade, indices, program, window_size, cursor_pos) {
 		log::warn!("Unable to draw: {err:?}");
 	}
 
-	if let Err(err) = self::update(geometry_state, duration, fade, display, image_processor) {
+	if let Err(err) = self::update(geometry_state, duration, fade, display, image_loader) {
 		log::warn!("Unable to update: {err:?}");
 	}
 }
@@ -276,7 +271,7 @@ fn draw_update(
 /// Updates
 fn update(
 	geometry_state: &mut GeometryState, duration: Duration, fade: f32, display: &glium::Display,
-	image_processor: &ImageProcessor,
+	image_loader: &ImageLoader,
 ) -> Result<(), anyhow::Error> {
 	// Increase the progress
 	geometry_state.progress += (1.0 / 60.0) / duration.as_secs_f32();
@@ -292,14 +287,14 @@ fn update(
 	geometry_state.images = match std::mem::replace(&mut geometry_state.images, GeometryImageState::Empty) {
 		// Regardless of progress, we must wait for the first image
 		GeometryImageState::Empty => {
-			let image = GlImage::new(display, image_processor, geometry.size).context("Unable to create image")?;
+			let image = GlImage::new(display, image_loader, geometry.size).context("Unable to create image")?;
 			GeometryImageState::PrimaryOnly(image)
 		},
 
 		// If we only have the primary, load a new image if we need to force wait
 		// TODO: Try to load it earlier
 		GeometryImageState::PrimaryOnly(cur) if force_wait => {
-			let next = GlImage::new(display, image_processor, geometry.size).context("Unable to create image")?;
+			let next = GlImage::new(display, image_loader, geometry.size).context("Unable to create image")?;
 			GeometryImageState::Both { cur, next }
 		},
 		state @ GeometryImageState::PrimaryOnly(_) => state,
@@ -313,7 +308,7 @@ fn update(
 
 		// If they've been swapped, try to update the previous
 		GeometryImageState::Swapped { mut prev, cur } => match prev
-			.try_update(display, image_processor, force_wait)
+			.try_update(display, image_loader, force_wait)
 			.context("Unable to get next image")?
 		{
 			true => GeometryImageState::Both { cur, next: prev },
