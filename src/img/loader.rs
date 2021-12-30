@@ -67,6 +67,7 @@ impl ImageLoader {
 #[derive(PartialEq, Clone, Copy, Debug)]
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
+#[allow(clippy::struct_excessive_bools)] // It's a config
 pub struct ImageLoaderArgs {
 	/// Loader threads
 	pub loader_threads: usize,
@@ -77,17 +78,21 @@ pub struct ImageLoaderArgs {
 	/// If upscaling should be done with waifu 2x
 	pub upscale_waifu2x: bool,
 
-	/// If any downscaling should be done
-	pub downscale: bool,
+	/// If images can be loaded from the downscaled cache
+	pub downscale_load_from_cache: bool,
+
+	/// If images should be downscaled and saved to cache
+	pub downscale_save_to_cache: bool,
 }
 
 impl Default for ImageLoaderArgs {
 	fn default() -> Self {
 		Self {
-			loader_threads:  thread::available_parallelism().map_or(1, NonZeroUsize::get),
-			upscale:         false,
-			upscale_waifu2x: false,
-			downscale:       true,
+			loader_threads:            thread::available_parallelism().map_or(1, NonZeroUsize::get),
+			upscale:                   false,
+			upscale_waifu2x:           false,
+			downscale_load_from_cache: true,
+			downscale_save_to_cache:   false,
 		}
 	}
 }
@@ -125,11 +130,11 @@ impl ImageReceiver {
 /// Image loader thread function
 fn image_loader(
 	request_rx: &priority_spmc::Receiver<(ImageRequest, once_channel::Sender<Image>)>, path_rx: &PathReceiver,
-	_args: ImageLoaderArgs,
+	args: ImageLoaderArgs,
 ) -> Result<(), anyhow::Error> {
 	loop {
 		// Get the next request
-		let (_request, sender) = match util::measure(|| request_rx.recv()) {
+		let (request, sender) = match util::measure(|| request_rx.recv()) {
 			(Ok(value), duration) => {
 				log::trace!("Spent {duration:?} waiting for a request");
 				value
@@ -148,7 +153,7 @@ fn image_loader(
 			// And try to process it
 			// Note: We can ignore errors on sending, since other senders might still be alive
 			#[allow(clippy::let_underscore_drop)]
-			match util::measure(|| load::load_image(&path)) {
+			match util::measure(|| load::load_image(&path, request, args)) {
 				// If we got it, send it
 				(Ok(image), duration) => {
 					log::trace!("Took {duration:?} to load {path:?}");

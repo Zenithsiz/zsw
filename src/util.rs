@@ -7,7 +7,10 @@ mod scan_dir;
 pub use scan_dir::visit_files_dir;
 
 // Imports
-use std::time::{Duration, Instant};
+use std::{
+	hash::{Hash, Hasher},
+	time::{Duration, Instant},
+};
 
 /// Measures how long it took to execute a function
 pub fn measure<T>(f: impl FnOnce() -> T) -> (T, Duration) {
@@ -33,4 +36,11 @@ pub macro measure_dbg {
 	($($val:expr),+ $(,)?) => {
 		($(::std::dbg!($val)),+,)
 	}
+}
+
+/// Hashes a value using `twox_hash`
+pub fn hash_of<T: ?Sized + Hash>(value: &T) -> u64 {
+	let mut hasher = twox_hash::XxHash64::with_seed(0);
+	value.hash(&mut hasher);
+	hasher.finish()
 }
