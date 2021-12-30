@@ -9,7 +9,7 @@ cargo run -- \
 	--image-geometry "1920x1080+1360+0" \
 	--image-geometry "1360x768+0+312" \
 	--fade-point 0.8 \
-	--loader-threads 4
+	--image-loader-args "image-loader-args.json"
 
 #cargo run -- \
 #	~/.wallpaper/active \

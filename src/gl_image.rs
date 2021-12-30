@@ -21,6 +21,7 @@ pub struct GlImage {
 	pub vertex_buffer: glium::VertexBuffer<Vertex>,
 
 	/// Next image receiver
+	// TODO: Have multiple receivers in case one gets stuck on a large image
 	pub next_image_receiver: Option<ImageReceiver>,
 
 	/// Request

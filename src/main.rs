@@ -26,7 +26,7 @@ mod vertex;
 // Imports
 use crate::{
 	gl_image::GlImage,
-	img::{ImageLoader, ImageLoaderArgs, ImageUvs},
+	img::{ImageLoader, ImageUvs},
 	path_loader::PathLoader,
 	rect::Rect,
 	vertex::Vertex,
@@ -96,13 +96,8 @@ fn main() -> Result<(), anyhow::Error> {
 
 	// Create the loader
 	log::debug!("Starting the image loader");
-	let image_loader_args = ImageLoaderArgs {
-		loader_threads:  args.loader_threads,
-		upscale:         args.upscale,
-		upscale_waifu2x: args.upscale_waifu2x,
-		downscale:       args.downscale,
-	};
-	let image_loader = ImageLoader::new(&path_loader, image_loader_args).context("Unable to create image loader")?;
+	let image_loader =
+		ImageLoader::new(&path_loader, args.image_loader_args).context("Unable to create image loader")?;
 
 	// Create the indices buffer
 	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];

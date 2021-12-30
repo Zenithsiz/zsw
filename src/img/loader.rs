@@ -32,7 +32,7 @@ impl ImageLoader {
 		// Note: Requests shouldn't be limited,
 		// TODO: Find a better way to do a priority based two-way communication channel.
 		let (request_tx, request_rx) = priority_spmc::channel(None);
-		let loader_threads = args.loader_threads.unwrap_or_else(default_loader_threads).max(1);
+		let loader_threads = args.loader_threads.max(1);
 		for thread_idx in 0..loader_threads {
 			let request_rx = request_rx.clone();
 			let path_rx = path_loader.receiver();
@@ -65,9 +65,11 @@ impl ImageLoader {
 
 /// Image loader arguments
 #[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 pub struct ImageLoaderArgs {
 	/// Loader threads
-	pub loader_threads: Option<usize>,
+	pub loader_threads: usize,
 
 	/// If any upscaling should be done
 	pub upscale: bool,
@@ -77,6 +79,17 @@ pub struct ImageLoaderArgs {
 
 	/// If any downscaling should be done
 	pub downscale: bool,
+}
+
+impl Default for ImageLoaderArgs {
+	fn default() -> Self {
+		Self {
+			loader_threads:  thread::available_parallelism().map_or(1, NonZeroUsize::get),
+			upscale:         false,
+			upscale_waifu2x: false,
+			downscale:       true,
+		}
+	}
 }
 
 /// Image receiver
@@ -107,11 +120,6 @@ impl ImageReceiver {
 			Err(_) => anyhow::bail!("Unable to get image from loader thread"),
 		}
 	}
-}
-
-/// Returns the default number of loader threads to use
-fn default_loader_threads() -> usize {
-	thread::available_parallelism().map_or(1, NonZeroUsize::get)
 }
 
 /// Image loader thread function

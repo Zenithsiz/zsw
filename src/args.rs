@@ -1,11 +1,11 @@
 //! Args
 
 // Imports
-use crate::Rect;
+use crate::{img::ImageLoaderArgs, Rect};
 use anyhow::Context;
 use cgmath::{EuclideanSpace, Point2, Vector2};
 use clap::{App as ClapApp, Arg as ClapArg};
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 /// Args
 #[derive(Debug)]
@@ -25,17 +25,8 @@ pub struct Args {
 	/// Fade point (0.5..1.0)
 	pub fade_point: f32,
 
-	/// Loader threads
-	pub loader_threads: Option<usize>,
-
-	/// If upscaling should be done with waifu 2x
-	pub upscale_waifu2x: bool,
-
-	/// If any upscaling should be done
-	pub upscale: bool,
-
-	/// If any downscaling should be done
-	pub downscale: bool,
+	/// Image loader arguments
+	pub image_loader_args: ImageLoaderArgs,
 }
 
 /// Parses all arguments
@@ -49,10 +40,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		pub const IMAGE_DURATION: &str = "image-duration";
 		pub const FADE_POINT: &str = "fade-point";
 		pub const GRID: &str = "grid";
-		pub const LOADER_THREADS: &str = "loader-threads";
-		pub const UPSCALE_WAIFU2X: &str = "upscale-waifu2x";
-		pub const UPSCALE: &str = "upscale";
-		pub const DOWNSCALE: &str = "downscale";
+		pub const IMAGE_LOADER_ARGS: &str = "image-loader-args";
 	}
 
 
@@ -119,29 +107,11 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.default_value("0.8"),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::LOADER_THREADS)
-				.help("Loader threads")
-				.long_help("Number of loader threads to use")
+			ClapArg::with_name(arg_name::IMAGE_LOADER_ARGS)
+				.help("Image loader arguments path")
+				.long_help("File to load image loader arguments from")
 				.takes_value(true)
-				.long("loader-threads"),
-		)
-		.arg(
-			ClapArg::with_name(arg_name::UPSCALE_WAIFU2X)
-				.help("Upscale using waifu2x")
-				.long_help("If images should be upscaled using `waifu2x`")
-				.long("upscale-waifu2x"),
-		)
-		.arg(
-			ClapArg::with_name(arg_name::UPSCALE)
-				.help("Upscale")
-				.long_help("If images should be upscaled")
-				.long("upscale"),
-		)
-		.arg(
-			ClapArg::with_name(arg_name::DOWNSCALE)
-				.help("Downscale")
-				.long_help("If images should be downscaled")
-				.long("downscale"),
+				.long("image-loader-args"),
 		)
 		.get_matches();
 
@@ -222,15 +192,13 @@ pub fn get() -> Result<Args, anyhow::Error> {
 	let fade_point = fade.parse().context("Unable to parse fade")?;
 	anyhow::ensure!((0.5..=1.0).contains(&fade_point), "Fade must be within 0.5 .. 1.0");
 
-	let loader_threads = matches
-		.value_of(arg_name::LOADER_THREADS)
-		.map(str::parse)
-		.transpose()
-		.context("Unable to parse loader threads")?;
-
-	let upscale_waifu2x = matches.is_present(arg_name::UPSCALE_WAIFU2X);
-	let upscale = matches.is_present(arg_name::UPSCALE);
-	let downscale = matches.is_present(arg_name::DOWNSCALE);
+	let image_loader_args = match matches.value_of_os(arg_name::IMAGE_LOADER_ARGS) {
+		Some(path) => {
+			let file = fs::File::open(path).context("Unable to open image loader args")?;
+			serde_json::from_reader(file).context("Unable to parse image loader args")?
+		},
+		None => ImageLoaderArgs::default(),
+	};
 
 	Ok(Args {
 		window_geometry,
@@ -238,9 +206,6 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		image_duration,
 		images_dir,
 		fade_point,
-		loader_threads,
-		upscale_waifu2x,
-		upscale,
-		downscale,
+		image_loader_args,
 	})
 }

@@ -1,0 +1,6 @@
+{
+	"loader_threads": 4,
+	"upscale": true,
+	"upscale_waifu2x": false,
+	"downscale": true
+}
