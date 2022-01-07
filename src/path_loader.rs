@@ -195,7 +195,7 @@ fn handle_fs_event(event: notify::DebouncedEvent, _base_path: &Path, paths: &mut
 		// Remove the path
 		notify::DebouncedEvent::Remove(path_to_remove) => {
 			log::debug!("Removing {path_to_remove:?}");
-			paths.retain(|path| **dbg!(path) != path_to_remove);
+			paths.retain(|path| **path != path_to_remove);
 		},
 
 		// Clear all paths and rescan
