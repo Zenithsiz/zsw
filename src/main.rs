@@ -1,6 +1,51 @@
 //! Zenithsiz's scrolling wallpaper
 
 // Features
+#![feature(never_type, available_parallelism, control_flow_enum, decl_macro)]
+// Lints
+#![deny(unsafe_op_in_unsafe_fn)]
+
+// Modules
+pub mod app;
+pub mod args;
+pub mod gl_image;
+pub mod img;
+pub mod path_loader;
+pub mod rect;
+pub mod renderer;
+pub mod sync;
+mod util;
+
+// Exports
+pub use rect::Rect;
+
+// Imports
+use anyhow::Context;
+use pollster::FutureExt;
+use std::fs;
+
+fn main() -> Result<(), anyhow::Error> {
+	// Initialize logger
+	match self::init_log() {
+		Ok(()) => log::debug!("Initialized logging"),
+		Err(err) => eprintln!("Unable to initialize logger: {err:?}"),
+	}
+
+	// Get arguments
+	let args = args::get().context("Unable to retrieve arguments")?;
+	log::debug!("Found arguments {args:?}");
+
+	// Create the app
+	let app = app::App::new(args).block_on().context("Unable to initialize app")?;
+
+	// Then run it
+	app.run().context("Unable to run app")?;
+
+	Ok(())
+}
+
+/*
+// Features
 #![feature(
 	never_type,
 	available_parallelism,
@@ -18,6 +63,7 @@ mod gl_image;
 mod img;
 mod path_loader;
 mod rect;
+mod renderer;
 mod sync;
 mod util;
 mod vertex;
@@ -33,27 +79,19 @@ use crate::{
 };
 use anyhow::Context;
 use cgmath::{EuclideanSpace, Matrix4, Point2, Vector3};
-use glium::{
-	glutin::{
-		self,
-		event::{Event, StartCause, WindowEvent},
-		event_loop::{ControlFlow as GlutinControlFlow, EventLoopWindowTarget},
-		platform::{
-			run_return::EventLoopExtRunReturn,
-			unix::{EventLoopExtUnix, WindowBuilderExtUnix, WindowExtUnix, XWindowType},
-		},
-	},
-	index::PrimitiveType,
-	program::ProgramCreationInput,
-	Surface,
-};
 use std::{
 	fs,
 	time::{Duration, Instant},
 };
+use winit::{
+	dpi::{PhysicalPosition, PhysicalSize},
+	event::{Event, StartCause, WindowEvent},
+	event_loop::{ControlFlow as EventLoopControlFlow, EventLoop, EventLoopWindowTarget},
+	platform::unix::{WindowBuilderExtUnix, XWindowType},
+	window::WindowBuilder,
+};
 use x11::xlib;
 
-#[allow(clippy::too_many_lines)] // TODO: Refactor
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
 	match self::init_log() {
@@ -65,6 +103,23 @@ fn main() -> Result<(), anyhow::Error> {
 	let args = args::get().context("Unable to retrieve arguments")?;
 	log::debug!("Found arguments {args:?}");
 
+	// Build the display
+	let event_loop = EventLoop::new();
+	let window = WindowBuilder::new()
+		.with_position(PhysicalPosition {
+			x: args.window_geometry.pos[0],
+			y: args.window_geometry.pos[1],
+		})
+		.with_inner_size(PhysicalSize {
+			width:  args.window_geometry.size[0],
+			height: args.window_geometry.size[1],
+		})
+		.with_x11_window_type(vec![XWindowType::Desktop])
+		.build(&event_loop)
+		.context("Unable to build window")?;
+
+
+	/*
 	// Create the event loop and build the display.
 	log::debug!("Building the window");
 	let mut event_loop =
@@ -81,14 +136,7 @@ fn main() -> Result<(), anyhow::Error> {
 		.with_x11_window_type(vec![XWindowType::Desktop]);
 	let context_builder = glutin::ContextBuilder::new();
 	let display =
-		glium::Display::new(window_builder, context_builder, &event_loop).context("Unable to create glutin display")?;
-
-	// Set the window as always below
-	// Note: Required so it doesn't hide itself if the desktop is clicked on
-	// SAFETY: TODO
-	unsafe {
-		self::set_display_always_below(&display);
-	}
+		wgpu::Device::new(window_builder, context_builder, &event_loop).context("Unable to create glutin display")?;
 
 	// Create the path loader
 	log::debug!("Starting the path loader");
@@ -136,14 +184,15 @@ fn main() -> Result<(), anyhow::Error> {
 	log::debug!("Entering event handler");
 	let event_handler = self::event_handler(display, &mut geometry_states, &args, indices, program, &image_loader);
 	event_loop.run_return(event_handler);
+	*/
 
 	Ok(())
 }
 
 fn event_handler<'a>(
-	display: glium::Display, geometry_states: &'a mut [GeometryState], args: &'a args::Args,
-	indices: glium::IndexBuffer<u32>, program: glium::Program, image_loader: &'a ImageLoader,
-) -> impl 'a + FnMut(Event<'_, !>, &EventLoopWindowTarget<!>, &mut glutin::event_loop::ControlFlow) {
+	display: wgpu::Device, geometry_states: &'a mut [GeometryState], args: &'a args::Args, indices: wgpu::Buffer,
+	program: wgpu::RenderPipeline, image_loader: &'a ImageLoader,
+) -> impl 'a + FnMut(Event<'_, !>, &EventLoopWindowTarget<!>, &mut EventLoopControlFlow) {
 	// Current cursor position
 	let mut cursor_pos = Point2::origin();
 
@@ -155,7 +204,7 @@ fn event_handler<'a>(
 		Event::WindowEvent { event, .. } => match event {
 			// If we got a close request, exit and return
 			WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-				*control_flow = GlutinControlFlow::Exit;
+				*control_flow = EventLoopControlFlow::Exit;
 			},
 
 			#[allow(clippy::cast_possible_truncation)] // We're fine with truncating the values
@@ -166,7 +215,7 @@ fn event_handler<'a>(
 		// If it's time to draw, draw
 		Event::NewEvents(StartCause::ResumeTimeReached { .. } | StartCause::Init) => {
 			// Set the next frame to 1/60th of a second from now
-			*control_flow = GlutinControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1) / 60);
+			*control_flow = EventLoopControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1) / 60);
 
 			// Draw
 			let mut target = display.draw();
@@ -200,62 +249,25 @@ fn event_handler<'a>(
 	}
 }
 
-/// Sets the display as always below
-///
-/// # Safety
-/// TODO
-// TODO: Do this through `glutin`, this is way too hacky
-#[allow(clippy::expect_used)] // TODO: Refactor all of this
-#[deny(unsafe_op_in_unsafe_fn)] // Necessary to prevent warnings during non-clippy operations
-unsafe fn set_display_always_below(display: &glium::Display) {
-	// Get the xlib display and window
-	let gl_window = display.gl_window();
-	let window = gl_window.window();
-	let display = window.xlib_display().expect("No `X` display found").cast();
-	let window = window.xlib_window().expect("No `X` window found");
 
-	// Flush the existing `XMapRaised`
-	unsafe { xlib::XFlush(display) };
-	std::thread::sleep(Duration::from_millis(100));
-
-	// Unmap the window temporarily
-	unsafe { xlib::XUnmapWindow(display, window) };
-	unsafe { xlib::XFlush(display) };
-	std::thread::sleep(Duration::from_millis(100));
-
-	// Add the always below hint to the window manager
-	{
-		let property = unsafe { xlib::XInternAtom(display, b"_NET_WM_STATE\0".as_ptr().cast(), 0) };
-		let value = unsafe { xlib::XInternAtom(display, b"_NET_WM_STATE_BELOW\0".as_ptr().cast(), 0) };
-		let res = unsafe {
-			xlib::XChangeProperty(
-				display,
-				window,
-				property,
-				xlib::XA_ATOM,
-				32,
-				xlib::PropModeAppend,
-				(&value as *const u64).cast(),
-				1,
-			)
-		};
-		assert_eq!(res, 1, "Unable to change window property");
-	}
-
-	// Then remap it
-	unsafe { xlib::XMapRaised(display, window) };
-	unsafe { xlib::XFlush(display) };
-}
 
 
 /// Draws and updates
 #[allow(clippy::too_many_arguments)] // TODO: Refactor, closure doesn't work, though
 fn draw_update(
-	target: &mut glium::Frame, geometry_state: &mut GeometryState, duration: Duration, fade: f32,
-	indices: &glium::IndexBuffer<u32>, program: &glium::Program, display: &glium::Display, image_loader: &ImageLoader,
+	render_pass: &wgpu::RenderPass, geometry_state: &mut GeometryState, duration: Duration, fade: f32,
+	indices: &wgpu::Buffer, program: &wgpu::RenderPipeline, display: &wgpu::Device, image_loader: &ImageLoader,
 	window_size: [u32; 2], cursor_pos: Point2<f32>, image_backlog: usize,
 ) {
-	if let Err(err) = self::draw(target, geometry_state, fade, indices, program, window_size, cursor_pos) {
+	if let Err(err) = self::draw(
+		render_pass,
+		geometry_state,
+		fade,
+		indices,
+		program,
+		window_size,
+		cursor_pos,
+	) {
 		log::warn!("Unable to draw: {err:?}");
 	}
 
@@ -266,7 +278,7 @@ fn draw_update(
 
 /// Updates
 fn update(
-	geometry_state: &mut GeometryState, duration: Duration, fade: f32, display: &glium::Display,
+	geometry_state: &mut GeometryState, duration: Duration, fade: f32, display: &wgpu::Device,
 	image_loader: &ImageLoader, image_backlog: usize,
 ) -> Result<(), anyhow::Error> {
 	// Increase the progress
@@ -318,7 +330,7 @@ fn update(
 
 /// Updates a swapped image state and returns the next state
 fn update_swapped(
-	mut prev: GlImage, cur: GlImage, mut since: Option<Instant>, display: &glium::Display, image_loader: &ImageLoader,
+	mut prev: GlImage, cur: GlImage, mut since: Option<Instant>, display: &wgpu::Device, image_loader: &ImageLoader,
 	force_wait: bool,
 ) -> Result<GeometryImageState, anyhow::Error> {
 	// If we're force waiting and don't have a `since`, create it,
@@ -354,8 +366,8 @@ fn update_swapped(
 /// Draws
 #[allow(clippy::cast_precision_loss)] // Image and window sizes are far below 2^23
 fn draw(
-	target: &mut glium::Frame, geometry_state: &mut GeometryState, fade: f32, indices: &glium::IndexBuffer<u32>,
-	program: &glium::Program, window_size: [u32; 2], _cursor_pos: Point2<f32>,
+	render_pass: &wgpu::RenderPass, geometry_state: &mut GeometryState, fade: f32, indices: &wgpu::Buffer,
+	program: &wgpu::RenderPass, window_size: [u32; 2], _cursor_pos: Point2<f32>,
 ) -> Result<(), anyhow::Error> {
 	// Calculate the base alpha and progress to apply to the images
 	let cur_progress = geometry_state.progress;
@@ -406,7 +418,7 @@ fn draw(
 			blend: glium::Blend::alpha_blending(),
 			..glium::DrawParameters::default()
 		};
-		target
+		render_pass
 			.draw(&image.vertex_buffer, indices, program, &uniforms, &draw_parameters)
 			.context("Unable to draw")?;
 	}
@@ -414,66 +426,16 @@ fn draw(
 	Ok(())
 }
 
-/// Geometry state
-#[derive(Debug)]
-struct GeometryState {
-	/// Geometry
-	geometry: Rect<u32>,
-
-	/// Images
-	images: GeometryImageState,
-
-	/// Progress
-	progress: f32,
-}
-
-/// Image state of the geometry
-#[derive(Debug)]
-enum GeometryImageState {
-	/// Empty
-	///
-	/// This means that no images have been assigned to this geometry yet.
-	Empty,
-
-	/// Primary only
-	///
-	/// The primary image is loaded. The back image is still not available
-	PrimaryOnly(GlImage),
-
-	/// Both
-	///
-	/// Both images are loaded to be faded in between
-	Both {
-		/// Current image
-		cur: GlImage,
-
-		/// Next
-		next: GlImage,
-	},
-
-	/// Swapped
-	///
-	/// Front and back images have been swapped, and the next image needs
-	/// to be loaded
-	Swapped {
-		/// Previous image
-		prev: GlImage,
-
-		/// Current image
-		cur: GlImage,
-
-		/// Instant we were swapped
-		since: Instant,
-	},
-}
+*/
 
 /// Initializes the logging
 fn init_log() -> Result<(), anyhow::Error> {
 	/// Creates the file logger
+	// TODO: Put back to trace once wgpu is somewhat filtered out
 	fn file_logger() -> Result<Box<simplelog::WriteLogger<fs::File>>, anyhow::Error> {
 		let file = fs::File::create("latest.log").context("Unable to create file `latest.log`")?;
 		Ok(simplelog::WriteLogger::new(
-			log::LevelFilter::Trace,
+			log::LevelFilter::Info,
 			simplelog::Config::default(),
 			file,
 		))

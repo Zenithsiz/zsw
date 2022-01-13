@@ -1,12 +1,23 @@
 [package]
 edition = "2021"
 name = "zsw"
+resolver = "2"
 version = "0.1.0"
 
 [dependencies]
 
+# Windowing
+winit = "0.26.1"
+
+# Rendering
+wgpu = "0.12.0"
+
+# Async
+pollster = "0.2.4"
+
 # Windowing / Gl
-glium = "0.30.2"
+# TODO: Remove once fully migrated
+#glium = "0.30.2"
 
 # X11
 x11 = {version = "2.18.2", features = ["xlib"]}
@@ -36,6 +47,7 @@ simplelog = "0.10.0"
 clap = "2.33.3"
 
 # Util
+bytemuck = {version = "1.7.3", features = ["derive"]}
 num-rational = "0.4.0"
 
 # Filesystem

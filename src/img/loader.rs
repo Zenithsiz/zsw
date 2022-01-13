@@ -9,9 +9,9 @@ mod load;
 // Imports
 use super::{Image, ImageRequest};
 use crate::{
-	path_loader::PathReceiver,
+	path_loader::{PathLoader, PathReceiver},
 	sync::{once_channel, priority_spmc},
-	util, PathLoader,
+	util,
 };
 use anyhow::Context;
 use std::{num::NonZeroUsize, thread};
@@ -96,6 +96,7 @@ impl Default for ImageLoaderArgs {
 		}
 	}
 }
+
 
 /// Image receiver
 #[derive(Debug)]

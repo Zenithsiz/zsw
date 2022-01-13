@@ -2,24 +2,25 @@
 
 // Imports
 use crate::{
-	img::{Image, ImageLoader, ImageReceiver, ImageRequest},
-	ImageUvs, Vertex,
+	img::{Image, ImageLoader, ImageReceiver, ImageRequest, ImageUvs},
+	renderer::Vertex,
 };
 use anyhow::Context;
 use cgmath::Vector2;
 use std::{collections::VecDeque, time::Duration};
+use wgpu::util::DeviceExt;
 
 /// Image
 #[derive(Debug)]
 pub struct GlImage {
 	/// Texture
-	pub texture: glium::Texture2d,
+	pub texture: wgpu::Texture,
 
 	/// Uvs
 	pub uvs: ImageUvs,
 
-	/// Vertex buffer
-	pub vertex_buffer: glium::VertexBuffer<Vertex>,
+	/// Vertices
+	pub vertices: wgpu::Buffer,
 
 	/// All image receivers
 	pub image_rxs: VecDeque<ImageReceiver>,
@@ -39,7 +40,8 @@ impl GlImage {
 	/// # Errors
 	/// Returns error if unable to create the gl texture or the vertex buffer
 	pub fn new(
-		facade: &glium::Display, image_loader: &ImageLoader, window_size: Vector2<u32>, image_backlog: usize,
+		device: &wgpu::Device, queue: &wgpu::Queue, image_loader: &ImageLoader, window_size: Vector2<u32>,
+		image_backlog: usize,
 	) -> Result<Self, anyhow::Error> {
 		let request = ImageRequest { window_size };
 
@@ -52,28 +54,31 @@ impl GlImage {
 			.map(|_| self::request(image_loader, request, Self::PRIORITY_LOW))
 			.collect();
 
-		let image_dims = image.dimensions();
-		let texture = glium::texture::Texture2d::new(
-			facade,
-			glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), image_dims),
-		)
-		.context("Unable to create texture")?;
+		let (image_width, image_height) = image.dimensions();
+		let texture_descriptor = self::texture_descriptor(image_width, image_height);
+		let texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_raw());
 
 		#[allow(clippy::cast_precision_loss)] // Image and window sizes are likely much lower than 2^24
 		let uvs = ImageUvs::new(
-			image_dims.0 as f32,
-			image_dims.1 as f32,
+			image_width as f32,
+			image_height as f32,
 			window_size.x as f32,
 			window_size.y as f32,
 			rand::random(),
 		);
 
-		let vertex_buffer = glium::VertexBuffer::dynamic(facade, &Self::vertices(uvs.start()))
-			.context("Unable to create vertex buffer")?;
+		let vertices = Self::vertices(uvs.start());
+		let vertex_buffer_descriptor = wgpu::util::BufferInitDescriptor {
+			label:    None,
+			contents: bytemuck::cast_slice(&vertices),
+			usage:    wgpu::BufferUsages::VERTEX,
+		};
+		let vertices = device.create_buffer_init(&vertex_buffer_descriptor);
+
 		Ok(Self {
 			texture,
 			uvs,
-			vertex_buffer,
+			vertices,
 			image_rxs,
 			request,
 		})
@@ -84,29 +89,26 @@ impl GlImage {
 	/// # Errors
 	/// Returns error if unable to load an image or create a new gl texture
 	pub fn try_update(
-		&mut self, facade: &glium::Display, image_loader: &ImageLoader, force_wait: bool,
+		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, image_loader: &ImageLoader, force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
 		let image = match self::get_image(&mut self.image_rxs, image_loader, self.request, force_wait) {
 			Some(image) => image,
 			None => {
-				assert!(!force_wait, "Received no image while force waiting");
+				debug_assert!(!force_wait, "Received no image while force waiting");
 				return Ok(false);
 			},
 		};
 
 		// Then update our texture
-		let image_dims = image.dimensions();
-		self.texture = glium::texture::Texture2d::new(
-			facade,
-			glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), image_dims),
-		)
-		.context("Unable to create texture")?;
+		let (image_width, image_height) = image.dimensions();
+		let texture_descriptor = self::texture_descriptor(image_width, image_height);
+		self.texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_raw());
 
 		// Re-create our UVs
 		#[allow(clippy::cast_precision_loss)] // Image and window sizes are likely much lower than 2^24
 		let uvs = ImageUvs::new(
-			image_dims.0 as f32,
-			image_dims.1 as f32,
+			image_width as f32,
+			image_height as f32,
 			self.request.window_size[0] as f32,
 			self.request.window_size[1] as f32,
 			rand::random(),
@@ -114,9 +116,10 @@ impl GlImage {
 		self.uvs = uvs;
 
 		// And update the vertex buffer
-		self.vertex_buffer
-			.as_mut_slice()
-			.write(&Self::vertices(self.uvs.start()));
+		self.vertices
+			.slice(..)
+			.get_mapped_range_mut()
+			.copy_from_slice(bytemuck::cast_slice(&Self::vertices(self.uvs.start())));
 
 		Ok(true)
 	}
@@ -125,22 +128,39 @@ impl GlImage {
 	const fn vertices(uvs_start: [f32; 2]) -> [Vertex; 4] {
 		[
 			Vertex {
-				vertex_pos: [-1.0, -1.0],
-				vertex_tex: [0.0, 0.0],
+				pos: [-1.0, -1.0],
+				uvs: [0.0, 0.0],
 			},
 			Vertex {
-				vertex_pos: [1.0, -1.0],
-				vertex_tex: [uvs_start[0], 0.0],
+				pos: [1.0, -1.0],
+				uvs: [uvs_start[0], 0.0],
 			},
 			Vertex {
-				vertex_pos: [-1.0, 1.0],
-				vertex_tex: [0.0, uvs_start[1]],
+				pos: [-1.0, 1.0],
+				uvs: [0.0, uvs_start[1]],
 			},
 			Vertex {
-				vertex_pos: [1.0, 1.0],
-				vertex_tex: uvs_start,
+				pos: [1.0, 1.0],
+				uvs: uvs_start,
 			},
 		]
+	}
+}
+
+/// Builds the texture descriptor
+fn texture_descriptor(image_width: u32, image_height: u32) -> wgpu::TextureDescriptor<'static> {
+	wgpu::TextureDescriptor {
+		label:           None,
+		size:            wgpu::Extent3d {
+			width:                 image_width,
+			height:                image_height,
+			depth_or_array_layers: 1,
+		},
+		mip_level_count: 1,
+		sample_count:    1,
+		dimension:       wgpu::TextureDimension::D2,
+		format:          wgpu::TextureFormat::Rgba8UnormSrgb,
+		usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
 	}
 }
 
