@@ -1,26 +1,41 @@
 //! Image
 
 // Imports
-use crate::{
-	img::{Image, ImageLoader, ImageReceiver, ImageRequest, ImageUvs},
-	renderer::Vertex,
-};
+use crate::img::{Image, ImageLoader, ImageReceiver, ImageRequest, ImageUvs};
 use anyhow::Context;
 use cgmath::Vector2;
 use std::{collections::VecDeque, time::Duration};
 use wgpu::util::DeviceExt;
 
+use super::{PanelUniforms, PanelVertex};
+
 /// Image
+// TODO: Redo the whole image request stuff around here
 #[derive(Debug)]
-pub struct GlImage {
+pub struct PanelImage {
 	/// Texture
 	pub texture: wgpu::Texture,
 
-	/// Uvs
-	pub uvs: ImageUvs,
+	/// Texture view
+	pub texture_view: wgpu::TextureView,
+
+	/// Texture sampler
+	pub texture_sampler: wgpu::Sampler,
+
+	/// Texture bind group
+	pub texture_bind_group: wgpu::BindGroup,
 
 	/// Vertices
 	pub vertices: wgpu::Buffer,
+
+	/// Uniforms
+	pub uniforms: wgpu::Buffer,
+
+	/// Uniforms bind group
+	pub uniforms_bind_group: wgpu::BindGroup,
+
+	/// Uvs
+	pub uvs: ImageUvs,
 
 	/// All image receivers
 	pub image_rxs: VecDeque<ImageReceiver>,
@@ -29,7 +44,7 @@ pub struct GlImage {
 	pub request: ImageRequest,
 }
 
-impl GlImage {
+impl PanelImage {
 	/// High priority
 	const PRIORITY_HIGH: usize = 1;
 	/// Low priority
@@ -40,10 +55,11 @@ impl GlImage {
 	/// # Errors
 	/// Returns error if unable to create the gl texture or the vertex buffer
 	pub fn new(
-		device: &wgpu::Device, queue: &wgpu::Queue, image_loader: &ImageLoader, window_size: Vector2<u32>,
+		device: &wgpu::Device, queue: &wgpu::Queue, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
+		texture_bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader, panel_size: Vector2<u32>,
 		image_backlog: usize,
 	) -> Result<Self, anyhow::Error> {
-		let request = ImageRequest { window_size };
+		let request = ImageRequest { panel_size };
 
 		let image = self::request(image_loader, request, Self::PRIORITY_HIGH)
 			.recv()
@@ -58,12 +74,25 @@ impl GlImage {
 		let texture_descriptor = self::texture_descriptor(image_width, image_height);
 		let texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_raw());
 
+		let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+		let texture_view = texture.create_view(&texture_view_descriptor);
+		let texture_sampler_descriptor = wgpu::SamplerDescriptor {
+			address_mode_u: wgpu::AddressMode::ClampToEdge,
+			address_mode_v: wgpu::AddressMode::ClampToEdge,
+			address_mode_w: wgpu::AddressMode::ClampToEdge,
+			mag_filter: wgpu::FilterMode::Linear,
+			min_filter: wgpu::FilterMode::Nearest,
+			mipmap_filter: wgpu::FilterMode::Nearest,
+			..wgpu::SamplerDescriptor::default()
+		};
+		let texture_sampler = device.create_sampler(&texture_sampler_descriptor);
+
 		#[allow(clippy::cast_precision_loss)] // Image and window sizes are likely much lower than 2^24
 		let uvs = ImageUvs::new(
 			image_width as f32,
 			image_height as f32,
-			window_size.x as f32,
-			window_size.y as f32,
+			panel_size.x as f32,
+			panel_size.y as f32,
 			rand::random(),
 		);
 
@@ -71,25 +100,65 @@ impl GlImage {
 		let vertex_buffer_descriptor = wgpu::util::BufferInitDescriptor {
 			label:    None,
 			contents: bytemuck::cast_slice(&vertices),
-			usage:    wgpu::BufferUsages::VERTEX,
+			usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
 		};
 		let vertices = device.create_buffer_init(&vertex_buffer_descriptor);
 
+		let uniforms = PanelUniforms::new();
+		let uniforms_descriptor = wgpu::util::BufferInitDescriptor {
+			label:    None,
+			contents: bytemuck::cast_slice(std::slice::from_ref(&uniforms)),
+			usage:    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+		};
+		let uniforms = device.create_buffer_init(&uniforms_descriptor);
+
+		// Create the uniform bind group
+		let uniforms_bind_group_descriptor = wgpu::BindGroupDescriptor {
+			layout:  uniforms_bind_group_layout,
+			entries: &[wgpu::BindGroupEntry {
+				binding:  0,
+				resource: uniforms.as_entire_binding(),
+			}],
+			label:   None,
+		};
+		let uniforms_bind_group = device.create_bind_group(&uniforms_bind_group_descriptor);
+
+
+		let texture_bind_group_descriptor = wgpu::BindGroupDescriptor {
+			layout:  texture_bind_group_layout,
+			entries: &[
+				wgpu::BindGroupEntry {
+					binding:  0,
+					resource: wgpu::BindingResource::TextureView(&texture_view),
+				},
+				wgpu::BindGroupEntry {
+					binding:  1,
+					resource: wgpu::BindingResource::Sampler(&texture_sampler),
+				},
+			],
+			label:   None,
+		};
+		let texture_bind_group = device.create_bind_group(&texture_bind_group_descriptor);
+
 		Ok(Self {
 			texture,
-			uvs,
+			texture_view,
+			texture_sampler,
+			texture_bind_group,
 			vertices,
+			uniforms,
+			uniforms_bind_group,
+			uvs,
 			image_rxs,
 			request,
 		})
 	}
 
 	/// Tries to update this image and returns if actually updated
-	///
-	/// # Errors
-	/// Returns error if unable to load an image or create a new gl texture
+	#[allow(clippy::unnecessary_wraps)] // It might fail in the future
 	pub fn try_update(
-		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, image_loader: &ImageLoader, force_wait: bool,
+		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, bind_group_layout: &wgpu::BindGroupLayout,
+		image_loader: &ImageLoader, force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
 		let image = match self::get_image(&mut self.image_rxs, image_loader, self.request, force_wait) {
 			Some(image) => image,
@@ -102,48 +171,78 @@ impl GlImage {
 		// Then update our texture
 		let (image_width, image_height) = image.dimensions();
 		let texture_descriptor = self::texture_descriptor(image_width, image_height);
+		let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
 		self.texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_raw());
+		self.texture_view = self.texture.create_view(&texture_view_descriptor);
+		let texture_bind_group_descriptor = wgpu::BindGroupDescriptor {
+			layout:  bind_group_layout,
+			entries: &[
+				wgpu::BindGroupEntry {
+					binding:  0,
+					resource: wgpu::BindingResource::TextureView(&self.texture_view),
+				},
+				wgpu::BindGroupEntry {
+					binding:  1,
+					resource: wgpu::BindingResource::Sampler(&self.texture_sampler),
+				},
+			],
+			label:   None,
+		};
+		self.texture_bind_group = device.create_bind_group(&texture_bind_group_descriptor);
 
 		// Re-create our UVs
 		#[allow(clippy::cast_precision_loss)] // Image and window sizes are likely much lower than 2^24
 		let uvs = ImageUvs::new(
 			image_width as f32,
 			image_height as f32,
-			self.request.window_size[0] as f32,
-			self.request.window_size[1] as f32,
+			self.request.panel_size[0] as f32,
+			self.request.panel_size[1] as f32,
 			rand::random(),
 		);
 		self.uvs = uvs;
 
 		// And update the vertex buffer
-		self.vertices
-			.slice(..)
-			.get_mapped_range_mut()
-			.copy_from_slice(bytemuck::cast_slice(&Self::vertices(self.uvs.start())));
+		queue.write_buffer(
+			&self.vertices,
+			0,
+			bytemuck::cast_slice(&Self::vertices(self.uvs.start())),
+		);
 
 		Ok(true)
 	}
 
 	/// Creates the vertices for uvs
-	const fn vertices(uvs_start: [f32; 2]) -> [Vertex; 4] {
+	const fn vertices(uvs_start: [f32; 2]) -> [PanelVertex; 4] {
 		[
-			Vertex {
+			PanelVertex {
 				pos: [-1.0, -1.0],
 				uvs: [0.0, 0.0],
 			},
-			Vertex {
+			PanelVertex {
 				pos: [1.0, -1.0],
 				uvs: [uvs_start[0], 0.0],
 			},
-			Vertex {
+			PanelVertex {
 				pos: [-1.0, 1.0],
 				uvs: [0.0, uvs_start[1]],
 			},
-			Vertex {
+			PanelVertex {
 				pos: [1.0, 1.0],
 				uvs: uvs_start,
 			},
 		]
+	}
+
+	/// Updates this image's uniforms
+	pub fn update_uniform(&self, queue: &wgpu::Queue, uniforms: PanelUniforms) {
+		queue.write_buffer(&self.uniforms, 0, bytemuck::cast_slice(&[uniforms]));
+	}
+
+	/// Binds this image's vertices and bind group
+	pub fn bind<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
+		render_pass.set_bind_group(0, &self.uniforms_bind_group, &[]);
+		render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
 	}
 }
 
@@ -182,7 +281,7 @@ fn get_image(
 		match image_rx.try_recv().expect("Unable to load next image") {
 			// If we got it, create a new request and return the image
 			Ok(image) => {
-				let image_rx = self::request(image_loader, request, GlImage::PRIORITY_LOW);
+				let image_rx = self::request(image_loader, request, PanelImage::PRIORITY_LOW);
 				image_rxs.push_back(image_rx);
 				return Some(image);
 			},

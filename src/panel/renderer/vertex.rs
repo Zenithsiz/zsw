@@ -1,13 +1,13 @@
-//! Vertices
+//! Panel vertex
 
 // Imports
 use std::mem;
 
-/// Vertex
+/// Panel vertex
 #[repr(C)]
 #[derive(PartialEq, Clone, Copy, Debug)]
 #[derive(bytemuck::Zeroable, bytemuck::Pod)]
-pub struct Vertex {
+pub struct PanelVertex {
 	/// Position
 	pub pos: [f32; 2],
 
@@ -15,7 +15,7 @@ pub struct Vertex {
 	pub uvs: [f32; 2],
 }
 
-impl Vertex {
+impl PanelVertex {
 	/// Returns the buffer layout of this vertex
 	#[must_use]
 	pub const fn buffer_layout() -> wgpu::VertexBufferLayout<'static> {

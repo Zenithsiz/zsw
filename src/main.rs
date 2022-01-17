@@ -1,23 +1,38 @@
 //! Zenithsiz's scrolling wallpaper
 
 // Features
-#![feature(never_type, available_parallelism, control_flow_enum, decl_macro)]
+#![feature(
+	never_type,
+	available_parallelism,
+	control_flow_enum,
+	decl_macro,
+	inline_const,
+	destructuring_assignment
+)]
 // Lints
 #![deny(unsafe_op_in_unsafe_fn)]
 
 // Modules
-pub mod app;
-pub mod args;
-pub mod gl_image;
-pub mod img;
-pub mod path_loader;
-pub mod rect;
-pub mod renderer;
-pub mod sync;
+mod app;
+mod args;
+mod img;
+mod panel;
+mod path_loader;
+mod rect;
+mod sync;
 mod util;
+mod wgpu;
 
 // Exports
-pub use rect::Rect;
+pub use self::{
+	app::App,
+	args::Args,
+	img::ImageLoader,
+	panel::{Panel, PanelState, PanelsRenderer},
+	path_loader::PathLoader,
+	rect::Rect,
+	wgpu::Wgpu,
+};
 
 // Imports
 use anyhow::Context;
@@ -36,7 +51,7 @@ fn main() -> Result<(), anyhow::Error> {
 	log::debug!("Found arguments {args:?}");
 
 	// Create the app
-	let app = app::App::new(args).block_on().context("Unable to initialize app")?;
+	let app = App::new(args).block_on().context("Unable to initialize app")?;
 
 	// Then run it
 	app.run().context("Unable to run app")?;
@@ -328,40 +343,7 @@ fn update(
 	Ok(())
 }
 
-/// Updates a swapped image state and returns the next state
-fn update_swapped(
-	mut prev: GlImage, cur: GlImage, mut since: Option<Instant>, display: &wgpu::Device, image_loader: &ImageLoader,
-	force_wait: bool,
-) -> Result<GeometryImageState, anyhow::Error> {
-	// If we're force waiting and don't have a `since`, create it,
-	// so we can keep track of how long the request took
-	if force_wait && since.is_none() {
-		since = Some(Instant::now());
-	}
 
-	let state = match prev
-		.try_update(display, image_loader, force_wait)
-		.context("Unable to get next image")?
-	{
-		// If we updated, switch to `Both`
-		true => {
-			// If we didn't just update it, log how long it took
-			if let Some(since) = since {
-				let duration = Instant::now().saturating_duration_since(since);
-				log::trace!("Waited {duration:?} for the next image");
-			}
-			GeometryImageState::Both { cur, next: prev }
-		},
-
-		// Else stay in `Swapped`
-		false => GeometryImageState::Swapped {
-			prev,
-			cur,
-			since: since.unwrap_or_else(Instant::now),
-		},
-	};
-	Ok(state)
-}
 
 /// Draws
 #[allow(clippy::cast_precision_loss)] // Image and window sizes are far below 2^23

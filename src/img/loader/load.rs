@@ -1,25 +1,22 @@
 //! Image loader
 
 // Modules
-mod downscale_cache;
+//mod downscale_cache;
 
 // Imports
-use self::downscale_cache::DownscaleCache;
-use super::ImageLoaderArgs;
+//use self::downscale_cache::DownscaleCache;
 use crate::img::ImageRequest;
 use anyhow::Context;
 use cgmath::Vector2;
-use image::{imageops::FilterType, io::Reader as ImageReader, DynamicImage};
-use num_rational::Ratio;
+use image::{io::Reader as ImageReader, DynamicImage};
 use std::{
-	cmp::Ordering,
 	fs,
 	io::{BufReader, Seek},
 	path::Path,
 };
 
 /// Loads an image from a path
-pub fn load_image(path: &Path, request: ImageRequest, args: ImageLoaderArgs) -> Result<DynamicImage, anyhow::Error> {
+pub fn load_image(path: &Path, _request: ImageRequest) -> Result<DynamicImage, anyhow::Error> {
 	// Canonicalize the path before loading
 	let path = path.canonicalize().context("Unable to canonicalize path")?;
 
@@ -31,14 +28,16 @@ pub fn load_image(path: &Path, request: ImageRequest, args: ImageLoaderArgs) -> 
 	let format = self::image_format(&mut image_file)?;
 
 	// Get it's size and others
-	let image_size = self::image_size(&mut image_file, format)?;
+	let _image_size = self::image_size(&mut image_file, format)?;
 
+	/*
 	// Check if we're doing any downscaling
 	match self::load_image_downscaled(&path, request, &mut image_file, format, image_size, args) {
 		Ok(Some(image)) => return Ok(image),
 		Ok(None) => (),
 		Err(err) => log::warn!("Unable to load downscaled image {path:?}: {err:?}"),
 	}
+	*/
 
 	// Else, just read the image
 	ImageReader::with_format(&mut image_file, format)
@@ -65,6 +64,7 @@ fn image_size(image_file: &mut BufReader<fs::File>, format: image::ImageFormat) 
 	Ok(Vector2::new(width, height))
 }
 
+/*
 /// Loads an image downscaled according to `args`
 fn load_image_downscaled(
 	path: &Path, request: ImageRequest, image_file: &mut BufReader<fs::File>, format: image::ImageFormat,
@@ -79,12 +79,12 @@ fn load_image_downscaled(
 	let downscale_cache = DownscaleCache::load(path, image_size).context("Unable to load the downscale cache")?;
 
 	// Calculate the scroll direction and what kind of resize it needs for future operations
-	let scroll_dir = ScrollDir::calculate(image_size, request.window_size);
-	let resize = scroll_dir.resize(image_size, request.window_size);
+	let scroll_dir = ScrollDir::calculate(image_size, request.panel_size);
+	let resize = scroll_dir.resize(image_size, request.panel_size);
 
 	// If we're allowed to load from cache and we have an exact match, use it instead
 	if args.downscale_load_from_cache {
-		if let Some(cached_image) = downscale_cache.get_exact(request.window_size) {
+		if let Some(cached_image) = downscale_cache.get_exact(request.panel_size) {
 			if let Some(value) = self::load_image_downscaled_cached(path, &cached_image, image_size) {
 				return value;
 			}
@@ -125,7 +125,7 @@ fn load_image_downscaled(
 	// Else if we're allowed to load from the cache, load the nearest
 	if args.downscale_load_from_cache {
 		// If we got any smaller image that fits, load it
-		if let Some(cached_image) = downscale_cache.get_smallest(request.window_size) {
+		if let Some(cached_image) = downscale_cache.get_smallest(request.panel_size) {
 			if let Some(value) = self::load_image_downscaled_cached(path, &cached_image, image_size) {
 				return value;
 			}
@@ -262,3 +262,4 @@ enum ResizeKind {
 	/// Upscale
 	Upscale,
 }
+*/

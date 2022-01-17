@@ -9,5 +9,5 @@ pub struct ImageRequest {
 	/// Window size
 	///
 	/// The window size the image will be processed in.
-	pub window_size: Vector2<u32>,
+	pub panel_size: Vector2<u32>,
 }

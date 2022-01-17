@@ -1,20 +1,20 @@
-//! Args
+//! Arguments
 
 // Imports
-use crate::{img::ImageLoaderArgs, Rect};
+use crate::Rect;
 use anyhow::Context;
 use cgmath::{EuclideanSpace, Point2, Vector2};
 use clap::{App as ClapApp, Arg as ClapArg};
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
-/// Args
+/// Arguments
 #[derive(Debug)]
 pub struct Args {
 	/// Window geometry
 	pub window_geometry: Rect<u32>,
 
-	/// Image geometries
-	pub image_geometries: Vec<Rect<u32>>,
+	/// Panel geometries
+	pub panel_geometries: Vec<Rect<u32>>,
 
 	/// Image duration
 	pub image_duration: Duration,
@@ -27,9 +27,6 @@ pub struct Args {
 
 	/// Image backlog
 	pub image_backlog: Option<usize>,
-
-	/// Image loader arguments
-	pub image_loader_args: ImageLoaderArgs,
 }
 
 /// Parses all arguments
@@ -38,7 +35,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 	/// All arguments' names
 	mod arg_name {
 		pub const WINDOW_GEOMETRY: &str = "window-geometry";
-		pub const IMAGE_GEOMETRY: &str = "image-geometry";
+		pub const PANEL_GEOMETRY: &str = "panel-geometry";
 		pub const IMAGES_DIR: &str = "images-dir";
 		pub const IMAGE_DURATION: &str = "image-duration";
 		pub const FADE_POINT: &str = "fade-point";
@@ -67,20 +64,20 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.short("g"),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::IMAGE_GEOMETRY)
-				.help("Window geometry")
-				.long_help("Specifies a specific window geometry (`{width}x{height}+{x}+{y}` or `{width}x{height}`)")
+			ClapArg::with_name(arg_name::PANEL_GEOMETRY)
+				.help("Panel geometry")
+				.long_help("Specifies a specific panel geometry (`{width}x{height}+{x}+{y}` or `{width}x{height}`)")
 				.long_help(
 					"Used when you want to only display in a part of the window geometry.\nIf not specified, it is \
 					 the window geometry.\nMultiple may be specified and they will all display images",
 				)
 				.takes_value(true)
 				.multiple(true)
-				.long("image-geometry"),
+				.long("panel-geometry"),
 		)
 		.arg(
 			ClapArg::with_name(arg_name::GRID)
-				.help("Adds a grid of image geometries (`{columns}x{rows}@{geometry}``)")
+				.help("Adds a grid of panel geometries (`{columns}x{rows}@{geometry}``)")
 				.takes_value(true)
 				.multiple(true)
 				.long("grid"),
@@ -133,7 +130,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 
 	// Get the specified image geometries, if any
 	let mut image_geometries = matches
-		.values_of(arg_name::IMAGE_GEOMETRY)
+		.values_of(arg_name::PANEL_GEOMETRY)
 		.map_or_else(
 			|| Ok(vec![]),
 			|geometries| {
@@ -209,21 +206,12 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		.transpose()
 		.context("Unable to parse image backlog")?;
 
-	let image_loader_args = match matches.value_of_os(arg_name::IMAGE_LOADER_ARGS) {
-		Some(path) => {
-			let file = fs::File::open(path).context("Unable to open image loader args")?;
-			serde_json::from_reader(file).context("Unable to parse image loader args")?
-		},
-		None => ImageLoaderArgs::default(),
-	};
-
 	Ok(Args {
 		window_geometry,
-		image_geometries,
+		panel_geometries: image_geometries,
 		image_duration,
 		images_dir,
 		fade_point,
 		image_backlog,
-		image_loader_args,
 	})
 }

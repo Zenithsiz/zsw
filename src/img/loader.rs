@@ -27,18 +27,21 @@ impl ImageLoader {
 	///
 	/// # Errors
 	/// Returns an error if unable to create all the loader threads
-	pub fn new(path_loader: &PathLoader, args: ImageLoaderArgs) -> Result<Self, anyhow::Error> {
+	pub fn new(path_loader: &PathLoader) -> Result<Self, anyhow::Error> {
 		// Start the image loader threads
 		// Note: Requests shouldn't be limited,
 		// TODO: Find a better way to do a priority based two-way communication channel.
 		let (request_tx, request_rx) = priority_spmc::channel(None);
-		let loader_threads = args.loader_threads.max(1);
+		//let loader_threads = args.loader_threads.max(1);
+		let loader_threads = std::thread::available_parallelism()
+			.context("Unable to get available parallelism")?
+			.get();
 		for thread_idx in 0..loader_threads {
 			let request_rx = request_rx.clone();
 			let path_rx = path_loader.receiver();
 			thread::Builder::new()
 				.name(format!("Image loader #{thread_idx}"))
-				.spawn(move || match self::image_loader(&request_rx, &path_rx, args) {
+				.spawn(move || match self::image_loader(&request_rx, &path_rx) {
 					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
 					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
 				})
@@ -131,7 +134,6 @@ impl ImageReceiver {
 /// Image loader thread function
 fn image_loader(
 	request_rx: &priority_spmc::Receiver<(ImageRequest, once_channel::Sender<Image>)>, path_rx: &PathReceiver,
-	args: ImageLoaderArgs,
 ) -> Result<(), anyhow::Error> {
 	loop {
 		// Get the next request
@@ -154,7 +156,7 @@ fn image_loader(
 			// And try to process it
 			// Note: We can ignore errors on sending, since other senders might still be alive
 			#[allow(clippy::let_underscore_drop)]
-			match util::measure(|| load::load_image(&path, request, args)) {
+			match util::measure(|| load::load_image(&path, request)) {
 				// If we got it, send it
 				(Ok(image), duration) => {
 					log::trace!("Took {duration:?} to load {path:?}");

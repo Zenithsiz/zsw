@@ -30,6 +30,8 @@ allow = [
   ## Performance
   # The compiler should transform the code into that, not us
   "clippy::suboptimal_flops", #
-  ## TODO:
-  "clippy::missing_errors_doc",
+  ## Others
+  "clippy::missing_errors_doc", # TODO: Remove
+  "clippy::missing_panics_doc", # Most panics are internal assertions
+  "clippy::unnecessary_wraps", # Might fail in the future
 ]
