@@ -2,12 +2,6 @@
 //!
 //! See the [`Wgpu`] type for more details
 
-// Modules
-//mod vertex;
-
-// Exports
-//pub use vertex::Vertex;
-
 // Imports
 use anyhow::Context;
 use parking_lot::Mutex;
@@ -34,13 +28,6 @@ pub struct Wgpu {
 
 	/// Preferred texture format
 	texture_format: TextureFormat,
-	/*
-	/// Geometry indices
-	geometry_indices: wgpu::Buffer,
-
-	/// Render pipeline for all geometry
-	geometry_render_pipeline: wgpu::RenderPipeline,
-	*/
 }
 
 impl Wgpu {
@@ -58,19 +45,11 @@ impl Wgpu {
 		// Configure the surface and get the preferred texture format
 		let texture_format = self::configure_window_surface(window, &surface, &adapter, &device)?;
 
-		// Create the geometry indices
-		//let geometry_indices = self::create_geometry_indices(&device);
-
 		// Start the thread for polling `wgpu`
-		{
-			let device = Arc::clone(&device);
-			thread::Builder::new()
-				.name("Wgpu poller".to_owned())
-				.spawn(move || loop {
-					device.poll(wgpu::Maintain::Wait);
-				})
-				.context("Unable to start wgpu poller thread")?;
-		}
+		thread::Builder::new()
+			.name("Wgpu poller".to_owned())
+			.spawn(Self::poller_thread(&device))
+			.context("Unable to start wgpu poller thread")?;
 
 		Ok(Self {
 			surface: Mutex::new(surface),
@@ -109,28 +88,54 @@ impl Wgpu {
 	pub fn render(
 		&self, f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView) -> Result<(), anyhow::Error>,
 	) -> Result<(), anyhow::Error> {
+		// Get our surface texture and create a view for it
 		let surface = self.surface.lock();
-		let output = surface
+		let surface_texture = surface
 			.get_current_texture()
 			.context("Unable to retrieve current texture")?;
-		let view_descriptor = wgpu::TextureViewDescriptor::default();
-		let view = output.texture.create_view(&view_descriptor);
+		let surface_view_descriptor = wgpu::TextureViewDescriptor {
+			label: Some("Surface texture view"),
+			..wgpu::TextureViewDescriptor::default()
+		};
+		let surface_texture_view = surface_texture.texture.create_view(&surface_view_descriptor);
 
+		// Then create an encoder for our frame
 		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
 			label: Some("Render encoder"),
 		};
 		let mut encoder = self.device.create_command_encoder(&encoder_descriptor);
 
-		f(&mut encoder, &view).context("Unable to render")?;
-		self.queue.submit([encoder.finish()]);
+		// And render using `f`
+		f(&mut encoder, &surface_texture_view).context("Unable to render")?;
 
-		output.present();
+		// Finally submit everything to the queue and present the texture
+		self.queue.submit([encoder.finish()]);
+		surface_texture.present();
 
 		Ok(())
 	}
+
+	/// Returns the poller thread
+	fn poller_thread(device: &Arc<wgpu::Device>) -> impl FnOnce() {
+		let device = Arc::clone(device);
+		move || {
+			log::info!("Starting wgpu poller thread");
+
+			// Poll until the device is gone.
+			// TODO: To this in a better way. We currently don't expose the `Arc`,
+			//       so the only possible strong counts are 2 and 1, but this may
+			//       change in the future and so we'll never actually leave this loop.
+			//       Although this isn't super important, since this only happens at exit (for now).
+			while Arc::strong_count(&device) > 1 {
+				device.poll(wgpu::Maintain::Wait);
+			}
+
+			log::info!("Exiting wgpu poller thread");
+		}
+	}
 }
 
-/// Configures the window surface
+/// Configures the window surface and returns the preferred texture format
 fn configure_window_surface(
 	window: &Window, surface: &wgpu::Surface, adapter: &wgpu::Adapter, device: &wgpu::Device,
 ) -> Result<TextureFormat, anyhow::Error> {

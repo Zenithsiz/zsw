@@ -30,6 +30,8 @@ allow = [
   ## Performance
   # The compiler should transform the code into that, not us
   "clippy::suboptimal_flops", #
+  # We need to work with `f32`s and small `u32`s extensively, they'll mostly fit
+  "clippy::cast_precision_loss", #
   ## Others
   "clippy::missing_errors_doc", # TODO: Remove
   "clippy::missing_panics_doc", # Most panics are internal assertions

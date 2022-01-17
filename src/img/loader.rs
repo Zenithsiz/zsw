@@ -32,7 +32,6 @@ impl ImageLoader {
 		// Note: Requests shouldn't be limited,
 		// TODO: Find a better way to do a priority based two-way communication channel.
 		let (request_tx, request_rx) = priority_spmc::channel(None);
-		//let loader_threads = args.loader_threads.max(1);
 		let loader_threads = std::thread::available_parallelism()
 			.context("Unable to get available parallelism")?
 			.get();

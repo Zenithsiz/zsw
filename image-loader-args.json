@@ -1,7 +1,0 @@
-{
-	"loader_threads": 4,
-	"upscale": true,
-	"upscale_waifu2x": false,
-	"downscale_load_from_cache": true,
-	"downscale_save_to_cache": true
-}

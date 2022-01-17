@@ -68,7 +68,7 @@ impl Panel {
 		let next_progress = self.progress + (1.0 / 60.0) / self.image_duration.as_secs_f32();
 
 		// Progress on image swap
-		let swapped_progress = 1.0 - self.fade_point;
+		let swapped_progress = self.progress - self.fade_point;
 
 		// If past the fade point
 		let past_fade = self.progress >= self.fade_point;
@@ -79,38 +79,13 @@ impl Panel {
 		// Check the image state
 		let geometry = self.geometry;
 		(self.state, self.progress) = match std::mem::replace(&mut self.state, PanelState::Empty) {
-			PanelState::Empty => {
-				let front = PanelImage::new(
-					device,
-					queue,
-					uniforms_bind_group_layout,
-					texture_bind_group_layout,
-					image_loader,
-					geometry.size,
-					self.image_backlog,
-				)
-				.expect("");
-				let back = PanelImage::new(
-					device,
-					queue,
-					uniforms_bind_group_layout,
-					texture_bind_group_layout,
-					image_loader,
-					geometry.size,
-					self.image_backlog,
-				)
-				.expect("");
-
-				(PanelState::Both { front, back }, 0.45)
-			},
-
-			/*
 			// If we're empty, get the next image
 			PanelState::Empty => {
 				let image = PanelImage::new(
 					device,
 					queue,
-					bind_group_layout,
+					uniforms_bind_group_layout,
+					texture_bind_group_layout,
 					image_loader,
 					geometry.size,
 					self.image_backlog,
@@ -127,7 +102,8 @@ impl Panel {
 				let back = PanelImage::new(
 					device,
 					queue,
-					bind_group_layout,
+					uniforms_bind_group_layout,
+					texture_bind_group_layout,
 					image_loader,
 					geometry.size,
 					self.image_backlog,
@@ -136,22 +112,7 @@ impl Panel {
 
 				(PanelState::Both { front, back }, next_progress)
 			},
-			*/
-			PanelState::Both { mut front, back } if finished => {
-				front
-					.try_update(device, queue, texture_bind_group_layout, image_loader, true)
-					.context("Unable to update swapped image")?;
 
-				(
-					PanelState::Both {
-						front: back,
-						back:  front,
-					},
-					self.progress - self.fade_point,
-				)
-			},
-
-			/*
 			// If we have both, update the progress and swap them if finished
 			PanelState::Both { front, back } if finished => {
 				// Note: Front and back are swapped here since we implicitly swap
@@ -161,14 +122,14 @@ impl Panel {
 					None,
 					device,
 					queue,
-					bind_group_layout,
+					texture_bind_group_layout,
 					image_loader,
 					past_fade,
 				)
 				.context("Unable to update swapped image")?
 				{
 					(true, state) => (state, swapped_progress),
-					(false, state) => (state, swapped_progress),
+					(false, state) => (state, next_progress),
 				}
 			},
 
@@ -179,16 +140,16 @@ impl Panel {
 				Some(since),
 				device,
 				queue,
-				bind_group_layout,
+				texture_bind_group_layout,
 				image_loader,
 				past_fade,
 			)
 			.context("Unable to update swapped image")?
 			{
-				(true, state) => (state, next_progress),
+				(true, state) => (state, swapped_progress),
 				(false, state) => (state, next_progress),
 			},
-			*/
+
 			// Else keep the current state and advance
 			state => (state, next_progress),
 		};
@@ -197,7 +158,6 @@ impl Panel {
 	}
 
 	/// Draws the panel to `render_pass`
-	#[allow(clippy::cast_precision_loss)] // Image and window sizes are far below 2^23
 	pub fn draw<'a>(
 		&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue, window_size: PhysicalSize<u32>,
 	) {
@@ -215,7 +175,7 @@ impl Panel {
 		)) * Matrix4::from_nonuniform_scale(x_scale, -y_scale, 1.0);
 
 		// Calculate the alpha and progress for the back image
-		let (back_alpha, back_progress) = match self.progress.min(1.0) {
+		let (back_alpha, back_progress) = match self.progress {
 			f if f >= self.fade_point => (
 				(self.progress - self.fade_point) / (1.0 - self.fade_point),
 				self.progress - self.fade_point,
@@ -223,12 +183,9 @@ impl Panel {
 			_ => (0.0, 0.0),
 		};
 
-		log::info!("{:.2}: {:.2} / {:.2}", self.progress, back_alpha, back_progress);
-
 		// Get the images to render
 		let (front, back) = match &mut self.state {
 			PanelState::Empty => (None, None),
-			PanelState::Swapped { .. } => panic!(),
 			PanelState::PrimaryOnly { image, .. } | PanelState::Swapped { front: image, .. } => {
 				(Some((image, 1.0, self.progress)), None)
 			},
@@ -238,15 +195,14 @@ impl Panel {
 			),
 		};
 
-		// Then draw
+		// Then draw each image
 		for (image, alpha, progress) in [front, back].into_iter().flatten() {
-			/*
 			// Skip rendering if alpha is 0
 			if alpha == 0.0 {
 				continue;
 			}
-			*/
 
+			// Update the uniforms
 			let uniforms = PanelUniforms {
 				matrix: matrix.into(),
 				uvs_offset: image.uvs.offset(progress),
@@ -255,65 +211,10 @@ impl Panel {
 			};
 			image.update_uniform(queue, uniforms);
 
+			// Then bind the image and draw it
 			image.bind(render_pass);
 			render_pass.draw_indexed(0..6, 0, 0..1);
 		}
-
-		/*
-
-
-
-
-		// Then draw
-		let geometry = self.panel;
-		for (image, alpha, progress) in [cur, next].into_iter().flatten() {
-			// Calculate the matrix for the panel
-			let x_scale = geometry.size[0] as f32 / window_size.width as f32;
-			let y_scale = geometry.size[1] as f32 / window_size.height as f32;
-
-			let x_offset = geometry.pos[0] as f32 / window_size.width as f32;
-			let y_offset = geometry.pos[1] as f32 / window_size.height as f32;
-
-			let matrix = Matrix4::from_translation(Vector3::new(
-				-1.0 + x_scale + 2.0 * x_offset,
-				1.0 - y_scale - 2.0 * y_offset,
-				0.0,
-			)) * Matrix4::from_nonuniform_scale(x_scale, -y_scale, 1.0);
-
-			// Setup the uniforms with all the data
-
-
-			let texture_offset = image.uvs.offset(progress);
-			let _uniforms = Uniforms {
-				matrix: *<_ as AsRef<[[f32; 4]; 4]>>::as_ref(&matrix),
-				texture_offset,
-				alpha,
-			};
-			/*
-			let sampler = image.texture.sampled();
-
-			let uniforms = glium::uniform! {
-				mat: ,
-				tex_sampler: sampler,
-				tex_offset: tex_offset,
-				alpha: alpha,
-			};
-
-			// And draw
-			let draw_parameters = glium::DrawParameters {
-				blend: glium::Blend::alpha_blending(),
-				..glium::DrawParameters::default()
-			};
-			render_pass
-				.draw(&image.vertex_buffer, indices, program, &uniforms, &draw_parameters)
-				.context("Unable to draw")?;
-			*/
-
-			render_pass.set_vertex_buffer(0, image.vertices.slice(..));
-			render_pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
-			render_pass.draw_indexed(0..6, 0, 0..1);
-		}
-		*/
 	}
 }
 
@@ -365,7 +266,7 @@ pub enum PanelState {
 #[allow(clippy::too_many_arguments)] // TODO:
 fn update_swapped(
 	mut back: PanelImage, front: PanelImage, mut since: Option<Instant>, device: &wgpu::Device, queue: &wgpu::Queue,
-	bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader, force_wait: bool,
+	texture_bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader, force_wait: bool,
 ) -> Result<(bool, PanelState), anyhow::Error> {
 	// If we're force waiting and don't have a `since`, create it,
 	// so we can keep track of how long the request took
@@ -374,7 +275,7 @@ fn update_swapped(
 	}
 
 	let swapped = back
-		.try_update(device, queue, bind_group_layout, image_loader, force_wait)
+		.try_update(device, queue, texture_bind_group_layout, image_loader, force_wait)
 		.context("Unable to get next image")?;
 	let state = match swapped {
 		// If we updated, switch to `Both`

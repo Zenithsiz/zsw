@@ -52,31 +52,9 @@ pub struct App {
 impl App {
 	/// Creates a new app
 	#[allow(clippy::future_not_send)] // Unfortunately we can't do much about it, we must build the window in the main thread
-	#[allow(clippy::too_many_lines)] // TODO:
 	pub async fn new(args: Args) -> Result<Self, anyhow::Error> {
 		// Build the window
-		// TODO: Not leak the window
-		let event_loop = EventLoop::with_user_event();
-		let window = WindowBuilder::new()
-			.with_position(PhysicalPosition {
-				x: args.window_geometry.pos[0],
-				y: args.window_geometry.pos[1],
-			})
-			.with_inner_size(PhysicalSize {
-				width:  args.window_geometry.size[0],
-				height: args.window_geometry.size[1],
-			})
-			.with_x11_window_type(vec![XWindowType::Desktop])
-			.build(&event_loop)
-			.context("Unable to build window")?;
-		let window = Box::leak(Box::new(window));
-
-		// Set the window as always below
-		// Note: Required so it doesn't hide itself if the desktop is clicked on
-		// SAFETY: TODO
-		unsafe {
-			self::set_display_always_below(window);
-		}
+		let (event_loop, window) = self::create_window(&args)?;
 
 		// Create the wgpu interface
 		let wgpu = Wgpu::new(window).await.context("Unable to create renderer")?;
@@ -248,6 +226,34 @@ impl App {
 	}
 }
 
+/// Creates the window, as well as the associated event loop
+fn create_window(args: &Args) -> Result<(EventLoop<!>, &'static Window), anyhow::Error> {
+	// Build the window
+	// TODO: Not leak the window
+	let event_loop = EventLoop::with_user_event();
+	let window = WindowBuilder::new()
+		.with_position(PhysicalPosition {
+			x: args.window_geometry.pos[0],
+			y: args.window_geometry.pos[1],
+		})
+		.with_inner_size(PhysicalSize {
+			width:  args.window_geometry.size[0],
+			height: args.window_geometry.size[1],
+		})
+		.with_x11_window_type(vec![XWindowType::Desktop])
+		.build(&event_loop)
+		.context("Unable to build window")?;
+	let window = Box::leak(Box::new(window));
+
+	// Set the window as always below
+	// Note: Required so it doesn't hide itself if the desktop is clicked on
+	// SAFETY: TODO
+	unsafe {
+		self::set_display_always_below(window);
+	}
+	Ok((event_loop, window))
+}
+
 /// Sets the display as always below
 ///
 /// # Safety
@@ -289,42 +295,4 @@ unsafe fn set_display_always_below(window: &Window) {
 	// Then remap it
 	unsafe { xlib::XMapRaised(display, window) };
 	unsafe { xlib::XFlush(display) };
-}
-
-
-#[derive(Debug, Copy, Clone)]
-#[derive(bytemuck::Zeroable, bytemuck::Pod)]
-#[repr(C)]
-struct Uniforms {
-	/// Matrix
-	matrix: [[f32; 4]; 4],
-
-	//tex_sampler: sampler,
-	/// Texture offset
-	texture_offset: [f32; 2],
-
-	/// Image alpha
-	alpha: f32,
-}
-
-impl Default for Uniforms {
-	fn default() -> Self {
-		Self {
-			matrix:         [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [
-				0.0, 0.0, 0.0, 1.0,
-			]],
-			texture_offset: [0.0; 2],
-			alpha:          1.0,
-		}
-	}
-}
-
-impl Uniforms {
-	pub const fn _new(matrix: [[f32; 4]; 4], texture_offset: [f32; 2], alpha: f32) -> Self {
-		Self {
-			matrix,
-			texture_offset,
-			alpha,
-		}
-	}
 }

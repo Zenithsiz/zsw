@@ -61,36 +61,24 @@ impl PanelImage {
 	) -> Result<Self, anyhow::Error> {
 		let request = ImageRequest { panel_size };
 
+		// Get the initial image
 		let image = self::request(image_loader, request, Self::PRIORITY_HIGH)
 			.recv()
 			.context("Unable to get image")?;
 
+		// Then start requesting images in the background
 		// Note: Make sure we have at least 1 receiver
-		let image_rxs = (0..image_backlog)
+		let image_rxs = (0..image_backlog.min(1))
 			.map(|_| self::request(image_loader, request, Self::PRIORITY_LOW))
 			.collect();
 
-		let (image_width, image_height) = image.dimensions();
-		let texture_descriptor = self::texture_descriptor(image_width, image_height);
-		let texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_raw());
+		// Create the texture and sampler
+		let (texture, texture_view) = self::create_image_texture(&image, device, queue);
+		let texture_sampler = create_texture_sampler(device);
 
-		let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
-		let texture_view = texture.create_view(&texture_view_descriptor);
-		let texture_sampler_descriptor = wgpu::SamplerDescriptor {
-			address_mode_u: wgpu::AddressMode::ClampToEdge,
-			address_mode_v: wgpu::AddressMode::ClampToEdge,
-			address_mode_w: wgpu::AddressMode::ClampToEdge,
-			mag_filter: wgpu::FilterMode::Linear,
-			min_filter: wgpu::FilterMode::Nearest,
-			mipmap_filter: wgpu::FilterMode::Nearest,
-			..wgpu::SamplerDescriptor::default()
-		};
-		let texture_sampler = device.create_sampler(&texture_sampler_descriptor);
-
-		#[allow(clippy::cast_precision_loss)] // Image and window sizes are likely much lower than 2^24
 		let uvs = ImageUvs::new(
-			image_width as f32,
-			image_height as f32,
+			image.width() as f32,
+			image.height() as f32,
 			panel_size.x as f32,
 			panel_size.y as f32,
 			rand::random(),
@@ -123,22 +111,9 @@ impl PanelImage {
 		};
 		let uniforms_bind_group = device.create_bind_group(&uniforms_bind_group_descriptor);
 
-
-		let texture_bind_group_descriptor = wgpu::BindGroupDescriptor {
-			layout:  texture_bind_group_layout,
-			entries: &[
-				wgpu::BindGroupEntry {
-					binding:  0,
-					resource: wgpu::BindingResource::TextureView(&texture_view),
-				},
-				wgpu::BindGroupEntry {
-					binding:  1,
-					resource: wgpu::BindingResource::Sampler(&texture_sampler),
-				},
-			],
-			label:   None,
-		};
-		let texture_bind_group = device.create_bind_group(&texture_bind_group_descriptor);
+		// Create the texture bind group
+		let texture_bind_group =
+			self::create_texture_bind_group(texture_bind_group_layout, &texture_view, &texture_sampler, device);
 
 		Ok(Self {
 			texture,
@@ -157,7 +132,7 @@ impl PanelImage {
 	/// Tries to update this image and returns if actually updated
 	#[allow(clippy::unnecessary_wraps)] // It might fail in the future
 	pub fn try_update(
-		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, bind_group_layout: &wgpu::BindGroupLayout,
+		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture_bind_group_layout: &wgpu::BindGroupLayout,
 		image_loader: &ImageLoader, force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
 		let image = match self::get_image(&mut self.image_rxs, image_loader, self.request, force_wait) {
@@ -169,37 +144,22 @@ impl PanelImage {
 		};
 
 		// Then update our texture
-		let (image_width, image_height) = image.dimensions();
-		let texture_descriptor = self::texture_descriptor(image_width, image_height);
-		let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
-		self.texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_raw());
-		self.texture_view = self.texture.create_view(&texture_view_descriptor);
-		let texture_bind_group_descriptor = wgpu::BindGroupDescriptor {
-			layout:  bind_group_layout,
-			entries: &[
-				wgpu::BindGroupEntry {
-					binding:  0,
-					resource: wgpu::BindingResource::TextureView(&self.texture_view),
-				},
-				wgpu::BindGroupEntry {
-					binding:  1,
-					resource: wgpu::BindingResource::Sampler(&self.texture_sampler),
-				},
-			],
-			label:   None,
-		};
-		self.texture_bind_group = device.create_bind_group(&texture_bind_group_descriptor);
+		(self.texture, self.texture_view) = self::create_image_texture(&image, device, queue);
+		self.texture_bind_group = self::create_texture_bind_group(
+			texture_bind_group_layout,
+			&self.texture_view,
+			&self.texture_sampler,
+			device,
+		);
 
 		// Re-create our UVs
-		#[allow(clippy::cast_precision_loss)] // Image and window sizes are likely much lower than 2^24
-		let uvs = ImageUvs::new(
-			image_width as f32,
-			image_height as f32,
+		self.uvs = ImageUvs::new(
+			image.width() as f32,
+			image.height() as f32,
 			self.request.panel_size[0] as f32,
 			self.request.panel_size[1] as f32,
 			rand::random(),
 		);
-		self.uvs = uvs;
 
 		// And update the vertex buffer
 		queue.write_buffer(
@@ -244,6 +204,53 @@ impl PanelImage {
 		render_pass.set_bind_group(0, &self.uniforms_bind_group, &[]);
 		render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
 	}
+}
+
+/// Creates the texture sampler
+fn create_texture_sampler(device: &wgpu::Device) -> wgpu::Sampler {
+	let descriptor = wgpu::SamplerDescriptor {
+		address_mode_u: wgpu::AddressMode::ClampToEdge,
+		address_mode_v: wgpu::AddressMode::ClampToEdge,
+		address_mode_w: wgpu::AddressMode::ClampToEdge,
+		mag_filter: wgpu::FilterMode::Linear,
+		min_filter: wgpu::FilterMode::Nearest,
+		mipmap_filter: wgpu::FilterMode::Linear,
+		..wgpu::SamplerDescriptor::default()
+	};
+	device.create_sampler(&descriptor)
+}
+
+/// Creates the texture bind group
+fn create_texture_bind_group(
+	bind_group_layout: &wgpu::BindGroupLayout, view: &wgpu::TextureView, sampler: &wgpu::Sampler, device: &wgpu::Device,
+) -> wgpu::BindGroup {
+	let texture_bind_group_descriptor = wgpu::BindGroupDescriptor {
+		layout:  bind_group_layout,
+		entries: &[
+			wgpu::BindGroupEntry {
+				binding:  0,
+				resource: wgpu::BindingResource::TextureView(view),
+			},
+			wgpu::BindGroupEntry {
+				binding:  1,
+				resource: wgpu::BindingResource::Sampler(sampler),
+			},
+		],
+		label:   None,
+	};
+
+	device.create_bind_group(&texture_bind_group_descriptor)
+}
+
+/// Creates the image texture and view
+fn create_image_texture(
+	image: &Image, device: &wgpu::Device, queue: &wgpu::Queue,
+) -> (wgpu::Texture, wgpu::TextureView) {
+	let texture_descriptor = self::texture_descriptor(image.width(), image.height());
+	let texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_raw());
+	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+	let texture_view = texture.create_view(&texture_view_descriptor);
+	(texture, texture_view)
 }
 
 /// Builds the texture descriptor
