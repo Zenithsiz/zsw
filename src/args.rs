@@ -5,7 +5,7 @@ use crate::Rect;
 use anyhow::Context;
 use cgmath::{EuclideanSpace, Point2, Vector2};
 use clap::{App as ClapApp, Arg as ClapArg};
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
 /// Arguments
 #[derive(Debug)]
@@ -20,7 +20,7 @@ pub struct Args {
 	pub image_duration: Duration,
 
 	/// Images directory
-	pub images_dir: Arc<PathBuf>,
+	pub images_dir: PathBuf,
 
 	/// Fade point (0.5..1.0)
 	pub fade_point: f32,
@@ -188,7 +188,6 @@ pub fn get() -> Result<Args, anyhow::Error> {
 			.value_of_os(arg_name::IMAGES_DIR)
 			.context("Required argument was missing")?,
 	);
-	let images_dir = Arc::new(images_dir);
 
 	let fade = matches
 		.value_of(arg_name::FADE_POINT)

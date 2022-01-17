@@ -8,7 +8,8 @@
 	decl_macro,
 	inline_const,
 	destructuring_assignment,
-	stmt_expr_attributes
+	stmt_expr_attributes,
+	try_trait_v2
 )]
 // Lints
 #![deny(unsafe_op_in_unsafe_fn)]
