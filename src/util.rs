@@ -25,7 +25,7 @@ pub macro measure_dbg {
 		::std::eprintln!("[{}:{}]", ::std::file!(), ::std::line!())
 	},
 	($value:expr $(,)?) => {
-		match $crate::util::measure(move || $value) {
+		match $crate::util::measure(|| $value) {
 			(value, duration) => {
 				::std::eprintln!("[{}:{}] {} took {:?}",
 					::std::file!(), ::std::line!(), ::std::stringify!($value), duration);

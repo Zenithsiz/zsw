@@ -7,7 +7,10 @@ use crate::{Args, ImageLoader, Panel, PanelState, PanelsRenderer, PathLoader, Wg
 use anyhow::Context;
 use crossbeam::thread;
 use parking_lot::Mutex;
-use std::time::Duration;
+use std::{
+	sync::atomic::{self, AtomicBool},
+	time::Duration,
+};
 use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
 	event::{Event, WindowEvent},
@@ -101,11 +104,13 @@ impl App {
 	/// Runs the app 'till completion
 	pub fn run(mut self) -> Result<(), anyhow::Error> {
 		// Start the renderer thread
+		let should_quit = AtomicBool::new(false);
 		thread::scope(|s| {
 			// Spawn the updater thread
 			s.builder()
-				.name("Renderer thread".to_owned())
+				.name("Updater thread".to_owned())
 				.spawn(Self::updater_thread(
+					&should_quit,
 					&self.wgpu,
 					&self.panels,
 					&self.panels_renderer,
@@ -117,6 +122,7 @@ impl App {
 			s.builder()
 				.name("Renderer thread".to_owned())
 				.spawn(Self::renderer_thread(
+					&should_quit,
 					&self.wgpu,
 					&self.panels,
 					self.window,
@@ -135,6 +141,7 @@ impl App {
 					Event::WindowEvent { event, .. } => match event {
 						WindowEvent::Resized(size) => self.wgpu.resize(size),
 						WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+							log::warn!("Received close request, closing window");
 							*control_flow = EventLoopControlFlow::Exit;
 						},
 						_ => (),
@@ -143,6 +150,9 @@ impl App {
 				}
 			});
 
+			// Notify other threads to quit
+			should_quit.store(true, atomic::Ordering::Relaxed);
+
 			Ok(())
 		})
 		.map_err(|err| anyhow::anyhow!("Unable to start all threads and run event loop: {:?}", err))?
@@ -150,14 +160,14 @@ impl App {
 
 	/// Returns the function to run in the updater thread
 	fn updater_thread<'a>(
-		wgpu: &'a Wgpu, panels: &'a Mutex<Vec<Panel>>, panels_renderer: &'a PanelsRenderer,
-		image_loader: &'a ImageLoader,
+		should_quit: &'a AtomicBool, wgpu: &'a Wgpu, panels: &'a Mutex<Vec<Panel>>,
+		panels_renderer: &'a PanelsRenderer, image_loader: &'a ImageLoader,
 	) -> impl FnOnce(&thread::Scope) + 'a {
-		move |_| loop {
+		move |_| {
 			// Duration we're sleep
 			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-			loop {
+			while !should_quit.load(atomic::Ordering::Relaxed) {
 				// Render
 				let (res, frame_duration) =
 					crate::util::measure(|| Self::update(wgpu, &mut *panels.lock(), panels_renderer, image_loader));
@@ -195,13 +205,14 @@ impl App {
 
 	/// Returns the function to run in the renderer thread
 	fn renderer_thread<'a>(
-		wgpu: &'a Wgpu, panels: &'a Mutex<Vec<Panel>>, window: &'a Window, panels_renderer: &'a PanelsRenderer,
+		should_quit: &'a AtomicBool, wgpu: &'a Wgpu, panels: &'a Mutex<Vec<Panel>>, window: &'a Window,
+		panels_renderer: &'a PanelsRenderer,
 	) -> impl FnOnce(&thread::Scope) + 'a {
-		move |_| loop {
+		move |_| {
 			// Duration we're sleep
 			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-			loop {
+			while !should_quit.load(atomic::Ordering::Relaxed) {
 				// Render
 				let (res, frame_duration) =
 					crate::util::measure(|| Self::render(wgpu, &mut **panels.lock(), window, panels_renderer));

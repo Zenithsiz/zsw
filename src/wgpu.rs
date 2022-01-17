@@ -126,8 +126,10 @@ impl Wgpu {
 			//       so the only possible strong counts are 2 and 1, but this may
 			//       change in the future and so we'll never actually leave this loop.
 			//       Although this isn't super important, since this only happens at exit (for now).
+			// TODO: Not sleep here, even with `Wait`, `poll` seems to just return within a few microseconds
 			while Arc::strong_count(&device) > 1 {
-				device.poll(wgpu::Maintain::Wait);
+				device.poll(wgpu::Maintain::Poll);
+				thread::sleep(std::time::Duration::from_secs_f32(1.0 / 60.0));
 			}
 
 			log::info!("Exiting wgpu poller thread");

@@ -39,7 +39,7 @@ impl ImageLoader {
 			let request_rx = request_rx.clone();
 			let path_rx = path_loader.receiver();
 			thread::Builder::new()
-				.name(format!("Image loader #{thread_idx}"))
+				.name("Image loader".to_owned())
 				.spawn(move || match self::image_loader(&request_rx, &path_rx) {
 					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
 					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
