@@ -207,6 +207,7 @@ pub enum TryRecvError {
 }
 
 /// Creates a new channel
+#[must_use]
 pub fn channel<T>(capacity: Option<NonZeroUsize>) -> (Sender<T>, Receiver<T>) {
 	// Create the shared inner
 	let inner = Arc::new(Inner {

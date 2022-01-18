@@ -25,7 +25,7 @@ pub macro measure_dbg {
 		::std::eprintln!("[{}:{}]", ::std::file!(), ::std::line!())
 	},
 	($value:expr $(,)?) => {
-		match $crate::util::measure(move || $value) {
+		match $crate::util::measure(|| $value) {
 			(value, duration) => {
 				::std::eprintln!("[{}:{}] {} took {:?}",
 					::std::file!(), ::std::line!(), ::std::stringify!($value), duration);
@@ -39,7 +39,7 @@ pub macro measure_dbg {
 }
 
 /// Hashes a value using `twox_hash`
-pub fn hash_of<T: ?Sized + Hash>(value: &T) -> u64 {
+pub fn _hash_of<T: ?Sized + Hash>(value: &T) -> u64 {
 	let mut hasher = twox_hash::XxHash64::with_seed(0);
 	value.hash(&mut hasher);
 	hasher.finish()

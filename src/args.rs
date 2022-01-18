@@ -1,35 +1,32 @@
-//! Args
+//! Arguments
 
 // Imports
-use crate::{img::ImageLoaderArgs, Rect};
+use crate::Rect;
 use anyhow::Context;
 use cgmath::{EuclideanSpace, Point2, Vector2};
 use clap::{App as ClapApp, Arg as ClapArg};
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
-/// Args
+/// Arguments
 #[derive(Debug)]
 pub struct Args {
 	/// Window geometry
 	pub window_geometry: Rect<u32>,
 
-	/// Image geometries
-	pub image_geometries: Vec<Rect<u32>>,
+	/// Panel geometries
+	pub panel_geometries: Vec<Rect<u32>>,
 
 	/// Image duration
 	pub image_duration: Duration,
 
 	/// Images directory
-	pub images_dir: Arc<PathBuf>,
+	pub images_dir: PathBuf,
 
 	/// Fade point (0.5..1.0)
 	pub fade_point: f32,
 
 	/// Image backlog
 	pub image_backlog: Option<usize>,
-
-	/// Image loader arguments
-	pub image_loader_args: ImageLoaderArgs,
 }
 
 /// Parses all arguments
@@ -38,15 +35,13 @@ pub fn get() -> Result<Args, anyhow::Error> {
 	/// All arguments' names
 	mod arg_name {
 		pub const WINDOW_GEOMETRY: &str = "window-geometry";
-		pub const IMAGE_GEOMETRY: &str = "image-geometry";
+		pub const PANEL_GEOMETRY: &str = "panel-geometry";
 		pub const IMAGES_DIR: &str = "images-dir";
 		pub const IMAGE_DURATION: &str = "image-duration";
 		pub const FADE_POINT: &str = "fade-point";
 		pub const GRID: &str = "grid";
 		pub const IMAGE_BACKLOG: &str = "image-backlog";
-		pub const IMAGE_LOADER_ARGS: &str = "image-loader-args";
 	}
-
 
 	// Get all matches from cli
 	let matches = ClapApp::new("Zss")
@@ -54,48 +49,52 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		.author("Filipe Rodrigues <filipejacintorodrigues1@gmail.com>")
 		.about("Zenithsiz's scrolling wallpaper")
 		.arg(
-			ClapArg::with_name(arg_name::WINDOW_GEOMETRY)
+			ClapArg::new(arg_name::WINDOW_GEOMETRY)
 				.help("Window geometry")
 				.long_help("Window geometry (`{width}x{height}+{x}+{y}` or `{width}x{height}`)")
-				.long_help(
-					"Geometry to place the window in, this will typically be your full desktop.\nIf you use multiple \
-					 monitors, set this to the full geometry and use image geometries to position all wallpapers",
-				)
+				.long_help(concat!(
+					"Geometry to place the window at, consisting of either width and height (`{width}x{height}`), or \
+					 width, height and an offset (`{width}x{height}+{x}+{y}`).\n",
+					"This will typically be your full desktop size, including if you use multiple monitors.\n",
+					"Using panels, you may populate sub-geometries of this window geometry to display images in"
+				))
 				.takes_value(true)
 				.required(true)
 				.long("window-geometry")
-				.short("g"),
+				.short('g'),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::IMAGE_GEOMETRY)
-				.help("Window geometry")
-				.long_help("Specifies a specific window geometry (`{width}x{height}+{x}+{y}` or `{width}x{height}`)")
-				.long_help(
-					"Used when you want to only display in a part of the window geometry.\nIf not specified, it is \
-					 the window geometry.\nMultiple may be specified and they will all display images",
-				)
+			ClapArg::new(arg_name::PANEL_GEOMETRY)
+				.help("Panel geometry")
+				.long_help("Panel geometry (`{width}x{height}+{x}+{y}` or `{width}x{height}`)")
+				.long_help(concat!(
+					"Used when you want to render images in a sub-geometry of the window geometry.\n",
+					"Each panel will render images independently. If none are given, defaults to a single panel \
+					 covering the whole window geometry"
+				))
 				.takes_value(true)
-				.multiple(true)
-				.long("image-geometry"),
+				.multiple_occurrences(true)
+				.long("panel-geometry")
+				.short('p'),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::GRID)
-				.help("Adds a grid of image geometries (`{columns}x{rows}@{geometry}``)")
+			ClapArg::new(arg_name::GRID)
+				.help("Grid of panel geometries (`{columns}x{rows}@{geometry}``)")
 				.takes_value(true)
-				.multiple(true)
+				.multiple_occurrences(true)
 				.long("grid"),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::IMAGES_DIR)
+			ClapArg::new(arg_name::IMAGES_DIR)
 				.help("Images Directory")
 				.long_help("Path to directory with images. Non-images will be ignored.")
 				.takes_value(true)
 				.required(true)
-				.long("images-dir")
+				.allow_invalid_utf8(true)
 				.index(1),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::IMAGE_DURATION)
+			ClapArg::new(arg_name::IMAGE_DURATION)
 				.help("Duration (in seconds) of each image")
 				.long_help("Duration, in seconds, each image will take up on screen, including during fading.")
 				.takes_value(true)
@@ -103,7 +102,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.default_value("30"),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::FADE_POINT)
+			ClapArg::new(arg_name::FADE_POINT)
 				.help("Fade percentage (0.5 .. 1.0)")
 				.long_help("Percentage, from 0.5 to 1.0, of when to start fading the image during it's display.")
 				.takes_value(true)
@@ -111,18 +110,14 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.default_value("0.8"),
 		)
 		.arg(
-			ClapArg::with_name(arg_name::IMAGE_BACKLOG)
+			ClapArg::new(arg_name::IMAGE_BACKLOG)
 				.help("Image backlog per geometry")
-				.long_help("Number of images to have in the backlog for each geometry")
+				.long_help(
+					"Number of images to have in the backlog for each geometry. Will be the number of threads by \
+					 default",
+				)
 				.takes_value(true)
 				.long("image-backlog"),
-		)
-		.arg(
-			ClapArg::with_name(arg_name::IMAGE_LOADER_ARGS)
-				.help("Image loader arguments path")
-				.long_help("File to load image loader arguments from")
-				.takes_value(true)
-				.long("image-loader-args"),
 		)
 		.get_matches();
 
@@ -133,7 +128,7 @@ pub fn get() -> Result<Args, anyhow::Error> {
 
 	// Get the specified image geometries, if any
 	let mut image_geometries = matches
-		.values_of(arg_name::IMAGE_GEOMETRY)
+		.values_of(arg_name::PANEL_GEOMETRY)
 		.map_or_else(
 			|| Ok(vec![]),
 			|geometries| {
@@ -145,7 +140,6 @@ pub fn get() -> Result<Args, anyhow::Error> {
 			},
 		)
 		.context("Unable to parse image geometries")?;
-
 
 	// Then add all geometries from the grids
 	if let Some(grids) = matches.values_of(arg_name::GRID) {
@@ -183,7 +177,6 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		});
 	}
 
-
 	let duration = matches
 		.value_of(arg_name::IMAGE_DURATION)
 		.context("Argument with default value was missing")?;
@@ -195,7 +188,6 @@ pub fn get() -> Result<Args, anyhow::Error> {
 			.value_of_os(arg_name::IMAGES_DIR)
 			.context("Required argument was missing")?,
 	);
-	let images_dir = Arc::new(images_dir);
 
 	let fade = matches
 		.value_of(arg_name::FADE_POINT)
@@ -209,21 +201,12 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		.transpose()
 		.context("Unable to parse image backlog")?;
 
-	let image_loader_args = match matches.value_of_os(arg_name::IMAGE_LOADER_ARGS) {
-		Some(path) => {
-			let file = fs::File::open(path).context("Unable to open image loader args")?;
-			serde_json::from_reader(file).context("Unable to parse image loader args")?
-		},
-		None => ImageLoaderArgs::default(),
-	};
-
 	Ok(Args {
 		window_geometry,
-		image_geometries,
+		panel_geometries: image_geometries,
 		image_duration,
 		images_dir,
 		fade_point,
 		image_backlog,
-		image_loader_args,
 	})
 }

@@ -2,7 +2,7 @@
 
 // Imports
 use std::{
-	ops::ControlFlow,
+	ops::Try,
 	path::{Path, PathBuf},
 };
 
@@ -10,20 +10,20 @@ use std::{
 ///
 /// # Errors
 /// Ignores all errors reading directories, simply logging them.
-///
-/// # Return
-/// Returns the number of files successfully loaded
-pub fn visit_files_dir<E, F>(path: &Path, f: &mut F) -> Result<(), E>
+pub fn visit_files_dir<T: Try<Output = ()>, F>(path: &Path, f: &mut F) -> T
 where
-	F: FnMut(PathBuf) -> ControlFlow<E>,
+	F: FnMut(PathBuf) -> T,
 {
+	// Try to read the directory
 	let dir = match std::fs::read_dir(path) {
 		Ok(dir) => dir,
 		Err(err) => {
 			log::warn!("Unable to read directory `{path:?}`: {:?}", anyhow::anyhow!(err));
-			return Ok(());
+			return T::from_output(());
 		},
 	};
+
+	// Then go through each entry
 	for entry in dir {
 		// Read the entry and file type
 		let entry = match entry {
@@ -50,13 +50,9 @@ where
 			true => self::visit_files_dir(&entry.path(), f)?,
 
 			// Visit files
-			false => {
-				if let ControlFlow::Break(err) = f(entry_path) {
-					return Err(err);
-				}
-			},
+			false => f(entry_path)?,
 		}
 	}
 
-	Ok(())
+	T::from_output(())
 }

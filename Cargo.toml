@@ -1,12 +1,19 @@
 [package]
 edition = "2021"
 name = "zsw"
+resolver = "2"
 version = "0.1.0"
 
 [dependencies]
 
-# Windowing / Gl
-glium = "0.30.2"
+# Windowing
+winit = "0.26.1"
+
+# Rendering
+wgpu = {version = "0.12.0", features = ["serde", "replay"]}
+
+# Async
+pollster = "0.2.4"
 
 # X11
 x11 = {version = "2.18.2", features = ["xlib"]}
@@ -30,13 +37,14 @@ thiserror = "1.0.30"
 
 # Logging
 log = "0.4.14"
-simplelog = "0.10.0"
+simplelog = "0.11.2"
 
 # Cmd
-clap = "2.33.3"
+clap = "3.0.7"
 
 # Util
-num-rational = "0.4.0"
+bytemuck = {version = "1.7.3", features = ["derive"]}
+#num-rational = "0.4.0"
 
 # Filesystem
 notify = "4.0.17"
