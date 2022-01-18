@@ -8,8 +8,11 @@ use anyhow::Context;
 use crossbeam::thread;
 use parking_lot::Mutex;
 use std::{
-	sync::atomic::{self, AtomicBool},
-	time::Duration,
+	sync::{
+		atomic::{self, AtomicBool},
+		Arc,
+	},
+	time::{Duration, Instant},
 };
 use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
@@ -23,13 +26,11 @@ use winit::{
 };
 use x11::xlib;
 
-/// Application state
-///
-/// Stores all of the application state
-pub struct App {
-	/// Event loop
-	event_loop: EventLoop<!>,
-
+/// Inner state
+// Note: This is required because the event loop can't be
+//       shared in between threads, but everything else we need
+//       to share.
+struct Inner {
 	/// Window
 	///
 	/// [`Wgpu`] required a static reference to it, which is
@@ -40,7 +41,9 @@ pub struct App {
 	wgpu: Wgpu,
 
 	/// Path loader
-	_path_loader: PathLoader,
+	// Note: Although we have it behind a mutex, we don't need to access it,
+	//       it's only there so we can share `self` between threads
+	_path_loader: Mutex<PathLoader>,
 
 	/// Image loader
 	image_loader: ImageLoader,
@@ -50,6 +53,29 @@ pub struct App {
 
 	/// Panels renderer
 	panels_renderer: PanelsRenderer,
+
+	/// Egui platform
+	egui_platform: Mutex<egui_winit_platform::Platform>,
+
+	/// Egui render pass
+	egui_render_pass: Mutex<egui_wgpu_backend::RenderPass>,
+
+	/// Egui repaint signal
+	egui_repaint_signal: Arc<EguiRepaintSignal>,
+
+	/// Egui frame time
+	egui_frame_time: Mutex<Option<Duration>>,
+}
+
+/// Application state
+///
+/// Stores all of the application state
+pub struct App {
+	/// Event loop
+	event_loop: EventLoop<!>,
+
+	/// Inner
+	inner: Inner,
 }
 
 impl App {
@@ -89,49 +115,62 @@ impl App {
 			.await
 			.context("Unable to create panels renderer")?;
 
+		// Create the egui platform
+		let window_size = window.inner_size();
+		let egui_platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
+			physical_width:   window_size.width,
+			physical_height:  window_size.height,
+			scale_factor:     window.scale_factor(),
+			font_definitions: egui::FontDefinitions::default(),
+			style:            egui::Style::default(),
+		});
+
+		// Create the egui render pass
+		let egui_render_pass = egui_wgpu_backend::RenderPass::new(wgpu.device(), wgpu.texture_format(), 1);
+
+		// Create the egui repaint signal
+		let egui_repaint_signal = Arc::new(EguiRepaintSignal);
 
 		Ok(Self {
 			event_loop,
-			window,
-			wgpu,
-			_path_loader: path_loader,
-			image_loader,
-			panels,
-			panels_renderer,
+			inner: Inner {
+				window,
+				wgpu,
+				_path_loader: Mutex::new(path_loader),
+				image_loader,
+				panels,
+				panels_renderer,
+				egui_platform: Mutex::new(egui_platform),
+				egui_render_pass: Mutex::new(egui_render_pass),
+				egui_repaint_signal,
+				egui_frame_time: Mutex::new(None),
+			},
 		})
 	}
 
 	/// Runs the app 'till completion
 	pub fn run(mut self) -> Result<(), anyhow::Error> {
-		// Start the renderer thread
+		// Start all threads and then wait in the main thread for events
+		let inner = self.inner;
 		let should_quit = AtomicBool::new(false);
 		thread::scope(|s| {
 			// Spawn the updater thread
 			s.builder()
 				.name("Updater thread".to_owned())
-				.spawn(Self::updater_thread(
-					&should_quit,
-					&self.wgpu,
-					&self.panels,
-					&self.panels_renderer,
-					&self.image_loader,
-				))
+				.spawn(Self::updater_thread(&inner, &should_quit))
 				.context("Unable to start renderer thread")?;
 
 			// Spawn the renderer thread
 			s.builder()
 				.name("Renderer thread".to_owned())
-				.spawn(Self::renderer_thread(
-					&should_quit,
-					&self.wgpu,
-					&self.panels,
-					self.window,
-					&self.panels_renderer,
-				))
+				.spawn(Self::renderer_thread(&inner, &should_quit))
 				.context("Unable to start renderer thread")?;
 
 			// Run event loop in this thread until we quit
 			self.event_loop.run_return(|event, _, control_flow| {
+				// Update egui
+				inner.egui_platform.lock().handle_event(&event);
+
 				// Set control for to wait for next event, since we're not doing
 				// anything else on the main thread
 				*control_flow = EventLoopControlFlow::Wait;
@@ -139,7 +178,7 @@ impl App {
 				// Then handle the event
 				match event {
 					Event::WindowEvent { event, .. } => match event {
-						WindowEvent::Resized(size) => self.wgpu.resize(size),
+						WindowEvent::Resized(size) => inner.wgpu.resize(size),
 						WindowEvent::CloseRequested | WindowEvent::Destroyed => {
 							log::warn!("Received close request, closing window");
 							*control_flow = EventLoopControlFlow::Exit;
@@ -159,18 +198,14 @@ impl App {
 	}
 
 	/// Returns the function to run in the updater thread
-	fn updater_thread<'a>(
-		should_quit: &'a AtomicBool, wgpu: &'a Wgpu, panels: &'a Mutex<Vec<Panel>>,
-		panels_renderer: &'a PanelsRenderer, image_loader: &'a ImageLoader,
-	) -> impl FnOnce(&thread::Scope) + 'a {
+	fn updater_thread<'a>(inner: &'a Inner, should_quit: &'a AtomicBool) -> impl FnOnce(&thread::Scope) + 'a {
 		move |_| {
 			// Duration we're sleep
 			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
 			while !should_quit.load(atomic::Ordering::Relaxed) {
 				// Render
-				let (res, frame_duration) =
-					crate::util::measure(|| Self::update(wgpu, &mut *panels.lock(), panels_renderer, image_loader));
+				let (res, frame_duration) = crate::util::measure(|| Self::update(inner));
 				match res {
 					Ok(()) => log::debug!("Took {frame_duration:?} to render"),
 					Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -185,16 +220,15 @@ impl App {
 	}
 
 	/// Updates
-	fn update(
-		wgpu: &Wgpu, panels: &mut [Panel], panels_renderer: &PanelsRenderer, image_loader: &ImageLoader,
-	) -> Result<(), anyhow::Error> {
-		for panel in panels {
+	fn update(inner: &Inner) -> Result<(), anyhow::Error> {
+		let mut panels = inner.panels.lock();
+		for panel in &mut *panels {
 			if let Err(err) = panel.update(
-				wgpu.device(),
-				wgpu.queue(),
-				panels_renderer.uniforms_bind_group_layout(),
-				panels_renderer.texture_bind_group_layout(),
-				image_loader,
+				inner.wgpu.device(),
+				inner.wgpu.queue(),
+				inner.panels_renderer.uniforms_bind_group_layout(),
+				inner.panels_renderer.texture_bind_group_layout(),
+				&inner.image_loader,
 			) {
 				log::warn!("Unable to update panel: {err:?}");
 			}
@@ -204,18 +238,17 @@ impl App {
 	}
 
 	/// Returns the function to run in the renderer thread
-	fn renderer_thread<'a>(
-		should_quit: &'a AtomicBool, wgpu: &'a Wgpu, panels: &'a Mutex<Vec<Panel>>, window: &'a Window,
-		panels_renderer: &'a PanelsRenderer,
-	) -> impl FnOnce(&thread::Scope) + 'a {
+	fn renderer_thread<'a>(inner: &'a Inner, should_quit: &'a AtomicBool) -> impl FnOnce(&thread::Scope) + 'a {
 		move |_| {
 			// Duration we're sleep
 			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
+			// Display the demo application that ships with egui.
+			let mut demo_app = egui_demo_lib::WrapApp::default();
+
 			while !should_quit.load(atomic::Ordering::Relaxed) {
 				// Render
-				let (res, frame_duration) =
-					crate::util::measure(|| Self::render(wgpu, &mut **panels.lock(), window, panels_renderer));
+				let (res, frame_duration) = crate::util::measure(|| Self::render(inner, &mut demo_app));
 				match res {
 					Ok(()) => log::debug!("Took {frame_duration:?} to render"),
 					Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -230,10 +263,71 @@ impl App {
 	}
 
 	/// Renders
-	fn render(
-		wgpu: &Wgpu, panels: &mut [Panel], window: &Window, panels_renderer: &PanelsRenderer,
-	) -> Result<(), anyhow::Error> {
-		wgpu.render(|encoder, view| panels_renderer.render(panels, encoder, view, wgpu.queue(), window.inner_size()))
+	fn render(inner: &Inner, demo_app: &mut egui_demo_lib::WrapApp) -> Result<(), anyhow::Error> {
+		// Start the egui frame
+		// Note: We need to make sure we keep the platform locked
+		//       while the frame is active, as the main thread expected
+		//       the frame to be over when processing events.
+		let mut egui_platform = inner.egui_platform.lock();
+		let egui_frame_start = Instant::now();
+		egui_platform.begin_frame();
+		let app_output = epi::backend::AppOutput::default();
+
+		#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
+		let egui_frame = epi::Frame::new(epi::backend::FrameData {
+			info:           epi::IntegrationInfo {
+				name:                    "egui",
+				web_info:                None,
+				cpu_usage:               inner.egui_frame_time.lock().as_ref().map(Duration::as_secs_f32),
+				native_pixels_per_point: Some(inner.window.scale_factor() as f32),
+				prefer_dark_mode:        None,
+			},
+			output:         app_output,
+			repaint_signal: inner.egui_repaint_signal.clone(),
+		});
+
+		// TODO: Draw egui here
+		epi::App::update(demo_app, &egui_platform.context(), &egui_frame);
+
+		// Finish the frame
+		let (_output, paint_commands) = egui_platform.end_frame(Some(inner.window));
+		let paint_jobs = egui_platform.context().tessellate(paint_commands);
+		*inner.egui_frame_time.lock() = Some(egui_frame_start.elapsed());
+
+		inner.wgpu.render(|encoder, surface_view| {
+			// Render the panels
+			let mut panels = inner.panels.lock();
+			inner
+				.panels_renderer
+				.render(
+					&mut *panels,
+					encoder,
+					surface_view,
+					inner.wgpu.queue(),
+					inner.window.inner_size(),
+				)
+				.context("Unable to render panels")?;
+
+			// Render egui
+			let window_size = inner.window.inner_size();
+			#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
+			let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
+				physical_width:  window_size.width,
+				physical_height: window_size.height,
+				scale_factor:    inner.window.scale_factor() as f32,
+			};
+			let device = inner.wgpu.device();
+			let queue = inner.wgpu.queue();
+			let mut egui_render_pass = inner.egui_render_pass.lock();
+			egui_render_pass.update_texture(device, queue, &egui_platform.context().font_image());
+			egui_render_pass.update_user_textures(device, queue);
+			egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
+
+			// Record all render passes.
+			egui_render_pass
+				.execute(encoder, surface_view, &paint_jobs, &screen_descriptor, None)
+				.context("Unable to render egui")
+		})
 	}
 }
 
@@ -306,4 +400,13 @@ unsafe fn set_display_always_below(window: &Window) {
 	// Then remap it
 	unsafe { xlib::XMapRaised(display, window) };
 	unsafe { xlib::XFlush(display) };
+}
+
+/// Egui repaint signal
+// Note: We paint egui every frame, so this isn't required currently, but
+//       we should take it into consideration eventually.
+struct EguiRepaintSignal;
+
+impl epi::backend::RepaintSignal for EguiRepaintSignal {
+	fn request_repaint(&self) {}
 }
