@@ -148,6 +148,7 @@ impl App {
 				*control_flow = EventLoopControlFlow::Wait;
 
 				// Then handle the event
+				#[allow(clippy::single_match)] // We might add more in the future
 				match event {
 					Event::WindowEvent { event, .. } => match event {
 						WindowEvent::Resized(size) => inner.wgpu.resize(size),
