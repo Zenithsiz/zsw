@@ -4,10 +4,25 @@
 
 // Imports
 use anyhow::Context;
+use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
 use std::{sync::Arc, thread};
 use wgpu::TextureFormat;
 use winit::{dpi::PhysicalSize, window::Window};
+
+/// Surface
+#[derive(Debug)]
+pub struct Surface {
+	/// Surface
+	surface: wgpu::Surface,
+
+	/// Surface size
+	// Note: We keep the size ourselves instead of using the inner
+	//       window size because the window resizes asynchronously
+	//       from us, so it's possible for the window sizes to be
+	//       wrong relative to the surface size.
+	size: PhysicalSize<u32>,
+}
 
 /// Wgpu renderer
 ///
@@ -21,13 +36,14 @@ pub struct Wgpu {
 	queue: wgpu::Queue,
 
 	/// Surface
-	// Note: Wrapped in a mutex because `wgpu` panics when we try to update the texture
-	//       (during resizing) when we're currently writing to it mid-frame, so we get
-	//       an exclusive lock on it.
-	surface: Mutex<wgpu::Surface>,
+	surface: Mutex<Surface>,
 
 	/// Preferred texture format
 	texture_format: TextureFormat,
+
+	/// Queued resize
+	// Note: We queue resizes to make sure we don't resize more times than necessary
+	queued_resize: AtomicCell<Option<PhysicalSize<u32>>>,
 }
 
 impl Wgpu {
@@ -52,10 +68,14 @@ impl Wgpu {
 			.context("Unable to start wgpu poller thread")?;
 
 		Ok(Self {
-			surface: Mutex::new(surface),
+			surface: Mutex::new(Surface {
+				surface,
+				size: window.inner_size(),
+			}),
 			device,
 			queue,
 			texture_format,
+			queued_resize: AtomicCell::new(None),
 		})
 	}
 
@@ -76,21 +96,31 @@ impl Wgpu {
 
 	/// Resizes the underlying surface
 	pub fn resize(&self, size: PhysicalSize<u32>) {
-		log::info!("Resizing to {size:?}");
-		if size.width > 0 && size.height > 0 {
-			// Update our surface
-			let config = self::window_surface_configuration(self.texture_format, size);
-			self.surface.lock().configure(&self.device, &config);
-		}
+		// Queue the resize
+		self.queued_resize.store(Some(size));
 	}
 
 	/// Renders
 	pub fn render(
-		&self, f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView) -> Result<(), anyhow::Error>,
+		&self,
+		f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView, PhysicalSize<u32>) -> Result<(), anyhow::Error>,
 	) -> Result<(), anyhow::Error> {
-		// Get our surface texture and create a view for it
-		let surface = self.surface.lock();
+		let mut surface = self.surface.lock();
+
+		// Check for resizes
+		if let Some(size) = self.queued_resize.take() {
+			log::info!("Resizing to {size:?}");
+			if size.width > 0 && size.height > 0 {
+				// Update our surface
+				let config = self::window_surface_configuration(self.texture_format, size);
+				surface.surface.configure(&self.device, &config);
+				surface.size = size;
+			}
+		}
+
+		// And then get the surface texture
 		let surface_texture = surface
+			.surface
 			.get_current_texture()
 			.context("Unable to retrieve current texture")?;
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
@@ -106,7 +136,7 @@ impl Wgpu {
 		let mut encoder = self.device.create_command_encoder(&encoder_descriptor);
 
 		// And render using `f`
-		f(&mut encoder, &surface_texture_view).context("Unable to render")?;
+		f(&mut encoder, &surface_texture_view, surface.size).context("Unable to render")?;
 
 		// Finally submit everything to the queue and present the surface's texture
 		self.queue.submit([encoder.finish()]);

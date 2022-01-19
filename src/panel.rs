@@ -159,14 +159,14 @@ impl Panel {
 
 	/// Draws the panel to `render_pass`
 	pub fn draw<'a>(
-		&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue, window_size: PhysicalSize<u32>,
+		&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue, surface_size: PhysicalSize<u32>,
 	) {
 		// Calculate the matrix for the panel
-		let x_scale = self.geometry.size[0] as f32 / window_size.width as f32;
-		let y_scale = self.geometry.size[1] as f32 / window_size.height as f32;
+		let x_scale = self.geometry.size[0] as f32 / surface_size.width as f32;
+		let y_scale = self.geometry.size[1] as f32 / surface_size.height as f32;
 
-		let x_offset = self.geometry.pos[0] as f32 / window_size.width as f32;
-		let y_offset = self.geometry.pos[1] as f32 / window_size.height as f32;
+		let x_offset = self.geometry.pos[0] as f32 / surface_size.width as f32;
+		let y_offset = self.geometry.pos[1] as f32 / surface_size.height as f32;
 
 		let matrix = Matrix4::from_translation(Vector3::new(
 			-1.0 + x_scale + 2.0 * x_offset,

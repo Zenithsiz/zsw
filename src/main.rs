@@ -9,7 +9,8 @@
 	inline_const,
 	destructuring_assignment,
 	stmt_expr_attributes,
-	try_trait_v2
+	try_trait_v2,
+	backtrace
 )]
 // Lints
 #![warn(clippy::pedantic, clippy::nursery)]
@@ -73,7 +74,7 @@ pub use self::{
 // Imports
 use anyhow::Context;
 use pollster::FutureExt;
-use std::fs;
+use std::{fs, panic, thread};
 
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
@@ -131,5 +132,27 @@ fn init_log() -> Result<(), anyhow::Error> {
 		log::warn!("Unable to initialize file logger: {err:?}");
 	}
 
+	// Finally set the panic hook to log errors
+	panic::set_hook(Box::new(self::panic_hook));
+
 	Ok(())
+}
+
+/// Panic hook
+#[track_caller]
+fn panic_hook(info: &panic::PanicInfo<'_>) {
+	let location = info.location().expect("Panic had no location");
+	let msg = match info.payload().downcast_ref::<&'static str>() {
+		Some(s) => *s,
+		None => match info.payload().downcast_ref::<String>() {
+			Some(s) => &s[..],
+			None => "Box<dyn Any>",
+		},
+	};
+	let thread = thread::current();
+	let thread_name = thread.name().unwrap_or("<unnamed>");
+
+	let backtrace = std::backtrace::Backtrace::force_capture();
+
+	log::error!("Thread '{thread_name}' panicked at '{msg}', {location}\nBacktrace:\n{backtrace}");
 }

@@ -5,10 +5,11 @@
 // Imports
 use crate::{Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, PathLoader, Wgpu};
 use anyhow::Context;
-use crossbeam::thread;
 use parking_lot::Mutex;
 use std::{
+	mem,
 	sync::atomic::{self, AtomicBool},
+	thread,
 	time::Duration,
 };
 use winit::{
@@ -123,19 +124,21 @@ impl App {
 	/// Runs the app 'till completion
 	pub fn run(mut self) -> Result<(), anyhow::Error> {
 		// Start all threads and then wait in the main thread for events
-		let inner = self.inner;
+		// TODO: Not ignore errors here, although given how `thread::scope` works
+		//       it's somewhat hard to do so
+		let inner = &self.inner;
 		let should_quit = AtomicBool::new(false);
-		thread::scope(|s| {
+		crossbeam::thread::scope(|s| {
 			// Spawn the updater thread
 			s.builder()
 				.name("Updater thread".to_owned())
-				.spawn(Self::updater_thread(&inner, &should_quit))
+				.spawn(Self::updater_thread(inner, &should_quit))
 				.context("Unable to start renderer thread")?;
 
 			// Spawn the renderer thread
 			s.builder()
 				.name("Renderer thread".to_owned())
-				.spawn(Self::renderer_thread(&inner, &should_quit))
+				.spawn(Self::renderer_thread(inner, &should_quit))
 				.context("Unable to start renderer thread")?;
 
 			// Run event loop in this thread until we quit
@@ -151,6 +154,9 @@ impl App {
 				#[allow(clippy::single_match)] // We might add more in the future
 				match event {
 					Event::WindowEvent { event, .. } => match event {
+						WindowEvent::Moved(_pos) => {
+							//dbg!(pos);
+						},
 						WindowEvent::Resized(size) => inner.wgpu.resize(size),
 						WindowEvent::CloseRequested | WindowEvent::Destroyed => {
 							log::warn!("Received close request, closing window");
@@ -165,13 +171,22 @@ impl App {
 			// Notify other threads to quit
 			should_quit.store(true, atomic::Ordering::Relaxed);
 
-			Ok(())
+			anyhow::Ok(())
 		})
-		.map_err(|err| anyhow::anyhow!("Unable to start all threads and run event loop: {:?}", err))?
+		.expect("Unable to start all threads")
+		.expect("Unable to run all threads 'till completion");
+
+		// TODO: We seem to be segfaulting when dropping the app, so we
+		//       forget `self`
+		mem::forget(self);
+
+		Ok(())
 	}
 
 	/// Returns the function to run in the updater thread
-	fn updater_thread<'a>(inner: &'a Inner, should_quit: &'a AtomicBool) -> impl FnOnce(&thread::Scope) + 'a {
+	fn updater_thread<'a>(
+		inner: &'a Inner, should_quit: &'a AtomicBool,
+	) -> impl FnOnce(&crossbeam::thread::Scope) + 'a {
 		move |_| {
 			// Duration we're sleep
 			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -186,7 +201,7 @@ impl App {
 
 				// Then sleep until next frame
 				if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
-					std::thread::sleep(duration);
+					thread::sleep(duration);
 				}
 			}
 		}
@@ -211,7 +226,9 @@ impl App {
 	}
 
 	/// Returns the function to run in the renderer thread
-	fn renderer_thread<'a>(inner: &'a Inner, should_quit: &'a AtomicBool) -> impl FnOnce(&thread::Scope) + 'a {
+	fn renderer_thread<'a>(
+		inner: &'a Inner, should_quit: &'a AtomicBool,
+	) -> impl FnOnce(&crossbeam::thread::Scope) + 'a {
 		move |_| {
 			// Duration we're sleep
 			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -229,7 +246,7 @@ impl App {
 
 				// Then sleep until next frame
 				if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
-					std::thread::sleep(duration);
+					thread::sleep(duration);
 				}
 			}
 		}
@@ -250,26 +267,19 @@ impl App {
 			})
 			.context("Unable to draw egui")?;
 
-		inner.wgpu.render(|encoder, surface_view| {
+		inner.wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
 			let mut panels = inner.panels.lock();
 			inner
 				.panels_renderer
-				.render(
-					&mut *panels,
-					encoder,
-					surface_view,
-					inner.wgpu.queue(),
-					inner.window.inner_size(),
-				)
+				.render(&mut *panels, encoder, surface_view, inner.wgpu.queue(), surface_size)
 				.context("Unable to render panels")?;
 
 			// Render egui
-			let window_size = inner.window.inner_size();
 			#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 			let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-				physical_width:  window_size.width,
-				physical_height: window_size.height,
+				physical_width:  surface_size.width,
+				physical_height: surface_size.height,
 				scale_factor:    inner.window.scale_factor() as f32,
 			};
 			let device = inner.wgpu.device();
@@ -316,6 +326,7 @@ fn create_window(args: &Args) -> Result<(EventLoop<!>, &'static Window), anyhow:
 	unsafe {
 		self::set_display_always_below(window);
 	}
+
 	Ok((event_loop, window))
 }
 
@@ -331,12 +342,12 @@ unsafe fn set_display_always_below(window: &Window) {
 
 	// Flush the existing `XMapRaised`
 	unsafe { xlib::XFlush(display) };
-	std::thread::sleep(Duration::from_millis(100));
+	thread::sleep(Duration::from_millis(100));
 
 	// Unmap the window temporarily
 	unsafe { xlib::XUnmapWindow(display, window) };
 	unsafe { xlib::XFlush(display) };
-	std::thread::sleep(Duration::from_millis(100));
+	thread::sleep(Duration::from_millis(100));
 
 	// Add the always below hint to the window manager
 	{

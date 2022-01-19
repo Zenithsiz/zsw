@@ -30,6 +30,8 @@ impl Egui {
 	/// Creates the egui state
 	pub fn new(window: &Window, wgpu: &Wgpu) -> Result<Self, anyhow::Error> {
 		// Create the egui platform
+		// TODO: Check if it's fine to use the window size here instead of the
+		//       wgpu surface size
 		let window_size = window.inner_size();
 		let platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
 			physical_width:   window_size.width,

@@ -81,7 +81,7 @@ impl PanelsRenderer {
 	/// Renders all panels
 	pub fn render(
 		&self, panels: &mut [Panel], encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, queue: &wgpu::Queue,
-		window_size: PhysicalSize<u32>,
+		surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
 		// CReate the render pass
 		let render_pass_descriptor = wgpu::RenderPassDescriptor {
@@ -107,7 +107,7 @@ impl PanelsRenderer {
 
 		// And draw each panel
 		for panel in panels {
-			panel.draw(&mut render_pass, queue, window_size);
+			panel.draw(&mut render_pass, queue, surface_size);
 		}
 
 		Ok(())
