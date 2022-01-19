@@ -108,7 +108,7 @@ impl Wgpu {
 		// And render using `f`
 		f(&mut encoder, &surface_texture_view).context("Unable to render")?;
 
-		// Finally submit everything to the queue and present the texture
+		// Finally submit everything to the queue and present the surface's texture
 		self.queue.submit([encoder.finish()]);
 		surface_texture.present();
 

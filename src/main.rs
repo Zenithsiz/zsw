@@ -17,6 +17,7 @@
 // Modules
 mod app;
 mod args;
+mod egui;
 mod img;
 mod panel;
 mod path_loader;
@@ -29,6 +30,7 @@ mod wgpu;
 pub use self::{
 	app::App,
 	args::Args,
+	egui::Egui,
 	img::ImageLoader,
 	panel::{Panel, PanelState, PanelsRenderer},
 	path_loader::PathLoader,

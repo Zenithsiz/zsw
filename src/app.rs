@@ -3,16 +3,13 @@
 //! See the [`App`] type for more details
 
 // Imports
-use crate::{Args, ImageLoader, Panel, PanelState, PanelsRenderer, PathLoader, Wgpu};
+use crate::{Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, PathLoader, Wgpu};
 use anyhow::Context;
 use crossbeam::thread;
 use parking_lot::Mutex;
 use std::{
-	sync::{
-		atomic::{self, AtomicBool},
-		Arc,
-	},
-	time::{Duration, Instant},
+	sync::atomic::{self, AtomicBool},
+	time::Duration,
 };
 use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
@@ -54,17 +51,8 @@ struct Inner {
 	/// Panels renderer
 	panels_renderer: PanelsRenderer,
 
-	/// Egui platform
-	egui_platform: Mutex<egui_winit_platform::Platform>,
-
-	/// Egui render pass
-	egui_render_pass: Mutex<egui_wgpu_backend::RenderPass>,
-
-	/// Egui repaint signal
-	egui_repaint_signal: Arc<EguiRepaintSignal>,
-
-	/// Egui frame time
-	egui_frame_time: Mutex<Option<Duration>>,
+	/// Egui
+	egui: Egui,
 }
 
 /// Application state
@@ -115,21 +103,8 @@ impl App {
 			.await
 			.context("Unable to create panels renderer")?;
 
-		// Create the egui platform
-		let window_size = window.inner_size();
-		let egui_platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
-			physical_width:   window_size.width,
-			physical_height:  window_size.height,
-			scale_factor:     window.scale_factor(),
-			font_definitions: egui::FontDefinitions::default(),
-			style:            egui::Style::default(),
-		});
-
-		// Create the egui render pass
-		let egui_render_pass = egui_wgpu_backend::RenderPass::new(wgpu.device(), wgpu.texture_format(), 1);
-
-		// Create the egui repaint signal
-		let egui_repaint_signal = Arc::new(EguiRepaintSignal);
+		// Create egui
+		let egui = Egui::new(window, &wgpu).context("Unable to create egui state")?;
 
 		Ok(Self {
 			event_loop,
@@ -140,10 +115,7 @@ impl App {
 				image_loader,
 				panels,
 				panels_renderer,
-				egui_platform: Mutex::new(egui_platform),
-				egui_render_pass: Mutex::new(egui_render_pass),
-				egui_repaint_signal,
-				egui_frame_time: Mutex::new(None),
+				egui,
 			},
 		})
 	}
@@ -169,7 +141,7 @@ impl App {
 			// Run event loop in this thread until we quit
 			self.event_loop.run_return(|event, _, control_flow| {
 				// Update egui
-				inner.egui_platform.lock().handle_event(&event);
+				inner.egui.platform().lock().handle_event(&event);
 
 				// Set control for to wait for next event, since we're not doing
 				// anything else on the main thread
@@ -264,35 +236,18 @@ impl App {
 
 	/// Renders
 	fn render(inner: &Inner, demo_app: &mut egui_demo_lib::WrapApp) -> Result<(), anyhow::Error> {
-		// Start the egui frame
-		// Note: We need to make sure we keep the platform locked
-		//       while the frame is active, as the main thread expected
-		//       the frame to be over when processing events.
-		let mut egui_platform = inner.egui_platform.lock();
-		let egui_frame_start = Instant::now();
-		egui_platform.begin_frame();
-		let app_output = epi::backend::AppOutput::default();
-
-		#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
-		let egui_frame = epi::Frame::new(epi::backend::FrameData {
-			info:           epi::IntegrationInfo {
-				name:                    "egui",
-				web_info:                None,
-				cpu_usage:               inner.egui_frame_time.lock().as_ref().map(Duration::as_secs_f32),
-				native_pixels_per_point: Some(inner.window.scale_factor() as f32),
-				prefer_dark_mode:        None,
-			},
-			output:         app_output,
-			repaint_signal: inner.egui_repaint_signal.clone(),
-		});
-
-		// TODO: Draw egui here
-		epi::App::update(demo_app, &egui_platform.context(), &egui_frame);
-
-		// Finish the frame
-		let (_output, paint_commands) = egui_platform.end_frame(Some(inner.window));
-		let paint_jobs = egui_platform.context().tessellate(paint_commands);
-		*inner.egui_frame_time.lock() = Some(egui_frame_start.elapsed());
+		// Draw egui
+		// TODO: When this is moved to it's own thread, regardless of issues with
+		//       synchronizing the platform, we should synchronize the drawing to ensure
+		//       we don't draw twice without displaying, as the first draw would never be
+		//       visible to the user.
+		let paint_jobs = inner
+			.egui
+			.draw(inner.window, |ctx, frame| {
+				epi::App::update(demo_app, ctx, frame);
+				Ok(())
+			})
+			.context("Unable to draw egui")?;
 
 		inner.wgpu.render(|encoder, surface_view| {
 			// Render the panels
@@ -318,7 +273,11 @@ impl App {
 			};
 			let device = inner.wgpu.device();
 			let queue = inner.wgpu.queue();
-			let mut egui_render_pass = inner.egui_render_pass.lock();
+			let mut egui_render_pass = inner.egui.render_pass().lock();
+
+			// TODO: Check if it's fine to get the platform here without synchronizing
+			//       with the drawing.
+			let egui_platform = inner.egui.platform().lock();
 			egui_render_pass.update_texture(device, queue, &egui_platform.context().font_image());
 			egui_render_pass.update_user_textures(device, queue);
 			egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
@@ -400,13 +359,4 @@ unsafe fn set_display_always_below(window: &Window) {
 	// Then remap it
 	unsafe { xlib::XMapRaised(display, window) };
 	unsafe { xlib::XFlush(display) };
-}
-
-/// Egui repaint signal
-// Note: We paint egui every frame, so this isn't required currently, but
-//       we should take it into consideration eventually.
-struct EguiRepaintSignal;
-
-impl epi::backend::RepaintSignal for EguiRepaintSignal {
-	fn request_repaint(&self) {}
 }
