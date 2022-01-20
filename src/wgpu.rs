@@ -1,16 +1,25 @@
 //! Wgpu
 //!
-//! See the [`Wgpu`] type for more details
+//! This module serves as a high-level interface for `wgpu`.
+//!
+//! The main entry point is the [`Wgpu`] type, which is used
+//! to interface with `wgpu`.
+//!
+//! This allows the application to not be exposed to the verbose
+//! details of `wgpu` and simply use the defaults [`Wgpu`] offers,
+//! which are tailed for this application.
 
 // Imports
 use anyhow::Context;
 use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
-use std::{sync::Arc, thread};
 use wgpu::TextureFormat;
 use winit::{dpi::PhysicalSize, window::Window};
 
 /// Surface
+// Note: Exists so we may lock both the surface and size behind
+//       the same mutex, to ensure resizes are atomic in regards
+//       to code using the surface.
 #[derive(Debug)]
 pub struct Surface {
 	/// Surface
@@ -21,66 +30,84 @@ pub struct Surface {
 	//       window size because the window resizes asynchronously
 	//       from us, so it's possible for the window sizes to be
 	//       wrong relative to the surface size.
+	//       Wgpu validation code can panic if the size we give it
+	//       is invalid (for example, during scissoring), so we *must*
+	//       ensure this size is the surface's actual size.
 	size: PhysicalSize<u32>,
 }
 
 /// Wgpu renderer
 ///
 /// Responsible for interfacing with `wgpu`.
+// TODO: Figure out if drop order matters here. Dropping the surface after the device/queue
+//       seems to not result in any panics, but it might be worth checking, especially if we
+//       ever need to "restart" `wgpu` in any scenario without restarting the application.
 #[derive(Debug)]
 pub struct Wgpu {
 	/// Device
-	device: Arc<wgpu::Device>,
+	// TODO: There exists a `Device::poll` method, but I'm not sure if we should
+	//       have to call that? Seems to be used for async, but we don't use any
+	//       of the async methods and unfortunately the polling seems to be busy
+	//       waiting even in `Wait` mode, so creating a new thread to poll whenever
+	//       doesn't work well without a sleep, which would defeat the point of
+	//       polling it in another thread instead of on the main thread whenever
+	//       an event is received.
+	device: wgpu::Device,
 
 	/// Queue
 	queue: wgpu::Queue,
 
 	/// Surface
+	// Note: Behind a mutex because, once we get the surface texture, calling most other
+	//       methods, such as `configure` will cause `wgpu` to panic due to the texture
+	//       being active.
+	//       For this reason we lock the surface while rendering to ensure no changes happen
+	//       and no panics can occur.
 	surface: Mutex<Surface>,
 
-	/// Preferred texture format
-	texture_format: TextureFormat,
+	/// Surface texture format
+	///
+	/// Used no each resize, so we configure the surface with the same texture format each time.
+	surface_texture_format: TextureFormat,
 
 	/// Queued resize
-	// Note: We queue resizes to make sure we don't resize more times than necessary
+	///
+	/// Will be `None` if no resizes are queued.
+	// Note: We queue resizes for 2 reasons:
+	//       1. So that multiple window resizes per frame only trigger an actual surface resize to
+	//          improve performance.
+	//       2. So that resizing may be done before rendering, so we can have a synchronizes-with
+	//          relation between surface resizes and drawing. This ensures we never resize the surface
+	//          without showing the user at least 1 frame of the resized surface.
 	queued_resize: AtomicCell<Option<PhysicalSize<u32>>>,
 }
 
 impl Wgpu {
-	/// Creates the renderer state and starts rendering in another thread
-	///
-	/// # Errors
+	/// Creates the `wgpu` wrapper given the window to create it in.
 	pub async fn new(window: &'static Window) -> Result<Self, anyhow::Error> {
 		// Create the surface and adapter
 		let (surface, adapter) = self::create_surface_and_adaptor(window).await?;
 
 		// Then create the device and it's queue
 		let (device, queue) = self::create_device(&adapter).await?;
-		let device = Arc::new(device);
 
-		// Configure the surface and get the preferred texture format
-		let texture_format = self::configure_window_surface(window, &surface, &adapter, &device)?;
-
-		// Start the thread for polling `wgpu`
-		thread::Builder::new()
-			.name("Wgpu poller".to_owned())
-			.spawn(Self::poller_thread(&device))
-			.context("Unable to start wgpu poller thread")?;
+		// Configure the surface and get the preferred texture format and surface size
+		let (texture_format, surface_size) = self::configure_window_surface(window, &surface, &adapter, &device)?;
 
 		Ok(Self {
 			surface: Mutex::new(Surface {
 				surface,
-				size: window.inner_size(),
+				size: surface_size,
 			}),
 			device,
 			queue,
-			texture_format,
+			surface_texture_format: texture_format,
 			queued_resize: AtomicCell::new(None),
 		})
 	}
 
 	/// Returns the wgpu device
-	pub fn device(&self) -> &wgpu::Device {
+	pub const fn device(&self) -> &wgpu::Device {
 		&self.device
 	}
 
@@ -91,20 +118,37 @@ impl Wgpu {
 
 	/// Returns the preferred texture format
 	pub const fn texture_format(&self) -> wgpu::TextureFormat {
-		self.texture_format
+		self.surface_texture_format
 	}
 
 	/// Resizes the underlying surface
+	///
+	/// The resize isn't executed immediately. Instead, it is
+	/// queued to happen at the start of the next render.
+	///
+	/// This means you can call this method whenever you receive
+	/// the resize event from the window.
 	pub fn resize(&self, size: PhysicalSize<u32>) {
 		// Queue the resize
 		self.queued_resize.store(Some(size));
 	}
 
-	/// Renders
+	/// Renders a frame using `f`
+	///
+	/// `f` receives the command encoder and the surface texture / size. This allows you to
+	/// start render passes to the surface texture.
+	///
+	/// Once `f` returns, all commands are sent via the `wgpu` queue and the surface is presented.
+	///
+	/// If any resize is queued, it will be executed *before* the frame starts, so the frame will start
+	/// with the new size.
 	pub fn render(
 		&self,
 		f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView, PhysicalSize<u32>) -> Result<(), anyhow::Error>,
 	) -> Result<(), anyhow::Error> {
+		// Note: We want to keep the surface locked until the end of the
+		//       method to prevent any possible changes from another thread
+		//       mid-frame, which could cause panics in `wgpu` validation.
 		let mut surface = self.surface.lock();
 
 		// Check for resizes
@@ -112,7 +156,7 @@ impl Wgpu {
 			log::info!("Resizing to {size:?}");
 			if size.width > 0 && size.height > 0 {
 				// Update our surface
-				let config = self::window_surface_configuration(self.texture_format, size);
+				let config = self::window_surface_configuration(self.surface_texture_format, size);
 				surface.surface.configure(&self.device, &config);
 				surface.size = size;
 			}
@@ -124,14 +168,14 @@ impl Wgpu {
 			.get_current_texture()
 			.context("Unable to retrieve current texture")?;
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
-			label: Some("Surface texture view"),
+			label: Some("[zsw] Window surface texture view"),
 			..wgpu::TextureViewDescriptor::default()
 		};
 		let surface_texture_view = surface_texture.texture.create_view(&surface_view_descriptor);
 
 		// Then create an encoder for our frame
 		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
-			label: Some("Render encoder"),
+			label: Some("[zsw] Frame render command encoder"),
 		};
 		let mut encoder = self.device.create_command_encoder(&encoder_descriptor);
 
@@ -144,50 +188,30 @@ impl Wgpu {
 
 		Ok(())
 	}
-
-	/// Returns the poller thread
-	fn poller_thread(device: &Arc<wgpu::Device>) -> impl FnOnce() {
-		let device = Arc::clone(device);
-		move || {
-			log::info!("Starting wgpu poller thread");
-
-			// Poll until the device is gone.
-			// TODO: To this in a better way. We currently don't expose the `Arc`,
-			//       so the only possible strong counts are 2 and 1, but this may
-			//       change in the future and so we'll never actually leave this loop.
-			//       Although this isn't super important, since this only happens at exit (for now).
-			// TODO: Not sleep here, even with `Wait`, `poll` seems to just return within a few microseconds
-			while Arc::strong_count(&device) > 1 {
-				device.poll(wgpu::Maintain::Poll);
-				thread::sleep(std::time::Duration::from_secs_f32(1.0 / 60.0));
-			}
-
-			log::info!("Exiting wgpu poller thread");
-		}
-	}
 }
 
 /// Configures the window surface and returns the preferred texture format
 fn configure_window_surface(
 	window: &Window, surface: &wgpu::Surface, adapter: &wgpu::Adapter, device: &wgpu::Device,
-) -> Result<TextureFormat, anyhow::Error> {
+) -> Result<(TextureFormat, PhysicalSize<u32>), anyhow::Error> {
 	// Get the format
 	let texture_format = surface
 		.get_preferred_format(adapter)
 		.context("Unable to query preferred format")?;
 
 	// Then configure it
-	let config = self::window_surface_configuration(texture_format, window.inner_size());
+	let surface_size = window.inner_size();
+	let config = self::window_surface_configuration(texture_format, surface_size);
 	surface.configure(device, &config);
 
-	Ok(texture_format)
+	Ok((texture_format, surface_size))
 }
 
 /// Creates the device
 async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), anyhow::Error> {
 	// Request the device without any features
 	let device_descriptor = wgpu::DeviceDescriptor {
-		label:    None,
+		label:    Some("[zsw] Device"),
 		features: wgpu::Features::empty(),
 		limits:   wgpu::Limits::default(),
 	};
