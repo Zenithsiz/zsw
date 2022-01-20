@@ -65,8 +65,8 @@ twox-hash = "1.6.1"
 
 # Compile all dependencies in release mode, or else it's too slow to
 # meaningfully tests most things
-[profile.dev.package."*"]
-opt-level = 3
+#[profile.dev.package."*"]
+#opt-level = 3
 
 # Add debug to release for profiling
 [profile.release]
