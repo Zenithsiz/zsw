@@ -16,10 +16,7 @@ use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
 	event::{Event, WindowEvent},
 	event_loop::{ControlFlow as EventLoopControlFlow, EventLoop},
-	platform::{
-		run_return::EventLoopExtRunReturn,
-		unix::{WindowBuilderExtUnix, WindowExtUnix, XWindowType},
-	},
+	platform::{run_return::EventLoopExtRunReturn, unix::WindowExtUnix},
 	window::{Window, WindowBuilder},
 };
 use x11::xlib;
@@ -154,9 +151,6 @@ impl App {
 				#[allow(clippy::single_match)] // We might add more in the future
 				match event {
 					Event::WindowEvent { event, .. } => match event {
-						WindowEvent::Moved(_pos) => {
-							//dbg!(pos);
-						},
 						WindowEvent::Resized(size) => inner.wgpu.resize(size),
 						WindowEvent::CloseRequested | WindowEvent::Destroyed => {
 							log::warn!("Received close request, closing window");
@@ -315,7 +309,7 @@ fn create_window(args: &Args) -> Result<(EventLoop<!>, &'static Window), anyhow:
 			width:  args.window_geometry.size[0],
 			height: args.window_geometry.size[1],
 		})
-		.with_x11_window_type(vec![XWindowType::Desktop])
+		.with_decorations(false)
 		.build(&event_loop)
 		.context("Unable to build window")?;
 	let window = Box::leak(Box::new(window));
