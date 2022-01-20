@@ -7,7 +7,6 @@ use crate::{Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, PathLoad
 use anyhow::Context;
 use parking_lot::Mutex;
 use std::{
-	mem,
 	sync::atomic::{self, AtomicBool},
 	thread,
 	time::Duration,
@@ -169,10 +168,6 @@ impl App {
 		})
 		.expect("Unable to start all threads")
 		.expect("Unable to run all threads 'till completion");
-
-		// TODO: We seem to be segfaulting when dropping the app, so we
-		//       forget `self`
-		mem::forget(self);
 
 		Ok(())
 	}
