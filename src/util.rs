@@ -2,9 +2,11 @@
 
 // Modules
 mod scan_dir;
+mod display_wrapper;
 
 // Exports
 pub use scan_dir::visit_files_dir;
+pub use display_wrapper::DisplayWrapper;
 
 // Imports
 use std::{

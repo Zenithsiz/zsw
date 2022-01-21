@@ -184,7 +184,7 @@ impl App {
 				// Render
 				let (res, frame_duration) = crate::util::measure(|| Self::update(inner));
 				match res {
-					Ok(()) => log::debug!("Took {frame_duration:?} to render"),
+					Ok(()) => log::trace!("Took {frame_duration:?} to render"),
 					Err(err) => log::warn!("Unable to render: {err:?}"),
 				};
 
@@ -229,7 +229,7 @@ impl App {
 				// Render
 				let (res, frame_duration) = crate::util::measure(|| Self::render(inner, &mut demo_app));
 				match res {
-					Ok(()) => log::debug!("Took {frame_duration:?} to render"),
+					Ok(()) => log::trace!("Took {frame_duration:?} to render"),
 					Err(err) => log::warn!("Unable to render: {err:?}"),
 				};
 

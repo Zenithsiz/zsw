@@ -52,6 +52,7 @@ mod app;
 mod args;
 mod egui;
 mod img;
+mod logger;
 mod panel;
 mod path_loader;
 mod rect;
@@ -74,18 +75,17 @@ pub use self::{
 // Imports
 use anyhow::Context;
 use pollster::FutureExt;
-use std::{fs, panic, thread};
 
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
-	match self::init_log() {
+	match logger::init() {
 		Ok(()) => log::debug!("Initialized logging"),
 		Err(err) => eprintln!("Unable to initialize logger: {err:?}"),
 	}
 
 	// Get arguments
 	let args = args::get().context("Unable to retrieve arguments")?;
-	log::debug!("Found arguments {args:?}");
+	log::debug!("Arguments: {args:?}");
 
 	// Create the app
 	let app = App::new(args).block_on().context("Unable to initialize app")?;
@@ -98,65 +98,4 @@ fn main() -> Result<(), anyhow::Error> {
 	//       log comes out. If instead of 2, 3 are being destroyed, it doesn't segfault.
 
 	Ok(())
-}
-
-/// Initializes the logging
-fn init_log() -> Result<(), anyhow::Error> {
-	/// Creates the file logger
-	// TODO: Put back to trace once wgpu is somewhat filtered out
-	fn file_logger() -> Result<Box<simplelog::WriteLogger<fs::File>>, anyhow::Error> {
-		let file = fs::File::create("latest.log").context("Unable to create file `latest.log`")?;
-		Ok(simplelog::WriteLogger::new(
-			log::LevelFilter::Info,
-			simplelog::Config::default(),
-			file,
-		))
-	}
-
-	// All loggers
-	let mut loggers = Vec::with_capacity(2);
-
-	// Create the term logger
-	let term_logger = simplelog::TermLogger::new(
-		log::LevelFilter::Info,
-		simplelog::Config::default(),
-		simplelog::TerminalMode::Stderr,
-		simplelog::ColorChoice::Auto,
-	);
-	loggers.push(term_logger as Box<_>);
-
-	// Then try to create the file logger
-	let file_logger_res = file_logger().map(|file_logger| loggers.push(file_logger as _));
-
-	// Finally initialize them all
-	simplelog::CombinedLogger::init(loggers).context("Unable to initialize loggers")?;
-
-	// Then check if we got any errors
-	if let Err(err) = file_logger_res {
-		log::warn!("Unable to initialize file logger: {err:?}");
-	}
-
-	// Finally set the panic hook to log errors
-	panic::set_hook(Box::new(self::panic_hook));
-
-	Ok(())
-}
-
-/// Panic hook
-#[track_caller]
-fn panic_hook(info: &panic::PanicInfo<'_>) {
-	let location = info.location().expect("Panic had no location");
-	let msg = match info.payload().downcast_ref::<&'static str>() {
-		Some(s) => *s,
-		None => match info.payload().downcast_ref::<String>() {
-			Some(s) => &s[..],
-			None => "Box<dyn Any>",
-		},
-	};
-	let thread = thread::current();
-	let thread_name = thread.name().unwrap_or("<unnamed>");
-
-	let backtrace = std::backtrace::Backtrace::force_capture();
-
-	log::error!("Thread '{thread_name}' panicked at '{msg}', {location}\nBacktrace:\n{backtrace}");
 }
