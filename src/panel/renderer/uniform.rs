@@ -8,13 +8,16 @@ pub struct PanelUniforms {
 	/// Matrix
 	pub matrix: [[f32; 4]; 4],
 
+	/// Uvs start
+	pub uvs_start: [f32; 2],
+
 	/// Uvs offset
 	pub uvs_offset: [f32; 2],
 
 	/// Alpha
 	pub alpha: f32,
 
-	pub _pad: [f32; 1],
+	pub _pad: [f32; 3],
 }
 
 impl PanelUniforms {
@@ -25,9 +28,10 @@ impl PanelUniforms {
 			matrix:     [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [
 				0.0, 0.0, 0.0, 1.0,
 			]],
+			uvs_start:  [0.0, 0.0],
 			uvs_offset: [0.0, 0.0],
 			alpha:      1.0,
-			_pad:       [0.0; 1],
+			_pad:       [0.0; 3],
 		}
 	}
 }

@@ -22,10 +22,14 @@ pub struct PanelsRenderer {
 	render_pipeline: wgpu::RenderPipeline,
 
 	/// Index buffer
-	///
-	/// Since we're just rendering rectangles, the indices
-	/// buffer is shared for all panels for now.
+	// Note: Since we're just rendering rectangles, the indices
+	//       buffer is shared for all panels for now.
 	indices: wgpu::Buffer,
+
+	/// Vertex buffer
+	// Note: We share the same vertex buffer and simply transform
+	//       the image using the uniforms
+	vertices: wgpu::Buffer,
 
 	/// Uniform bind group
 	uniforms_bind_group_layout: wgpu::BindGroupLayout,
@@ -49,6 +53,32 @@ impl PanelsRenderer {
 		};
 		let indices = device.create_buffer_init(&index_buffer_descriptor);
 
+		// Create the vertex buffer
+		const VERTICES: [PanelVertex; 4] = [
+			PanelVertex {
+				pos: [-1.0, -1.0],
+				uvs: [0.0, 0.0],
+			},
+			PanelVertex {
+				pos: [1.0, -1.0],
+				uvs: [1.0, 0.0],
+			},
+			PanelVertex {
+				pos: [-1.0, 1.0],
+				uvs: [0.0, 1.0],
+			},
+			PanelVertex {
+				pos: [1.0, 1.0],
+				uvs: [1.0, 1.0],
+			},
+		];
+		let vertex_buffer_descriptor = wgpu::util::BufferInitDescriptor {
+			label:    None,
+			contents: bytemuck::cast_slice(&VERTICES),
+			usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+		};
+		let vertices = device.create_buffer_init(&vertex_buffer_descriptor);
+
 		// Create the image bind group layout
 		let texture_bind_group_layout = self::create_texture_bind_group_layout(device);
 
@@ -66,6 +96,7 @@ impl PanelsRenderer {
 		Ok(Self {
 			render_pipeline,
 			indices,
+			vertices,
 			uniforms_bind_group_layout,
 			texture_bind_group_layout,
 		})
@@ -107,6 +138,7 @@ impl PanelsRenderer {
 		let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
 		render_pass.set_pipeline(&self.render_pipeline);
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
 		for panel in panels {

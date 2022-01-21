@@ -1,13 +1,12 @@
 //! Image
 
 // Imports
+use super::PanelUniforms;
 use crate::img::{Image, ImageLoader, ImageReceiver, ImageUvs};
 use anyhow::Context;
 use cgmath::Vector2;
 use std::{collections::VecDeque, time::Duration};
 use wgpu::util::DeviceExt;
-
-use super::{PanelUniforms, PanelVertex};
 
 /// Image
 // TODO: Don't like that this stores the panel size and swap direction, check what we'll do
@@ -24,9 +23,6 @@ pub struct PanelImage {
 
 	/// Texture bind group
 	pub texture_bind_group: wgpu::BindGroup,
-
-	/// Vertices
-	pub vertices: wgpu::Buffer,
 
 	/// Uniforms
 	pub uniforms: wgpu::Buffer,
@@ -79,15 +75,6 @@ impl PanelImage {
 		let texture_sampler = create_texture_sampler(device);
 
 		let swap_dir = rand::random();
-		let uvs = uvs(image_size, panel_size, swap_dir);
-
-		let vertices = Self::vertices(uvs.start());
-		let vertex_buffer_descriptor = wgpu::util::BufferInitDescriptor {
-			label:    None,
-			contents: bytemuck::cast_slice(&vertices),
-			usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-		};
-		let vertices = device.create_buffer_init(&vertex_buffer_descriptor);
 
 		let uniforms = PanelUniforms::new();
 		let uniforms_descriptor = wgpu::util::BufferInitDescriptor {
@@ -117,7 +104,6 @@ impl PanelImage {
 			texture_view,
 			texture_sampler,
 			texture_bind_group,
-			vertices,
 			uniforms,
 			uniforms_bind_group,
 			image_rxs,
@@ -152,13 +138,6 @@ impl PanelImage {
 			device,
 		);
 
-		// And update the vertex buffer
-		queue.write_buffer(
-			&self.vertices,
-			0,
-			bytemuck::cast_slice(&Self::vertices(self.uvs().start())),
-		);
-
 		Ok(true)
 	}
 
@@ -167,36 +146,13 @@ impl PanelImage {
 		self::uvs(self.image_size, self.panel_size, self.swap_dir)
 	}
 
-	/// Creates the vertices for uvs
-	const fn vertices(uvs_start: [f32; 2]) -> [PanelVertex; 4] {
-		[
-			PanelVertex {
-				pos: [-1.0, -1.0],
-				uvs: [0.0, 0.0],
-			},
-			PanelVertex {
-				pos: [1.0, -1.0],
-				uvs: [uvs_start[0], 0.0],
-			},
-			PanelVertex {
-				pos: [-1.0, 1.0],
-				uvs: [0.0, uvs_start[1]],
-			},
-			PanelVertex {
-				pos: [1.0, 1.0],
-				uvs: uvs_start,
-			},
-		]
-	}
-
 	/// Updates this image's uniforms
 	pub fn update_uniform(&self, queue: &wgpu::Queue, uniforms: PanelUniforms) {
 		queue.write_buffer(&self.uniforms, 0, bytemuck::cast_slice(&[uniforms]));
 	}
 
-	/// Binds this image's vertices and bind group
+	/// Binds this image's uniforms and texture
 	pub fn bind<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 		render_pass.set_bind_group(0, &self.uniforms_bind_group, &[]);
 		render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
 	}

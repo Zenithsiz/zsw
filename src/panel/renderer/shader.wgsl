@@ -20,6 +20,7 @@ struct VertexOutput {
 // Uniforms
 struct Uniforms {
 	matrix: mat4x4<f32>;
+	uvs_start: vec2<f32>;
 	uvs_offset: vec2<f32>;
 	alpha: f32;
 };
@@ -57,7 +58,7 @@ fn fs_main(in: VertexOutput) -> FragOutput {
 	var out: FragOutput;
 
 	// Sample the color and set the alpha
-	out.color = textureSample(texture, texture_sampler, in.uvs + uniforms.uvs_offset);
+	out.color = textureSample(texture, texture_sampler, in.uvs * uniforms.uvs_start + uniforms.uvs_offset);
 	out.color.a = uniforms.alpha;
 
 	return out;
