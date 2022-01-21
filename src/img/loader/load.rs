@@ -3,7 +3,6 @@
 // Modules
 
 // Imports
-use crate::img::ImageRequest;
 use anyhow::Context;
 use cgmath::Vector2;
 use image::{io::Reader as ImageReader, DynamicImage};
@@ -14,7 +13,7 @@ use std::{
 };
 
 /// Loads an image from a path
-pub fn load_image(path: &Path, _request: ImageRequest) -> Result<DynamicImage, anyhow::Error> {
+pub fn load_image(path: &Path) -> Result<DynamicImage, anyhow::Error> {
 	// Canonicalize the path before loading
 	let path = path.canonicalize().context("Unable to canonicalize path")?;
 

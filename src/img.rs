@@ -3,12 +3,10 @@
 
 // Modules
 mod loader;
-mod request;
 mod uvs;
 
 // Exports
 pub use loader::{ImageLoader, ImageLoaderArgs, ImageReceiver};
-pub use request::ImageRequest;
 pub use uvs::ImageUvs;
 
 /// Image

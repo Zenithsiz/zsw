@@ -7,7 +7,7 @@
 mod load;
 
 // Imports
-use super::{Image, ImageRequest};
+use super::Image;
 use crate::{
 	paths::{PathReceiver, Paths},
 	sync::{once_channel, priority_spmc},
@@ -20,7 +20,7 @@ use std::{num::NonZeroUsize, thread};
 #[derive(Debug)]
 pub struct ImageLoader {
 	/// Request sender
-	request_tx: priority_spmc::Sender<(ImageRequest, once_channel::Sender<Image>)>,
+	request_tx: priority_spmc::Sender<once_channel::Sender<Image>>,
 }
 
 impl ImageLoader {
@@ -55,11 +55,11 @@ impl ImageLoader {
 	///
 	/// # Errors
 	/// Returns an error if unable to send a request
-	pub fn request(&self, request: ImageRequest, priority: usize) -> Result<ImageReceiver, anyhow::Error> {
+	pub fn request(&self, priority: usize) -> Result<ImageReceiver, anyhow::Error> {
 		// Create the channel and send the request
 		let (image_tx, image_rx) = once_channel::channel();
 		self.request_tx
-			.send((request, image_tx), priority)
+			.send(image_tx, priority)
 			.context("Unable to send request to loader thread")?;
 
 		Ok(ImageReceiver { image_rx })
@@ -133,11 +133,11 @@ impl ImageReceiver {
 
 /// Image loader thread function
 fn image_loader(
-	request_rx: &priority_spmc::Receiver<(ImageRequest, once_channel::Sender<Image>)>, path_rx: &PathReceiver,
+	request_rx: &priority_spmc::Receiver<once_channel::Sender<Image>>, path_rx: &PathReceiver,
 ) -> Result<(), anyhow::Error> {
 	loop {
 		// Get the next request
-		let (request, sender) = match util::measure(|| request_rx.recv()) {
+		let sender = match util::measure(|| request_rx.recv()) {
 			(Ok(value), duration) => {
 				log::trace!("Spent {duration:?} waiting for a request");
 				value
@@ -156,7 +156,7 @@ fn image_loader(
 			// And try to process it
 			// Note: We can ignore errors on sending, since other senders might still be alive
 			#[allow(clippy::let_underscore_drop)]
-			match util::measure(|| load::load_image(&path, request)) {
+			match util::measure(|| load::load_image(&path)) {
 				// If we got it, send it
 				(Ok(image), duration) => {
 					log::trace!("Took {duration:?} to load {path:?}");

@@ -3,7 +3,7 @@
 set -e
 
 cargo run -- \
-	~/.wallpaper/local \
+	~/.wallpaper/active \
 	--image-duration 5.0 \
 	--window-geometry "1920x1080+1360+0" \
 	--panel-geometry "1920x1080+0+0" \

@@ -1,7 +1,7 @@
 //! Image
 
 // Imports
-use crate::img::{Image, ImageLoader, ImageReceiver, ImageRequest, ImageUvs};
+use crate::img::{Image, ImageLoader, ImageReceiver, ImageUvs};
 use anyhow::Context;
 use cgmath::Vector2;
 use std::{collections::VecDeque, time::Duration};
@@ -40,8 +40,8 @@ pub struct PanelImage {
 	/// All image receivers
 	pub image_rxs: VecDeque<ImageReceiver>,
 
-	/// Request
-	pub request: ImageRequest,
+	/// Panel size
+	pub panel_size: Vector2<u32>,
 }
 
 impl PanelImage {
@@ -59,17 +59,15 @@ impl PanelImage {
 		texture_bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader, panel_size: Vector2<u32>,
 		image_backlog: usize,
 	) -> Result<Self, anyhow::Error> {
-		let request = ImageRequest { panel_size };
-
 		// Get the initial image
-		let image = self::request(image_loader, request, Self::PRIORITY_HIGH)
+		let image = self::request(image_loader, Self::PRIORITY_HIGH)
 			.recv()
 			.context("Unable to get image")?;
 
 		// Then start requesting images in the background
 		// Note: Make sure we have at least 1 receiver
 		let image_rxs = (0..image_backlog.min(1))
-			.map(|_| self::request(image_loader, request, Self::PRIORITY_LOW))
+			.map(|_| self::request(image_loader, Self::PRIORITY_LOW))
 			.collect();
 
 		// Create the texture and sampler
@@ -125,7 +123,7 @@ impl PanelImage {
 			uniforms_bind_group,
 			uvs,
 			image_rxs,
-			request,
+			panel_size,
 		})
 	}
 
@@ -135,7 +133,7 @@ impl PanelImage {
 		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture_bind_group_layout: &wgpu::BindGroupLayout,
 		image_loader: &ImageLoader, force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
-		let image = match self::get_image(&mut self.image_rxs, image_loader, self.request, force_wait) {
+		let image = match self::get_image(&mut self.image_rxs, image_loader, force_wait) {
 			Some(image) => image,
 			None => {
 				debug_assert!(!force_wait, "Received no image while force waiting");
@@ -156,8 +154,8 @@ impl PanelImage {
 		self.uvs = ImageUvs::new(
 			image.width() as f32,
 			image.height() as f32,
-			self.request.panel_size[0] as f32,
-			self.request.panel_size[1] as f32,
+			self.panel_size[0] as f32,
+			self.panel_size[1] as f32,
 			rand::random(),
 		);
 
@@ -271,9 +269,7 @@ fn texture_descriptor(image_width: u32, image_height: u32) -> wgpu::TextureDescr
 }
 
 // TODO: Redo all of this, seems to cause some CPU pinning *sometimes*
-fn get_image(
-	image_rxs: &mut VecDeque<ImageReceiver>, image_loader: &ImageLoader, request: ImageRequest, force_wait: bool,
-) -> Option<Image> {
+fn get_image(image_rxs: &mut VecDeque<ImageReceiver>, image_loader: &ImageLoader, force_wait: bool) -> Option<Image> {
 	let timeout = Duration::from_millis(200); // TODO: Adjust timeout
 	let mut cur_idx = 0;
 	loop {
@@ -288,7 +284,7 @@ fn get_image(
 		match image_rx.try_recv().expect("Unable to load next image") {
 			// If we got it, create a new request and return the image
 			Ok(image) => {
-				let image_rx = self::request(image_loader, request, PanelImage::PRIORITY_LOW);
+				let image_rx = self::request(image_loader, PanelImage::PRIORITY_LOW);
 				image_rxs.push_back(image_rx);
 				return Some(image);
 			},
@@ -306,8 +302,6 @@ fn get_image(
 }
 
 /// Requests an image
-fn request(image_loader: &ImageLoader, request: ImageRequest, priority: usize) -> ImageReceiver {
-	image_loader
-		.request(request, priority)
-		.expect("Unable to request image")
+fn request(image_loader: &ImageLoader, priority: usize) -> ImageReceiver {
+	image_loader.request(priority).expect("Unable to request image")
 }
