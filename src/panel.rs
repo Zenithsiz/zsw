@@ -26,7 +26,11 @@ use winit::dpi::PhysicalSize;
 #[derive(Debug)]
 pub struct Panel {
 	/// Geometry
-	geometry: Rect<u32>,
+	// Note: It's fine for our geometry to be public, as
+	//       we only use it during rendering, and we don't
+	//       have any expected value for it, nor any cached
+	//       values that depend on it.
+	pub geometry: Rect<u32>,
 
 	/// Panel state
 	state: PanelState,
@@ -51,11 +55,6 @@ impl Panel {
 			image_duration,
 			fade_point,
 		}
-	}
-
-	/// Get a mutable reference to the panel's geometry.
-	pub fn geometry_mut(&mut self) -> &mut Rect<u32> {
-		&mut self.geometry
 	}
 
 	/// Updates this panel
