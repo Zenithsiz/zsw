@@ -226,12 +226,9 @@ impl App {
 			// Duration we're sleep
 			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-			// Display the demo application that ships with egui.
-			let mut demo_app = egui_demo_lib::WrapApp::default();
-
 			while !should_quit.load(atomic::Ordering::Relaxed) {
 				// Render
-				let (res, frame_duration) = crate::util::measure(|| Self::render(inner, &mut demo_app));
+				let (res, frame_duration) = crate::util::measure(|| Self::render(inner));
 				match res {
 					Ok(()) => log::trace!("Took {frame_duration:?} to render"),
 					Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -246,7 +243,7 @@ impl App {
 	}
 
 	/// Renders
-	fn render(inner: &Inner, demo_app: &mut egui_demo_lib::WrapApp) -> Result<(), anyhow::Error> {
+	fn render(inner: &Inner) -> Result<(), anyhow::Error> {
 		// Draw egui
 		// TODO: When this is moved to it's own thread, regardless of issues with
 		//       synchronizing the platform, we should synchronize the drawing to ensure
@@ -254,10 +251,7 @@ impl App {
 		//       visible to the user.
 		let paint_jobs = inner
 			.egui
-			.draw(inner.window, |ctx, frame| {
-				epi::App::update(demo_app, ctx, frame);
-				Ok(())
-			})
+			.draw(inner.window, |ctx, frame| Self::draw_egui(inner, ctx, frame))
 			.context("Unable to draw egui")?;
 
 		inner.wgpu.render(|encoder, surface_view, surface_size| {
@@ -291,6 +285,33 @@ impl App {
 				.execute(encoder, surface_view, &paint_jobs, &screen_descriptor, None)
 				.context("Unable to render egui")
 		})
+	}
+
+	/// Draws egui app
+	#[allow(unused_results)] // `egui` returns a response on every operation, but we don't use them
+	fn draw_egui(inner: &Inner, ctx: &egui::CtxRef, _frame: &epi::Frame) -> Result<(), anyhow::Error> {
+		egui::Window::new("Settings").show(ctx, |ui| {
+			let mut panels = inner.panels.lock();
+			for _panel in &mut *panels {
+				ui.collapsing("Panel", |ui| {
+					ui.collapsing("Position", |ui| {
+						ui.label("x");
+						//egui::Slider::new(&mut panel.geometry.pos.x, 0..=1920).ui(ui);
+						ui.label("y");
+						//egui::Slider::new(&mut panel.geometry.pos.y, 0..=1920).ui(ui);
+					});
+					ui.collapsing("Size", |ui| {
+						ui.label("width");
+						//egui::Slider::new(&mut panel.geometry.size.x, 0..=1920).ui(ui);
+						ui.label("height");
+						//egui::Slider::new(&mut panel.geometry.size.y, 0..=1920).ui(ui);
+					});
+				});
+			}
+		});
+
+
+		Ok(())
 	}
 }
 

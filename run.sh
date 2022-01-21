@@ -5,8 +5,8 @@ set -e
 cargo run -- \
 	~/.wallpaper/local \
 	--image-duration 5.0 \
-	--window-geometry "1020x1080+1360+0" \
-	--panel-geometry "1020x1080+0+0" \
+	--window-geometry "1920x1080+1360+0" \
+	--panel-geometry "1920x1080+0+0" \
 	--fade-point 0.8 \
 	--image-backlog 4 \
 
