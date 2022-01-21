@@ -37,7 +37,9 @@ pub struct PanelsRenderer {
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
 	#[allow(clippy::too_many_lines)] // TODO:
-	pub async fn new(device: &wgpu::Device, texture_format: wgpu::TextureFormat) -> Result<Self, anyhow::Error> {
+	pub async fn new(
+		device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat,
+	) -> Result<Self, anyhow::Error> {
 		// Create the index buffer
 		const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
 		let index_buffer_descriptor = wgpu::util::BufferInitDescriptor {
@@ -56,7 +58,7 @@ impl PanelsRenderer {
 		// Create the render pipeline
 		let render_pipeline = self::create_render_pipeline(
 			device,
-			texture_format,
+			surface_texture_format,
 			&uniforms_bind_group_layout,
 			&texture_bind_group_layout,
 		);
@@ -164,8 +166,8 @@ fn create_uniforms_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLa
 
 /// Creates the render pipeline
 fn create_render_pipeline(
-	device: &wgpu::Device, texture_format: wgpu::TextureFormat, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
-	texture_bind_group_layout: &wgpu::BindGroupLayout,
+	device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat,
+	uniforms_bind_group_layout: &wgpu::BindGroupLayout, texture_bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
 	// Load the shader
 	let shader_descriptor = wgpu::ShaderModuleDescriptor {
@@ -183,7 +185,7 @@ fn create_render_pipeline(
 	let render_pipeline_layout = device.create_pipeline_layout(&render_pipeline_layout_descriptor);
 
 	let color_targets = [wgpu::ColorTargetState {
-		format:     texture_format,
+		format:     surface_texture_format,
 		blend:      Some(wgpu::BlendState::ALPHA_BLENDING),
 		write_mask: wgpu::ColorWrites::ALL,
 	}];

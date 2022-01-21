@@ -98,7 +98,7 @@ impl App {
 		let panels = Mutex::new(panels);
 
 		// Create the panels renderer
-		let panels_renderer = PanelsRenderer::new(wgpu.device(), wgpu.texture_format())
+		let panels_renderer = PanelsRenderer::new(wgpu.device(), wgpu.surface_texture_format())
 			.await
 			.context("Unable to create panels renderer")?;
 

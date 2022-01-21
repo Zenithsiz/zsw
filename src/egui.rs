@@ -53,7 +53,7 @@ impl Egui {
 		});
 
 		// Create the egui render pass
-		let render_pass = egui_wgpu_backend::RenderPass::new(wgpu.device(), wgpu.texture_format(), 1);
+		let render_pass = egui_wgpu_backend::RenderPass::new(wgpu.device(), wgpu.surface_texture_format(), 1);
 
 		// Create the egui repaint signal
 		let repaint_signal = Arc::new(RepaintSignal);

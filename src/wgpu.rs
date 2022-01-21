@@ -92,7 +92,8 @@ impl Wgpu {
 		let (device, queue) = self::create_device(&adapter).await?;
 
 		// Configure the surface and get the preferred texture format and surface size
-		let (texture_format, surface_size) = self::configure_window_surface(window, &surface, &adapter, &device)?;
+		let (surface_texture_format, surface_size) =
+			self::configure_window_surface(window, &surface, &adapter, &device)?;
 
 		log::info!("Successfully initialized");
 		Ok(Self {
@@ -102,7 +103,7 @@ impl Wgpu {
 			}),
 			device,
 			queue,
-			surface_texture_format: texture_format,
+			surface_texture_format,
 			queued_resize: AtomicCell::new(None),
 		})
 	}
@@ -118,7 +119,7 @@ impl Wgpu {
 	}
 
 	/// Returns the preferred texture format
-	pub const fn texture_format(&self) -> wgpu::TextureFormat {
+	pub const fn surface_texture_format(&self) -> wgpu::TextureFormat {
 		self.surface_texture_format
 	}
 
@@ -256,11 +257,11 @@ async fn create_surface_and_adapter(window: &'static Window) -> Result<(wgpu::Su
 
 /// Returns the window surface configuration
 const fn window_surface_configuration(
-	texture_format: TextureFormat, size: PhysicalSize<u32>,
+	surface_texture_format: TextureFormat, size: PhysicalSize<u32>,
 ) -> wgpu::SurfaceConfiguration {
 	wgpu::SurfaceConfiguration {
 		usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
-		format:       texture_format,
+		format:       surface_texture_format,
 		width:        size.width,
 		height:       size.height,
 		present_mode: wgpu::PresentMode::Mailbox,
