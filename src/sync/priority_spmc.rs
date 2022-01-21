@@ -78,7 +78,7 @@ impl<T> Drop for Sender<T> {
 	fn drop(&mut self) {
 		// Lock the buffer and notify all receivers that we're quitting
 		let _buffer = self.inner.buffer.lock();
-		self.inner.receiver_condvar.notify_all();
+		let _ = self.inner.receiver_condvar.notify_all();
 	}
 }
 
@@ -109,7 +109,7 @@ impl<T> Sender<T> {
 		buffer.queue.push(ValueByPriority { value, priority });
 
 		// And wake a receiver
-		self.inner.receiver_condvar.notify_one();
+		let _ = self.inner.receiver_condvar.notify_one();
 
 		Ok(())
 	}
@@ -162,7 +162,7 @@ impl<T> Receiver<T> {
 		};
 
 		// Then wake up the sender if they're waiting and return
-		self.inner.sender_condvar.notify_one();
+		let _ = self.inner.sender_condvar.notify_one();
 		Ok(value)
 	}
 
@@ -176,7 +176,7 @@ impl<T> Receiver<T> {
 		match buffer.queue.pop() {
 			// If we had it, wake up the sender and return
 			Some(value) => {
-				self.inner.sender_condvar.notify_one();
+				let _ = self.inner.sender_condvar.notify_one();
 				Ok(value.value)
 			},
 

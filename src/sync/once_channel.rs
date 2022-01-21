@@ -28,7 +28,7 @@ impl<T> Drop for Sender<T> {
 		let _value = self.inner.value.lock();
 
 		// Then wake him up
-		self.inner.condvar.notify_one();
+		let _ = self.inner.condvar.notify_one();
 	}
 }
 
@@ -47,7 +47,7 @@ impl<T> Sender<T> {
 		*value_lock = Some(value);
 
 		// Then wake him up
-		self.inner.condvar.notify_one();
+		let _ = self.inner.condvar.notify_one();
 
 		// Forget ourselves so we don't run our drop impl, which
 		// attempts to get a lock on the value

@@ -17,6 +17,7 @@ use anyhow::Context;
 use std::{num::NonZeroUsize, thread};
 
 /// Image loader
+#[derive(Debug)]
 pub struct ImageLoader {
 	/// Request sender
 	request_tx: priority_spmc::Sender<(ImageRequest, once_channel::Sender<Image>)>,
@@ -38,7 +39,7 @@ impl ImageLoader {
 		for thread_idx in 0..loader_threads {
 			let request_rx = request_rx.clone();
 			let path_rx = path_loader.receiver();
-			thread::Builder::new()
+			let _loader_thread = thread::Builder::new()
 				.name("Image loader".to_owned())
 				.spawn(move || match self::image_loader(&request_rx, &path_rx) {
 					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),

@@ -16,6 +16,7 @@ use winit::dpi::PhysicalSize;
 /// Renderer for all panels
 ///
 /// Responsible for rendering all panels.
+#[derive(Debug)]
 pub struct PanelsRenderer {
 	/// Render pipeline
 	render_pipeline: wgpu::RenderPipeline,

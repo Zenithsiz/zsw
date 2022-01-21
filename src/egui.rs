@@ -26,6 +26,17 @@ pub struct Egui {
 	frame_time: Mutex<Option<Duration>>,
 }
 
+impl std::fmt::Debug for Egui {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Egui")
+			.field("platform", &"..")
+			.field("render_pass", &"..")
+			.field("repaint_signal", &"..")
+			.field("frame_time", &self.frame_time)
+			.finish()
+	}
+}
+
 impl Egui {
 	/// Creates the egui state
 	pub fn new(window: &Window, wgpu: &Wgpu) -> Result<Self, anyhow::Error> {

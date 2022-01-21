@@ -13,7 +13,14 @@
 	backtrace
 )]
 // Lints
-#![warn(clippy::pedantic, clippy::nursery)]
+#![warn(
+	clippy::pedantic,
+	clippy::nursery,
+	missing_copy_implementations,
+	missing_debug_implementations,
+	noop_method_call,
+	unused_results
+)]
 #![deny(
 	// We want to annotate unsafe inside unsafe fns
 	unsafe_op_in_unsafe_fn,

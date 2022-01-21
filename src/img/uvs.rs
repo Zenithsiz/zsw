@@ -3,7 +3,7 @@
 /// Image uvs
 ///
 /// Represents the uvs of an image during it's scroll.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ImageUvs {
 	/// uvs
 	start: [f32; 2],

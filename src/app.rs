@@ -24,6 +24,7 @@ use x11::xlib;
 // Note: This is required because the event loop can't be
 //       shared in between threads, but everything else we need
 //       to share.
+#[derive(Debug)]
 struct Inner {
 	/// Window
 	///
@@ -55,6 +56,7 @@ struct Inner {
 /// Application state
 ///
 /// Stores all of the application state
+#[derive(Debug)]
 pub struct App {
 	/// Event loop
 	event_loop: EventLoop<!>,
@@ -126,13 +128,15 @@ impl App {
 		let should_quit = AtomicBool::new(false);
 		crossbeam::thread::scope(|s| {
 			// Spawn the updater thread
-			s.builder()
+			let _updater_thread = s
+				.builder()
 				.name("Updater thread".to_owned())
 				.spawn(Self::updater_thread(inner, &should_quit))
 				.context("Unable to start renderer thread")?;
 
 			// Spawn the renderer thread
-			s.builder()
+			let _renderer_thread = s
+				.builder()
 				.name("Renderer thread".to_owned())
 				.spawn(Self::renderer_thread(inner, &should_quit))
 				.context("Unable to start renderer thread")?;
@@ -330,12 +334,12 @@ unsafe fn set_display_always_below(window: &Window) {
 	let window = window.xlib_window().expect("No `X` window found");
 
 	// Flush the existing `XMapRaised`
-	unsafe { xlib::XFlush(display) };
+	assert_eq!(unsafe { xlib::XFlush(display) }, 1);
 	thread::sleep(Duration::from_millis(100));
 
 	// Unmap the window temporarily
-	unsafe { xlib::XUnmapWindow(display, window) };
-	unsafe { xlib::XFlush(display) };
+	assert_eq!(unsafe { xlib::XUnmapWindow(display, window) }, 1);
+	assert_eq!(unsafe { xlib::XFlush(display) }, 1);
 	thread::sleep(Duration::from_millis(100));
 
 	// Add the always below hint to the window manager
@@ -358,6 +362,6 @@ unsafe fn set_display_always_below(window: &Window) {
 	}
 
 	// Then remap it
-	unsafe { xlib::XMapRaised(display, window) };
-	unsafe { xlib::XFlush(display) };
+	assert_eq!(unsafe { xlib::XMapRaised(display, window) }, 1);
+	assert_eq!(unsafe { xlib::XFlush(display) }, 1);
 }

@@ -32,6 +32,16 @@ pub struct PathLoader {
 	_fs_watcher: notify::RecommendedWatcher,
 }
 
+impl std::fmt::Debug for PathLoader {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("PathLoader")
+			.field("path_rx", &self.path_rx)
+			.field("fs_tx", &self.fs_tx)
+			.field("_fs_watcher", &"..")
+			.finish()
+	}
+}
+
 impl PathLoader {
 	/// Creates a new path loader
 	///
@@ -51,7 +61,7 @@ impl PathLoader {
 		{
 			let base_path = base_path.clone();
 			let fs_sender = fs_tx.clone();
-			thread::Builder::new()
+			let _loader_thread = thread::Builder::new()
 				.name("Path loader".to_owned())
 				.spawn(move || self::load_paths(&base_path, &fs_sender))
 				.map_err(NewError::CreateLoaderThread)?;
@@ -63,7 +73,7 @@ impl PathLoader {
 		let (path_tx, path_rx) = priority_spmc::channel(Some(NonZeroUsize::new(16).expect("16 isn't 0")));
 
 		// Then start the path loader thread
-		thread::Builder::new()
+		let _distributer_thread = thread::Builder::new()
 			.name("Path distributor".to_owned())
 			.spawn(move || match self::distributer_thread(&base_path, &fs_rx, &path_tx) {
 				Ok(()) => log::debug!("Path distributor successfully returned"),
@@ -88,6 +98,7 @@ impl PathLoader {
 }
 
 /// A path receiver
+#[derive(Debug)]
 pub struct PathReceiver {
 	/// Receiver for the path
 	path_rx: priority_spmc::Receiver<Arc<PathBuf>>,
@@ -120,12 +131,12 @@ impl PathReceiver {
 }
 
 /// Error for [`PathReceiver::recv`]
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error)]
 #[error("Path loader thread quit")]
 pub struct RecvError;
 
 /// Error for [`PathReceiver::try_recv`]
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error)]
 pub enum TryRecvError {
 	/// Loader thread quit
 	#[error("Path loader thread quit")]
@@ -137,7 +148,7 @@ pub enum TryRecvError {
 }
 
 /// Error for [`PathReceiver::remove_path`]
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error)]
 #[error("Path loader thread quit")]
 pub struct RemovePathError;
 
