@@ -9,7 +9,7 @@ mod load;
 // Imports
 use super::{Image, ImageRequest};
 use crate::{
-	path_loader::{PathLoader, PathReceiver},
+	paths::{PathReceiver, Paths},
 	sync::{once_channel, priority_spmc},
 	util,
 };
@@ -28,7 +28,7 @@ impl ImageLoader {
 	///
 	/// # Errors
 	/// Returns an error if unable to create all the loader threads
-	pub fn new(path_loader: &PathLoader) -> Result<Self, anyhow::Error> {
+	pub fn new(paths: &Paths) -> Result<Self, anyhow::Error> {
 		// Start the image loader threads
 		// Note: Requests shouldn't be limited,
 		// TODO: Find a better way to do a priority based two-way communication channel.
@@ -38,7 +38,7 @@ impl ImageLoader {
 			.get();
 		for thread_idx in 0..loader_threads {
 			let request_rx = request_rx.clone();
-			let path_rx = path_loader.receiver();
+			let path_rx = paths.receiver();
 			let _loader_thread = thread::Builder::new()
 				.name("Image loader".to_owned())
 				.spawn(move || match self::image_loader(&request_rx, &path_rx) {

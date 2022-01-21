@@ -1,6 +1,6 @@
-//! Path loader
+//! Paths
 //!
-//! See the [`PathLoader`] type for more details.
+//! See the [`Paths`] type for more details.
 
 // Modules
 mod error;
@@ -9,21 +9,25 @@ mod error;
 pub use error::NewError;
 
 // Imports
-use crate::{sync::priority_spmc, util};
+use crate::util;
 use notify::Watcher;
 use rand::prelude::SliceRandom;
 use std::{
-	num::NonZeroUsize,
 	path::{Path, PathBuf},
 	sync::{mpsc, Arc},
 	thread,
 	time::Duration,
 };
 
-/// Path loader
-pub struct PathLoader {
+/// Paths
+///
+/// A low-latency generator of paths to load.
+///
+/// This is intended as a low-contention channel, that is,
+/// it is not optimized for distribution speed.
+pub struct Paths {
 	/// Receiver for the path
-	path_rx: priority_spmc::Receiver<Arc<PathBuf>>,
+	path_rx: crossbeam::channel::Receiver<Arc<PathBuf>>,
 
 	/// Filesystem event sender
 	fs_tx: mpsc::Sender<notify::DebouncedEvent>,
@@ -32,7 +36,7 @@ pub struct PathLoader {
 	_fs_watcher: notify::RecommendedWatcher,
 }
 
-impl std::fmt::Debug for PathLoader {
+impl std::fmt::Debug for Paths {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("PathLoader")
 			.field("path_rx", &self.path_rx)
@@ -42,12 +46,8 @@ impl std::fmt::Debug for PathLoader {
 	}
 }
 
-impl PathLoader {
-	/// Creates a new path loader
-	///
-	/// # Errors
-	/// Returns an error if unable to start watching the filesystem, or if unable to start
-	/// the path loader thread
+impl Paths {
+	/// Creates a new path manager and starts loading paths in the background.
 	pub fn new(base_path: PathBuf) -> Result<Self, NewError> {
 		// Start the filesystem watcher and start watching the path
 		let (fs_tx, fs_rx) = mpsc::channel();
@@ -62,19 +62,21 @@ impl PathLoader {
 			let base_path = base_path.clone();
 			let fs_sender = fs_tx.clone();
 			let _loader_thread = thread::Builder::new()
-				.name("Path loader".to_owned())
+				.name("Paths initial-loader".to_owned())
 				.spawn(move || self::load_paths(&base_path, &fs_sender))
 				.map_err(NewError::CreateLoaderThread)?;
 		}
 
 		// Create both channels
-		// Note: Since we can hand out paths quickly, we can use a relatively low capacity
-		#[allow(clippy::expect_used)] // It won't panic
-		let (path_tx, path_rx) = priority_spmc::channel(Some(NonZeroUsize::new(16).expect("16 isn't 0")));
+		// Note: Since we have relatively low contention, 16 is more than enough capacity,
+		//       we just don't make it 0 so that threads don't have to wait for the distributer
+		//       thread to wake up to send them a path and can instead just queue the next whenever
+		//       it wakes up.
+		let (path_tx, path_rx) = crossbeam::channel::bounded(16);
 
-		// Then start the path loader thread
+		// Then start the path distributer thread
 		let _distributer_thread = thread::Builder::new()
-			.name("Path distributor".to_owned())
+			.name("Paths distributor".to_owned())
 			.spawn(move || match self::distributer_thread(&base_path, &fs_rx, &path_tx) {
 				Ok(()) => log::debug!("Path distributor successfully returned"),
 				Err(err) => log::error!("Path distributor returned an error: {err:?}"),
@@ -101,7 +103,7 @@ impl PathLoader {
 #[derive(Debug)]
 pub struct PathReceiver {
 	/// Receiver for the path
-	path_rx: priority_spmc::Receiver<Arc<PathBuf>>,
+	path_rx: crossbeam::channel::Receiver<Arc<PathBuf>>,
 
 	/// Filesystem event sender
 	fs_tx: mpsc::Sender<notify::DebouncedEvent>,
@@ -113,17 +115,15 @@ impl PathReceiver {
 		self.path_rx.recv().map_err(|_| RecvError)
 	}
 
-	/// Tries to receive a value
-	#[allow(dead_code)] // It might be useful eventually
-	pub fn try_recv(&self) -> Result<Arc<PathBuf>, TryRecvError> {
-		self.path_rx.try_recv().map_err(|err| match err {
-			priority_spmc::TryRecvError::SenderQuit => TryRecvError::LoaderQuit,
-			priority_spmc::TryRecvError::NotReady => TryRecvError::NotReady,
-		})
-	}
+	// Note: `try_recv` isn't super useful, since we're low-latency, so we
+	//       just don't offer it.
 
 	/// Reports a path for removal
 	pub fn remove_path(&self, path: PathBuf) -> Result<(), RemovePathError> {
+		// TODO: Ideally we wouldn't hijack the filesystem watcher
+		//       events for this and we'd create a custom event channel,
+		//       but not worth it for just this. When we expand the path distributer
+		//       to support adding/removing paths we'll migrate to that.
 		self.fs_tx
 			.send(notify::DebouncedEvent::Remove(path))
 			.map_err(|_| RemovePathError)
@@ -132,30 +132,18 @@ impl PathReceiver {
 
 /// Error for [`PathReceiver::recv`]
 #[derive(Clone, Copy, Debug, thiserror::Error)]
-#[error("Path loader thread quit")]
+#[error("Paths distributer thread quit")]
 pub struct RecvError;
-
-/// Error for [`PathReceiver::try_recv`]
-#[derive(Clone, Copy, Debug, thiserror::Error)]
-pub enum TryRecvError {
-	/// Loader thread quit
-	#[error("Path loader thread quit")]
-	LoaderQuit,
-
-	/// Not ready
-	#[error("Not ready")]
-	NotReady,
-}
 
 /// Error for [`PathReceiver::remove_path`]
 #[derive(Clone, Copy, Debug, thiserror::Error)]
-#[error("Path loader thread quit")]
+#[error("Paths distributer thread quit")]
 pub struct RemovePathError;
-
 
 /// Path distributer thread
 fn distributer_thread(
-	base_path: &Path, fs_rx: &mpsc::Receiver<notify::DebouncedEvent>, path_sender: &priority_spmc::Sender<Arc<PathBuf>>,
+	base_path: &Path, fs_rx: &mpsc::Receiver<notify::DebouncedEvent>,
+	path_sender: &crossbeam::channel::Sender<Arc<PathBuf>>,
 ) -> Result<(), anyhow::Error> {
 	// Load all existing paths in a background thread
 	let mut paths = vec![];
@@ -183,8 +171,7 @@ fn distributer_thread(
 		// Then send all paths through the sender
 		for path in paths.iter().map(Arc::clone) {
 			// Send it and quit if we're done
-			// Note: Priority for the path sender isn't mega relevant for now
-			if path_sender.send(path, 0).is_err() {
+			if path_sender.send(path).is_err() {
 				return Ok(());
 			}
 		}

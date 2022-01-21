@@ -62,7 +62,7 @@ mod egui;
 mod img;
 mod logger;
 mod panel;
-mod path_loader;
+mod paths;
 mod rect;
 mod sync;
 mod util;
@@ -75,7 +75,7 @@ pub use self::{
 	egui::Egui,
 	img::ImageLoader,
 	panel::{Panel, PanelState, PanelsRenderer},
-	path_loader::PathLoader,
+	paths::Paths,
 	rect::Rect,
 	wgpu::Wgpu,
 };

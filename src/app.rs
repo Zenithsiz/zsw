@@ -3,7 +3,7 @@
 //! See the [`App`] type for more details
 
 // Imports
-use crate::{Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, PathLoader, Wgpu};
+use crate::{Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Paths, Wgpu};
 use anyhow::Context;
 use parking_lot::Mutex;
 use std::{
@@ -35,10 +35,10 @@ struct Inner {
 	/// Wgpu
 	wgpu: Wgpu,
 
-	/// Path loader
+	/// Path
 	// Note: Although we have it behind a mutex, we don't need to access it,
 	//       it's only there so we can share `self` between threads
-	_path_loader: Mutex<PathLoader>,
+	_paths: Mutex<Paths>,
 
 	/// Image loader
 	image_loader: ImageLoader,
@@ -75,11 +75,11 @@ impl App {
 		// Create the wgpu interface
 		let wgpu = Wgpu::new(window).await.context("Unable to create renderer")?;
 
-		// Create the path loader
-		let path_loader = PathLoader::new(args.images_dir).context("Unable to create path loader")?;
+		// Create the paths manager
+		let paths = Paths::new(args.images_dir).context("Unable to create paths")?;
 
 		// Create the image loader
-		let image_loader = ImageLoader::new(&path_loader).context("Unable to create image loader")?;
+		let image_loader = ImageLoader::new(&paths).context("Unable to create image loader")?;
 
 		// Create all panels
 		let panels = args
@@ -110,7 +110,7 @@ impl App {
 			inner: Inner {
 				window,
 				wgpu,
-				_path_loader: Mutex::new(path_loader),
+				_paths: Mutex::new(paths),
 				image_loader,
 				panels,
 				panels_renderer,
