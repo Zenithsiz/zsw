@@ -1,6 +1,7 @@
 //! Logger
 
 // Imports
+use crate::util::DisplayWrapper;
 use anyhow::Context;
 use fern::colors::{Color, ColoredLevelConfig};
 use std::{fmt, fs, panic, thread};
@@ -77,10 +78,18 @@ fn file_dispatch() -> Result<fern::Dispatch, anyhow::Error> {
 }
 
 /// Returns a formatter for the logger
-fn fmt_log(use_colors: bool) -> impl Fn(fern::FormatCallback, &std::fmt::Arguments, &log::Record) {
+fn fmt_log(use_colors: bool) -> impl Fn(fern::FormatCallback, &fmt::Arguments, &log::Record) {
 	move |out, msg, record: &log::Record| {
+		let thread_name = DisplayWrapper::new(move |f| {
+			let thread = thread::current();
+			match thread.name() {
+				Some(name) => write!(f, "{name}"),
+				None => write!(f, "{}", thread.id().as_u64()),
+			}
+		});
+
 		out.finish(format_args!(
-			"{} [{}] {}: {msg}",
+			"{} [{}] ({thread_name}) {}: {msg}",
 			chrono::Local::now().format(TIME_FMT),
 			self::fmt_level(record.level(), use_colors),
 			record.target(),
@@ -90,7 +99,7 @@ fn fmt_log(use_colors: bool) -> impl Fn(fern::FormatCallback, &std::fmt::Argumen
 
 /// Formats a record
 pub fn fmt_level(level: log::Level, use_colors: bool) -> impl fmt::Display {
-	crate::util::DisplayWrapper::new(move |f| match use_colors {
+	DisplayWrapper::new(move |f| match use_colors {
 		true => write!(f, "{}", RECORD_COLORS.color(level)),
 		false => write!(f, "{}", level),
 	})

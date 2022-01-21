@@ -130,14 +130,14 @@ impl App {
 			// Spawn the updater thread
 			let _updater_thread = s
 				.builder()
-				.name("Updater thread".to_owned())
+				.name("Updater".to_owned())
 				.spawn(Self::updater_thread(inner, &should_quit))
 				.context("Unable to start renderer thread")?;
 
 			// Spawn the renderer thread
 			let _renderer_thread = s
 				.builder()
-				.name("Renderer thread".to_owned())
+				.name("Renderer".to_owned())
 				.spawn(Self::renderer_thread(inner, &should_quit))
 				.context("Unable to start renderer thread")?;
 

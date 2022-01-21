@@ -10,7 +10,8 @@
 	destructuring_assignment,
 	stmt_expr_attributes,
 	try_trait_v2,
-	backtrace
+	backtrace,
+	thread_id_value
 )]
 // Lints
 #![warn(
@@ -92,7 +93,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 	// Get arguments
 	let args = args::get().context("Unable to retrieve arguments")?;
-	log::debug!("Arguments: {args:?}");
+	log::debug!("Arguments: {args:#?}");
 
 	// Create the app
 	let app = App::new(args).block_on().context("Unable to initialize app")?;

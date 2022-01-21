@@ -86,7 +86,7 @@ impl Wgpu {
 	/// Creates the `wgpu` wrapper given the window to create it in.
 	pub async fn new(window: &'static Window) -> Result<Self, anyhow::Error> {
 		// Create the surface and adapter
-		let (surface, adapter) = self::create_surface_and_adaptor(window).await?;
+		let (surface, adapter) = self::create_surface_and_adapter(window).await?;
 
 		// Then create the device and it's queue
 		let (device, queue) = self::create_device(&adapter).await?;
@@ -94,6 +94,7 @@ impl Wgpu {
 		// Configure the surface and get the preferred texture format and surface size
 		let (texture_format, surface_size) = self::configure_window_surface(window, &surface, &adapter, &device)?;
 
+		log::info!("Successfully initialized");
 		Ok(Self {
 			surface: Mutex::new(Surface {
 				surface,
@@ -190,21 +191,23 @@ impl Wgpu {
 	}
 }
 
-/// Configures the window surface and returns the preferred texture format
+/// Configures the window surface and returns the preferred surface texture format
 fn configure_window_surface(
 	window: &Window, surface: &wgpu::Surface, adapter: &wgpu::Adapter, device: &wgpu::Device,
 ) -> Result<(TextureFormat, PhysicalSize<u32>), anyhow::Error> {
 	// Get the format
-	let texture_format = surface
+	let surface_texture_format = surface
 		.get_preferred_format(adapter)
 		.context("Unable to query preferred format")?;
+	log::debug!("Found preferred surface format: {surface_texture_format:?}");
 
 	// Then configure it
 	let surface_size = window.inner_size();
-	let config = self::window_surface_configuration(texture_format, surface_size);
+	let config = self::window_surface_configuration(surface_texture_format, surface_size);
+	log::debug!("Configuring surface with {config:?}");
 	surface.configure(device, &config);
 
-	Ok((texture_format, surface_size))
+	Ok((surface_texture_format, surface_size))
 }
 
 /// Creates the device
@@ -215,6 +218,7 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 		features: wgpu::Features::empty(),
 		limits:   wgpu::Limits::default(),
 	};
+	log::debug!("Requesting wgpu device (descriptor: {device_descriptor:#?})");
 	let (device, queue) = adapter
 		.request_device(&device_descriptor, None)
 		.await
@@ -223,21 +227,25 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 	Ok((device, queue))
 }
 
-/// Creates the surface and adaptor
-async fn create_surface_and_adaptor(window: &'static Window) -> Result<(wgpu::Surface, wgpu::Adapter), anyhow::Error> {
+/// Creates the surface and adapter
+async fn create_surface_and_adapter(window: &'static Window) -> Result<(wgpu::Surface, wgpu::Adapter), anyhow::Error> {
 	// Get an instance with any backend
-	let instance = wgpu::Instance::new(wgpu::Backends::all());
+	let backends = wgpu::Backends::all();
+	log::debug!("Requesting wgpu instance (backends: {backends:?})");
+	let instance = wgpu::Instance::new(backends);
 
 	// Create the surface
 	// SAFETY: `window` has a `'static` lifetime
+	log::debug!("Creating wgpu surface (window: {window:?})");
 	let surface = unsafe { instance.create_surface(window) };
+
+	// Then request the adapter
 	let adapter_options = wgpu::RequestAdapterOptions {
 		power_preference:       wgpu::PowerPreference::default(),
 		force_fallback_adapter: false,
 		compatible_surface:     Some(&surface),
 	};
-
-	// Then request the adapter
+	log::debug!("Requesting wgpu adapter (options: {adapter_options:#?})");
 	let adapter = instance
 		.request_adapter(&adapter_options)
 		.await
