@@ -5,6 +5,7 @@
 // Imports
 use crate::{Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Paths, Wgpu};
 use anyhow::Context;
+use crossbeam::atomic::AtomicCell;
 use egui::Widget;
 use parking_lot::Mutex;
 use std::{
@@ -16,7 +17,10 @@ use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
 	event::{Event, WindowEvent},
 	event_loop::{ControlFlow as EventLoopControlFlow, EventLoop},
-	platform::{run_return::EventLoopExtRunReturn, unix::WindowExtUnix},
+	platform::{
+		run_return::EventLoopExtRunReturn,
+		unix::{WindowBuilderExtUnix, WindowExtUnix, XWindowType},
+	},
 	window::{Window, WindowBuilder},
 };
 use x11::xlib;
@@ -52,6 +56,12 @@ struct Inner {
 
 	/// Egui
 	egui: Egui,
+
+	/// Queued settings window open click
+	queued_settings_window_open_click: AtomicCell<Option<PhysicalPosition<f64>>>,
+
+	/// If the settings window is currently open
+	settings_window_open: Mutex<bool>,
 }
 
 /// Application state
@@ -108,6 +118,8 @@ impl App {
 				panels,
 				panels_renderer,
 				egui,
+				queued_settings_window_open_click: AtomicCell::new(None),
+				settings_window_open: Mutex::new(false),
 			},
 		})
 	}
@@ -135,6 +147,7 @@ impl App {
 				.context("Unable to start renderer thread")?;
 
 			// Run event loop in this thread until we quit
+			let mut cursor_pos = PhysicalPosition::new(0.0, 0.0);
 			self.event_loop.run_return(|event, _, control_flow| {
 				// Update egui
 				inner.egui.platform().lock().handle_event(&event);
@@ -147,10 +160,25 @@ impl App {
 				#[allow(clippy::single_match)] // We might add more in the future
 				match event {
 					Event::WindowEvent { event, .. } => match event {
-						WindowEvent::Resized(size) => inner.wgpu.resize(size),
+						// if we should be closing, set the control flow to exit
 						WindowEvent::CloseRequested | WindowEvent::Destroyed => {
 							log::warn!("Received close request, closing window");
 							*control_flow = EventLoopControlFlow::Exit;
+						},
+
+						// If we resized, queue a resize on wgpu
+						WindowEvent::Resized(size) => inner.wgpu.resize(size),
+
+						// On move, update the cursor position
+						WindowEvent::CursorMoved { position, .. } => cursor_pos = position,
+
+						// If right clicked, queue a click
+						WindowEvent::MouseInput {
+							state: winit::event::ElementState::Pressed,
+							button: winit::event::MouseButton::Right,
+							..
+						} => {
+							inner.queued_settings_window_open_click.store(Some(cursor_pos));
 						},
 						_ => (),
 					},
@@ -244,7 +272,9 @@ impl App {
 		//       visible to the user.
 		let paint_jobs = inner
 			.egui
-			.draw(inner.window, |ctx, frame| Self::draw_egui(inner, ctx, frame))
+			.draw(inner.window, |ctx, frame| {
+				Self::draw_egui(inner, ctx, frame, inner.wgpu.surface_size())
+			})
 			.context("Unable to draw egui")?;
 
 		inner.wgpu.render(|encoder, surface_view, surface_size| {
@@ -282,23 +312,50 @@ impl App {
 
 	/// Draws egui app
 	#[allow(unused_results)] // `egui` returns a response on every operation, but we don't use them
-	fn draw_egui(inner: &Inner, ctx: &egui::CtxRef, _frame: &epi::Frame) -> Result<(), anyhow::Error> {
-		egui::Window::new("Settings").show(ctx, |ui| {
+	fn draw_egui(
+		inner: &Inner, ctx: &egui::CtxRef, _frame: &epi::Frame, surface_size: PhysicalSize<u32>,
+	) -> Result<(), anyhow::Error> {
+		let mut settings_window_open = inner.settings_window_open.lock();
+
+		// Create the base settings window
+		let mut settings_window = egui::Window::new("Settings");
+
+		// If we have any queued click, summon the window there
+		if let Some(cursor_pos) = inner.queued_settings_window_open_click.take() {
+			// Adjust cursor pos to account for the scale factor
+			let scale_factor = inner.window.scale_factor();
+			let cursor_pos = cursor_pos.to_logical(scale_factor);
+
+			// Then set the current position and that we're open
+			settings_window = settings_window.current_pos(egui::pos2(cursor_pos.x, cursor_pos.y));
+			*settings_window_open = true;
+		}
+
+		// Then render it
+		settings_window.open(&mut *settings_window_open).show(ctx, |ui| {
 			let mut panels = inner.panels.lock();
 			for panel in &mut *panels {
-				ui.collapsing("Panel", |ui| {
-					ui.collapsing("Position", |ui| {
-						ui.label("x");
-						egui::Slider::new(&mut panel.geometry.pos.x, 0..=1920).ui(ui);
-						ui.label("y");
-						egui::Slider::new(&mut panel.geometry.pos.y, 0..=1920).ui(ui);
-					});
-					ui.collapsing("Size", |ui| {
-						ui.label("width");
-						egui::Slider::new(&mut panel.geometry.size.x, 0..=1920).ui(ui);
-						ui.label("height");
-						egui::Slider::new(&mut panel.geometry.size.y, 0..=1920).ui(ui);
-					});
+				ui.horizontal(|ui| {
+					// Calculate the limits
+					let max_width = surface_size.width;
+					let max_height = surface_size.height;
+					let max_x = surface_size.width.saturating_sub(panel.geometry.size.x);
+					let max_y = surface_size.height.saturating_sub(panel.geometry.size.y);
+
+					ui.label("Geometry");
+					ui.add_space(10.0);
+					egui::Slider::new(&mut panel.geometry.size.x, 0..=max_width).ui(ui);
+					ui.label("x");
+					egui::Slider::new(&mut panel.geometry.size.y, 0..=max_height).ui(ui);
+					ui.label("+");
+					egui::Slider::new(&mut panel.geometry.pos.x, 0..=max_x).ui(ui);
+					ui.label("+");
+					egui::Slider::new(&mut panel.geometry.pos.y, 0..=max_y).ui(ui);
+
+					// Note: For some reason positions aren't properly clamped when the size increases
+					//       beyond, so we're manually doing it here
+					panel.geometry.pos.x = panel.geometry.pos.x.min(max_x);
+					panel.geometry.pos.y = panel.geometry.pos.y.min(max_y);
 				});
 			}
 		});
@@ -312,6 +369,7 @@ fn create_window(args: &Args) -> Result<(EventLoop<!>, &'static Window), anyhow:
 	// Build the window
 	// TODO: Not leak the window
 	let event_loop = EventLoop::with_user_event();
+	log::debug!("Creating window (geometry: {:?})", args.window_geometry);
 	let window = WindowBuilder::new()
 		.with_position(PhysicalPosition {
 			x: args.window_geometry.pos[0],
@@ -322,6 +380,7 @@ fn create_window(args: &Args) -> Result<(EventLoop<!>, &'static Window), anyhow:
 			height: args.window_geometry.size[1],
 		})
 		.with_decorations(false)
+		.with_x11_window_type(vec![XWindowType::Desktop])
 		.build(&event_loop)
 		.context("Unable to build window")?;
 	let window = Box::leak(Box::new(window));

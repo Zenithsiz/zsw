@@ -118,7 +118,17 @@ impl Wgpu {
 		&self.queue
 	}
 
-	/// Returns the preferred texture format
+	/// Returns the current surface's size
+	///
+	/// # Warning
+	/// This surface size might change at any time, so you shouldn't
+	/// use it on `wgpu` operations that might panic on wrong surface
+	/// sizes.
+	pub fn surface_size(&self) -> PhysicalSize<u32> {
+		self.surface.lock().size
+	}
+
+	/// Returns the surface texture format
 	pub const fn surface_texture_format(&self) -> wgpu::TextureFormat {
 		self.surface_texture_format
 	}

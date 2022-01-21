@@ -49,6 +49,7 @@
 	// losses, although most will be lossless, since we deal with window sizes and the
 	// such, which will fit within a `f32` losslessly.
 	clippy::cast_precision_loss,
+	clippy::cast_possible_truncation,
 	// We use proper error types when it matters what errors can be returned, else,
 	// such as when using `anyhow`, we just assume the caller won't check *what* error
 	// happened and instead just bubbles it up

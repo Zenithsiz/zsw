@@ -4,12 +4,13 @@ set -e
 
 cargo run -- \
 	~/.wallpaper/active \
-	--image-duration 5.0 \
-	--window-geometry "1920x1080+1360+0" \
-	--panel-geometry "1920x1080+0+0" \
+	--image-duration 30.0 \
+	--window-geometry "3280x1080+0+0" \
+	--panel-geometry "1920x1080+1360+0" \
+	--panel-geometry "1360x768+0+312" \
 	--fade-point 0.8
 
-# "1360x768+0+312"
+# 
 
 #cargo run -- \
 #	~/.wallpaper/active \
