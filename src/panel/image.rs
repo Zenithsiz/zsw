@@ -10,7 +10,7 @@ use wgpu::util::DeviceExt;
 use super::{PanelUniforms, PanelVertex};
 
 /// Image
-// TODO: Redo the whole image request stuff around here
+// TODO: Don't like that this stores the panel size and swap direction, check what we'll do
 #[derive(Debug)]
 pub struct PanelImage {
 	/// Texture
@@ -34,11 +34,14 @@ pub struct PanelImage {
 	/// Uniforms bind group
 	pub uniforms_bind_group: wgpu::BindGroup,
 
-	/// Uvs
-	pub uvs: ImageUvs,
-
 	/// All image receivers
 	pub image_rxs: VecDeque<ImageReceiver>,
+
+	/// Image size
+	image_size: Vector2<u32>,
+
+	/// If we're swapping scrolling directions
+	swap_dir: bool,
 
 	/// Panel size
 	pub panel_size: Vector2<u32>,
@@ -63,6 +66,7 @@ impl PanelImage {
 		let image = self::request(image_loader, Self::PRIORITY_HIGH)
 			.recv()
 			.context("Unable to get image")?;
+		let image_size = Vector2::new(image.width(), image.height());
 
 		// Then start requesting images in the background
 		// Note: Make sure we have at least 1 receiver
@@ -74,13 +78,8 @@ impl PanelImage {
 		let (texture, texture_view) = self::create_image_texture(&image, device, queue);
 		let texture_sampler = create_texture_sampler(device);
 
-		let uvs = ImageUvs::new(
-			image.width() as f32,
-			image.height() as f32,
-			panel_size.x as f32,
-			panel_size.y as f32,
-			rand::random(),
-		);
+		let swap_dir = rand::random();
+		let uvs = uvs(image_size, panel_size, swap_dir);
 
 		let vertices = Self::vertices(uvs.start());
 		let vertex_buffer_descriptor = wgpu::util::BufferInitDescriptor {
@@ -121,8 +120,9 @@ impl PanelImage {
 			vertices,
 			uniforms,
 			uniforms_bind_group,
-			uvs,
 			image_rxs,
+			image_size,
+			swap_dir,
 			panel_size,
 		})
 	}
@@ -140,6 +140,8 @@ impl PanelImage {
 				return Ok(false);
 			},
 		};
+		self.image_size = Vector2::new(image.width(), image.height());
+		self.swap_dir = rand::random();
 
 		// Then update our texture
 		(self.texture, self.texture_view) = self::create_image_texture(&image, device, queue);
@@ -150,23 +152,19 @@ impl PanelImage {
 			device,
 		);
 
-		// Re-create our UVs
-		self.uvs = ImageUvs::new(
-			image.width() as f32,
-			image.height() as f32,
-			self.panel_size[0] as f32,
-			self.panel_size[1] as f32,
-			rand::random(),
-		);
-
 		// And update the vertex buffer
 		queue.write_buffer(
 			&self.vertices,
 			0,
-			bytemuck::cast_slice(&Self::vertices(self.uvs.start())),
+			bytemuck::cast_slice(&Self::vertices(self.uvs().start())),
 		);
 
 		Ok(true)
+	}
+
+	/// Returns this image's uvs
+	pub fn uvs(&self) -> ImageUvs {
+		self::uvs(self.image_size, self.panel_size, self.swap_dir)
 	}
 
 	/// Creates the vertices for uvs
@@ -202,6 +200,17 @@ impl PanelImage {
 		render_pass.set_bind_group(0, &self.uniforms_bind_group, &[]);
 		render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
 	}
+}
+
+/// Returns the uvs for the panel
+fn uvs(image_size: Vector2<u32>, panel_size: Vector2<u32>, swap_dir: bool) -> ImageUvs {
+	ImageUvs::new(
+		image_size.x as f32,
+		image_size.y as f32,
+		panel_size.x as f32,
+		panel_size.y as f32,
+		swap_dir,
+	)
 }
 
 /// Creates the texture sampler

@@ -205,7 +205,7 @@ impl Panel {
 			// Update the uniforms
 			let uniforms = PanelUniforms {
 				matrix: matrix.into(),
-				uvs_offset: image.uvs.offset(progress),
+				uvs_offset: image.uvs().offset(progress),
 				alpha,
 				_pad: [0.0; 1],
 			};
