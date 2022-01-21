@@ -37,9 +37,6 @@ pub struct PanelImage {
 
 	/// If we're swapping scrolling directions
 	swap_dir: bool,
-
-	/// Panel size
-	panel_size: Vector2<u32>,
 }
 
 impl PanelImage {
@@ -49,7 +46,7 @@ impl PanelImage {
 	/// Returns error if unable to create the gl texture or the vertex buffer
 	pub fn new(
 		device: &wgpu::Device, queue: &wgpu::Queue, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
-		texture_bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader, panel_size: Vector2<u32>,
+		texture_bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader,
 	) -> Result<Self, anyhow::Error> {
 		// Get an image receiver and the initial image
 		let image_rx = image_loader.receiver();
@@ -95,7 +92,6 @@ impl PanelImage {
 			image_rx,
 			image_size,
 			swap_dir,
-			panel_size,
 		})
 	}
 
@@ -127,9 +123,9 @@ impl PanelImage {
 		Ok(true)
 	}
 
-	/// Returns this image's uvs
-	pub fn uvs(&self) -> ImageUvs {
-		self::uvs(self.image_size, self.panel_size, self.swap_dir)
+	/// Returns this image's uvs for a panel size
+	pub fn uvs(&self, panel_size: Vector2<u32>) -> ImageUvs {
+		self::uvs(self.image_size, panel_size, self.swap_dir)
 	}
 
 	/// Updates this image's uniforms

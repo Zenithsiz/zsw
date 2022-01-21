@@ -53,6 +53,11 @@ impl Panel {
 		}
 	}
 
+	/// Get a mutable reference to the panel's geometry.
+	pub fn geometry_mut(&mut self) -> &mut Rect<u32> {
+		&mut self.geometry
+	}
+
 	/// Updates this panel
 	pub fn update(
 		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
@@ -71,7 +76,6 @@ impl Panel {
 		let finished = self.progress >= 1.0;
 
 		// Check the image state
-		let geometry = self.geometry;
 		(self.state, self.progress) = match std::mem::replace(&mut self.state, PanelState::Empty) {
 			// If we're empty, get the next image
 			PanelState::Empty => {
@@ -81,7 +85,6 @@ impl Panel {
 					uniforms_bind_group_layout,
 					texture_bind_group_layout,
 					image_loader,
-					geometry.size,
 				)
 				.context("Unable to create image")?;
 				(PanelState::PrimaryOnly { image }, 0.0)
@@ -98,7 +101,6 @@ impl Panel {
 					uniforms_bind_group_layout,
 					texture_bind_group_layout,
 					image_loader,
-					geometry.size,
 				)
 				.context("Unable to create image")?;
 
@@ -185,7 +187,7 @@ impl Panel {
 			}
 
 			// Update the uniforms
-			let uvs = image.uvs();
+			let uvs = image.uvs(self.geometry.size);
 			let uniforms = PanelUniforms {
 				matrix: matrix.into(),
 				uvs_start: uvs.start(),

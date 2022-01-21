@@ -5,6 +5,7 @@
 // Imports
 use crate::{Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Paths, Wgpu};
 use anyhow::Context;
+use egui::Widget;
 use parking_lot::Mutex;
 use std::{
 	sync::atomic::{self, AtomicBool},
@@ -284,19 +285,20 @@ impl App {
 	fn draw_egui(inner: &Inner, ctx: &egui::CtxRef, _frame: &epi::Frame) -> Result<(), anyhow::Error> {
 		egui::Window::new("Settings").show(ctx, |ui| {
 			let mut panels = inner.panels.lock();
-			for _panel in &mut *panels {
+			for panel in &mut *panels {
+				let geometry = panel.geometry_mut();
 				ui.collapsing("Panel", |ui| {
 					ui.collapsing("Position", |ui| {
 						ui.label("x");
-						//egui::Slider::new(&mut panel.geometry.pos.x, 0..=1920).ui(ui);
+						egui::Slider::new(&mut geometry.pos.x, 0..=1920).ui(ui);
 						ui.label("y");
-						//egui::Slider::new(&mut panel.geometry.pos.y, 0..=1920).ui(ui);
+						egui::Slider::new(&mut geometry.pos.y, 0..=1920).ui(ui);
 					});
 					ui.collapsing("Size", |ui| {
 						ui.label("width");
-						//egui::Slider::new(&mut panel.geometry.size.x, 0..=1920).ui(ui);
+						egui::Slider::new(&mut geometry.size.x, 0..=1920).ui(ui);
 						ui.label("height");
-						//egui::Slider::new(&mut panel.geometry.size.y, 0..=1920).ui(ui);
+						egui::Slider::new(&mut geometry.size.y, 0..=1920).ui(ui);
 					});
 				});
 			}
