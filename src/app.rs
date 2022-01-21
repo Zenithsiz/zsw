@@ -85,15 +85,7 @@ impl App {
 		let panels = args
 			.panel_geometries
 			.iter()
-			.map(|&geometry| {
-				Panel::new(
-					geometry,
-					PanelState::Empty,
-					args.image_duration,
-					args.fade_point,
-					args.image_backlog.unwrap_or(1).max(1),
-				)
-			})
+			.map(|&geometry| Panel::new(geometry, PanelState::Empty, args.image_duration, args.fade_point))
 			.collect::<Vec<_>>();
 		let panels = Mutex::new(panels);
 

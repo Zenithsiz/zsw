@@ -10,7 +10,6 @@ mod load;
 use super::Image;
 use crate::{
 	paths::{PathReceiver, Paths},
-	sync::{once_channel, priority_spmc},
 	util,
 };
 use anyhow::Context;
@@ -19,8 +18,8 @@ use std::{num::NonZeroUsize, thread};
 /// Image loader
 #[derive(Debug)]
 pub struct ImageLoader {
-	/// Request sender
-	request_tx: priority_spmc::Sender<once_channel::Sender<Image>>,
+	/// Image receiver
+	image_rx: crossbeam::channel::Receiver<Image>,
 }
 
 impl ImageLoader {
@@ -29,40 +28,36 @@ impl ImageLoader {
 	/// # Errors
 	/// Returns an error if unable to create all the loader threads
 	pub fn new(paths: &Paths) -> Result<Self, anyhow::Error> {
-		// Start the image loader threads
-		// Note: Requests shouldn't be limited,
-		// TODO: Find a better way to do a priority based two-way communication channel.
-		let (request_tx, request_rx) = priority_spmc::channel(None);
 		let loader_threads = std::thread::available_parallelism()
 			.context("Unable to get available parallelism")?
 			.get();
+
+		// Start all the loader threads
+		let (image_tx, image_rx) = crossbeam::channel::bounded(2 * loader_threads);
 		for thread_idx in 0..loader_threads {
-			let request_rx = request_rx.clone();
+			let image_tx = image_tx.clone();
 			let path_rx = paths.receiver();
 			let _loader_thread = thread::Builder::new()
 				.name("Image loader".to_owned())
-				.spawn(move || match self::image_loader(&request_rx, &path_rx) {
+				.spawn(move || match self::image_loader(&image_tx, &path_rx) {
 					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
 					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
 				})
 				.context("Unable to spawn image loader")?;
 		}
 
-		Ok(Self { request_tx })
+		Ok(Self { image_rx })
 	}
 
 	/// Requests an image to be loaded
 	///
 	/// # Errors
 	/// Returns an error if unable to send a request
-	pub fn request(&self, priority: usize) -> Result<ImageReceiver, anyhow::Error> {
-		// Create the channel and send the request
-		let (image_tx, image_rx) = once_channel::channel();
-		self.request_tx
-			.send(image_tx, priority)
-			.context("Unable to send request to loader thread")?;
-
-		Ok(ImageReceiver { image_rx })
+	#[must_use]
+	pub fn receiver(&self) -> ImageReceiver {
+		ImageReceiver {
+			image_rx: self.image_rx.clone(),
+		}
 	}
 }
 
@@ -105,70 +100,49 @@ impl Default for ImageLoaderArgs {
 #[derive(Debug)]
 pub struct ImageReceiver {
 	/// Image receiver
-	image_rx: once_channel::Receiver<Image>,
+	image_rx: crossbeam::channel::Receiver<Image>,
 }
 
 impl ImageReceiver {
 	/// Receives the image, waiting if not ready yet
-	pub fn recv(self) -> Result<Image, anyhow::Error> {
+	pub fn recv(&self) -> Result<Image, anyhow::Error> {
 		self.image_rx.recv().context("Unable to get image from loader thread")
 	}
 
-	/// Attempts to receive the image, returning `Ok(Err(self))` if not ready yet
-	///
-	/// # Errors
-	/// Returns `Err` if unable to get image from loader thread
-	pub fn try_recv(mut self) -> Result<Result<Image, Self>, anyhow::Error> {
+	/// Attempts to receive the image
+	pub fn try_recv(&self) -> Result<Option<Image>, anyhow::Error> {
 		// Try to get the result
 		match self.image_rx.try_recv() {
-			Ok(image) => Ok(Ok(image)),
-			Err(once_channel::TryRecvError::NotReady(receiver)) => {
-				self.image_rx = receiver;
-				Ok(Err(self))
-			},
+			Ok(image) => Ok(Some(image)),
+			Err(crossbeam::channel::TryRecvError::Empty) => Ok(None),
 			Err(_) => anyhow::bail!("Unable to get image from loader thread"),
 		}
 	}
 }
 
 /// Image loader thread function
-fn image_loader(
-	request_rx: &priority_spmc::Receiver<once_channel::Sender<Image>>, path_rx: &PathReceiver,
-) -> Result<(), anyhow::Error> {
+fn image_loader(image_tx: &crossbeam::channel::Sender<Image>, path_rx: &PathReceiver) -> Result<(), anyhow::Error> {
 	loop {
-		// Get the next request
-		let sender = match util::measure(|| request_rx.recv()) {
-			(Ok(value), duration) => {
-				log::trace!("Spent {duration:?} waiting for a request");
-				value
-			},
-			(Err(_), _) => return Ok(()),
+		// Get the next path
+		let path = match path_rx.recv() {
+			Ok(path) => path,
+			Err(_) => return Ok(()),
 		};
 
-		// Then try to get images until we send ones
-		'get_img: loop {
-			// Then get the image
-			let path = match path_rx.recv() {
-				Ok(path) => path,
-				Err(_) => return Ok(()),
-			};
-
-			// And try to process it
-			// Note: We can ignore errors on sending, since other senders might still be alive
-			#[allow(clippy::let_underscore_drop)]
-			match util::measure(|| load::load_image(&path)) {
-				// If we got it, send it
-				(Ok(image), duration) => {
-					log::trace!("Took {duration:?} to load {path:?}");
-					let _ = sender.send(image.to_rgba8());
-					break 'get_img;
-				},
-				// If we didn't manage to, log and try again with another path
-				(Err(err), _) => {
-					log::info!("Unable to load {path:?}: {err:?}");
-					let _ = path_rx.remove_path((*path).clone());
-				},
-			};
-		}
+		// And try to process it
+		// Note: We can ignore errors on sending, since other senders might still be alive
+		#[allow(clippy::let_underscore_drop)]
+		match util::measure(|| load::load_image(&path)) {
+			// If we got it, send it
+			(Ok(image), duration) => {
+				log::trace!("Took {duration:?} to load {path:?}");
+				let _ = image_tx.send(image.to_rgba8());
+			},
+			// If we didn't manage to, log and try again with another path
+			(Err(err), _) => {
+				log::info!("Unable to load {path:?}: {err:?}");
+				let _ = path_rx.remove_path((*path).clone());
+			},
+		};
 	}
 }

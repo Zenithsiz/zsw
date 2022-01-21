@@ -64,7 +64,6 @@ mod logger;
 mod panel;
 mod paths;
 mod rect;
-mod sync;
 mod util;
 mod wgpu;
 

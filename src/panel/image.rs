@@ -5,7 +5,6 @@ use super::PanelUniforms;
 use crate::img::{Image, ImageLoader, ImageReceiver, ImageUvs};
 use anyhow::Context;
 use cgmath::Vector2;
-use std::{collections::VecDeque, time::Duration};
 use wgpu::util::DeviceExt;
 
 /// Image
@@ -13,25 +12,25 @@ use wgpu::util::DeviceExt;
 #[derive(Debug)]
 pub struct PanelImage {
 	/// Texture
-	pub texture: wgpu::Texture,
+	texture: wgpu::Texture,
 
 	/// Texture view
-	pub texture_view: wgpu::TextureView,
+	texture_view: wgpu::TextureView,
 
 	/// Texture sampler
-	pub texture_sampler: wgpu::Sampler,
+	texture_sampler: wgpu::Sampler,
 
 	/// Texture bind group
-	pub texture_bind_group: wgpu::BindGroup,
+	texture_bind_group: wgpu::BindGroup,
 
 	/// Uniforms
-	pub uniforms: wgpu::Buffer,
+	uniforms: wgpu::Buffer,
 
 	/// Uniforms bind group
-	pub uniforms_bind_group: wgpu::BindGroup,
+	uniforms_bind_group: wgpu::BindGroup,
 
-	/// All image receivers
-	pub image_rxs: VecDeque<ImageReceiver>,
+	/// Image receiver
+	image_rx: ImageReceiver,
 
 	/// Image size
 	image_size: Vector2<u32>,
@@ -40,15 +39,10 @@ pub struct PanelImage {
 	swap_dir: bool,
 
 	/// Panel size
-	pub panel_size: Vector2<u32>,
+	panel_size: Vector2<u32>,
 }
 
 impl PanelImage {
-	/// High priority
-	const PRIORITY_HIGH: usize = 1;
-	/// Low priority
-	const PRIORITY_LOW: usize = 0;
-
 	/// Creates a new image
 	///
 	/// # Errors
@@ -56,19 +50,11 @@ impl PanelImage {
 	pub fn new(
 		device: &wgpu::Device, queue: &wgpu::Queue, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
 		texture_bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader, panel_size: Vector2<u32>,
-		image_backlog: usize,
 	) -> Result<Self, anyhow::Error> {
-		// Get the initial image
-		let image = self::request(image_loader, Self::PRIORITY_HIGH)
-			.recv()
-			.context("Unable to get image")?;
+		// Get an image receiver and the initial image
+		let image_rx = image_loader.receiver();
+		let image = image_rx.recv().context("Unable to get image")?;
 		let image_size = Vector2::new(image.width(), image.height());
-
-		// Then start requesting images in the background
-		// Note: Make sure we have at least 1 receiver
-		let image_rxs = (0..image_backlog.min(1))
-			.map(|_| self::request(image_loader, Self::PRIORITY_LOW))
-			.collect();
 
 		// Create the texture and sampler
 		let (texture, texture_view) = self::create_image_texture(&image, device, queue);
@@ -106,7 +92,7 @@ impl PanelImage {
 			texture_bind_group,
 			uniforms,
 			uniforms_bind_group,
-			image_rxs,
+			image_rx,
 			image_size,
 			swap_dir,
 			panel_size,
@@ -117,13 +103,13 @@ impl PanelImage {
 	#[allow(clippy::unnecessary_wraps)] // It might fail in the future
 	pub fn try_update(
 		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture_bind_group_layout: &wgpu::BindGroupLayout,
-		image_loader: &ImageLoader, force_wait: bool,
+		force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
-		let image = match self::get_image(&mut self.image_rxs, image_loader, force_wait) {
+		let image = match self.image_rx.try_recv().context("Unable to receive image")? {
 			Some(image) => image,
-			None => {
-				debug_assert!(!force_wait, "Received no image while force waiting");
-				return Ok(false);
+			None => match force_wait {
+				true => self.image_rx.recv().context("Unable to receive image")?,
+				false => return Ok(false),
 			},
 		};
 		self.image_size = Vector2::new(image.width(), image.height());
@@ -231,42 +217,4 @@ fn texture_descriptor(image_width: u32, image_height: u32) -> wgpu::TextureDescr
 		format:          wgpu::TextureFormat::Rgba8UnormSrgb,
 		usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
 	}
-}
-
-// TODO: Redo all of this, seems to cause some CPU pinning *sometimes*
-fn get_image(image_rxs: &mut VecDeque<ImageReceiver>, image_loader: &ImageLoader, force_wait: bool) -> Option<Image> {
-	let timeout = Duration::from_millis(200); // TODO: Adjust timeout
-	let mut cur_idx = 0;
-	loop {
-		// If we're not force waiting and we've gone through all image receivers,
-		// quit
-		if !force_wait && cur_idx >= image_rxs.len() {
-			return None;
-		}
-
-		// Else pop the front receiver and try to receiver it
-		let image_rx = image_rxs.pop_front().expect("No image receivers found");
-		match image_rx.try_recv().expect("Unable to load next image") {
-			// If we got it, create a new request and return the image
-			Ok(image) => {
-				let image_rx = self::request(image_loader, PanelImage::PRIORITY_LOW);
-				image_rxs.push_back(image_rx);
-				return Some(image);
-			},
-			// Else push the receiver back
-			Err(image_rx) => image_rxs.push_back(image_rx),
-		}
-
-		// If we're force waiting and we reached the end, sleep for a bit
-		if force_wait && (cur_idx + 1) % image_rxs.len() == 0 {
-			std::thread::sleep(timeout);
-		}
-
-		cur_idx += 1;
-	}
-}
-
-/// Requests an image
-fn request(image_loader: &ImageLoader, priority: usize) -> ImageReceiver {
-	image_loader.request(priority).expect("Unable to request image")
 }

@@ -24,9 +24,6 @@ pub struct Args {
 
 	/// Fade point (0.5..1.0)
 	pub fade_point: f32,
-
-	/// Image backlog
-	pub image_backlog: Option<usize>,
 }
 
 /// Parses all arguments
@@ -40,7 +37,6 @@ pub fn get() -> Result<Args, anyhow::Error> {
 		pub const IMAGE_DURATION: &str = "image-duration";
 		pub const FADE_POINT: &str = "fade-point";
 		pub const GRID: &str = "grid";
-		pub const IMAGE_BACKLOG: &str = "image-backlog";
 	}
 
 	// Get all matches from cli
@@ -108,16 +104,6 @@ pub fn get() -> Result<Args, anyhow::Error> {
 				.takes_value(true)
 				.long("fade-point")
 				.default_value("0.8"),
-		)
-		.arg(
-			ClapArg::new(arg_name::IMAGE_BACKLOG)
-				.help("Image backlog per geometry")
-				.long_help(
-					"Number of images to have in the backlog for each geometry. Will be the number of threads by \
-					 default",
-				)
-				.takes_value(true)
-				.long("image-backlog"),
 		)
 		.get_matches();
 
@@ -195,18 +181,11 @@ pub fn get() -> Result<Args, anyhow::Error> {
 	let fade_point = fade.parse().context("Unable to parse fade")?;
 	anyhow::ensure!((0.5..=1.0).contains(&fade_point), "Fade must be within 0.5 .. 1.0");
 
-	let image_backlog = matches
-		.value_of(arg_name::IMAGE_BACKLOG)
-		.map(str::parse)
-		.transpose()
-		.context("Unable to parse image backlog")?;
-
 	Ok(Args {
 		window_geometry,
 		panel_geometries: image_geometries,
 		image_duration,
 		images_dir,
 		fade_point,
-		image_backlog,
 	})
 }

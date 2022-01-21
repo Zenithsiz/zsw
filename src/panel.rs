@@ -39,23 +39,17 @@ pub struct Panel {
 
 	/// Fade point
 	fade_point: f32,
-
-	/// Image backlog
-	image_backlog: usize,
 }
 
 impl Panel {
 	/// Creates a new panel
-	pub const fn new(
-		geometry: Rect<u32>, state: PanelState, image_duration: Duration, fade_point: f32, image_backlog: usize,
-	) -> Self {
+	pub const fn new(geometry: Rect<u32>, state: PanelState, image_duration: Duration, fade_point: f32) -> Self {
 		Self {
 			geometry,
 			state,
 			progress: 0.0,
 			image_duration,
 			fade_point,
-			image_backlog,
 		}
 	}
 
@@ -88,7 +82,6 @@ impl Panel {
 					texture_bind_group_layout,
 					image_loader,
 					geometry.size,
-					self.image_backlog,
 				)
 				.context("Unable to create image")?;
 				(PanelState::PrimaryOnly { image }, 0.0)
@@ -106,7 +99,6 @@ impl Panel {
 					texture_bind_group_layout,
 					image_loader,
 					geometry.size,
-					self.image_backlog,
 				)
 				.context("Unable to create image")?;
 
@@ -116,17 +108,8 @@ impl Panel {
 			// If we have both, update the progress and swap them if finished
 			PanelState::Both { front, back } if finished => {
 				// Note: Front and back are swapped here since we implicitly swap
-				match self::update_swapped(
-					front,
-					back,
-					None,
-					device,
-					queue,
-					texture_bind_group_layout,
-					image_loader,
-					past_fade,
-				)
-				.context("Unable to update swapped image")?
+				match self::update_swapped(front, back, None, device, queue, texture_bind_group_layout, past_fade)
+					.context("Unable to update swapped image")?
 				{
 					(true, state) => (state, swapped_progress),
 					(false, state) => (state, next_progress),
@@ -141,7 +124,6 @@ impl Panel {
 				device,
 				queue,
 				texture_bind_group_layout,
-				image_loader,
 				past_fade,
 			)
 			.context("Unable to update swapped image")?
@@ -268,7 +250,7 @@ pub enum PanelState {
 #[allow(clippy::too_many_arguments)] // TODO:
 fn update_swapped(
 	mut back: PanelImage, front: PanelImage, mut since: Option<Instant>, device: &wgpu::Device, queue: &wgpu::Queue,
-	texture_bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader, force_wait: bool,
+	texture_bind_group_layout: &wgpu::BindGroupLayout, force_wait: bool,
 ) -> Result<(bool, PanelState), anyhow::Error> {
 	// If we're force waiting and don't have a `since`, create it,
 	// so we can keep track of how long the request took
@@ -277,7 +259,7 @@ fn update_swapped(
 	}
 
 	let swapped = back
-		.try_update(device, queue, texture_bind_group_layout, image_loader, force_wait)
+		.try_update(device, queue, texture_bind_group_layout, force_wait)
 		.context("Unable to get next image")?;
 	let state = match swapped {
 		// If we updated, switch to `Both`
