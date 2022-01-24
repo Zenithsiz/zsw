@@ -343,8 +343,8 @@ impl App {
 		// Then render it
 		settings_window.open(&mut *settings_window_open).show(ctx, |ui| {
 			let mut panels = inner.panels.lock();
-			for panel in &mut *panels {
-				ui.collapsing(format!("Panel {}", panel.geometry), |ui| {
+			for (idx, panel) in panels.iter_mut().enumerate() {
+				ui.collapsing(format!("Panel {idx}"), |ui| {
 					// TODO: Make a macro to make this more readable
 					ui.horizontal(|ui| {
 						// Calculate the limits
