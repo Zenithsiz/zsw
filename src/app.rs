@@ -348,25 +348,33 @@ impl App {
 					// TODO: Make a macro to make this more readable
 					ui.horizontal(|ui| {
 						// Calculate the limits
+						// TODO: If two values are changed at the same time, during 1 frame it's
+						//       possible for the values to be out of range.
 						let max_width = surface_size.width;
 						let max_height = surface_size.height;
 						let max_x = surface_size.width.saturating_sub(panel.geometry.size.x);
 						let max_y = surface_size.height.saturating_sub(panel.geometry.size.y);
 
 						ui.label("Geometry");
-						ui.add_space(10.0);
-						egui::Slider::new(&mut panel.geometry.size.x, 0..=max_width).ui(ui);
+						egui::DragValue::new(&mut panel.geometry.size.x)
+							.clamp_range(0..=max_width)
+							.speed(10)
+							.ui(ui);
 						ui.label("x");
-						egui::Slider::new(&mut panel.geometry.size.y, 0..=max_height).ui(ui);
+						egui::DragValue::new(&mut panel.geometry.size.y)
+							.clamp_range(0..=max_height)
+							.speed(10)
+							.ui(ui);
 						ui.label("+");
-						egui::Slider::new(&mut panel.geometry.pos.x, 0..=max_x).ui(ui);
+						egui::DragValue::new(&mut panel.geometry.pos.x)
+							.clamp_range(0..=max_x)
+							.speed(10)
+							.ui(ui);
 						ui.label("+");
-						egui::Slider::new(&mut panel.geometry.pos.y, 0..=max_y).ui(ui);
-
-						// Note: For some reason positions aren't properly clamped when the size increases
-						//       beyond, so we're manually doing it here
-						panel.geometry.pos.x = panel.geometry.pos.x.min(max_x);
-						panel.geometry.pos.y = panel.geometry.pos.y.min(max_y);
+						egui::DragValue::new(&mut panel.geometry.pos.y)
+							.clamp_range(0..=max_y)
+							.speed(10)
+							.ui(ui);
 					});
 					ui.horizontal(|ui| {
 						ui.label("Progress");
@@ -379,7 +387,7 @@ impl App {
 					ui.horizontal(|ui| {
 						ui.label("Duration");
 						let mut seconds = panel.image_duration.as_secs_f32();
-						egui::Slider::new(&mut seconds, 0.1..=180.0).ui(ui);
+						egui::Slider::new(&mut seconds, 0.5..=180.0).ui(ui);
 						panel.image_duration = Duration::from_secs_f32(seconds);
 					});
 					ui.horizontal(|ui| {
