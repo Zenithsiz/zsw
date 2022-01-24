@@ -45,6 +45,7 @@ use std::{
 };
 
 /// Inner
+#[derive(Debug)]
 struct Inner {
 	/// Root path
 	root_path: Arc<PathBuf>,
@@ -55,15 +56,6 @@ struct Inner {
 	//       the file loading to be done by the distributer
 	//       thread instead of on the caller thread.
 	cached_paths: Option<Vec<Arc<PathBuf>>>,
-}
-
-impl std::fmt::Debug for Inner {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Inner")
-			.field("root_path", &self.root_path)
-			.field("cached_paths", &self.cached_paths)
-			.finish_non_exhaustive()
-	}
 }
 
 /// A receiver
