@@ -3,7 +3,7 @@
 // Imports
 use anyhow::Context;
 use cgmath::{num_traits::Num, Point2, Vector2};
-use std::error::Error;
+use std::{error::Error, fmt};
 
 /// A rectangle
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -49,5 +49,17 @@ impl<T> Rect<T> {
 		};
 
 		Ok(Self { pos, size })
+	}
+}
+
+impl fmt::Display for Rect<u32> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}x{}", self.size.x, self.size.y)?;
+
+		if self.pos.x != 0 || self.pos.y != 0 {
+			write!(f, "+{}+{}", self.pos.x, self.pos.y)?;
+		}
+
+		Ok(())
 	}
 }

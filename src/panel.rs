@@ -23,26 +23,27 @@ use winit::dpi::PhysicalSize;
 ///
 /// A panel is responsible for rendering the scrolling images
 /// in a certain rectangle on the window
+// Note: It's fine for our state to be public, as
+//       we only use it during rendering, and we don't
+//       have any expected value for it, nor any cached
+//       values that depend on it.
 #[derive(Debug)]
 pub struct Panel {
 	/// Geometry
-	// Note: It's fine for our geometry to be public, as
-	//       we only use it during rendering, and we don't
-	//       have any expected value for it, nor any cached
-	//       values that depend on it.
 	pub geometry: Rect<u32>,
 
 	/// Panel state
-	state: PanelState,
+	pub state: PanelState,
 
 	/// Progress
-	progress: f32,
+	pub progress: f32,
 
 	/// Image duration
-	image_duration: Duration,
+	pub image_duration: Duration,
 
 	/// Fade point
-	fade_point: f32,
+	// TODO: Ensure it's between 0.5 and 1.0
+	pub fade_point: f32,
 }
 
 impl Panel {

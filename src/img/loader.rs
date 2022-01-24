@@ -56,6 +56,11 @@ impl ImageLoader {
 			image_rx: self.image_rx.clone(),
 		}
 	}
+
+	/// Clears all images in the receiver
+	pub fn clear(&self) {
+		while self.image_rx.try_recv().is_ok() {}
+	}
 }
 
 /// Image loader arguments
