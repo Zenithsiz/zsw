@@ -3,7 +3,7 @@
 //! See the [`App`] type for more details
 
 // Imports
-use crate::{Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Paths, Wgpu};
+use crate::{paths, Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Wgpu};
 use anyhow::Context;
 use crossbeam::atomic::AtomicCell;
 use egui::Widget;
@@ -40,10 +40,8 @@ struct Inner {
 	/// Wgpu
 	wgpu: Wgpu,
 
-	/// Path
-	// Note: Although we have it behind a mutex, we don't need to access it,
-	//       it's only there so we can share `self` between threads
-	_paths: Mutex<Paths>,
+	/// Path distributer
+	paths_distributer: paths::Distributer,
 
 	/// Image loader
 	image_loader: ImageLoader,
@@ -86,11 +84,11 @@ impl App {
 		// Create the wgpu interface
 		let wgpu = Wgpu::new(window).await.context("Unable to create renderer")?;
 
-		// Create the paths manager
-		let paths = Paths::new(args.images_dir).context("Unable to create paths")?;
+		// Create the paths channel
+		let (paths_distributer, paths_rx) = paths::new(args.images_dir);
 
 		// Create the image loader
-		let image_loader = ImageLoader::new(&paths).context("Unable to create image loader")?;
+		let image_loader = ImageLoader::new(&paths_rx).context("Unable to create image loader")?;
 
 		// Create all panels
 		let panels = args
@@ -113,7 +111,7 @@ impl App {
 			inner: Inner {
 				window,
 				wgpu,
-				_paths: Mutex::new(paths),
+				paths_distributer,
 				image_loader,
 				panels,
 				panels_renderer,
@@ -132,6 +130,13 @@ impl App {
 		let inner = &self.inner;
 		let should_quit = AtomicBool::new(false);
 		crossbeam::thread::scope(|s| {
+			// Spawn the path distributer thread
+			let _path_distributer = s
+				.builder()
+				.name("Path distributer".to_owned())
+				.spawn(|_| inner.paths_distributer.run(&should_quit))
+				.context("Unable to start renderer thread")?;
+
 			// Spawn the updater thread
 			let _updater_thread = s
 				.builder()
@@ -188,6 +193,10 @@ impl App {
 
 			// Notify other threads to quit
 			should_quit.store(true, atomic::Ordering::Relaxed);
+
+			// If we're in release mode, just exit here, no need to run shutdown code
+			#[cfg(not(debug_assertions))]
+			std::process::exit(0);
 
 			anyhow::Ok(())
 		})
@@ -335,6 +344,7 @@ impl App {
 		settings_window.open(&mut *settings_window_open).show(ctx, |ui| {
 			let mut panels = inner.panels.lock();
 			for panel in &mut *panels {
+				// TODO: Make a macro to make this more readable
 				ui.horizontal(|ui| {
 					// Calculate the limits
 					let max_width = surface_size.width;
@@ -358,6 +368,26 @@ impl App {
 					panel.geometry.pos.y = panel.geometry.pos.y.min(max_y);
 				});
 			}
+
+			ui.horizontal(|ui| {
+				let cur_root_path = inner.paths_distributer.root_path();
+
+				ui.label("Root path");
+				ui.label(cur_root_path.display().to_string());
+				if ui.button("📁").clicked() {
+					let file_dialog = native_dialog::FileDialog::new()
+						.set_location(&*cur_root_path)
+						.show_open_single_dir();
+					match file_dialog {
+						Ok(file_dialog) => {
+							if let Some(root_path) = file_dialog {
+								inner.paths_distributer.set_root_path(root_path);
+							}
+						},
+						Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
+					}
+				}
+			});
 		});
 
 		Ok(())
@@ -426,7 +456,7 @@ unsafe fn set_display_always_below(window: &Window) {
 				xlib::XA_ATOM,
 				32,
 				xlib::PropModeAppend,
-				(&value as *const u64).cast(),
+				std::ptr::addr_of!(value).cast(),
 				1,
 			)
 		};

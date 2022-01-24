@@ -3,15 +3,14 @@
 // Features
 #![feature(
 	never_type,
-	available_parallelism,
 	control_flow_enum,
 	decl_macro,
 	inline_const,
-	destructuring_assignment,
 	stmt_expr_attributes,
 	try_trait_v2,
 	backtrace,
-	thread_id_value
+	thread_id_value,
+	unwrap_infallible
 )]
 // Lints
 #![warn(
@@ -75,7 +74,6 @@ pub use self::{
 	egui::Egui,
 	img::ImageLoader,
 	panel::{Panel, PanelState, PanelsRenderer},
-	paths::Paths,
 	rect::Rect,
 	wgpu::Wgpu,
 };

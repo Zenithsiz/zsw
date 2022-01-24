@@ -8,10 +8,7 @@ mod load;
 
 // Imports
 use super::Image;
-use crate::{
-	paths::{PathReceiver, Paths},
-	util,
-};
+use crate::{paths, util};
 use anyhow::Context;
 use std::{num::NonZeroUsize, thread};
 
@@ -27,7 +24,7 @@ impl ImageLoader {
 	///
 	/// # Errors
 	/// Returns an error if unable to create all the loader threads
-	pub fn new(paths: &Paths) -> Result<Self, anyhow::Error> {
+	pub fn new(paths_rx: &paths::Receiver) -> Result<Self, anyhow::Error> {
 		let loader_threads = std::thread::available_parallelism()
 			.context("Unable to get available parallelism")?
 			.get();
@@ -36,10 +33,10 @@ impl ImageLoader {
 		let (image_tx, image_rx) = crossbeam::channel::bounded(2 * loader_threads);
 		for thread_idx in 0..loader_threads {
 			let image_tx = image_tx.clone();
-			let path_rx = paths.receiver();
+			let paths_rx = paths_rx.clone();
 			let _loader_thread = thread::Builder::new()
 				.name("Image loader".to_owned())
-				.spawn(move || match self::image_loader(&image_tx, &path_rx) {
+				.spawn(move || match self::image_loader(&image_tx, &paths_rx) {
 					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
 					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
 				})
@@ -121,12 +118,13 @@ impl ImageReceiver {
 }
 
 /// Image loader thread function
-fn image_loader(image_tx: &crossbeam::channel::Sender<Image>, path_rx: &PathReceiver) -> Result<(), anyhow::Error> {
+fn image_loader(image_tx: &crossbeam::channel::Sender<Image>, paths_rx: &paths::Receiver) -> Result<(), anyhow::Error> {
+	#[allow(clippy::while_let_loop)] // We might add more steps before/after getting a path
 	loop {
 		// Get the next path
-		let path = match path_rx.recv() {
+		let path = match paths_rx.recv() {
 			Ok(path) => path,
-			Err(_) => return Ok(()),
+			Err(_) => break,
 		};
 
 		// And try to process it
@@ -141,8 +139,10 @@ fn image_loader(image_tx: &crossbeam::channel::Sender<Image>, path_rx: &PathRece
 			// If we didn't manage to, log and try again with another path
 			(Err(err), _) => {
 				log::info!("Unable to load {path:?}: {err:?}");
-				let _ = path_rx.remove_path((*path).clone());
+				paths_rx.remove(&path);
 			},
 		};
 	}
+
+	Ok(())
 }
