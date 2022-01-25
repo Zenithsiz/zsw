@@ -30,8 +30,8 @@
 //! May also be used to change the channel state, such as the current root directory,
 //! what happens when the end of the paths is reached, and others.
 
-use crossbeam::channel::SendTimeoutError;
 // Imports
+use crossbeam::channel::SendTimeoutError;
 use parking_lot::Mutex;
 use rand::prelude::SliceRandom;
 use std::{
@@ -50,12 +50,13 @@ struct Inner {
 	/// Root path
 	root_path: Arc<PathBuf>,
 
-	/// Cached paths, if any
-	// Note: This will be set to `None` at the beginning
-	//       and whenever the root path changes. This allows
-	//       the file loading to be done by the distributer
-	//       thread instead of on the caller thread.
-	cached_paths: Option<Vec<Arc<PathBuf>>>,
+	/// Cached paths.
+	cached_paths: Vec<Arc<PathBuf>>,
+
+	/// If the paths need to be reloaded
+	// Note: This is set to `true` at the beginning to,
+	//       to load all paths initially
+	reload_cached: bool,
 }
 
 /// A receiver
@@ -77,16 +78,21 @@ impl Receiver {
 	/// Removes a path
 	pub fn remove(&self, path: &Arc<PathBuf>) {
 		let mut inner = self.inner.lock();
-		if let Some(paths) = &mut inner.cached_paths {
-			match paths.iter().position(|cached_path| cached_path == path) {
-				// Note: Since we shuffle, it's fine to swap remove
-				Some(idx) => {
-					#[allow(clippy::let_underscore_drop)] // We want to drop the path
-					let _ = paths.swap_remove(idx);
-				},
-				// Note: This happens whenever paths is modified in between the receive call and the remove call.
-				None => log::debug!("Unable to remove path {path:?}, index not found"),
-			}
+
+		// If the paths need reloading, no use in removing the path
+		if inner.reload_cached {
+			return;
+		}
+
+		// Else try to get it.
+		match inner.cached_paths.iter().position(|cached_path| cached_path == path) {
+			// Note: Since we shuffle, it's fine to swap remove
+			Some(idx) => {
+				#[allow(clippy::let_underscore_drop)] // We want to drop the path
+				let _ = inner.cached_paths.swap_remove(idx);
+			},
+			// Note: This happens whenever paths is modified in between the receive call and the remove call.
+			None => log::debug!("Unable to remove path {path:?}, index not found"),
 		}
 	}
 }
@@ -109,22 +115,21 @@ impl Distributer {
 	pub fn run(&self, should_quit: &AtomicBool) -> Result<(), anyhow::Error> {
 		let mut cur_paths = vec![];
 		'run: loop {
-			// Retrieve the paths, or load them
 			let mut inner = self.inner.lock();
+
+
+			// If we need to reload, clear and load the paths
 			let cur_root_path = Arc::clone(&inner.root_path);
-			let paths = match &inner.cached_paths {
-				Some(paths) => paths,
-				None => {
-					let paths = inner.cached_paths.insert(vec![]);
-					Self::load_paths_into(&cur_root_path, paths);
-					&*paths
-				},
-			};
+			if inner.reload_cached {
+				inner.cached_paths.clear();
+				Self::load_paths_into(&cur_root_path, &mut inner.cached_paths);
+				inner.reload_cached = true;
+			}
 
 			// Copy all paths and shuffle
 			// Note: We also drop the lock after copying, since we don't need
 			//       inner anymore
-			cur_paths.extend(paths.iter().cloned());
+			cur_paths.extend(inner.cached_paths.iter().cloned());
 			mem::drop(inner);
 			cur_paths.shuffle(&mut rand::thread_rng());
 
@@ -196,7 +201,7 @@ impl Distributer {
 		// Set the root path and clear all paths
 		let mut inner = self.inner.lock();
 		inner.root_path = Arc::new(path);
-		inner.cached_paths = None;
+		inner.reload_cached = true;
 	}
 }
 
@@ -212,8 +217,9 @@ pub struct DistributerQuitError;
 pub fn new(root_path: PathBuf) -> (Distributer, Receiver) {
 	// Create the inner data
 	let inner = Inner {
-		root_path:    Arc::new(root_path),
-		cached_paths: None,
+		root_path:     Arc::new(root_path),
+		cached_paths:  vec![],
+		reload_cached: true,
 	};
 	let inner = Arc::new(Mutex::new(inner));
 
