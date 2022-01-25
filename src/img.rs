@@ -6,7 +6,7 @@ mod loader;
 mod uvs;
 
 // Exports
-pub use loader::{ImageLoader, ImageLoaderArgs, ImageReceiver};
+pub use loader::{ImageLoader, ImageReceiver};
 pub use uvs::ImageUvs;
 
 /// Image

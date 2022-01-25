@@ -10,7 +10,7 @@ mod load;
 use super::Image;
 use crate::{paths, util};
 use anyhow::Context;
-use std::{num::NonZeroUsize, thread};
+use std::thread;
 
 /// Image loader
 #[derive(Debug)]
@@ -62,41 +62,6 @@ impl ImageLoader {
 		while self.image_rx.try_recv().is_ok() {}
 	}
 }
-
-/// Image loader arguments
-#[derive(PartialEq, Clone, Copy, Debug)]
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)]
-#[allow(clippy::struct_excessive_bools)] // It's a config
-pub struct ImageLoaderArgs {
-	/// Loader threads
-	pub loader_threads: usize,
-
-	/// If any upscaling should be done
-	pub upscale: bool,
-
-	/// If upscaling should be done with waifu 2x
-	pub upscale_waifu2x: bool,
-
-	/// If images can be loaded from the downscaled cache
-	pub downscale_load_from_cache: bool,
-
-	/// If images should be downscaled and saved to cache
-	pub downscale_save_to_cache: bool,
-}
-
-impl Default for ImageLoaderArgs {
-	fn default() -> Self {
-		Self {
-			loader_threads:            thread::available_parallelism().map_or(1, NonZeroUsize::get),
-			upscale:                   false,
-			upscale_waifu2x:           false,
-			downscale_load_from_cache: true,
-			downscale_save_to_cache:   false,
-		}
-	}
-}
-
 
 /// Image receiver
 #[derive(Debug)]
