@@ -3,12 +3,14 @@
 //! See the [`App`] type for more details
 
 // Imports
-use crate::{paths, Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Wgpu};
+use crate::{paths, Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Rect, Wgpu};
 use anyhow::Context;
+use cgmath::{Point2, Vector2};
 use crossbeam::atomic::AtomicCell;
 use egui::Widget;
 use parking_lot::Mutex;
 use std::{
+	mem,
 	sync::atomic::{self, AtomicBool},
 	thread,
 	time::Duration,
@@ -60,6 +62,9 @@ struct Inner {
 
 	/// If the settings window is currently open
 	settings_window_open: Mutex<bool>,
+
+	/// New panel parameters
+	new_panel_parameters: Mutex<(Rect<u32>, f32, f32)>,
 }
 
 /// Application state
@@ -118,6 +123,15 @@ impl App {
 				egui,
 				queued_settings_window_open_click: AtomicCell::new(None),
 				settings_window_open: Mutex::new(false),
+				// TODO: Copy existing panel, or surface
+				new_panel_parameters: Mutex::new((
+					Rect {
+						pos:  Point2::new(0, 0),
+						size: Vector2::new(0, 0),
+					},
+					15.0,
+					0.85,
+				)),
 			},
 		})
 	}
@@ -347,34 +361,8 @@ impl App {
 				ui.collapsing(format!("Panel {idx}"), |ui| {
 					// TODO: Make a macro to make this more readable
 					ui.horizontal(|ui| {
-						// Calculate the limits
-						// TODO: If two values are changed at the same time, during 1 frame it's
-						//       possible for the values to be out of range.
-						let max_width = surface_size.width;
-						let max_height = surface_size.height;
-						let max_x = surface_size.width.saturating_sub(panel.geometry.size.x);
-						let max_y = surface_size.height.saturating_sub(panel.geometry.size.y);
-
 						ui.label("Geometry");
-						egui::DragValue::new(&mut panel.geometry.size.x)
-							.clamp_range(0..=max_width)
-							.speed(10)
-							.ui(ui);
-						ui.label("x");
-						egui::DragValue::new(&mut panel.geometry.size.y)
-							.clamp_range(0..=max_height)
-							.speed(10)
-							.ui(ui);
-						ui.label("+");
-						egui::DragValue::new(&mut panel.geometry.pos.x)
-							.clamp_range(0..=max_x)
-							.speed(10)
-							.ui(ui);
-						ui.label("+");
-						egui::DragValue::new(&mut panel.geometry.pos.y)
-							.clamp_range(0..=max_y)
-							.speed(10)
-							.ui(ui);
+						self::draw_rect(ui, &mut panel.geometry, surface_size);
 					});
 					ui.horizontal(|ui| {
 						ui.label("Progress");
@@ -398,6 +386,35 @@ impl App {
 					});
 				});
 			}
+			ui.collapsing("Add panel", |ui| {
+				let mut new_panel_parameters = inner.new_panel_parameters.lock();
+				let (geometry, image_duration, fade_point) = &mut *new_panel_parameters;
+
+				ui.horizontal(|ui| {
+					ui.label("Geometry");
+					self::draw_rect(ui, geometry, surface_size);
+				});
+
+				ui.horizontal(|ui| {
+					ui.label("Fade point");
+					egui::Slider::new(fade_point, 0.5..=1.0).ui(ui);
+				});
+
+				ui.horizontal(|ui| {
+					ui.label("Duration");
+					egui::Slider::new(image_duration, 0.5..=180.0).ui(ui);
+				});
+
+				if ui.button("Add").clicked() {
+					panels.push(Panel::new(
+						*geometry,
+						PanelState::Empty,
+						Duration::from_secs_f32(*image_duration),
+						*fade_point,
+					));
+				}
+			});
+			mem::drop(panels);
 
 			ui.horizontal(|ui| {
 				let cur_root_path = inner.paths_distributer.root_path();
@@ -417,9 +434,12 @@ impl App {
 								// Then reset all panels and empty the loaded images
 								// TODO: This doesn't fully clear everything, since the image loader
 								//       threads may still be working on an image, but good enough for now.
+								let mut panels = inner.panels.lock();
 								for panel in &mut *panels {
 									panel.state = PanelState::Empty;
 								}
+								mem::drop(panels);
+
 								inner.image_loader.clear();
 							}
 						},
@@ -431,6 +451,40 @@ impl App {
 
 		Ok(())
 	}
+}
+
+fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<u32>, max_size: PhysicalSize<u32>) -> egui::Response {
+	// Calculate the limits
+	// TODO: If two values are changed at the same time, during 1 frame it's
+	//       possible for the values to be out of range.
+	let max_width = max_size.width;
+	let max_height = max_size.height;
+	let max_x = max_size.width.saturating_sub(geometry.size.x);
+	let max_y = max_size.height.saturating_sub(geometry.size.y);
+
+	// new_panel_parameters
+
+	let mut response = egui::DragValue::new(&mut geometry.size.x)
+		.clamp_range(0..=max_width)
+		.speed(10)
+		.ui(ui);
+	response |= ui.label("x");
+	response |= egui::DragValue::new(&mut geometry.size.y)
+		.clamp_range(0..=max_height)
+		.speed(10)
+		.ui(ui);
+	response |= ui.label("+");
+	response |= egui::DragValue::new(&mut geometry.pos.x)
+		.clamp_range(0..=max_x)
+		.speed(10)
+		.ui(ui);
+	response |= ui.label("+");
+	response |= egui::DragValue::new(&mut geometry.pos.y)
+		.clamp_range(0..=max_y)
+		.speed(10)
+		.ui(ui);
+
+	response
 }
 
 /// Creates the window, as well as the associated event loop
