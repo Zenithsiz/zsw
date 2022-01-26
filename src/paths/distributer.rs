@@ -2,15 +2,13 @@
 
 // Imports
 use super::Inner;
-use crossbeam::channel::SendTimeoutError;
 use parking_lot::Mutex;
 use rand::prelude::SliceRandom;
 use std::{
 	collections::HashSet,
 	mem,
 	path::{Path, PathBuf},
-	sync::{atomic::AtomicBool, Arc},
-	time::Duration,
+	sync::Arc,
 };
 
 
@@ -29,11 +27,10 @@ pub struct Distributer {
 
 impl Distributer {
 	/// Runs the distributer until all receivers have quit
-	pub fn run(&self, should_quit: &AtomicBool) -> Result<(), anyhow::Error> {
+	pub fn run(&self) -> Result<(), anyhow::Error> {
 		let mut cur_paths = vec![];
 		'run: loop {
 			let mut inner = self.inner.lock();
-
 
 			// If we need to reload, clear and load the paths
 			let cur_root_path = Arc::clone(&inner.root_path);
@@ -50,19 +47,8 @@ impl Distributer {
 			mem::drop(inner);
 			cur_paths.shuffle(&mut rand::thread_rng());
 
-			// Macro to exit if the `should_quit` flag is true
-			macro check_should_quit() {
-				if should_quit.load(std::sync::atomic::Ordering::Relaxed) {
-					log::debug!("Received quit notification, quitting");
-					break 'run;
-				}
-			}
-
 			// Then send them all
-			for mut path in cur_paths.drain(..) {
-				// Check if we should quit
-				check_should_quit!();
-
+			for path in cur_paths.drain(..) {
 				// If the root path changed in the meantime, reload
 				// TODO: `ptr_eq` here? Not sure if it's worth it
 				if self.inner.lock().root_path != cur_root_path {
@@ -71,20 +57,9 @@ impl Distributer {
 				}
 
 				// Else send the path
-				// Note: We sleep at most 1 second to ensure we can check the `should_quit` flag.
-				// TODO: Find a cleaner solution
-				'send: loop {
-					match self.tx.send_timeout(path, Duration::from_secs(1)) {
-						Ok(()) => break 'send,
-						Err(SendTimeoutError::Timeout(sent_path)) => {
-							check_should_quit!();
-							path = sent_path;
-						},
-						Err(SendTimeoutError::Disconnected(_)) => {
-							log::debug!("All receivers quit, quitting");
-							break 'run;
-						},
-					}
+				if self.tx.send(path).is_err() {
+					log::debug!("All receivers quit, quitting");
+					break 'run;
 				}
 			}
 		}

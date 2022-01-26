@@ -9,12 +9,7 @@ use cgmath::{Point2, Vector2};
 use crossbeam::atomic::AtomicCell;
 use egui::Widget;
 use parking_lot::Mutex;
-use std::{
-	mem,
-	sync::atomic::{self, AtomicBool},
-	thread,
-	time::Duration,
-};
+use std::{mem, thread, time::Duration};
 use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
 	event::{Event, WindowEvent},
@@ -142,27 +137,26 @@ impl App {
 		// TODO: Not ignore errors here, although given how `thread::scope` works
 		//       it's somewhat hard to do so
 		let inner = &self.inner;
-		let should_quit = AtomicBool::new(false);
 		crossbeam::thread::scope(|s| {
 			// Spawn the path distributer thread
 			let _path_distributer = s
 				.builder()
 				.name("Path distributer".to_owned())
-				.spawn(|_| inner.paths_distributer.run(&should_quit))
+				.spawn(|_| inner.paths_distributer.run())
 				.context("Unable to start renderer thread")?;
 
 			// Spawn the updater thread
 			let _updater_thread = s
 				.builder()
 				.name("Updater".to_owned())
-				.spawn(Self::updater_thread(inner, &should_quit))
+				.spawn(|_| Self::run_updater(inner))
 				.context("Unable to start renderer thread")?;
 
 			// Spawn the renderer thread
 			let _renderer_thread = s
 				.builder()
 				.name("Renderer".to_owned())
-				.spawn(Self::renderer_thread(inner, &should_quit))
+				.spawn(|_| Self::run_renderer(inner))
 				.context("Unable to start renderer thread")?;
 
 			// Run event loop in this thread until we quit
@@ -183,6 +177,11 @@ impl App {
 						WindowEvent::CloseRequested | WindowEvent::Destroyed => {
 							log::warn!("Received close request, closing window");
 							*control_flow = EventLoopControlFlow::Exit;
+
+							// Once we reach here, we can just exit, no need to
+							// drop everything
+							// TODO: Go through the drop in debug mode at least.
+							std::process::exit(0);
 						},
 
 						// If we resized, queue a resize on wgpu
@@ -205,13 +204,6 @@ impl App {
 				}
 			});
 
-			// Notify other threads to quit
-			should_quit.store(true, atomic::Ordering::Relaxed);
-
-			// If we're in release mode, just exit here, no need to run shutdown code
-			#[cfg(not(debug_assertions))]
-			std::process::exit(0);
-
 			anyhow::Ok(())
 		})
 		.expect("Unable to start all threads")
@@ -220,26 +212,22 @@ impl App {
 		Ok(())
 	}
 
-	/// Returns the function to run in the updater thread
-	fn updater_thread<'a>(
-		inner: &'a Inner, should_quit: &'a AtomicBool,
-	) -> impl FnOnce(&crossbeam::thread::Scope) + 'a {
-		move |_| {
-			// Duration we're sleep
-			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
+	/// Runs the updater
+	fn run_updater(inner: &Inner) {
+		// Duration we're sleep
+		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-			while !should_quit.load(atomic::Ordering::Relaxed) {
-				// Render
-				let (res, frame_duration) = crate::util::measure(|| Self::update(inner));
-				match res {
-					Ok(()) => log::trace!("Took {frame_duration:?} to render"),
-					Err(err) => log::warn!("Unable to render: {err:?}"),
-				};
+		loop {
+			// Render
+			let (res, frame_duration) = crate::util::measure(|| Self::update(inner));
+			match res {
+				Ok(()) => log::trace!("Took {frame_duration:?} to render"),
+				Err(err) => log::warn!("Unable to render: {err:?}"),
+			};
 
-				// Then sleep until next frame
-				if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
-					thread::sleep(duration);
-				}
+			// Then sleep until next frame
+			if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
+				thread::sleep(duration);
 			}
 		}
 	}
@@ -262,26 +250,22 @@ impl App {
 		Ok(())
 	}
 
-	/// Returns the function to run in the renderer thread
-	fn renderer_thread<'a>(
-		inner: &'a Inner, should_quit: &'a AtomicBool,
-	) -> impl FnOnce(&crossbeam::thread::Scope) + 'a {
-		move |_| {
-			// Duration we're sleep
-			let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
+	/// Runs the renderer
+	fn run_renderer(inner: &Inner) {
+		// Duration we're sleep
+		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-			while !should_quit.load(atomic::Ordering::Relaxed) {
-				// Render
-				let (res, frame_duration) = crate::util::measure(|| Self::render(inner));
-				match res {
-					Ok(()) => log::trace!("Took {frame_duration:?} to render"),
-					Err(err) => log::warn!("Unable to render: {err:?}"),
-				};
+		loop {
+			// Render
+			let (res, frame_duration) = crate::util::measure(|| Self::render(inner));
+			match res {
+				Ok(()) => log::trace!("Took {frame_duration:?} to render"),
+				Err(err) => log::warn!("Unable to render: {err:?}"),
+			};
 
-				// Then sleep until next frame
-				if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
-					thread::sleep(duration);
-				}
+			// Then sleep until next frame
+			if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
+				thread::sleep(duration);
 			}
 		}
 	}
