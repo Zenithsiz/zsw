@@ -53,6 +53,8 @@
 	// such as when using `anyhow`, we just assume the caller won't check *what* error
 	// happened and instead just bubbles it up
 	clippy::missing_errors_doc,
+	// Too many false positives and not too important
+	clippy::missing_const_for_fn
 )]
 
 // Modules

@@ -35,6 +35,7 @@ use crossbeam::channel::SendTimeoutError;
 use parking_lot::Mutex;
 use rand::prelude::SliceRandom;
 use std::{
+	collections::HashSet,
 	mem,
 	path::{Path, PathBuf},
 	sync::{
@@ -51,7 +52,7 @@ struct Inner {
 	root_path: Arc<PathBuf>,
 
 	/// Cached paths.
-	cached_paths: Vec<Arc<PathBuf>>,
+	cached_paths: HashSet<Arc<PathBuf>>,
 
 	/// If the paths need to be reloaded
 	// Note: This is set to `true` at the beginning to,
@@ -84,16 +85,9 @@ impl Receiver {
 			return;
 		}
 
-		// Else try to get it.
-		match inner.cached_paths.iter().position(|cached_path| cached_path == path) {
-			// Note: Since we shuffle, it's fine to swap remove
-			Some(idx) => {
-				#[allow(clippy::let_underscore_drop)] // We want to drop the path
-				let _ = inner.cached_paths.swap_remove(idx);
-			},
-			// Note: This happens whenever paths is modified in between the receive call and the remove call.
-			None => log::debug!("Unable to remove path {path:?}, index not found"),
-		}
+		// Else remove it
+		// TODO: Not require an owned value here
+		let _ = inner.cached_paths.remove(path);
 	}
 }
 
@@ -176,12 +170,12 @@ impl Distributer {
 	}
 
 	/// Loads all paths
-	fn load_paths_into(root_path: &Path, paths: &mut Vec<Arc<PathBuf>>) {
+	fn load_paths_into(root_path: &Path, paths: &mut HashSet<Arc<PathBuf>>) {
 		log::info!("Loading all paths from {root_path:?}");
 
 		let ((), duration) = crate::util::measure(|| {
 			crate::util::visit_files_dir(root_path, &mut |path| {
-				paths.push(Arc::new(path));
+				let _ = paths.insert(Arc::new(path));
 				Ok::<(), !>(())
 			})
 			.into_ok();
@@ -218,7 +212,7 @@ pub fn new(root_path: PathBuf) -> (Distributer, Receiver) {
 	// Create the inner data
 	let inner = Inner {
 		root_path:     Arc::new(root_path),
-		cached_paths:  vec![],
+		cached_paths:  HashSet::new(),
 		reload_cached: true,
 	};
 	let inner = Arc::new(Mutex::new(inner));
