@@ -70,11 +70,16 @@ fn file_dispatch() -> Result<fern::Dispatch, anyhow::Error> {
 		.level_for("wgpu_hal", log::LevelFilter::Warn)
 		.level_for("wgpu_core", log::LevelFilter::Warn)
 		.level_for("naga", log::LevelFilter::Warn)
-		.level_for("winit", log::LevelFilter::Warn)
-		.level(log::LevelFilter::Debug)
-		.chain(file);
+		.level_for("winit", log::LevelFilter::Warn);
 
-	Ok(dispatcher)
+	// On debug builds, log trace to file, else debug
+	#[cfg(debug_assertions)]
+	let dispatcher = dispatcher.level(log::LevelFilter::Trace);
+
+	#[cfg(not(debug_assertions))]
+	let dispatcher = dispatcher.level(log::LevelFilter::Debug);
+
+	Ok(dispatcher.chain(file))
 }
 
 /// Returns a formatter for the logger

@@ -359,10 +359,14 @@ impl App {
 						egui::Slider::new(&mut seconds, 0.5..=180.0).ui(ui);
 						panel.image_duration = Duration::from_secs_f32(seconds);
 					});
+
+					// On skip, skip the current panel
+					// TODO: Do this properly
 					ui.horizontal(|ui| {
-						ui.label("Reset");
+						ui.label("Skip");
 						if ui.button("🔄").clicked() {
-							panel.state = PanelState::Empty;
+							//panel.state = PanelState::Empty;
+							panel.progress = 1.0;
 						}
 					});
 				});
