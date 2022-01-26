@@ -10,13 +10,18 @@ mod load;
 use super::Image;
 use crate::{paths, util};
 use anyhow::Context;
-use std::thread;
 
 /// Image loader
 #[derive(Debug)]
 pub struct ImageLoader {
 	/// Image receiver
 	image_rx: crossbeam::channel::Receiver<Image>,
+
+	/// Image sender
+	image_tx: crossbeam::channel::Sender<Image>,
+
+	/// Paths receiver
+	paths_rx: paths::Receiver,
 }
 
 impl ImageLoader {
@@ -24,26 +29,26 @@ impl ImageLoader {
 	///
 	/// # Errors
 	/// Returns an error if unable to create all the loader threads
-	pub fn new(paths_rx: &paths::Receiver) -> Result<Self, anyhow::Error> {
+	pub fn new(paths_rx: paths::Receiver) -> Result<Self, anyhow::Error> {
+		// Create the image channel with the number of threads, since that's likely to
+		// be the number of runners we have
 		let loader_threads = std::thread::available_parallelism()
 			.context("Unable to get available parallelism")?
 			.get();
-
-		// Start all the loader threads
 		let (image_tx, image_rx) = crossbeam::channel::bounded(2 * loader_threads);
-		for thread_idx in 0..loader_threads {
-			let image_tx = image_tx.clone();
-			let paths_rx = paths_rx.clone();
-			let _loader_thread = thread::Builder::new()
-				.name("Image loader".to_owned())
-				.spawn(move || match self::image_loader(&image_tx, &paths_rx) {
-					Ok(()) => log::debug!("Image loader #{thread_idx} successfully quit"),
-					Err(err) => log::warn!("Image loader #{thread_idx} returned `Err`: {err:?}"),
-				})
-				.context("Unable to spawn image loader")?;
-		}
 
-		Ok(Self { image_rx })
+		Ok(Self {
+			image_rx,
+			image_tx,
+			paths_rx,
+		})
+	}
+
+	/// Runs an image loader.
+	///
+	/// Multiple image loaders may run at the same time
+	pub fn run(&self) -> Result<(), anyhow::Error> {
+		self::run_image_loader(&self.image_tx, &self.paths_rx)
 	}
 
 	/// Receives the image, waiting if not ready yet
@@ -62,24 +67,19 @@ impl ImageLoader {
 	}
 }
 
-/// Image loader thread function
-fn image_loader(image_tx: &crossbeam::channel::Sender<Image>, paths_rx: &paths::Receiver) -> Result<(), anyhow::Error> {
-	#[allow(clippy::while_let_loop)] // We might add more steps before/after getting a path
-	loop {
-		// Get the next path
-		let path = match paths_rx.recv() {
-			Ok(path) => path,
-			Err(_) => break,
-		};
-
-		// And try to process it
-		// Note: We can ignore errors on sending, since other senders might still be alive
-		#[allow(clippy::let_underscore_drop)]
+/// Runs the image loader
+fn run_image_loader(
+	image_tx: &crossbeam::channel::Sender<Image>, paths_rx: &paths::Receiver,
+) -> Result<(), anyhow::Error> {
+	while let Ok(path) = paths_rx.recv() {
 		match util::measure(|| load::load_image(&path)) {
 			// If we got it, send it
 			(Ok(image), duration) => {
 				log::trace!("Took {duration:?} to load {path:?}");
-				let _ = image_tx.send(image.to_rgba8());
+				if image_tx.send(image.to_rgba8()).is_err() {
+					log::info!("No more receivers found, quitting");
+					break;
+				}
 			},
 			// If we didn't manage to, log and try again with another path
 			(Err(err), _) => {

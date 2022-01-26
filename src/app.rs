@@ -3,13 +3,13 @@
 //! See the [`App`] type for more details
 
 // Imports
-use crate::{paths, Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Rect, Wgpu};
+use crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Rect, Wgpu};
 use anyhow::Context;
 use cgmath::{Point2, Vector2};
 use crossbeam::atomic::AtomicCell;
 use egui::Widget;
 use parking_lot::Mutex;
-use std::{mem, thread, time::Duration};
+use std::{mem, num::NonZeroUsize, thread, time::Duration};
 use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
 	event::{Event, WindowEvent},
@@ -88,7 +88,7 @@ impl App {
 		let (paths_distributer, paths_rx) = paths::new(args.images_dir);
 
 		// Create the image loader
-		let image_loader = ImageLoader::new(&paths_rx).context("Unable to create image loader")?;
+		let image_loader = ImageLoader::new(paths_rx).context("Unable to create image loader")?;
 
 		// Create all panels
 		let panels = args
@@ -136,34 +136,24 @@ impl App {
 		// Start all threads and then wait in the main thread for events
 		// TODO: Not ignore errors here, although given how `thread::scope` works
 		//       it's somewhat hard to do so
-		let inner = &self.inner;
 		crossbeam::thread::scope(|s| {
 			// Spawn the path distributer thread
-			let _path_distributer = s
-				.builder()
-				.name("Path distributer".to_owned())
-				.spawn(|_| inner.paths_distributer.run())
-				.context("Unable to start renderer thread")?;
+			let _path_distributer = util::spawn_scoped(s, "Path distributer", || self.inner.paths_distributer.run())?;
 
-			// Spawn the updater thread
-			let _updater_thread = s
-				.builder()
-				.name("Updater".to_owned())
-				.spawn(|_| Self::run_updater(inner))
-				.context("Unable to start renderer thread")?;
+			// Spawn all image loaders
+			let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
+			let _image_loaders =
+				util::spawn_scoped_multiple(s, "Image loader", loader_threads, || || self.inner.image_loader.run())?;
 
-			// Spawn the renderer thread
-			let _renderer_thread = s
-				.builder()
-				.name("Renderer".to_owned())
-				.spawn(|_| Self::run_renderer(inner))
-				.context("Unable to start renderer thread")?;
+			// Spawn the updater and renderer thread
+			let _updater_thread = util::spawn_scoped(s, "Updater", || Self::run_updater(&self.inner))?;
+			let _renderer_thread = util::spawn_scoped(s, "Renderer", || Self::run_renderer(&self.inner))?;
 
 			// Run event loop in this thread until we quit
 			let mut cursor_pos = PhysicalPosition::new(0.0, 0.0);
 			self.event_loop.run_return(|event, _, control_flow| {
 				// Update egui
-				inner.egui.platform().lock().handle_event(&event);
+				self.inner.egui.platform().lock().handle_event(&event);
 
 				// Set control for to wait for next event, since we're not doing
 				// anything else on the main thread
@@ -185,7 +175,7 @@ impl App {
 						},
 
 						// If we resized, queue a resize on wgpu
-						WindowEvent::Resized(size) => inner.wgpu.resize(size),
+						WindowEvent::Resized(size) => self.inner.wgpu.resize(size),
 
 						// On move, update the cursor position
 						WindowEvent::CursorMoved { position, .. } => cursor_pos = position,
@@ -196,7 +186,7 @@ impl App {
 							button: winit::event::MouseButton::Right,
 							..
 						} => {
-							inner.queued_settings_window_open_click.store(Some(cursor_pos));
+							self.inner.queued_settings_window_open_click.store(Some(cursor_pos));
 						},
 						_ => (),
 					},
