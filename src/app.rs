@@ -161,8 +161,7 @@ impl App {
 			let _image_loaders =
 				util::spawn_scoped_multiple(s, "Image loader", loader_threads, || || self.inner.image_loader.run())?;
 
-			// Spawn the updater and renderer thread
-			let _updater_thread = util::spawn_scoped(s, "Updater", || Self::run_updater(&self.inner))?;
+			// Spawn the renderer thread
 			let _renderer_thread = util::spawn_scoped(s, "Renderer", || Self::run_renderer(&self.inner))?;
 
 			// Run event loop in this thread until we quit
@@ -225,14 +224,24 @@ impl App {
 		}
 	}
 
-	/// Runs the updater
-	fn run_updater(inner: &Inner) {
+	/// Runs the renderer
+	fn run_renderer(inner: &Inner) {
 		// Duration we're sleep
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
 		loop {
-			// Render
+			// Update
+			// Note: The update is only useful for displaying, so there's no use
+			//       in running it in another thread.
+			//       Especially given that `update` doesn't block.
 			let (res, frame_duration) = crate::util::measure(|| Self::update(inner));
+			match res {
+				Ok(()) => log::trace!("Took {frame_duration:?} to update"),
+				Err(err) => log::warn!("Unable to update: {err:?}"),
+			};
+
+			// Render
+			let (res, frame_duration) = crate::util::measure(|| Self::render(inner));
 			match res {
 				Ok(()) => log::trace!("Took {frame_duration:?} to render"),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -245,7 +254,7 @@ impl App {
 		}
 	}
 
-	/// Updates
+	/// Updates all panels
 	fn update(inner: &Inner) -> Result<(), anyhow::Error> {
 		let mut panels = inner.panels.lock();
 		for panel in &mut *panels {
@@ -261,26 +270,6 @@ impl App {
 		}
 
 		Ok(())
-	}
-
-	/// Runs the renderer
-	fn run_renderer(inner: &Inner) {
-		// Duration we're sleep
-		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
-
-		loop {
-			// Render
-			let (res, frame_duration) = crate::util::measure(|| Self::render(inner));
-			match res {
-				Ok(()) => log::trace!("Took {frame_duration:?} to render"),
-				Err(err) => log::warn!("Unable to render: {err:?}"),
-			};
-
-			// Then sleep until next frame
-			if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
-				thread::sleep(duration);
-			}
-		}
 	}
 
 	/// Renders
