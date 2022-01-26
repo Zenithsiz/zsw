@@ -152,46 +152,7 @@ impl App {
 			// Run event loop in this thread until we quit
 			let mut cursor_pos = PhysicalPosition::new(0.0, 0.0);
 			self.event_loop.run_return(|event, _, control_flow| {
-				// Update egui
-				self.inner.egui.platform().lock().handle_event(&event);
-
-				// Set control for to wait for next event, since we're not doing
-				// anything else on the main thread
-				*control_flow = EventLoopControlFlow::Wait;
-
-				// Then handle the event
-				#[allow(clippy::single_match)] // We might add more in the future
-				match event {
-					Event::WindowEvent { event, .. } => match event {
-						// if we should be closing, set the control flow to exit
-						WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-							log::warn!("Received close request, closing window");
-							*control_flow = EventLoopControlFlow::Exit;
-
-							// Once we reach here, we can just exit, no need to
-							// drop everything
-							// TODO: Go through the drop in debug mode at least.
-							std::process::exit(0);
-						},
-
-						// If we resized, queue a resize on wgpu
-						WindowEvent::Resized(size) => self.inner.wgpu.resize(size),
-
-						// On move, update the cursor position
-						WindowEvent::CursorMoved { position, .. } => cursor_pos = position,
-
-						// If right clicked, queue a click
-						WindowEvent::MouseInput {
-							state: winit::event::ElementState::Pressed,
-							button: winit::event::MouseButton::Right,
-							..
-						} => {
-							self.inner.queued_settings_window_open_click.store(Some(cursor_pos));
-						},
-						_ => (),
-					},
-					_ => (),
-				}
+				Self::event_handler(&self.inner, event, control_flow, &mut cursor_pos);
 			});
 
 			anyhow::Ok(())
@@ -200,6 +161,52 @@ impl App {
 		.expect("Unable to run all threads 'till completion");
 
 		Ok(())
+	}
+
+	/// Event handler
+	fn event_handler(
+		inner: &Inner, event: Event<!>, control_flow: &mut EventLoopControlFlow, cursor_pos: &mut PhysicalPosition<f64>,
+	) {
+		// Update egui
+		inner.egui.platform().lock().handle_event(&event);
+
+		// Set control for to wait for next event, since we're not doing
+		// anything else on the main thread
+		*control_flow = EventLoopControlFlow::Wait;
+
+		// Then handle the event
+		#[allow(clippy::single_match)] // We might add more in the future
+		match event {
+			Event::WindowEvent { event, .. } => match event {
+				// if we should be closing, set the control flow to exit
+				WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+					log::warn!("Received close request, closing window");
+					*control_flow = EventLoopControlFlow::Exit;
+
+					// Once we reach here, we can just exit, no need to
+					// drop everything
+					// TODO: Go through the drop in debug mode at least.
+					std::process::exit(0);
+				},
+
+				// If we resized, queue a resize on wgpu
+				WindowEvent::Resized(size) => inner.wgpu.resize(size),
+
+				// On move, update the cursor position
+				WindowEvent::CursorMoved { position, .. } => *cursor_pos = position,
+
+				// If right clicked, queue a click
+				WindowEvent::MouseInput {
+					state: winit::event::ElementState::Pressed,
+					button: winit::event::MouseButton::Right,
+					..
+				} => {
+					inner.queued_settings_window_open_click.store(Some(*cursor_pos));
+				},
+				_ => (),
+			},
+			_ => (),
+		}
 	}
 
 	/// Runs the updater
