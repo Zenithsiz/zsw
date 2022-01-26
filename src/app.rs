@@ -431,16 +431,8 @@ impl App {
 								// Set the root path
 								inner.paths_distributer.set_root_path(root_path);
 
-								// Then reset all panels and empty the loaded images
-								// TODO: This doesn't fully clear everything, since the image loader
-								//       threads may still be working on an image, but good enough for now.
-								let mut panels = inner.panels.lock();
-								for panel in &mut *panels {
-									panel.state = PanelState::Empty;
-								}
-								mem::drop(panels);
-
-								inner.image_loader.clear();
+								// TODO: Reset all existing images and paths loaded from the
+								//       old path distributer, maybe?
 							}
 						},
 						Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),

@@ -110,8 +110,17 @@ impl Panel {
 			// If we have both, update the progress and swap them if finished
 			PanelState::Both { front, back } if finished => {
 				// Note: Front and back are swapped here since we implicitly swap
-				match self::update_swapped(front, back, None, device, queue, texture_bind_group_layout, past_fade)
-					.context("Unable to update swapped image")?
+				match self::update_swapped(
+					front,
+					back,
+					None,
+					image_loader,
+					device,
+					queue,
+					texture_bind_group_layout,
+					past_fade,
+				)
+				.context("Unable to update swapped image")?
 				{
 					(true, state) => (state, swapped_progress),
 					(false, state) => (state, next_progress),
@@ -123,6 +132,7 @@ impl Panel {
 				back,
 				front,
 				Some(since),
+				image_loader,
 				device,
 				queue,
 				texture_bind_group_layout,
@@ -251,8 +261,8 @@ pub enum PanelState {
 /// Updates a swapped image state and returns the next state
 #[allow(clippy::too_many_arguments)] // TODO:
 fn update_swapped(
-	mut back: PanelImage, front: PanelImage, mut since: Option<Instant>, device: &wgpu::Device, queue: &wgpu::Queue,
-	texture_bind_group_layout: &wgpu::BindGroupLayout, force_wait: bool,
+	mut back: PanelImage, front: PanelImage, mut since: Option<Instant>, image_loader: &ImageLoader,
+	device: &wgpu::Device, queue: &wgpu::Queue, texture_bind_group_layout: &wgpu::BindGroupLayout, force_wait: bool,
 ) -> Result<(bool, PanelState), anyhow::Error> {
 	// If we're force waiting and don't have a `since`, create it,
 	// so we can keep track of how long the request took
@@ -261,7 +271,7 @@ fn update_swapped(
 	}
 
 	let swapped = back
-		.try_update(device, queue, texture_bind_group_layout, force_wait)
+		.try_update(image_loader, device, queue, texture_bind_group_layout, force_wait)
 		.context("Unable to get next image")?;
 	let state = match swapped {
 		// If we updated, switch to `Both`

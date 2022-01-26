@@ -2,7 +2,7 @@
 
 // Imports
 use super::PanelUniforms;
-use crate::img::{Image, ImageLoader, ImageReceiver, ImageUvs};
+use crate::img::{Image, ImageLoader, ImageUvs};
 use anyhow::Context;
 use cgmath::Vector2;
 use wgpu::util::DeviceExt;
@@ -29,9 +29,6 @@ pub struct PanelImage {
 	/// Uniforms bind group
 	uniforms_bind_group: wgpu::BindGroup,
 
-	/// Image receiver
-	image_rx: ImageReceiver,
-
 	/// Image size
 	image_size: Vector2<u32>,
 
@@ -49,8 +46,7 @@ impl PanelImage {
 		texture_bind_group_layout: &wgpu::BindGroupLayout, image_loader: &ImageLoader,
 	) -> Result<Self, anyhow::Error> {
 		// Get an image receiver and the initial image
-		let image_rx = image_loader.receiver();
-		let image = image_rx.recv().context("Unable to get image")?;
+		let image = image_loader.recv().context("Unable to get image")?;
 		let image_size = Vector2::new(image.width(), image.height());
 
 		// Create the texture and sampler
@@ -89,7 +85,6 @@ impl PanelImage {
 			texture_bind_group,
 			uniforms,
 			uniforms_bind_group,
-			image_rx,
 			image_size,
 			swap_dir,
 		})
@@ -98,13 +93,13 @@ impl PanelImage {
 	/// Tries to update this image and returns if actually updated
 	#[allow(clippy::unnecessary_wraps)] // It might fail in the future
 	pub fn try_update(
-		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture_bind_group_layout: &wgpu::BindGroupLayout,
-		force_wait: bool,
+		&mut self, image_loader: &ImageLoader, device: &wgpu::Device, queue: &wgpu::Queue,
+		texture_bind_group_layout: &wgpu::BindGroupLayout, force_wait: bool,
 	) -> Result<bool, anyhow::Error> {
-		let image = match self.image_rx.try_recv().context("Unable to receive image")? {
+		let image = match image_loader.try_recv().context("Unable to receive image")? {
 			Some(image) => image,
 			None => match force_wait {
-				true => self.image_rx.recv().context("Unable to receive image")?,
+				true => image_loader.recv().context("Unable to receive image")?,
 				false => return Ok(false),
 			},
 		};

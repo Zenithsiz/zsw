@@ -46,31 +46,6 @@ impl ImageLoader {
 		Ok(Self { image_rx })
 	}
 
-	/// Requests an image to be loaded
-	///
-	/// # Errors
-	/// Returns an error if unable to send a request
-	#[must_use]
-	pub fn receiver(&self) -> ImageReceiver {
-		ImageReceiver {
-			image_rx: self.image_rx.clone(),
-		}
-	}
-
-	/// Clears all images in the receiver
-	pub fn clear(&self) {
-		while self.image_rx.try_recv().is_ok() {}
-	}
-}
-
-/// Image receiver
-#[derive(Debug)]
-pub struct ImageReceiver {
-	/// Image receiver
-	image_rx: crossbeam::channel::Receiver<Image>,
-}
-
-impl ImageReceiver {
 	/// Receives the image, waiting if not ready yet
 	pub fn recv(&self) -> Result<Image, anyhow::Error> {
 		self.image_rx.recv().context("Unable to get image from loader thread")
