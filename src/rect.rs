@@ -7,6 +7,7 @@ use std::{error::Error, fmt};
 
 /// A rectangle
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)] // TODO: serialize to string
 pub struct Rect<T> {
 	/// Position
 	pub pos: Point2<T>,

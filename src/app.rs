@@ -3,7 +3,7 @@
 //! See the [`App`] type for more details
 
 // Imports
-use crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Rect, Wgpu};
+use crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, PanelsProfile, PanelsRenderer, Rect, Wgpu};
 use anyhow::Context;
 use cgmath::{Point2, Vector2};
 use crossbeam::atomic::AtomicCell;
@@ -60,6 +60,9 @@ struct Inner {
 
 	/// New panel parameters
 	new_panel_parameters: Mutex<(Rect<u32>, f32, f32)>,
+
+	/// Profiles
+	_profiles: Vec<PanelsProfile>,
 }
 
 /// Application state
@@ -106,6 +109,18 @@ impl App {
 		// Create egui
 		let egui = Egui::new(window, &wgpu).context("Unable to create egui state")?;
 
+		// Read all profiles
+		let profiles = match util::parse_json_from_file("zsw_profiles.json") {
+			Ok(profiles) => {
+				log::info!("Loaded profiles {profiles:#?}");
+				profiles
+			},
+			Err(err) => {
+				log::info!("Unable to load profiles: {err:?}");
+				vec![]
+			},
+		};
+
 		Ok(Self {
 			event_loop,
 			inner: Inner {
@@ -127,6 +142,7 @@ impl App {
 					15.0,
 					0.85,
 				)),
+				_profiles: profiles,
 			},
 		})
 	}

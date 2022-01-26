@@ -11,7 +11,9 @@ pub use scan_dir::visit_files_dir;
 // Imports
 use anyhow::Context;
 use std::{
+	fs,
 	hash::{Hash, Hasher},
+	path::Path,
 	time::{Duration, Instant},
 };
 
@@ -66,6 +68,15 @@ where
 {
 	let name = name.into();
 	(0..threads).map(move |_| self::spawn_scoped(s, &name, f())).collect()
+}
+
+/// Parses json from a file
+pub fn parse_json_from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, anyhow::Error> {
+	// Open the file
+	let file = fs::File::open(path).context("Unable to open file")?;
+
+	// Then parse it
+	serde_json::from_reader(file).context("Unable to parse file")
 }
 
 /// Hashes a value using `twox_hash`

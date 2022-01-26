@@ -4,11 +4,13 @@
 
 // Modules
 mod image;
+mod profile;
 mod renderer;
 
 // Exports
 pub use self::{
 	image::PanelImage,
+	profile::PanelsProfile,
 	renderer::{PanelUniforms, PanelVertex, PanelsRenderer},
 };
 
