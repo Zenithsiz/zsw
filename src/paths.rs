@@ -6,29 +6,19 @@
 //! receive image paths, but it is made generic to be able to serve
 //! other purposes (and maybe one day be moved to it's own crate).
 //!
-//! The current implementation is made to serve 2 entities:
-//! - Receivers
-//! - Distributer
+//! # [`Receiver`]
+//! The receiver type is used to receive paths from the distributer.
+//! It may be cloned and moved to other threads.
 //!
-//! # Receivers
-//! The receivers are the entities that receive paths, they
-//! store an instance of the [`Receiver`] type, that allows
-//! receiving paths, as well as signaling paths for removal,
-//! so they aren't distributed again.
+//! It may also perform some operation on the existing paths, such as removing
+//! a path. This is useful when loading images and a path isn't an image.
+//! There would be no use in keeping the path around, so it is removed from
+//! the path list so it won't be distributed next cycle.
 //!
-//! The removal feature exists, for example, for when the image loaders encounters
-//! a non-image path and wants to signal it to not be distributed again so it doesn't
-//! need to re-check the file again.
-//!
-//! # Distributer
-//! The heart of the implementation. Responsible for organizing and distributing
-//! all paths for the receivers to receive.
-//!
-//! Only a single instance of the [`Distributer`] type exists per channel.
-//! This instance can then be run until all receivers exit.
-//!
-//! May also be used to change the channel state, such as the current root directory,
-//! what happens when the end of the paths is reached, and others.
+//! # [`Distributer`]
+//! The distributer is responsible for distributing paths to all threads.
+//! It may not be cloned and must be ran using its' [`run`](Distributer::run)
+//! method so receivers may receive paths.
 
 // Modules
 mod distributer;
@@ -54,7 +44,7 @@ struct Inner {
 	cached_paths: HashSet<Arc<PathBuf>>,
 
 	/// If the paths need to be reloaded
-	// Note: This is set to `true` at the beginning to,
+	// Note: This is set to `true` at the beginning too,
 	//       to load all paths initially
 	reload_cached: bool,
 }
