@@ -204,22 +204,12 @@ impl Panel {
 		Ok(())
 	}
 
-	/// Draws the panel to `render_pass`
+	/// Renders the panel to the render pass `render_pass`.
 	pub fn draw<'a>(
-		&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue, surface_size: PhysicalSize<u32>,
+		&'a mut self, queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'a>, surface_size: PhysicalSize<u32>,
 	) {
 		// Calculate the matrix for the panel
-		let x_scale = self.geometry.size[0] as f32 / surface_size.width as f32;
-		let y_scale = self.geometry.size[1] as f32 / surface_size.height as f32;
-
-		let x_offset = self.geometry.pos[0] as f32 / surface_size.width as f32;
-		let y_offset = self.geometry.pos[1] as f32 / surface_size.height as f32;
-
-		let matrix = Matrix4::from_translation(Vector3::new(
-			-1.0 + x_scale + 2.0 * x_offset,
-			1.0 - y_scale - 2.0 * y_offset,
-			0.0,
-		)) * Matrix4::from_nonuniform_scale(x_scale, -y_scale, 1.0);
+		let matrix = self.matrix(surface_size);
 
 		// Calculate the alpha and progress for the back image
 		let (back_alpha, back_progress) = match self.progress {
@@ -262,6 +252,25 @@ impl Panel {
 			image.bind(render_pass);
 			render_pass.draw_indexed(0..6, 0, 0..1);
 		}
+	}
+
+	/// Calculates the matrix for this panel
+	// Note: This matrix simply goes from a geometry in physical units
+	//       onto shader coordinates.
+	fn matrix(&mut self, surface_size: PhysicalSize<u32>) -> Matrix4<f32> {
+		let x_scale = self.geometry.size[0] as f32 / surface_size.width as f32;
+		let y_scale = self.geometry.size[1] as f32 / surface_size.height as f32;
+
+		let x_offset = self.geometry.pos[0] as f32 / surface_size.width as f32;
+		let y_offset = self.geometry.pos[1] as f32 / surface_size.height as f32;
+
+		let translation = Matrix4::from_translation(Vector3::new(
+			-1.0 + x_scale + 2.0 * x_offset,
+			1.0 - y_scale - 2.0 * y_offset,
+			0.0,
+		));
+		let scaling = Matrix4::from_nonuniform_scale(x_scale, -y_scale, 1.0);
+		translation * scaling
 	}
 }
 

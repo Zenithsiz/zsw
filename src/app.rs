@@ -43,11 +43,11 @@ struct Inner {
 	/// Image loader
 	image_loader: ImageLoader,
 
-	/// Panels
-	panels: Mutex<Vec<Panel>>,
-
 	/// Panels renderer
 	panels_renderer: PanelsRenderer,
+
+	/// Panels
+	panels: Mutex<Vec<Panel>>,
 
 	/// Egui
 	egui: Egui,
@@ -262,7 +262,7 @@ impl App {
 				inner.wgpu.device(),
 				inner.wgpu.queue(),
 				inner.panels_renderer.uniforms_bind_group_layout(),
-				inner.panels_renderer.texture_bind_group_layout(),
+				inner.panels_renderer.image_bind_group_layout(),
 				&inner.image_loader,
 			) {
 				log::warn!("Unable to update panel: {err:?}");
@@ -291,7 +291,7 @@ impl App {
 			let mut panels = inner.panels.lock();
 			inner
 				.panels_renderer
-				.render(&mut *panels, encoder, surface_view, inner.wgpu.queue(), surface_size)
+				.render(&mut *panels, inner.wgpu.queue(), encoder, surface_view, surface_size)
 				.context("Unable to render panels")?;
 
 			// Render egui

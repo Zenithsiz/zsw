@@ -1,4 +1,4 @@
-//! Panel renderer
+//! Panels renderer
 
 // Modules
 mod uniform;
@@ -13,92 +13,64 @@ use crate::Panel;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
-/// Renderer for all panels
+/// Panels renderer
 ///
 /// Responsible for rendering all panels.
+///
+/// Exists because all panels share a lot of state, such as
+/// their vertices and indices. Using this renderer means each
+/// panel instance only needs to store their own uniform buffer
+// Note: Vertices and indices are shared because all panels are
+//       rendered as just a quad. Their position is determined by
+//       the matrix sent in the uniform. Their UVs are also determined
+//       via the uniforms.
 #[derive(Debug)]
 pub struct PanelsRenderer {
 	/// Render pipeline
 	render_pipeline: wgpu::RenderPipeline,
 
-	/// Index buffer
-	// Note: Since we're just rendering rectangles, the indices
-	//       buffer is shared for all panels for now.
-	indices: wgpu::Buffer,
-
 	/// Vertex buffer
-	// Note: We share the same vertex buffer and simply transform
-	//       the image using the uniforms
 	vertices: wgpu::Buffer,
+
+	/// Index buffer
+	indices: wgpu::Buffer,
 
 	/// Uniform bind group
 	uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Image bind group layout
-	texture_bind_group_layout: wgpu::BindGroupLayout,
+	image_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
-	#[allow(clippy::too_many_lines)] // TODO:
 	pub async fn new(
 		device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat,
 	) -> Result<Self, anyhow::Error> {
 		// Create the index buffer
-		const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
-		let index_buffer_descriptor = wgpu::util::BufferInitDescriptor {
-			label:    Some("Index buffer"),
-			contents: bytemuck::cast_slice(&INDICES),
-			usage:    wgpu::BufferUsages::INDEX,
-		};
-		let indices = device.create_buffer_init(&index_buffer_descriptor);
+		let indices = self::create_indices(device);
 
 		// Create the vertex buffer
-		const VERTICES: [PanelVertex; 4] = [
-			PanelVertex {
-				pos: [-1.0, -1.0],
-				uvs: [0.0, 0.0],
-			},
-			PanelVertex {
-				pos: [1.0, -1.0],
-				uvs: [1.0, 0.0],
-			},
-			PanelVertex {
-				pos: [-1.0, 1.0],
-				uvs: [0.0, 1.0],
-			},
-			PanelVertex {
-				pos: [1.0, 1.0],
-				uvs: [1.0, 1.0],
-			},
-		];
-		let vertex_buffer_descriptor = wgpu::util::BufferInitDescriptor {
-			label:    None,
-			contents: bytemuck::cast_slice(&VERTICES),
-			usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-		};
-		let vertices = device.create_buffer_init(&vertex_buffer_descriptor);
+		let vertices = self::create_vertices(device);
 
-		// Create the image bind group layout
-		let texture_bind_group_layout = self::create_texture_bind_group_layout(device);
-
-		// Create the uniform bind group
+		// Create the bind groups
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(device);
+		let image_bind_group_layout = self::create_image_bind_group_layout(device);
 
 		// Create the render pipeline
 		let render_pipeline = self::create_render_pipeline(
 			device,
 			surface_texture_format,
 			&uniforms_bind_group_layout,
-			&texture_bind_group_layout,
+			&image_bind_group_layout,
 		);
 
 		Ok(Self {
 			render_pipeline,
-			indices,
 			vertices,
+			indices,
 			uniforms_bind_group_layout,
-			texture_bind_group_layout,
+			image_bind_group_layout,
 		})
 	}
 
@@ -107,23 +79,23 @@ impl PanelsRenderer {
 		&self.uniforms_bind_group_layout
 	}
 
-	/// Returns the texture bind group layout
-	pub const fn texture_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-		&self.texture_bind_group_layout
+	/// Returns the image bind group layout
+	pub const fn image_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+		&self.image_bind_group_layout
 	}
 
-	/// Renders all panels
+	/// Renders all panels `panels` onto
 	pub fn render(
-		&self, panels: &mut [Panel], encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, queue: &wgpu::Queue,
-		surface_size: PhysicalSize<u32>,
+		&self, panels: &mut [Panel], queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder,
+		surface_view: &wgpu::TextureView, surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
-		// CReate the render pass
+		// Create the render pass for all panels
 		let render_pass_descriptor = wgpu::RenderPassDescriptor {
-			label:                    Some("Render pass"),
+			label:                    Some("[zsw::panel] Render pass"),
 			color_attachments:        &[wgpu::RenderPassColorAttachment {
-				view,
+				view:           surface_view,
 				resolve_target: None,
-				ops: wgpu::Operations {
+				ops:            wgpu::Operations {
 					load:  wgpu::LoadOp::Clear(wgpu::Color {
 						r: 0.0,
 						g: 0.0,
@@ -136,23 +108,49 @@ impl PanelsRenderer {
 			depth_stencil_attachment: None,
 		};
 		let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
+
+		// Set our shared pipeline, indices and vertices
 		render_pass.set_pipeline(&self.render_pipeline);
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
 		for panel in panels {
-			panel.draw(&mut render_pass, queue, surface_size);
+			panel.draw(queue, &mut render_pass, surface_size);
 		}
 
 		Ok(())
 	}
 }
 
+/// Creates the vertices
+fn create_vertices(device: &wgpu::Device) -> wgpu::Buffer {
+	let descriptor = wgpu::util::BufferInitDescriptor {
+		label:    Some("[zsw::panel] Vertex buffer"),
+		contents: bytemuck::cast_slice(&PanelVertex::QUAD),
+		usage:    wgpu::BufferUsages::VERTEX,
+	};
 
-/// Creates the texture bind group layout
-fn create_texture_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+	device.create_buffer_init(&descriptor)
+}
+
+/// Creates the indices
+fn create_indices(device: &wgpu::Device) -> wgpu::Buffer {
+	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
+	let descriptor = wgpu::util::BufferInitDescriptor {
+		label:    Some("[zsw::panel] Index buffer"),
+		contents: bytemuck::cast_slice(&INDICES),
+		usage:    wgpu::BufferUsages::INDEX,
+	};
+
+	device.create_buffer_init(&descriptor)
+}
+
+
+/// Creates the image bind group layout
+fn create_image_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
+		label:   Some("[zsw::panel] Image bind group layout"),
 		entries: &[
 			wgpu::BindGroupLayoutEntry {
 				binding:    0,
@@ -171,7 +169,6 @@ fn create_texture_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLay
 				count:      None,
 			},
 		],
-		label:   None,
 	};
 
 	device.create_bind_group_layout(&descriptor)
@@ -180,6 +177,7 @@ fn create_texture_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLay
 /// Creates the uniforms bind group layout
 fn create_uniforms_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
+		label:   Some("[zsw::panel] Uniform bind group layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
 			binding:    0,
 			visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
@@ -190,7 +188,6 @@ fn create_uniforms_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLa
 			},
 			count:      None,
 		}],
-		label:   None,
 	};
 
 	device.create_bind_group_layout(&descriptor)
@@ -203,14 +200,14 @@ fn create_render_pipeline(
 ) -> wgpu::RenderPipeline {
 	// Load the shader
 	let shader_descriptor = wgpu::ShaderModuleDescriptor {
-		label:  Some("Shader"),
+		label:  Some("[zsw::panel] Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("renderer/shader.wgsl").into()),
 	};
 	let shader = device.create_shader_module(&shader_descriptor);
 
 	// Create the pipeline layout
 	let render_pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
-		label:                Some("Render pipeline layout"),
+		label:                Some("[zsw::panel] Render pipeline layout"),
 		bind_group_layouts:   &[uniforms_bind_group_layout, texture_bind_group_layout],
 		push_constant_ranges: &[],
 	};
@@ -222,7 +219,7 @@ fn create_render_pipeline(
 		write_mask: wgpu::ColorWrites::ALL,
 	}];
 	let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
-		label:         Some("Render pipeline"),
+		label:         Some("[zsw::panel] Render pipeline"),
 		layout:        Some(&render_pipeline_layout),
 		vertex:        wgpu::VertexState {
 			module:      &shader,
