@@ -8,9 +8,6 @@ pub struct ImageUvs {
 	/// uvs
 	start: [f32; 2],
 
-	/// End
-	end: [f32; 2],
-
 	/// Swap direction
 	swap_dir: bool,
 }
@@ -19,16 +16,12 @@ impl ImageUvs {
 	/// Creates the uvs for an image
 	#[must_use]
 	pub fn new(image_width: f32, image_height: f32, window_width: f32, window_height: f32, swap_dir: bool) -> Self {
-		let (start, end) = match image_width / image_height >= window_width / window_height {
-			true => ([(window_width / image_width) / (window_height / image_height), 1.0], [
-				1.0, 1.0,
-			]),
-			false => ([1.0, (window_height / image_height) / (window_width / image_width)], [
-				1.0, 1.0,
-			]),
+		let start = match image_width / image_height >= window_width / window_height {
+			true => [(window_width / image_width) / (window_height / image_height), 1.0],
+			false => [1.0, (window_height / image_height) / (window_width / image_width)],
 		};
 
-		Self { start, end, swap_dir }
+		Self { start, swap_dir }
 	}
 
 	/// Returns the starting uvs
@@ -45,6 +38,6 @@ impl ImageUvs {
 			false => f,
 		};
 
-		[f * (self.end[0] - self.start[0]), f * (self.end[1] - self.start[1])]
+		[f * (1.0 - self.start[0]), f * (1.0 - self.start[1])]
 	}
 }
