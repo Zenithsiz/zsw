@@ -7,7 +7,7 @@
 //!
 //! This allows the application to not be exposed to the verbose
 //! details of `wgpu` and simply use the defaults [`Wgpu`] offers,
-//! which are tailed for this application.
+//! which are tailored for this application.
 
 // Imports
 use anyhow::Context;
@@ -20,6 +20,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 // Note: Exists so we may lock both the surface and size behind
 //       the same mutex, to ensure resizes are atomic in regards
 //       to code using the surface.
+//       See the note on the surface size on why this is important.
 #[derive(Debug)]
 pub struct Surface {
 	/// Surface
@@ -36,9 +37,7 @@ pub struct Surface {
 	size: PhysicalSize<u32>,
 }
 
-/// Wgpu renderer
-///
-/// Responsible for interfacing with `wgpu`.
+/// Wgpu interface
 // TODO: Figure out if drop order matters here. Dropping the surface after the device/queue
 //       seems to not result in any panics, but it might be worth checking, especially if we
 //       ever need to "restart" `wgpu` in any scenario without restarting the application.
@@ -67,7 +66,7 @@ pub struct Wgpu {
 
 	/// Surface texture format
 	///
-	/// Used no each resize, so we configure the surface with the same texture format each time.
+	/// Used on each resize, so we configure the surface with the same texture format each time.
 	surface_texture_format: TextureFormat,
 
 	/// Queued resize
