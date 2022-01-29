@@ -20,20 +20,20 @@ const RECORD_COLORS: ColoredLevelConfig = ColoredLevelConfig {
 
 /// Initializes all logging for the application
 pub fn init() -> Result<(), anyhow::Error> {
-	// Create the base dispatcher
-	let mut dispatcher = fern::Dispatch::new().chain(self::stderr_dispatch());
+	// Create the base dispatch
+	let mut dispatch = fern::Dispatch::new().chain(self::stderr_dispatch());
 
 	// Try to add a file dispatch
 	let file_err = match self::file_dispatch() {
 		Ok(file) => {
-			dispatcher = dispatcher.chain(file);
+			dispatch = dispatch.chain(file);
 			None
 		},
 		Err(err) => Some(err),
 	};
 
 	// Then apply
-	dispatcher.apply().context("Unable to initialize logger")?;
+	dispatch.apply().context("Unable to initialize logger")?;
 
 	// If we failed to add the file dispatch, log a warning
 	if let Some(err) = file_err {
@@ -48,15 +48,13 @@ pub fn init() -> Result<(), anyhow::Error> {
 
 /// Returns the stderr dispatch
 fn stderr_dispatch() -> fern::Dispatch {
-	fern::Dispatch::new()
+	let dispatch = fern::Dispatch::new()
 		.format(self::fmt_log(true))
-		.level_for("wgpu", log::LevelFilter::Warn)
-		.level_for("wgpu_hal", log::LevelFilter::Warn)
-		.level_for("wgpu_core", log::LevelFilter::Warn)
-		.level_for("naga", log::LevelFilter::Warn)
-		.level_for("winit", log::LevelFilter::Warn)
 		.level(log::LevelFilter::Info)
-		.chain(std::io::stderr())
+		.chain(std::io::stderr());
+
+	// Note: For `stderr` always only emit warnings from other libraries
+	self::set_libs_levels(dispatch, log::LevelFilter::Warn)
 }
 
 /// Returns the file dispatch
@@ -64,22 +62,39 @@ fn file_dispatch() -> Result<fern::Dispatch, anyhow::Error> {
 	// Try to create the output file
 	let file = fs::File::create("latest.log").context("Unable to create log file `latest.log`")?;
 
-	let dispatcher = fern::Dispatch::new()
-		.format(self::fmt_log(false))
-		.level_for("wgpu", log::LevelFilter::Warn)
-		.level_for("wgpu_hal", log::LevelFilter::Warn)
-		.level_for("wgpu_core", log::LevelFilter::Warn)
-		.level_for("naga", log::LevelFilter::Warn)
-		.level_for("winit", log::LevelFilter::Warn);
+	// Create the dispatcher
+	let dispatch = fern::Dispatch::new().format(self::fmt_log(false));
+	let dispatch = self::set_libs_levels(dispatch, log::LevelFilter::Debug);
 
-	// On debug builds, log trace to file, else debug
-	#[cfg(debug_assertions)]
-	let dispatcher = dispatcher.level(log::LevelFilter::Trace);
+	// Note: On debug builds, log trace to file, else debug
+	let dispatch = match cfg!(debug_assertions) {
+		true => dispatch.level(log::LevelFilter::Trace),
+		false => dispatch.level(log::LevelFilter::Debug),
+	};
 
-	#[cfg(not(debug_assertions))]
-	let dispatcher = dispatcher.level(log::LevelFilter::Debug);
+	Ok(dispatch.chain(file))
+}
 
-	Ok(dispatcher.chain(file))
+/// Sets the levels for a dispatch
+fn set_libs_levels(dispatch: fern::Dispatch, max_level: log::LevelFilter) -> fern::Dispatch {
+	// Note: By default in release builds we start at `Warn`
+	let default_level = match cfg!(debug_assertions) {
+		true => log::LevelFilter::Info,
+		false => log::LevelFilter::Warn,
+	};
+	let default_level = default_level.min(max_level);
+
+	// Note: We don't emit perf by default
+	let dispatch = dispatch.level_for("zsw::perf", log::LevelFilter::Off);
+
+	// Filter out some modules to use the default level
+	dispatch
+		.level_for("wgpu", default_level)
+		.level_for("wgpu_hal", default_level)
+		.level_for("wgpu_core", default_level)
+		.level_for("naga", default_level)
+		.level_for("winit", default_level)
+		.level_for("mio", default_level)
 }
 
 /// Returns a formatter for the logger
@@ -103,7 +118,7 @@ fn fmt_log(use_colors: bool) -> impl Fn(fern::FormatCallback, &fmt::Arguments, &
 }
 
 /// Formats a record
-pub fn fmt_level(level: log::Level, use_colors: bool) -> impl fmt::Display {
+fn fmt_level(level: log::Level, use_colors: bool) -> impl fmt::Display {
 	DisplayWrapper::new(move |f| match use_colors {
 		true => write!(f, "{}", RECORD_COLORS.color(level)),
 		false => write!(f, "{}", level),

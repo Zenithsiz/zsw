@@ -236,14 +236,14 @@ impl App {
 			//       Especially given that `update` doesn't block.
 			let (res, frame_duration) = crate::util::measure(|| Self::update(inner));
 			match res {
-				Ok(()) => log::trace!("Took {frame_duration:?} to update"),
+				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to update"),
 				Err(err) => log::warn!("Unable to update: {err:?}"),
 			};
 
 			// Render
 			let (res, frame_duration) = crate::util::measure(|| Self::render(inner));
 			match res {
-				Ok(()) => log::trace!("Took {frame_duration:?} to render"),
+				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
 			};
 

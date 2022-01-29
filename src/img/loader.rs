@@ -75,7 +75,7 @@ fn run_image_loader(
 		match util::measure(|| load::load_image(&path)) {
 			// If we got it, send it
 			(Ok(image), duration) => {
-				log::trace!("Took {duration:?} to load {path:?}");
+				log::trace!(target: "zsw::perf", "Took {duration:?} to load {path:?}");
 				if image_tx.send(image.to_rgba8()).is_err() {
 					log::info!("No more receivers found, quitting");
 					break;

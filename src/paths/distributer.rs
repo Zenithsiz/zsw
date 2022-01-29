@@ -78,7 +78,7 @@ impl Distributer {
 			})
 			.into_ok();
 		});
-		log::debug!("Took {duration:?} to load all paths from {root_path:?}");
+		log::trace!(target: "zsw::perf", "Took {duration:?} to load all paths from {root_path:?}");
 	}
 
 	/// Returns the current root path
