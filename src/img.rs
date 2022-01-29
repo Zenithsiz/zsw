@@ -8,3 +8,25 @@ mod uvs;
 // Exports
 pub use loader::ImageLoader;
 pub use uvs::ImageUvs;
+
+// Imports
+use cgmath::Vector2;
+use image::{DynamicImage, GenericImageView};
+use std::{path::PathBuf, sync::Arc};
+
+/// Loaded image
+#[derive(Debug)]
+pub struct Image {
+	/// Path of the image
+	pub path: Arc<PathBuf>,
+
+	/// Image
+	pub image: DynamicImage,
+}
+
+impl Image {
+	/// Returns the image's size
+	pub fn size(&self) -> Vector2<u32> {
+		Vector2::new(self.image.width(), self.image.height())
+	}
+}

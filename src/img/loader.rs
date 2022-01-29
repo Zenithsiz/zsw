@@ -7,18 +7,18 @@
 mod load;
 
 // Imports
+use super::Image;
 use crate::{paths, util};
 use anyhow::Context;
-use image::DynamicImage;
 
 /// Image loader
 #[derive(Debug)]
 pub struct ImageLoader {
 	/// Image receiver
-	image_rx: crossbeam::channel::Receiver<DynamicImage>,
+	image_rx: crossbeam::channel::Receiver<Image>,
 
 	/// Image sender
-	image_tx: crossbeam::channel::Sender<DynamicImage>,
+	image_tx: crossbeam::channel::Sender<Image>,
 
 	/// Paths receiver
 	paths_rx: paths::Receiver,
@@ -48,12 +48,12 @@ impl ImageLoader {
 	}
 
 	/// Receives the image, waiting if not ready yet
-	pub fn recv(&self) -> Result<DynamicImage, anyhow::Error> {
+	pub fn recv(&self) -> Result<Image, anyhow::Error> {
 		self.image_rx.recv().context("Unable to get image from loader thread")
 	}
 
 	/// Attempts to receive the image
-	pub fn try_recv(&self) -> Result<Option<DynamicImage>, anyhow::Error> {
+	pub fn try_recv(&self) -> Result<Option<Image>, anyhow::Error> {
 		// Try to get the result
 		match self.image_rx.try_recv() {
 			Ok(image) => Ok(Some(image)),
@@ -65,7 +65,7 @@ impl ImageLoader {
 
 /// Runs the image loader
 fn run_image_loader(
-	image_tx: &crossbeam::channel::Sender<DynamicImage>, paths_rx: &paths::Receiver,
+	image_tx: &crossbeam::channel::Sender<Image>, paths_rx: &paths::Receiver,
 ) -> Result<(), anyhow::Error> {
 	while let Ok(path) = paths_rx.recv() {
 		match util::measure(|| load::load_image(&path)) {
@@ -73,6 +73,8 @@ fn run_image_loader(
 			(Ok(image), duration) => {
 				let format = util::image_format(&image);
 				log::debug!(target: "zsw::perf", "Took {duration:?} to load {path:?} (format: {format})");
+
+				let image = Image { path, image };
 				if image_tx.send(image).is_err() {
 					log::info!("No more receivers found, quitting");
 					break;

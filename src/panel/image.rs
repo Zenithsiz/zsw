@@ -2,7 +2,10 @@
 
 // Imports
 use super::PanelUniforms;
-use crate::{img::ImageUvs, util};
+use crate::{
+	img::{Image, ImageUvs},
+	util,
+};
 use cgmath::Vector2;
 use image::{DynamicImage, GenericImageView};
 use wgpu::util::DeviceExt;
@@ -40,11 +43,11 @@ impl PanelImage {
 	/// Creates a new image
 	pub fn new(
 		device: &wgpu::Device, queue: &wgpu::Queue, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
-		texture_bind_group_layout: &wgpu::BindGroupLayout, image: DynamicImage,
+		texture_bind_group_layout: &wgpu::BindGroupLayout, image: Image,
 	) -> Result<Self, anyhow::Error> {
 		// Create the texture and sampler
-		let image_size = Vector2::new(image.width(), image.height());
-		let (texture, texture_view) = self::create_image_texture(image, device, queue);
+		let image_size = image.size();
+		let (texture, texture_view) = self::create_image_texture(image.image, device, queue);
 		let texture_sampler = self::create_texture_sampler(device);
 
 		// Create the uniforms
@@ -87,14 +90,14 @@ impl PanelImage {
 	#[allow(clippy::unnecessary_wraps)] // It might fail in the future
 	pub fn update(
 		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture_bind_group_layout: &wgpu::BindGroupLayout,
-		image: DynamicImage,
+		image: Image,
 	) -> Result<(), anyhow::Error> {
 		// Update the image
-		self.image_size = Vector2::new(image.width(), image.height());
+		self.image_size = image.size();
 		self.swap_dir = rand::random();
 
 		// Then update our texture
-		(self.texture, self.texture_view) = self::create_image_texture(image, device, queue);
+		(self.texture, self.texture_view) = self::create_image_texture(image.image, device, queue);
 		self.texture_bind_group = self::create_texture_bind_group(
 			texture_bind_group_layout,
 			&self.texture_view,
@@ -179,7 +182,7 @@ fn create_image_texture(
 		image @ DynamicImage::ImageRgba8(_) => (image, wgpu::TextureFormat::Rgba8UnormSrgb),
 
 		// TODO: Don't convert more common formats (such as rgb8) if possible.
-		
+
 		// Else simply convert to rgba8
 		image => {
 			let old_format = util::image_format(&image);

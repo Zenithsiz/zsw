@@ -15,8 +15,10 @@ pub use self::{
 };
 
 // Imports
-use crate::{img::ImageLoader, Rect};
-use ::image::DynamicImage;
+use crate::{
+	img::{Image, ImageLoader},
+	Rect,
+};
 use anyhow::Context;
 use cgmath::{Matrix4, Vector3};
 use std::{
@@ -59,7 +61,7 @@ pub struct Panel {
 #[derive(Debug)]
 pub enum NextImageState {
 	/// Ready
-	Ready(DynamicImage),
+	Ready(Image),
 
 	/// Waiting
 	Waiting {
@@ -93,7 +95,7 @@ impl NextImageState {
 	}
 
 	/// Takes the image, if any
-	pub fn take_image(&mut self) -> Option<DynamicImage> {
+	pub fn take_image(&mut self) -> Option<Image> {
 		let image;
 		(*self, image) = match mem::replace(self, Self::Empty) {
 			Self::Ready(image) => (Self::Empty, Some(image)),
