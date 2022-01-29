@@ -258,13 +258,7 @@ impl App {
 	fn update(inner: &Inner) -> Result<(), anyhow::Error> {
 		let mut panels = inner.panels.lock();
 		for panel in &mut *panels {
-			if let Err(err) = panel.update(
-				inner.wgpu.device(),
-				inner.wgpu.queue(),
-				inner.panels_renderer.uniforms_bind_group_layout(),
-				inner.panels_renderer.image_bind_group_layout(),
-				&inner.image_loader,
-			) {
+			if let Err(err) = panel.update(&inner.wgpu, &inner.panels_renderer, &inner.image_loader) {
 				log::warn!("Unable to update panel: {err:?}");
 			}
 		}

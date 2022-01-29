@@ -19,19 +19,3 @@ pub struct PanelUniforms {
 
 	pub _pad: [f32; 3],
 }
-
-impl PanelUniforms {
-	/// Creates new uniforms
-	// TODO: Do this properly
-	pub const fn new() -> Self {
-		Self {
-			matrix:     [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [
-				0.0, 0.0, 0.0, 1.0,
-			]],
-			uvs_start:  [0.0, 0.0],
-			uvs_offset: [0.0, 0.0],
-			alpha:      1.0,
-			_pad:       [0.0; 3],
-		}
-	}
-}

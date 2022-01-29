@@ -1,17 +1,20 @@
 //! Image
 
 // Imports
-use super::PanelUniforms;
 use crate::{
 	img::{Image, ImageUvs},
-	util,
+	util, Wgpu,
 };
 use cgmath::Vector2;
 use image::{DynamicImage, GenericImageView};
+use std::path::Path;
 use wgpu::util::DeviceExt;
 
-/// Image
-// TODO: Don't like that this stores the panel size and swap direction, check what we'll do
+use super::PanelUniforms;
+
+/// Panel's image
+///
+/// Represents a single image of a panel.
 #[derive(Debug)]
 pub struct PanelImage {
 	/// Texture
@@ -24,7 +27,7 @@ pub struct PanelImage {
 	texture_sampler: wgpu::Sampler,
 
 	/// Texture bind group
-	texture_bind_group: wgpu::BindGroup,
+	image_bind_group: wgpu::BindGroup,
 
 	/// Uniforms
 	uniforms: wgpu::Buffer,
@@ -34,30 +37,28 @@ pub struct PanelImage {
 
 	/// Image size
 	image_size: Vector2<u32>,
-
-	/// If we're swapping scrolling directions
-	swap_dir: bool,
 }
 
 impl PanelImage {
 	/// Creates a new image
 	pub fn new(
-		device: &wgpu::Device, queue: &wgpu::Queue, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
-		texture_bind_group_layout: &wgpu::BindGroupLayout, image: Image,
-	) -> Result<Self, anyhow::Error> {
+		wgpu: &Wgpu, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
+		image_bind_group_layout: &wgpu::BindGroupLayout, image: Image,
+	) -> Self {
 		// Create the texture and sampler
 		let image_size = image.size();
-		let (texture, texture_view) = self::create_image_texture(image.image, device, queue);
-		let texture_sampler = self::create_texture_sampler(device);
+		let (texture, texture_view) = self::create_image_texture(wgpu, &image.path, image.image);
+		let texture_sampler = self::create_texture_sampler(wgpu.device());
 
 		// Create the uniforms
-		let uniforms = PanelUniforms::new();
+		// Note: Initial value doesn't matter
+		let uniforms = PanelUniforms::default();
 		let uniforms_descriptor = wgpu::util::BufferInitDescriptor {
 			label:    None,
 			contents: bytemuck::cast_slice(std::slice::from_ref(&uniforms)),
 			usage:    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 		};
-		let uniforms = device.create_buffer_init(&uniforms_descriptor);
+		let uniforms = wgpu.device().create_buffer_init(&uniforms_descriptor);
 
 		// Create the uniform bind group
 		let uniforms_bind_group_descriptor = wgpu::BindGroupDescriptor {
@@ -68,77 +69,66 @@ impl PanelImage {
 			}],
 			label:   None,
 		};
-		let uniforms_bind_group = device.create_bind_group(&uniforms_bind_group_descriptor);
+		let uniforms_bind_group = wgpu.device().create_bind_group(&uniforms_bind_group_descriptor);
 
 		// Create the texture bind group
-		let texture_bind_group =
-			self::create_texture_bind_group(texture_bind_group_layout, &texture_view, &texture_sampler, device);
+		let image_bind_group =
+			self::create_image_bind_group(wgpu, image_bind_group_layout, &texture_view, &texture_sampler);
 
-		Ok(Self {
+		Self {
 			texture,
 			texture_view,
 			texture_sampler,
-			texture_bind_group,
+			image_bind_group,
 			uniforms,
 			uniforms_bind_group,
 			image_size,
-			swap_dir: rand::random(),
-		})
+		}
 	}
 
 	/// Updates this image
-	#[allow(clippy::unnecessary_wraps)] // It might fail in the future
-	pub fn update(
-		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture_bind_group_layout: &wgpu::BindGroupLayout,
-		image: Image,
-	) -> Result<(), anyhow::Error> {
+	pub fn update(&mut self, wgpu: &Wgpu, image_bind_group_layout: &wgpu::BindGroupLayout, image: Image) {
 		// Update the image
 		self.image_size = image.size();
-		self.swap_dir = rand::random();
 
 		// Then update our texture
-		(self.texture, self.texture_view) = self::create_image_texture(image.image, device, queue);
-		self.texture_bind_group = self::create_texture_bind_group(
-			texture_bind_group_layout,
-			&self.texture_view,
-			&self.texture_sampler,
-			device,
-		);
-
-		Ok(())
+		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.path, image.image);
+		self.image_bind_group =
+			self::create_image_bind_group(wgpu, image_bind_group_layout, &self.texture_view, &self.texture_sampler);
 	}
 
 	/// Returns this image's uvs for a panel size
-	pub fn uvs(&self, panel_size: Vector2<u32>) -> ImageUvs {
-		self::uvs(self.image_size, panel_size, self.swap_dir)
+	pub fn uvs(&self, panel_size: Vector2<u32>, swap_dir: bool) -> ImageUvs {
+		ImageUvs::new(
+			self.image_size.x as f32,
+			self.image_size.y as f32,
+			panel_size.x as f32,
+			panel_size.y as f32,
+			swap_dir,
+		)
 	}
 
-	/// Updates this image's uniforms
-	pub fn update_uniform(&self, queue: &wgpu::Queue, uniforms: PanelUniforms) {
-		queue.write_buffer(&self.uniforms, 0, bytemuck::cast_slice(&[uniforms]));
+	/// Returns the uniforms buffer
+	pub fn uniforms(&self) -> &wgpu::Buffer {
+		&self.uniforms
 	}
 
-	/// Binds this image's uniforms and texture
-	pub fn bind<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-		render_pass.set_bind_group(0, &self.uniforms_bind_group, &[]);
-		render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
+	/// Returns this image's uniforms bind group
+	pub fn uniforms_bind_group(&self) -> &wgpu::BindGroup {
+		&self.uniforms_bind_group
+	}
+
+	/// Returns this image's image bind group
+	pub fn image_bind_group(&self) -> &wgpu::BindGroup {
+		&self.image_bind_group
 	}
 }
 
-/// Returns the uvs for the panel
-fn uvs(image_size: Vector2<u32>, panel_size: Vector2<u32>, swap_dir: bool) -> ImageUvs {
-	ImageUvs::new(
-		image_size.x as f32,
-		image_size.y as f32,
-		panel_size.x as f32,
-		panel_size.y as f32,
-		swap_dir,
-	)
-}
 
 /// Creates the texture sampler
 fn create_texture_sampler(device: &wgpu::Device) -> wgpu::Sampler {
 	let descriptor = wgpu::SamplerDescriptor {
+		label: Some("[zsw::panel] Texture sampler"),
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
 		address_mode_v: wgpu::AddressMode::ClampToEdge,
 		address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -151,10 +141,10 @@ fn create_texture_sampler(device: &wgpu::Device) -> wgpu::Sampler {
 }
 
 /// Creates the texture bind group
-fn create_texture_bind_group(
-	bind_group_layout: &wgpu::BindGroupLayout, view: &wgpu::TextureView, sampler: &wgpu::Sampler, device: &wgpu::Device,
+fn create_image_bind_group(
+	wgpu: &Wgpu, bind_group_layout: &wgpu::BindGroupLayout, view: &wgpu::TextureView, sampler: &wgpu::Sampler,
 ) -> wgpu::BindGroup {
-	let texture_bind_group_descriptor = wgpu::BindGroupDescriptor {
+	let descriptor = wgpu::BindGroupDescriptor {
 		layout:  bind_group_layout,
 		entries: &[
 			wgpu::BindGroupEntry {
@@ -169,13 +159,11 @@ fn create_texture_bind_group(
 		label:   None,
 	};
 
-	device.create_bind_group(&texture_bind_group_descriptor)
+	wgpu.device().create_bind_group(&descriptor)
 }
 
 /// Creates the image texture and view
-fn create_image_texture(
-	image: DynamicImage, device: &wgpu::Device, queue: &wgpu::Queue,
-) -> (wgpu::Texture, wgpu::TextureView) {
+fn create_image_texture(wgpu: &Wgpu, path: &Path, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
 	// Get the image's format, converting if necessary.
 	let (image, format) = match image {
 		// With `rgba` we can simply use the image
@@ -192,8 +180,11 @@ fn create_image_texture(
 		},
 	};
 
-	let texture_descriptor = self::texture_descriptor(image.width(), image.height(), format);
-	let texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_bytes());
+	let label = format!("[zsw::panel] Image {path:?}");
+	let texture_descriptor = self::texture_descriptor(&label, image.width(), image.height(), format);
+	let texture = wgpu
+		.device()
+		.create_texture_with_data(wgpu.queue(), &texture_descriptor, image.as_bytes());
 	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
 	let texture_view = texture.create_view(&texture_view_descriptor);
 	(texture, texture_view)
@@ -201,10 +192,10 @@ fn create_image_texture(
 
 /// Builds the texture descriptor
 fn texture_descriptor(
-	image_width: u32, image_height: u32, format: wgpu::TextureFormat,
-) -> wgpu::TextureDescriptor<'static> {
+	label: &str, image_width: u32, image_height: u32, format: wgpu::TextureFormat,
+) -> wgpu::TextureDescriptor<'_> {
 	wgpu::TextureDescriptor {
-		label: None,
+		label: Some(label),
 		size: wgpu::Extent3d {
 			width:                 image_width,
 			height:                image_height,

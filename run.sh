@@ -10,9 +10,7 @@ cargo run -- \
 	--panel-geometry "1360x768+0+312" \
 	--fade-point 0.8
 
-# 
-
-#cargo run -- \
+#cargo run --release -- \
 #	~/.wallpaper/active \
 #	--image-duration 5.0 \
 #	--window-geometry "1920x1080+1360+0" \

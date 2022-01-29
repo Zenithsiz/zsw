@@ -9,7 +9,9 @@ pub use uniform::PanelUniforms;
 pub use vertex::PanelVertex;
 
 // Imports
-use crate::Panel;
+use super::PanelImage;
+use crate::{img::Image, Panel, Wgpu};
+use parking_lot::Mutex;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
@@ -35,11 +37,15 @@ pub struct PanelsRenderer {
 	/// Index buffer
 	indices: wgpu::Buffer,
 
-	/// Uniform bind group
+	/// Uniforms bind group layout
 	uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Image bind group layout
 	image_bind_group_layout: wgpu::BindGroupLayout,
+
+	/// All images
+	// TODO: Deal with panels being removed somehow.
+	images: Mutex<Vec<PanelImage>>,
 }
 
 impl PanelsRenderer {
@@ -53,7 +59,7 @@ impl PanelsRenderer {
 		// Create the vertex buffer
 		let vertices = self::create_vertices(device);
 
-		// Create the bind groups
+		// Create the bind group layouts
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(device);
 		let image_bind_group_layout = self::create_image_bind_group_layout(device);
 
@@ -71,24 +77,56 @@ impl PanelsRenderer {
 			indices,
 			uniforms_bind_group_layout,
 			image_bind_group_layout,
+			images: Mutex::new(vec![]),
 		})
 	}
 
-	/// Returns the bind group layout
-	pub const fn uniforms_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-		&self.uniforms_bind_group_layout
+	/// Creates a new image and returns it's path
+	pub fn create_image(&self, wgpu: &Wgpu, image: Image) -> PanelImageId {
+		// Lock the images and calculate the id for the new image
+		let mut images = self.images.lock();
+		let id = images.len();
+
+		// Create the new image and insert it
+		let image = PanelImage::new(
+			wgpu,
+			&self.uniforms_bind_group_layout,
+			&self.image_bind_group_layout,
+			image,
+		);
+		images.push(image);
+
+		PanelImageId(id)
 	}
 
-	/// Returns the image bind group layout
-	pub const fn image_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-		&self.image_bind_group_layout
+	/// Updates an image
+	pub fn update_image(&self, wgpu: &Wgpu, id: PanelImageId, image: Image) {
+		// Lock the images and try to get the image
+		let mut images = self.images.lock();
+		let panel_image = match images.get_mut(id.0) {
+			Some(panel_image) => panel_image,
+			None => {
+				log::warn!("Image index was invalid: {:?}", id);
+				return;
+			},
+		};
+
+		// Then update it
+		panel_image.update(wgpu, &self.image_bind_group_layout, image);
 	}
 
-	/// Renders all panels `panels` onto
+	/// Renders panels
 	pub fn render(
 		&self, panels: &mut [Panel], queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder,
 		surface_view: &wgpu::TextureView, surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
+		// Note: We need to lock images before starting the render pass,
+		//       as the render pass borrows it.
+		// TODO: Explicitly dropping the render pass before the drop of images
+		//       wasn't compiling, so I had to move the lock over here, check out
+		//       why not.
+		let images = self.images.lock();
+
 		// Create the render pass for all panels
 		let render_pass_descriptor = wgpu::RenderPassDescriptor {
 			label:                    Some("[zsw::panel] Render pass"),
@@ -109,19 +147,58 @@ impl PanelsRenderer {
 		};
 		let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
 
-		// Set our shared pipeline, indices and vertices
+		// Set our shared pipeline, indices, vertices and uniform bind group
 		render_pass.set_pipeline(&self.render_pipeline);
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
 		for panel in panels {
-			panel.draw(queue, &mut render_pass, surface_size);
+			// Calculate the matrix for the panel
+			let matrix = panel.matrix(surface_size);
+
+			// Then go through all image descriptors to render
+			for descriptor in panel.image_descriptors() {
+				// Skip rendering if alpha is 0
+				if descriptor.alpha == 0.0 {
+					continue;
+				}
+
+				// Try to get the image
+				let image = match images.get(descriptor.image_id.0) {
+					Some(value) => value,
+					None => {
+						log::warn!("Image index was invalid: {:?}", descriptor.image_id);
+						continue;
+					},
+				};
+
+				// Then update the uniforms
+				let uvs = image.uvs(panel.geometry.size, descriptor.swap_dir);
+				let uniforms = PanelUniforms {
+					matrix:     matrix.into(),
+					uvs_start:  uvs.start(),
+					uvs_offset: uvs.offset(descriptor.progress),
+					alpha:      descriptor.alpha,
+					_pad:       [0.0; 3],
+				};
+				queue.write_buffer(image.uniforms(), 0, bytemuck::cast_slice(&[uniforms]));
+
+				// Bind the image and draw
+				render_pass.set_bind_group(0, image.uniforms_bind_group(), &[]);
+				render_pass.set_bind_group(1, image.image_bind_group(), &[]);
+				render_pass.draw_indexed(0..6, 0, 0..1);
+			}
 		}
 
 		Ok(())
 	}
 }
+
+/// Panel image id
+#[derive(Clone, Copy, Debug)]
+pub struct PanelImageId(usize);
+
 
 /// Creates the vertices
 fn create_vertices(device: &wgpu::Device) -> wgpu::Buffer {
