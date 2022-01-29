@@ -37,7 +37,7 @@ impl Distributer {
 			if inner.reload_cached {
 				inner.cached_paths.clear();
 				Self::load_paths_into(&cur_root_path, &mut inner.cached_paths);
-				inner.reload_cached = true;
+				inner.reload_cached = false;
 			}
 
 			// Copy all paths and shuffle
