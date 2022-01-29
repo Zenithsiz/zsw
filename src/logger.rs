@@ -84,8 +84,12 @@ fn set_libs_levels(dispatch: fern::Dispatch, max_level: log::LevelFilter) -> fer
 	};
 	let default_level = default_level.min(max_level);
 
-	// Note: We don't emit perf by default
-	let dispatch = dispatch.level_for("zsw::perf", log::LevelFilter::Off);
+	// Note: Perf is debug on debug builds and off else
+	let perf_level = match cfg!(debug_assertions) {
+		true => log::LevelFilter::Debug,
+		false => log::LevelFilter::Off,
+	};
+	let dispatch = dispatch.level_for("zsw::perf", perf_level.min(perf_level));
 
 	// Filter out some modules to use the default level
 	dispatch

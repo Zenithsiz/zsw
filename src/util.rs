@@ -10,6 +10,7 @@ pub use scan_dir::visit_files_dir;
 
 // Imports
 use anyhow::Context;
+use image::DynamicImage;
 use std::{
 	fs,
 	hash::{Hash, Hasher},
@@ -84,4 +85,20 @@ pub fn _hash_of<T: ?Sized + Hash>(value: &T) -> u64 {
 	let mut hasher = twox_hash::XxHash64::with_seed(0);
 	value.hash(&mut hasher);
 	hasher.finish()
+}
+
+/// Returns the image format string of an image (for logging)
+pub fn image_format(image: &DynamicImage) -> &'static str {
+	match image {
+		DynamicImage::ImageLuma8(_) => "Luma8",
+		DynamicImage::ImageLumaA8(_) => "LumaA8",
+		DynamicImage::ImageRgb8(_) => "Rgb8",
+		DynamicImage::ImageRgba8(_) => "Rgba8",
+		DynamicImage::ImageBgr8(_) => "Bgr8",
+		DynamicImage::ImageBgra8(_) => "Bgra8",
+		DynamicImage::ImageLuma16(_) => "Luma16",
+		DynamicImage::ImageLumaA16(_) => "LumaA16",
+		DynamicImage::ImageRgb16(_) => "Rgb16",
+		DynamicImage::ImageRgba16(_) => "Rgba16",
+	}
 }

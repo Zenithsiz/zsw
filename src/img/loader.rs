@@ -7,35 +7,31 @@
 mod load;
 
 // Imports
-use super::Image;
 use crate::{paths, util};
 use anyhow::Context;
+use image::DynamicImage;
 
 /// Image loader
 #[derive(Debug)]
 pub struct ImageLoader {
 	/// Image receiver
-	image_rx: crossbeam::channel::Receiver<Image>,
+	image_rx: crossbeam::channel::Receiver<DynamicImage>,
 
 	/// Image sender
-	image_tx: crossbeam::channel::Sender<Image>,
+	image_tx: crossbeam::channel::Sender<DynamicImage>,
 
 	/// Paths receiver
 	paths_rx: paths::Receiver,
 }
 
 impl ImageLoader {
-	/// Creates a new image loader
-	///
-	/// # Errors
-	/// Returns an error if unable to create all the loader threads
+	/// Creates a new image loader.
 	pub fn new(paths_rx: paths::Receiver) -> Result<Self, anyhow::Error> {
-		// Create the image channel with the number of threads, since that's likely to
-		// be the number of runners we have
-		let loader_threads = std::thread::available_parallelism()
-			.context("Unable to get available parallelism")?
-			.get();
-		let (image_tx, image_rx) = crossbeam::channel::bounded(2 * loader_threads);
+		// TODO: Check if a 0 capacity channel is fine here.
+		//       Given we'll have a few runner threads, each one
+		//       will hold an image, which should be fine, but we might
+		//       want to hold more? Maybe let the user decide somewhere.
+		let (image_tx, image_rx) = crossbeam::channel::bounded(0);
 
 		Ok(Self {
 			image_rx,
@@ -52,12 +48,12 @@ impl ImageLoader {
 	}
 
 	/// Receives the image, waiting if not ready yet
-	pub fn recv(&self) -> Result<Image, anyhow::Error> {
+	pub fn recv(&self) -> Result<DynamicImage, anyhow::Error> {
 		self.image_rx.recv().context("Unable to get image from loader thread")
 	}
 
 	/// Attempts to receive the image
-	pub fn try_recv(&self) -> Result<Option<Image>, anyhow::Error> {
+	pub fn try_recv(&self) -> Result<Option<DynamicImage>, anyhow::Error> {
 		// Try to get the result
 		match self.image_rx.try_recv() {
 			Ok(image) => Ok(Some(image)),
@@ -69,19 +65,20 @@ impl ImageLoader {
 
 /// Runs the image loader
 fn run_image_loader(
-	image_tx: &crossbeam::channel::Sender<Image>, paths_rx: &paths::Receiver,
+	image_tx: &crossbeam::channel::Sender<DynamicImage>, paths_rx: &paths::Receiver,
 ) -> Result<(), anyhow::Error> {
 	while let Ok(path) = paths_rx.recv() {
 		match util::measure(|| load::load_image(&path)) {
 			// If we got it, send it
 			(Ok(image), duration) => {
-				log::trace!(target: "zsw::perf", "Took {duration:?} to load {path:?}");
-				if image_tx.send(image.to_rgba8()).is_err() {
+				let format = util::image_format(&image);
+				log::debug!(target: "zsw::perf", "Took {duration:?} to load {path:?} (format: {format})");
+				if image_tx.send(image).is_err() {
 					log::info!("No more receivers found, quitting");
 					break;
 				}
 			},
-			// If we didn't manage to, log and try again with another path
+			// If we couldn't load, log, remove the path and retry
 			(Err(err), _) => {
 				log::info!("Unable to load {path:?}: {err:?}");
 				paths_rx.remove(&path);

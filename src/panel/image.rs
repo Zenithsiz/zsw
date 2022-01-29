@@ -2,8 +2,9 @@
 
 // Imports
 use super::PanelUniforms;
-use crate::img::{Image, ImageUvs};
+use crate::{img::ImageUvs, util};
 use cgmath::Vector2;
+use image::{DynamicImage, GenericImageView};
 use wgpu::util::DeviceExt;
 
 /// Image
@@ -39,9 +40,10 @@ impl PanelImage {
 	/// Creates a new image
 	pub fn new(
 		device: &wgpu::Device, queue: &wgpu::Queue, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
-		texture_bind_group_layout: &wgpu::BindGroupLayout, image: &Image,
+		texture_bind_group_layout: &wgpu::BindGroupLayout, image: DynamicImage,
 	) -> Result<Self, anyhow::Error> {
 		// Create the texture and sampler
+		let image_size = Vector2::new(image.width(), image.height());
 		let (texture, texture_view) = self::create_image_texture(image, device, queue);
 		let texture_sampler = self::create_texture_sampler(device);
 
@@ -76,7 +78,7 @@ impl PanelImage {
 			texture_bind_group,
 			uniforms,
 			uniforms_bind_group,
-			image_size: Vector2::new(image.width(), image.height()),
+			image_size,
 			swap_dir: rand::random(),
 		})
 	}
@@ -85,7 +87,7 @@ impl PanelImage {
 	#[allow(clippy::unnecessary_wraps)] // It might fail in the future
 	pub fn update(
 		&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture_bind_group_layout: &wgpu::BindGroupLayout,
-		image: &Image,
+		image: DynamicImage,
 	) -> Result<(), anyhow::Error> {
 		// Update the image
 		self.image_size = Vector2::new(image.width(), image.height());
@@ -169,28 +171,46 @@ fn create_texture_bind_group(
 
 /// Creates the image texture and view
 fn create_image_texture(
-	image: &Image, device: &wgpu::Device, queue: &wgpu::Queue,
+	image: DynamicImage, device: &wgpu::Device, queue: &wgpu::Queue,
 ) -> (wgpu::Texture, wgpu::TextureView) {
-	let texture_descriptor = self::texture_descriptor(image.width(), image.height());
-	let texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_raw());
+	// Get the image's format, converting if necessary.
+	let (image, format) = match image {
+		// With `rgba` we can simply use the image
+		image @ DynamicImage::ImageRgba8(_) => (image, wgpu::TextureFormat::Rgba8UnormSrgb),
+
+		// TODO: Don't convert more common formats (such as rgb8) if possible.
+		
+		// Else simply convert to rgba8
+		image => {
+			let old_format = util::image_format(&image);
+			let (image, duration) = util::measure(move || image.into_rgba8());
+			log::debug!(target: "zsw::perf", "Took {duration:?} to convert image to rgba (from {old_format})");
+			(DynamicImage::ImageRgba8(image), wgpu::TextureFormat::Rgba8UnormSrgb)
+		},
+	};
+
+	let texture_descriptor = self::texture_descriptor(image.width(), image.height(), format);
+	let texture = device.create_texture_with_data(queue, &texture_descriptor, image.as_bytes());
 	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
 	let texture_view = texture.create_view(&texture_view_descriptor);
 	(texture, texture_view)
 }
 
 /// Builds the texture descriptor
-fn texture_descriptor(image_width: u32, image_height: u32) -> wgpu::TextureDescriptor<'static> {
+fn texture_descriptor(
+	image_width: u32, image_height: u32, format: wgpu::TextureFormat,
+) -> wgpu::TextureDescriptor<'static> {
 	wgpu::TextureDescriptor {
-		label:           None,
-		size:            wgpu::Extent3d {
+		label: None,
+		size: wgpu::Extent3d {
 			width:                 image_width,
 			height:                image_height,
 			depth_or_array_layers: 1,
 		},
 		mip_level_count: 1,
-		sample_count:    1,
-		dimension:       wgpu::TextureDimension::D2,
-		format:          wgpu::TextureFormat::Rgba8UnormSrgb,
-		usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		sample_count: 1,
+		dimension: wgpu::TextureDimension::D2,
+		format,
+		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
 	}
 }

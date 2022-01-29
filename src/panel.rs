@@ -15,10 +15,8 @@ pub use self::{
 };
 
 // Imports
-use crate::{
-	img::{Image, ImageLoader},
-	Rect,
-};
+use crate::{img::ImageLoader, Rect};
+use ::image::DynamicImage;
 use anyhow::Context;
 use cgmath::{Matrix4, Vector3};
 use std::{
@@ -61,7 +59,7 @@ pub struct Panel {
 #[derive(Debug)]
 pub enum NextImageState {
 	/// Ready
-	Ready(Image),
+	Ready(DynamicImage),
 
 	/// Waiting
 	Waiting {
@@ -95,7 +93,7 @@ impl NextImageState {
 	}
 
 	/// Takes the image, if any
-	pub fn take_image(&mut self) -> Option<Image> {
+	pub fn take_image(&mut self) -> Option<DynamicImage> {
 		let image;
 		(*self, image) = match mem::replace(self, Self::Empty) {
 			Self::Ready(image) => (Self::Empty, Some(image)),
@@ -152,7 +150,7 @@ impl Panel {
 							queue,
 							uniforms_bind_group_layout,
 							texture_bind_group_layout,
-							&image,
+							image,
 						)
 						.context("Unable to create panel image")?,
 					},
@@ -171,7 +169,7 @@ impl Panel {
 							queue,
 							uniforms_bind_group_layout,
 							texture_bind_group_layout,
-							&image,
+							image,
 						)
 						.context("Unable to create panel image")?,
 					},
@@ -185,7 +183,7 @@ impl Panel {
 				// Note: We update the front and swap them
 				Some(image) => {
 					front
-						.update(device, queue, texture_bind_group_layout, &image)
+						.update(device, queue, texture_bind_group_layout, image)
 						.context("Unable to update texture")?;
 					(
 						PanelState::Both {
