@@ -86,7 +86,8 @@ impl Panel {
 							swap_dir: rand::random(),
 						},
 					},
-					rand::random(),
+					// Note: Ensure it's below `0.5` to avoid starting during a fade.
+					rand::random::<f32>() / 2.0,
 				),
 				None => (PanelState::Empty, 0.0),
 			},
