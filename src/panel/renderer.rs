@@ -50,9 +50,7 @@ pub struct PanelsRenderer {
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
-	pub async fn new(
-		device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat,
-	) -> Result<Self, anyhow::Error> {
+	pub fn new(device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat) -> Result<Self, anyhow::Error> {
 		// Create the index buffer
 		let indices = self::create_indices(device);
 

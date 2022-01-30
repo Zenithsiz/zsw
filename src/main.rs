@@ -71,7 +71,6 @@ mod wgpu;
 
 // Exports
 pub use self::{
-	app::App,
 	args::Args,
 	egui::Egui,
 	img::ImageLoader,
@@ -82,7 +81,6 @@ pub use self::{
 
 // Imports
 use anyhow::Context;
-use pollster::FutureExt;
 
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
@@ -95,11 +93,21 @@ fn main() -> Result<(), anyhow::Error> {
 	let args = args::get().context("Unable to retrieve arguments")?;
 	log::debug!("Arguments: {args:#?}");
 
-	// Create the app
-	let app = App::new(args).block_on().context("Unable to initialize app")?;
-
-	// Then run it
-	app.run().context("Unable to run app")?;
+	// Run the app and restart if we get an error (up to 5 errors)
+	let mut errors = 0;
+	while errors < 5 {
+		match app::run(&args) {
+			Ok(()) => {
+				log::info!("Application finished");
+				break;
+			},
+			Err(err) => {
+				log::error!("Application encountered fatal error: {err:?}");
+				errors += 1;
+				continue;
+			},
+		}
+	}
 
 	// TODO: Wgpu seems to segfault during a global destructor.
 	//       Not sure what's causing this, but happens after "Destroying 2 command encoders"

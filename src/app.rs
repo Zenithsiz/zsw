@@ -2,6 +2,9 @@
 //!
 //! See the [`App`] type for more details
 
+// Lints
+#![allow(clippy::too_many_arguments)] // We need to share a lot of state and we can't couple it together in most cases
+
 // Imports
 use crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, PanelsProfile, PanelsRenderer, Rect, Wgpu};
 use anyhow::Context;
@@ -9,6 +12,7 @@ use cgmath::{Point2, Vector2};
 use crossbeam::atomic::AtomicCell;
 use egui::Widget;
 use parking_lot::Mutex;
+use pollster::FutureExt;
 use std::{mem, num::NonZeroUsize, thread, time::Duration};
 use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
@@ -22,168 +26,124 @@ use winit::{
 };
 use x11::xlib;
 
-/// Inner state
-// Note: This is required because the event loop can't be
-//       shared in between threads, but everything else we need
-//       to share.
-#[derive(Debug)]
-struct Inner {
-	/// Window
-	///
-	/// [`Wgpu`] required a static reference to it, which is
-	/// why we leak it.
-	window: &'static Window,
+/// Runs the application
+pub fn run(args: &Args) -> Result<(), anyhow::Error> {
+	// Build the window
+	let (mut event_loop, window) = self::create_window(args)?;
 
+	// Create the wgpu interface
+	let wgpu = Wgpu::new(window).block_on().context("Unable to create renderer")?;
+
+	// Create the paths channel
+	let (paths_distributer, paths_rx) = paths::new(args.images_dir.clone());
+
+	// Create the image loader
+	let image_loader = ImageLoader::new(paths_rx).context("Unable to create image loader")?;
+
+	// Create all panels
+	let panels = args
+		.panel_geometries
+		.iter()
+		.map(|&geometry| Panel::new(geometry, PanelState::Empty, args.image_duration, args.fade_point))
+		.collect::<Vec<_>>();
+	let panels = Mutex::new(panels);
+
+	// Create the panels renderer
+	let panels_renderer = PanelsRenderer::new(wgpu.device(), wgpu.surface_texture_format())
+		.context("Unable to create panels renderer")?;
+
+	// Create egui
+	let egui = Egui::new(window, &wgpu).context("Unable to create egui state")?;
+
+	// Read all profiles
+	let _profiles: Vec<PanelsProfile> = match util::parse_json_from_file("zsw_profiles.json") {
+		Ok(profiles) => {
+			log::info!("Loaded profiles {profiles:#?}");
+			profiles
+		},
+		Err(err) => {
+			log::info!("Unable to load profiles: {err:?}");
+			vec![]
+		},
+	};
+
+	let queued_settings_window_open_click = AtomicCell::new(None);
+
+	// Create the event handler
+	let mut event_handler = EventHandler::new(&wgpu, &egui, &queued_settings_window_open_click);
+
+	// Create the renderer
+	let mut renderer = Renderer::new(
+		window,
+		&wgpu,
+		&paths_distributer,
+		&image_loader,
+		&panels_renderer,
+		&panels,
+		&egui,
+		&queued_settings_window_open_click,
+	);
+
+	// Start all threads and then wait in the main thread for events
+	// TODO: Not ignore errors here, although given how `thread::scope` works
+	//       it's somewhat hard to do so
+	crossbeam::thread::scope(|s| {
+		// Spawn the path distributer thread
+		let _path_distributer = util::spawn_scoped(s, "Path distributer", || paths_distributer.run())?;
+
+		// Spawn all image loaders
+		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
+		let _image_loaders = util::spawn_scoped_multiple(s, "Image loader", loader_threads, || || image_loader.run())?;
+
+		// Spawn the renderer thread
+		let _renderer_thread = util::spawn_scoped(s, "Renderer", || renderer.run())?;
+
+		// Run event loop in this thread until we quit
+		event_loop.run_return(|event, _, control_flow| {
+			event_handler.handle_event(event, control_flow);
+		});
+
+		anyhow::Ok(())
+	})
+	.expect("Unable to start all threads")
+	.expect("Unable to run all threads 'till completion");
+
+	Ok(())
+}
+
+/// Event handler
+pub struct EventHandler<'a> {
 	/// Wgpu
-	wgpu: Wgpu,
-
-	/// Path distributer
-	paths_distributer: paths::Distributer,
-
-	/// Image loader
-	image_loader: ImageLoader,
-
-	/// Panels renderer
-	panels_renderer: PanelsRenderer,
-
-	/// Panels
-	panels: Mutex<Vec<Panel>>,
+	wgpu: &'a Wgpu,
 
 	/// Egui
-	egui: Egui,
+	egui: &'a Egui,
+
+	/// Cursor position
+	cursor_pos: Option<PhysicalPosition<f64>>,
 
 	/// Queued settings window open click
-	queued_settings_window_open_click: AtomicCell<Option<PhysicalPosition<f64>>>,
-
-	/// If the settings window is currently open
-	settings_window_open: Mutex<bool>,
-
-	/// New panel parameters
-	new_panel_parameters: Mutex<(Rect<u32>, f32, f32)>,
-
-	/// Profiles
-	_profiles: Vec<PanelsProfile>,
+	queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
 }
 
-/// Application state
-///
-/// Stores all of the application state
-#[derive(Debug)]
-pub struct App {
-	/// Event loop
-	event_loop: EventLoop<!>,
-
-	/// Inner
-	inner: Inner,
-}
-
-impl App {
-	/// Creates a new app
-	#[allow(clippy::future_not_send)] // Unfortunately we can't do much about it, we must build the window in the main thread
-	pub async fn new(args: Args) -> Result<Self, anyhow::Error> {
-		// Build the window
-		let (event_loop, window) = self::create_window(&args)?;
-
-		// Create the wgpu interface
-		let wgpu = Wgpu::new(window).await.context("Unable to create renderer")?;
-
-		// Create the paths channel
-		let (paths_distributer, paths_rx) = paths::new(args.images_dir);
-
-		// Create the image loader
-		let image_loader = ImageLoader::new(paths_rx).context("Unable to create image loader")?;
-
-		// Create all panels
-		let panels = args
-			.panel_geometries
-			.iter()
-			.map(|&geometry| Panel::new(geometry, PanelState::Empty, args.image_duration, args.fade_point))
-			.collect::<Vec<_>>();
-		let panels = Mutex::new(panels);
-
-		// Create the panels renderer
-		let panels_renderer = PanelsRenderer::new(wgpu.device(), wgpu.surface_texture_format())
-			.await
-			.context("Unable to create panels renderer")?;
-
-		// Create egui
-		let egui = Egui::new(window, &wgpu).context("Unable to create egui state")?;
-
-		// Read all profiles
-		let profiles = match util::parse_json_from_file("zsw_profiles.json") {
-			Ok(profiles) => {
-				log::info!("Loaded profiles {profiles:#?}");
-				profiles
-			},
-			Err(err) => {
-				log::info!("Unable to load profiles: {err:?}");
-				vec![]
-			},
-		};
-
-		Ok(Self {
-			event_loop,
-			inner: Inner {
-				window,
-				wgpu,
-				paths_distributer,
-				image_loader,
-				panels,
-				panels_renderer,
-				egui,
-				queued_settings_window_open_click: AtomicCell::new(None),
-				settings_window_open: Mutex::new(false),
-				// TODO: Copy existing panel, or surface
-				new_panel_parameters: Mutex::new((
-					Rect {
-						pos:  Point2::new(0, 0),
-						size: Vector2::new(0, 0),
-					},
-					15.0,
-					0.85,
-				)),
-				_profiles: profiles,
-			},
-		})
+impl<'a> EventHandler<'a> {
+	/// Creates the event handler
+	pub fn new(
+		wgpu: &'a Wgpu, egui: &'a Egui,
+		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
+	) -> Self {
+		Self {
+			wgpu,
+			egui,
+			cursor_pos: None,
+			queued_settings_window_open_click,
+		}
 	}
 
-	/// Runs the app 'till completion
-	pub fn run(mut self) -> Result<(), anyhow::Error> {
-		// Start all threads and then wait in the main thread for events
-		// TODO: Not ignore errors here, although given how `thread::scope` works
-		//       it's somewhat hard to do so
-		crossbeam::thread::scope(|s| {
-			// Spawn the path distributer thread
-			let _path_distributer = util::spawn_scoped(s, "Path distributer", || self.inner.paths_distributer.run())?;
-
-			// Spawn all image loaders
-			let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-			let _image_loaders =
-				util::spawn_scoped_multiple(s, "Image loader", loader_threads, || || self.inner.image_loader.run())?;
-
-			// Spawn the renderer thread
-			let _renderer_thread = util::spawn_scoped(s, "Renderer", || Self::run_renderer(&self.inner))?;
-
-			// Run event loop in this thread until we quit
-			let mut cursor_pos = PhysicalPosition::new(0.0, 0.0);
-			self.event_loop.run_return(|event, _, control_flow| {
-				Self::event_handler(&self.inner, event, control_flow, &mut cursor_pos);
-			});
-
-			anyhow::Ok(())
-		})
-		.expect("Unable to start all threads")
-		.expect("Unable to run all threads 'till completion");
-
-		Ok(())
-	}
-
-	/// Event handler
-	fn event_handler(
-		inner: &Inner, event: Event<!>, control_flow: &mut EventLoopControlFlow, cursor_pos: &mut PhysicalPosition<f64>,
-	) {
+	/// Handles an event
+	pub fn handle_event(&mut self, event: Event<!>, control_flow: &mut EventLoopControlFlow) {
 		// Update egui
-		inner.egui.platform().lock().handle_event(&event);
+		self.egui.platform().lock().handle_event(&event);
 
 		// Set control for to wait for next event, since we're not doing
 		// anything else on the main thread
@@ -205,10 +165,10 @@ impl App {
 				},
 
 				// If we resized, queue a resize on wgpu
-				WindowEvent::Resized(size) => inner.wgpu.resize(size),
+				WindowEvent::Resized(size) => self.wgpu.resize(size),
 
 				// On move, update the cursor position
-				WindowEvent::CursorMoved { position, .. } => *cursor_pos = position,
+				WindowEvent::CursorMoved { position, .. } => self.cursor_pos = Some(position),
 
 				// If right clicked, queue a click
 				WindowEvent::MouseInput {
@@ -216,16 +176,78 @@ impl App {
 					button: winit::event::MouseButton::Right,
 					..
 				} => {
-					inner.queued_settings_window_open_click.store(Some(*cursor_pos));
+					self.queued_settings_window_open_click.store(self.cursor_pos);
 				},
 				_ => (),
 			},
 			_ => (),
 		}
 	}
+}
+
+/// Renderer
+pub struct Renderer<'a> {
+	/// Window
+	window: &'a Window,
+
+	/// Wgpu
+	wgpu: &'a Wgpu,
+
+	/// Path distributer
+	paths_distributer: &'a paths::Distributer,
+
+	/// Image loader
+	image_loader: &'a ImageLoader,
+
+	/// Panels renderer
+	panels_renderer: &'a PanelsRenderer,
+
+	/// Panels
+	panels: &'a Mutex<Vec<Panel>>,
+
+	/// Egui
+	egui: &'a Egui,
+
+	/// Queued settings window open click
+	queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
+
+	/// If the settings window is currently open
+	settings_window_open: bool,
+
+	/// New panel parameters
+	new_panel_parameters: (Rect<u32>, f32, f32),
+}
+
+impl<'a> Renderer<'a> {
+	/// Creates a new renderer
+	pub fn new(
+		window: &'a Window, wgpu: &'a Wgpu, paths_distributer: &'a paths::Distributer, image_loader: &'a ImageLoader,
+		panels_renderer: &'a PanelsRenderer, panels: &'a Mutex<Vec<Panel>>, egui: &'a Egui,
+		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
+	) -> Self {
+		Self {
+			window,
+			wgpu,
+			paths_distributer,
+			image_loader,
+			panels_renderer,
+			panels,
+			egui,
+			queued_settings_window_open_click,
+			settings_window_open: false,
+			new_panel_parameters: (
+				Rect {
+					pos:  Point2::new(0, 0),
+					size: Vector2::new(0, 0),
+				},
+				15.0,
+				0.85,
+			),
+		}
+	}
 
 	/// Runs the renderer
-	fn run_renderer(inner: &Inner) {
+	fn run(&mut self) {
 		// Duration we're sleep
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
@@ -234,14 +256,14 @@ impl App {
 			// Note: The update is only useful for displaying, so there's no use
 			//       in running it in another thread.
 			//       Especially given that `update` doesn't block.
-			let (res, frame_duration) = crate::util::measure(|| Self::update(inner));
+			let (res, frame_duration) = crate::util::measure(|| self.update());
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to update"),
 				Err(err) => log::warn!("Unable to update: {err:?}"),
 			};
 
 			// Render
-			let (res, frame_duration) = crate::util::measure(|| Self::render(inner));
+			let (res, frame_duration) = crate::util::measure(|| self.render());
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -255,10 +277,10 @@ impl App {
 	}
 
 	/// Updates all panels
-	fn update(inner: &Inner) -> Result<(), anyhow::Error> {
-		let mut panels = inner.panels.lock();
+	fn update(&mut self) -> Result<(), anyhow::Error> {
+		let mut panels = self.panels.lock();
 		for panel in &mut *panels {
-			if let Err(err) = panel.update(&inner.wgpu, &inner.panels_renderer, &inner.image_loader) {
+			if let Err(err) = panel.update(self.wgpu, self.panels_renderer, self.image_loader) {
 				log::warn!("Unable to update panel: {err:?}");
 			}
 		}
@@ -267,25 +289,24 @@ impl App {
 	}
 
 	/// Renders
-	fn render(inner: &Inner) -> Result<(), anyhow::Error> {
+	fn render(&mut self) -> Result<(), anyhow::Error> {
 		// Draw egui
 		// TODO: When this is moved to it's own thread, regardless of issues with
 		//       synchronizing the platform, we should synchronize the drawing to ensure
 		//       we don't draw twice without displaying, as the first draw would never be
 		//       visible to the user.
-		let paint_jobs = inner
+		let paint_jobs = self
 			.egui
-			.draw(inner.window, |ctx, frame| {
-				Self::draw_egui(inner, ctx, frame, inner.wgpu.surface_size())
+			.draw(self.window, |ctx, frame| {
+				self.draw_egui(ctx, frame, self.wgpu.surface_size())
 			})
 			.context("Unable to draw egui")?;
 
-		inner.wgpu.render(|encoder, surface_view, surface_size| {
+		self.wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
-			let mut panels = inner.panels.lock();
-			inner
-				.panels_renderer
-				.render(&mut *panels, inner.wgpu.queue(), encoder, surface_view, surface_size)
+			let mut panels = self.panels.lock();
+			self.panels_renderer
+				.render(&mut *panels, self.wgpu.queue(), encoder, surface_view, surface_size)
 				.context("Unable to render panels")?;
 
 			// Render egui
@@ -293,15 +314,15 @@ impl App {
 			let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
 				physical_width:  surface_size.width,
 				physical_height: surface_size.height,
-				scale_factor:    inner.window.scale_factor() as f32,
+				scale_factor:    self.window.scale_factor() as f32,
 			};
-			let device = inner.wgpu.device();
-			let queue = inner.wgpu.queue();
-			let mut egui_render_pass = inner.egui.render_pass().lock();
+			let device = self.wgpu.device();
+			let queue = self.wgpu.queue();
+			let mut egui_render_pass = self.egui.render_pass().lock();
 
 			// TODO: Check if it's fine to get the platform here without synchronizing
 			//       with the drawing.
-			let egui_platform = inner.egui.platform().lock();
+			let egui_platform = self.egui.platform().lock();
 			egui_render_pass.update_texture(device, queue, &egui_platform.context().font_image());
 			egui_render_pass.update_user_textures(device, queue);
 			egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
@@ -316,27 +337,25 @@ impl App {
 	/// Draws egui app
 	#[allow(unused_results)] // `egui` returns a response on every operation, but we don't use them
 	fn draw_egui(
-		inner: &Inner, ctx: &egui::CtxRef, _frame: &epi::Frame, surface_size: PhysicalSize<u32>,
+		&mut self, ctx: &egui::CtxRef, _frame: &epi::Frame, surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
-		let mut settings_window_open = inner.settings_window_open.lock();
-
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
 
 		// If we have any queued click, summon the window there
-		if let Some(cursor_pos) = inner.queued_settings_window_open_click.take() {
+		if let Some(cursor_pos) = self.queued_settings_window_open_click.take() {
 			// Adjust cursor pos to account for the scale factor
-			let scale_factor = inner.window.scale_factor();
+			let scale_factor = self.window.scale_factor();
 			let cursor_pos = cursor_pos.to_logical(scale_factor);
 
 			// Then set the current position and that we're open
 			settings_window = settings_window.current_pos(egui::pos2(cursor_pos.x, cursor_pos.y));
-			*settings_window_open = true;
+			self.settings_window_open = true;
 		}
 
 		// Then render it
-		settings_window.open(&mut *settings_window_open).show(ctx, |ui| {
-			let mut panels = inner.panels.lock();
+		settings_window.open(&mut self.settings_window_open).show(ctx, |ui| {
+			let mut panels = self.panels.lock();
 			for (idx, panel) in panels.iter_mut().enumerate() {
 				ui.collapsing(format!("Panel {idx}"), |ui| {
 					// TODO: Make a macro to make this more readable
@@ -371,8 +390,7 @@ impl App {
 				});
 			}
 			ui.collapsing("Add panel", |ui| {
-				let mut new_panel_parameters = inner.new_panel_parameters.lock();
-				let (geometry, image_duration, fade_point) = &mut *new_panel_parameters;
+				let (geometry, image_duration, fade_point) = &mut self.new_panel_parameters;
 
 				ui.horizontal(|ui| {
 					ui.label("Geometry");
@@ -401,7 +419,7 @@ impl App {
 			mem::drop(panels);
 
 			ui.horizontal(|ui| {
-				let cur_root_path = inner.paths_distributer.root_path();
+				let cur_root_path = self.paths_distributer.root_path();
 
 				ui.label("Root path");
 				ui.label(cur_root_path.display().to_string());
@@ -413,7 +431,7 @@ impl App {
 						Ok(file_dialog) => {
 							if let Some(root_path) = file_dialog {
 								// Set the root path
-								inner.paths_distributer.set_root_path(root_path);
+								self.paths_distributer.set_root_path(root_path);
 
 								// TODO: Reset all existing images and paths loaded from the
 								//       old path distributer, maybe?
@@ -429,6 +447,7 @@ impl App {
 	}
 }
 
+/// Draws a geometry rectangle
 fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<u32>, max_size: PhysicalSize<u32>) -> egui::Response {
 	// Calculate the limits
 	// TODO: If two values are changed at the same time, during 1 frame it's
