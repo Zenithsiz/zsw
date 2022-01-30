@@ -25,24 +25,20 @@ pub struct SettingsWindow<'a> {
 	/// If open
 	open: bool,
 
-	/// New panel parameters
-	new_panel_parameters: (Rect<u32>, f32, f32),
+	/// New panel state
+	new_panel_state: NewPanelState,
 }
 
 impl<'a> SettingsWindow<'a> {
 	/// Creates the settings window
-	pub fn new(queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>) -> Self {
+	pub fn new(
+		surface_size: PhysicalSize<u32>,
+		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
+	) -> Self {
 		Self {
 			queued_settings_window_open_click,
 			open: false,
-			new_panel_parameters: (
-				Rect {
-					pos:  Point2::new(0, 0),
-					size: Vector2::new(0, 0),
-				},
-				15.0,
-				0.85,
-			),
+			new_panel_state: NewPanelState::new(surface_size),
 		}
 	}
 
@@ -75,33 +71,31 @@ impl<'a> SettingsWindow<'a> {
 			let mut panels = panels.lock();
 			for (idx, panel) in panels.iter_mut().enumerate() {
 				ui.collapsing(format!("Panel {idx}"), |ui| {
-					self::draw_panel(ui, panel, surface_size);
+					ui.add(PanelWidget::new(panel, surface_size));
 				});
 			}
 			ui.collapsing("Add panel", |ui| {
-				let (geometry, image_duration, fade_point) = &mut self.new_panel_parameters;
-
 				ui.horizontal(|ui| {
 					ui.label("Geometry");
-					self::draw_rect(ui, geometry, surface_size);
+					self::draw_rect(ui, &mut self.new_panel_state.geometry, surface_size);
 				});
 
 				ui.horizontal(|ui| {
 					ui.label("Fade point");
-					egui::Slider::new(fade_point, 0.5..=1.0).ui(ui);
+					egui::Slider::new(&mut self.new_panel_state.fade_point, 0.5..=1.0).ui(ui);
 				});
 
 				ui.horizontal(|ui| {
 					ui.label("Duration");
-					egui::Slider::new(image_duration, 0.5..=180.0).ui(ui);
+					egui::Slider::new(&mut self.new_panel_state.duration_secs, 0.5..=180.0).ui(ui);
 				});
 
 				if ui.button("Add").clicked() {
 					panels.push(Panel::new(
-						*geometry,
+						self.new_panel_state.geometry,
 						PanelState::Empty,
-						Duration::from_secs_f32(*image_duration),
-						*fade_point,
+						Duration::from_secs_f32(self.new_panel_state.duration_secs),
+						self.new_panel_state.fade_point,
 					));
 				}
 			});
@@ -136,40 +130,83 @@ impl<'a> SettingsWindow<'a> {
 	}
 }
 
-/// Draws a panel
-fn draw_panel(ui: &mut egui::Ui, panel: &mut Panel, surface_size: PhysicalSize<u32>) {
-	ui.horizontal(|ui| {
-		ui.label("Geometry");
-		self::draw_rect(ui, &mut panel.geometry, surface_size);
-	});
+/// New panel state
+struct NewPanelState {
+	/// Geometry
+	geometry: Rect<u32>,
 
-	ui.horizontal(|ui| {
-		ui.label("Progress");
-		egui::Slider::new(&mut panel.progress, 0.0..=0.99).ui(ui);
-	});
+	/// Duration seconds
+	duration_secs: f32,
 
-	ui.horizontal(|ui| {
-		ui.label("Fade point");
-		egui::Slider::new(&mut panel.fade_point, 0.5..=1.0).ui(ui);
-	});
-
-	ui.horizontal(|ui| {
-		ui.label("Duration");
-
-		let mut seconds = panel.image_duration.as_secs_f32();
-		egui::Slider::new(&mut seconds, 0.5..=180.0).ui(ui);
-		panel.image_duration = Duration::from_secs_f32(seconds);
-	});
-
-	ui.horizontal(|ui| {
-		ui.label("Skip");
-		if ui.button("🔄").clicked() {
-			//panel.state = PanelState::Empty;
-			panel.progress = 1.0;
-		}
-	});
+	/// Fade point
+	fade_point: f32,
 }
 
+impl NewPanelState {
+	fn new(surface_size: PhysicalSize<u32>) -> Self {
+		Self {
+			geometry:      Rect {
+				pos:  Point2::new(0, 0),
+				size: Vector2::new(surface_size.width, surface_size.height),
+			},
+			duration_secs: 15.0,
+			fade_point:    0.95,
+		}
+	}
+}
+
+/// Panel widget
+#[derive(Debug)]
+pub struct PanelWidget<'panel> {
+	/// The panel
+	panel: &'panel mut Panel,
+
+	/// Surface size
+	surface_size: PhysicalSize<u32>,
+}
+
+impl<'panel> PanelWidget<'panel> {
+	/// Creates a panel widget
+	pub fn new(panel: &'panel mut Panel, surface_size: PhysicalSize<u32>) -> Self {
+		Self { panel, surface_size }
+	}
+}
+
+impl<'panel> egui::Widget for PanelWidget<'panel> {
+	fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+		ui.horizontal(|ui| {
+			ui.label("Geometry");
+			self::draw_rect(ui, &mut self.panel.geometry, self.surface_size);
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Progress");
+			egui::Slider::new(&mut self.panel.progress, 0.0..=0.99).ui(ui);
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Fade point");
+			egui::Slider::new(&mut self.panel.fade_point, 0.5..=1.0).ui(ui);
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Duration");
+
+			let mut seconds = self.panel.image_duration.as_secs_f32();
+			egui::Slider::new(&mut seconds, 0.5..=180.0).ui(ui);
+			self.panel.image_duration = Duration::from_secs_f32(seconds);
+		});
+
+		// TODO: Return more than just the skip button here
+		ui.horizontal(|ui| {
+			ui.label("Skip");
+			if ui.button("🔄").clicked() {
+				self.panel.progress = 1.0;
+			}
+		})
+		.response
+	}
+}
 
 /// Draws a geometry rectangle
 fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<u32>, max_size: PhysicalSize<u32>) {

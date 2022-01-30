@@ -61,7 +61,7 @@ impl<'a> Renderer<'a> {
 			panels_renderer,
 			panels,
 			egui,
-			settings_window: SettingsWindow::new(queued_settings_window_open_click),
+			settings_window: SettingsWindow::new(wgpu.surface_size(), queued_settings_window_open_click),
 		}
 	}
 
