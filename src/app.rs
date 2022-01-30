@@ -12,7 +12,6 @@ use cgmath::{Point2, Vector2};
 use crossbeam::atomic::AtomicCell;
 use egui::Widget;
 use parking_lot::Mutex;
-use pollster::FutureExt;
 use std::{mem, num::NonZeroUsize, thread, time::Duration};
 use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
@@ -32,7 +31,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let (mut event_loop, window) = self::create_window(args)?;
 
 	// Create the wgpu interface
-	let wgpu = Wgpu::new(window).block_on().context("Unable to create renderer")?;
+	let wgpu = Wgpu::new(&window).context("Unable to create renderer")?;
 
 	// Create the paths channel
 	let (paths_distributer, paths_rx) = paths::new(args.images_dir.clone());
@@ -53,7 +52,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		.context("Unable to create panels renderer")?;
 
 	// Create egui
-	let egui = Egui::new(window, &wgpu).context("Unable to create egui state")?;
+	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
 
 	// Read all profiles
 	let _profiles: Vec<PanelsProfile> = match util::parse_json_from_file("zsw_profiles.json") {
@@ -74,7 +73,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Create the renderer
 	let mut renderer = Renderer::new(
-		window,
+		&window,
 		&wgpu,
 		&paths_distributer,
 		&image_loader,
@@ -114,7 +113,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 /// Event handler
 pub struct EventHandler<'a> {
 	/// Wgpu
-	wgpu: &'a Wgpu,
+	wgpu: &'a Wgpu<'a>,
 
 	/// Egui
 	egui: &'a Egui,
@@ -191,7 +190,7 @@ pub struct Renderer<'a> {
 	window: &'a Window,
 
 	/// Wgpu
-	wgpu: &'a Wgpu,
+	wgpu: &'a Wgpu<'a>,
 
 	/// Path distributer
 	paths_distributer: &'a paths::Distributer,
@@ -483,9 +482,8 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<u32>, max_size: PhysicalSize
 }
 
 /// Creates the window, as well as the associated event loop
-fn create_window(args: &Args) -> Result<(EventLoop<!>, &'static Window), anyhow::Error> {
+fn create_window(args: &Args) -> Result<(EventLoop<!>, Window), anyhow::Error> {
 	// Build the window
-	// TODO: Not leak the window
 	let event_loop = EventLoop::with_user_event();
 	log::debug!("Creating window (geometry: {:?})", args.window_geometry);
 	let window = WindowBuilder::new()
@@ -501,13 +499,12 @@ fn create_window(args: &Args) -> Result<(EventLoop<!>, &'static Window), anyhow:
 		.with_x11_window_type(vec![XWindowType::Desktop])
 		.build(&event_loop)
 		.context("Unable to build window")?;
-	let window = Box::leak(Box::new(window));
 
 	// Set the window as always below
 	// Note: Required so it doesn't hide itself if the desktop is clicked on
 	// SAFETY: TODO
 	unsafe {
-		self::set_display_always_below(window);
+		self::set_display_always_below(&window);
 	}
 
 	Ok((event_loop, window))

@@ -13,6 +13,8 @@
 use anyhow::Context;
 use crossbeam::atomic::AtomicCell;
 use parking_lot::Mutex;
+use pollster::FutureExt;
+use std::marker::PhantomData;
 use wgpu::TextureFormat;
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -42,7 +44,7 @@ pub struct Surface {
 //       seems to not result in any panics, but it might be worth checking, especially if we
 //       ever need to "restart" `wgpu` in any scenario without restarting the application.
 #[derive(Debug)]
-pub struct Wgpu {
+pub struct Wgpu<'window> {
 	/// Device
 	// TODO: There exists a `Device::poll` method, but I'm not sure if we should
 	//       have to call that? Seems to be used for async, but we don't use any
@@ -79,16 +81,21 @@ pub struct Wgpu {
 	//          relation between surface resizes and drawing. This ensures we never resize the surface
 	//          without showing the user at least 1 frame of the resized surface.
 	queued_resize: AtomicCell<Option<PhysicalSize<u32>>>,
+
+	/// Window lifetime
+	// Note: Our surface must outlive the window, so we make sure of it using the `'window` lifetime
+	window_phantom: PhantomData<&'window Window>,
 }
 
-impl Wgpu {
+impl<'window> Wgpu<'window> {
 	/// Creates the `wgpu` wrapper given the window to create it in.
-	pub async fn new(window: &'static Window) -> Result<Self, anyhow::Error> {
+	pub fn new(window: &'window Window) -> Result<Self, anyhow::Error> {
 		// Create the surface and adapter
-		let (surface, adapter) = self::create_surface_and_adapter(window).await?;
+		// SAFETY: Due to our lifetime, we ensure the window outlives us and thus the surface
+		let (surface, adapter) = unsafe { self::create_surface_and_adapter(window)? };
 
 		// Then create the device and it's queue
-		let (device, queue) = self::create_device(&adapter).await?;
+		let (device, queue) = self::create_device(&adapter).block_on()?;
 
 		// Configure the surface and get the preferred texture format and surface size
 		let (surface_texture_format, surface_size) =
@@ -104,6 +111,7 @@ impl Wgpu {
 			queue,
 			surface_texture_format,
 			queued_resize: AtomicCell::new(None),
+			window_phantom: PhantomData,
 		})
 	}
 
@@ -238,14 +246,17 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 }
 
 /// Creates the surface and adapter
-async fn create_surface_and_adapter(window: &'static Window) -> Result<(wgpu::Surface, wgpu::Adapter), anyhow::Error> {
+///
+/// # Safety
+/// The returned surface *must* be dropped before the window.
+unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, wgpu::Adapter), anyhow::Error> {
 	// Get an instance with any backend
 	let backends = wgpu::Backends::all();
 	log::debug!("Requesting wgpu instance (backends: {backends:?})");
 	let instance = wgpu::Instance::new(backends);
 
 	// Create the surface
-	// SAFETY: `window` has a `'static` lifetime
+	// SAFETY: Caller promises the window outlives the surface
 	log::debug!("Creating wgpu surface (window: {window:?})");
 	let surface = unsafe { instance.create_surface(window) };
 
@@ -258,7 +269,7 @@ async fn create_surface_and_adapter(window: &'static Window) -> Result<(wgpu::Su
 	log::debug!("Requesting wgpu adapter (options: {adapter_options:#?})");
 	let adapter = instance
 		.request_adapter(&adapter_options)
-		.await
+		.block_on()
 		.context("Unable to request adapter")?;
 
 	Ok((surface, adapter))
