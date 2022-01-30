@@ -8,22 +8,24 @@ mod event_handler;
 mod renderer;
 
 // Imports
-use self::{event_handler::EventHandler, renderer::Renderer};
-use crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, PanelsProfile, PanelsRenderer, Wgpu};
-use anyhow::Context;
-use crossbeam::atomic::AtomicCell;
-use parking_lot::Mutex;
-use std::{num::NonZeroUsize, thread, time::Duration};
-use winit::{
-	dpi::{PhysicalPosition, PhysicalSize},
-	event_loop::EventLoop,
-	platform::{
-		run_return::EventLoopExtRunReturn,
-		unix::{WindowBuilderExtUnix, WindowExtUnix, XWindowType},
+use {
+	self::{event_handler::EventHandler, renderer::Renderer},
+	crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, PanelsProfile, PanelsRenderer, Wgpu},
+	anyhow::Context,
+	crossbeam::atomic::AtomicCell,
+	parking_lot::Mutex,
+	std::{num::NonZeroUsize, thread, time::Duration},
+	winit::{
+		dpi::{PhysicalPosition, PhysicalSize},
+		event_loop::EventLoop,
+		platform::{
+			run_return::EventLoopExtRunReturn,
+			unix::{WindowBuilderExtUnix, WindowExtUnix, XWindowType},
+		},
+		window::{Window, WindowBuilder},
 	},
-	window::{Window, WindowBuilder},
+	x11::xlib,
 };
-use x11::xlib;
 
 /// Runs the application
 pub fn run(args: &Args) -> Result<(), anyhow::Error> {

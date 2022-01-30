@@ -1,11 +1,13 @@
 //! Arguments
 
 // Imports
-use crate::Rect;
-use anyhow::Context;
-use cgmath::{EuclideanSpace, Point2, Vector2};
-use clap::{App as ClapApp, Arg as ClapArg};
-use std::{path::PathBuf, time::Duration};
+use {
+	crate::Rect,
+	anyhow::Context,
+	cgmath::{EuclideanSpace, Point2, Vector2},
+	clap::{App as ClapApp, Arg as ClapArg},
+	std::{path::PathBuf, time::Duration},
+};
 
 /// Arguments
 #[derive(Debug)]

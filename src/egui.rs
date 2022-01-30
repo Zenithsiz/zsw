@@ -1,14 +1,16 @@
 //! Egui
 
 // Imports
-use crate::Wgpu;
-use anyhow::Context;
-use parking_lot::Mutex;
-use std::{
-	sync::Arc,
-	time::{Duration, Instant},
+use {
+	crate::Wgpu,
+	anyhow::Context,
+	parking_lot::Mutex,
+	std::{
+		sync::Arc,
+		time::{Duration, Instant},
+	},
+	winit::window::Window,
 };
-use winit::window::Window;
 
 
 /// All egui state
@@ -68,7 +70,9 @@ impl Egui {
 
 	/// Draws egui
 	pub fn draw(
-		&self, window: &Window, f: impl FnOnce(&egui::CtxRef, &epi::Frame) -> Result<(), anyhow::Error>,
+		&self,
+		window: &Window,
+		f: impl FnOnce(&egui::CtxRef, &epi::Frame) -> Result<(), anyhow::Error>,
 	) -> Result<Vec<egui::ClippedMesh>, anyhow::Error> {
 		// Start the frame
 		// Note: We must keep the platform locked until the call to retrieve all the paint jobs,

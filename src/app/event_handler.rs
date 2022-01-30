@@ -1,14 +1,15 @@
 //! Event handler
 
 // Imports
-use crate::{Egui, Wgpu};
-use crossbeam::atomic::AtomicCell;
-use winit::{
-	dpi::PhysicalPosition,
-	event::{Event, WindowEvent},
-	event_loop::ControlFlow as EventLoopControlFlow,
+use {
+	crate::{Egui, Wgpu},
+	crossbeam::atomic::AtomicCell,
+	winit::{
+		dpi::PhysicalPosition,
+		event::{Event, WindowEvent},
+		event_loop::ControlFlow as EventLoopControlFlow,
+	},
 };
-
 
 /// Event handler
 pub struct EventHandler<'a> {
@@ -28,7 +29,8 @@ pub struct EventHandler<'a> {
 impl<'a> EventHandler<'a> {
 	/// Creates the event handler
 	pub fn new(
-		wgpu: &'a Wgpu, egui: &'a Egui,
+		wgpu: &'a Wgpu,
+		egui: &'a Egui,
 		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
 	) -> Self {
 		Self {

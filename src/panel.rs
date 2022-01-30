@@ -15,11 +15,13 @@ pub use self::{
 };
 
 // Imports
-use crate::{img::ImageLoader, Rect, Wgpu};
-use anyhow::Context;
-use cgmath::{Matrix4, Vector3};
-use std::time::Duration;
-use winit::dpi::PhysicalSize;
+use {
+	crate::{img::ImageLoader, Rect, Wgpu},
+	anyhow::Context,
+	cgmath::{Matrix4, Vector3},
+	std::time::Duration,
+	winit::dpi::PhysicalSize,
+};
 
 /// Panel
 ///
@@ -64,7 +66,10 @@ impl Panel {
 
 	/// Updates this panel
 	pub fn update(
-		&mut self, wgpu: &Wgpu, renderer: &PanelsRenderer, image_loader: &ImageLoader,
+		&mut self,
+		wgpu: &Wgpu,
+		renderer: &PanelsRenderer,
+		image_loader: &ImageLoader,
 	) -> Result<(), anyhow::Error> {
 		// Next frame's progress
 		let next_progress = self.progress + (1.0 / 60.0) / self.image_duration.as_secs_f32();

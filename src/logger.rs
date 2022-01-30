@@ -1,10 +1,12 @@
 //! Logger
 
 // Imports
-use crate::util::DisplayWrapper;
-use anyhow::Context;
-use fern::colors::{Color, ColoredLevelConfig};
-use std::{fmt, fs, panic, thread};
+use {
+	crate::util::DisplayWrapper,
+	anyhow::Context,
+	fern::colors::{Color, ColoredLevelConfig},
+	std::{fmt, fs, panic, thread},
+};
 
 // Time format string
 const TIME_FMT: &str = "%Y-%m-%d %H:%M:%S";

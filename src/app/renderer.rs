@@ -1,18 +1,19 @@
 //! Renderer
 
 // Imports
-use crate::{paths, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Rect, Wgpu};
-use anyhow::Context;
-use cgmath::{Point2, Vector2};
-use crossbeam::atomic::AtomicCell;
-use egui::Widget;
-use parking_lot::Mutex;
-use std::{mem, thread, time::Duration};
-use winit::{
-	dpi::{PhysicalPosition, PhysicalSize},
-	window::Window,
+use {
+	crate::{paths, Egui, ImageLoader, Panel, PanelState, PanelsRenderer, Rect, Wgpu},
+	anyhow::Context,
+	cgmath::{Point2, Vector2},
+	crossbeam::atomic::AtomicCell,
+	egui::Widget,
+	parking_lot::Mutex,
+	std::{mem, thread, time::Duration},
+	winit::{
+		dpi::{PhysicalPosition, PhysicalSize},
+		window::Window,
+	},
 };
-
 
 /// Renderer
 pub struct Renderer<'a> {
@@ -50,8 +51,13 @@ pub struct Renderer<'a> {
 impl<'a> Renderer<'a> {
 	/// Creates a new renderer
 	pub fn new(
-		window: &'a Window, wgpu: &'a Wgpu, paths_distributer: &'a paths::Distributer, image_loader: &'a ImageLoader,
-		panels_renderer: &'a PanelsRenderer, panels: &'a Mutex<Vec<Panel>>, egui: &'a Egui,
+		window: &'a Window,
+		wgpu: &'a Wgpu,
+		paths_distributer: &'a paths::Distributer,
+		image_loader: &'a ImageLoader,
+		panels_renderer: &'a PanelsRenderer,
+		panels: &'a Mutex<Vec<Panel>>,
+		egui: &'a Egui,
 		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
 	) -> Self {
 		Self {
@@ -166,7 +172,10 @@ impl<'a> Renderer<'a> {
 	/// Draws egui app
 	#[allow(unused_results)] // `egui` returns a response on every operation, but we don't use them
 	fn draw_egui(
-		&mut self, ctx: &egui::CtxRef, _frame: &epi::Frame, surface_size: PhysicalSize<u32>,
+		&mut self,
+		ctx: &egui::CtxRef,
+		_frame: &epi::Frame,
+		surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");

@@ -5,15 +5,16 @@ mod uniform;
 mod vertex;
 
 // Exports
-pub use uniform::PanelUniforms;
-pub use vertex::PanelVertex;
+pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 
 // Imports
-use super::PanelImage;
-use crate::{img::Image, Panel, Wgpu};
-use parking_lot::Mutex;
-use wgpu::util::DeviceExt;
-use winit::dpi::PhysicalSize;
+use {
+	super::PanelImage,
+	crate::{img::Image, Panel, Wgpu},
+	parking_lot::Mutex,
+	wgpu::util::DeviceExt,
+	winit::dpi::PhysicalSize,
+};
 
 /// Panels renderer
 ///
@@ -115,8 +116,12 @@ impl PanelsRenderer {
 
 	/// Renders panels
 	pub fn render(
-		&self, panels: &mut [Panel], queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder,
-		surface_view: &wgpu::TextureView, surface_size: PhysicalSize<u32>,
+		&self,
+		panels: &mut [Panel],
+		queue: &wgpu::Queue,
+		encoder: &mut wgpu::CommandEncoder,
+		surface_view: &wgpu::TextureView,
+		surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
 		// Note: We need to lock images before starting the render pass,
 		//       as the render pass borrows it.
@@ -270,8 +275,10 @@ fn create_uniforms_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLa
 
 /// Creates the render pipeline
 fn create_render_pipeline(
-	device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat,
-	uniforms_bind_group_layout: &wgpu::BindGroupLayout, texture_bind_group_layout: &wgpu::BindGroupLayout,
+	device: &wgpu::Device,
+	surface_texture_format: wgpu::TextureFormat,
+	uniforms_bind_group_layout: &wgpu::BindGroupLayout,
+	texture_bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
 	// Load the shader
 	let shader_descriptor = wgpu::ShaderModuleDescriptor {

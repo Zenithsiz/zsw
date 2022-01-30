@@ -1,8 +1,7 @@
 //! Panels profiles
 
 // Imports
-use crate::Rect;
-use std::time::Duration;
+use {crate::Rect, std::time::Duration};
 
 /// A panels profile
 #[derive(Clone, Debug)]
@@ -11,7 +10,6 @@ pub struct PanelsProfile {
 	/// All panels
 	panels: Vec<PanelsProfile>,
 }
-
 
 /// A panel profile
 #[derive(Clone, Debug)]

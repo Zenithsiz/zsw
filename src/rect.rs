@@ -1,9 +1,11 @@
 //! Rect
 
 // Imports
-use anyhow::Context;
-use cgmath::{num_traits::Num, Point2, Vector2};
-use std::{error::Error, fmt};
+use {
+	anyhow::Context,
+	cgmath::{num_traits::Num, Point2, Vector2},
+	std::{error::Error, fmt},
+};
 
 /// A rectangle
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

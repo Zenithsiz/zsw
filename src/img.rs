@@ -6,13 +6,14 @@ mod loader;
 mod uvs;
 
 // Exports
-pub use loader::ImageLoader;
-pub use uvs::ImageUvs;
+pub use {loader::ImageLoader, uvs::ImageUvs};
 
 // Imports
-use cgmath::Vector2;
-use image::{DynamicImage, GenericImageView};
-use std::{path::PathBuf, sync::Arc};
+use {
+	cgmath::Vector2,
+	image::{DynamicImage, GenericImageView},
+	std::{path::PathBuf, sync::Arc},
+};
 
 /// Loaded image
 #[derive(Debug)]

@@ -1,16 +1,18 @@
 //! Image
 
 // Imports
-use crate::{
-	img::{Image, ImageUvs},
-	util, Wgpu,
+use {
+	super::PanelUniforms,
+	crate::{
+		img::{Image, ImageUvs},
+		util,
+		Wgpu,
+	},
+	cgmath::Vector2,
+	image::{DynamicImage, GenericImageView},
+	std::path::Path,
+	wgpu::util::DeviceExt,
 };
-use cgmath::Vector2;
-use image::{DynamicImage, GenericImageView};
-use std::path::Path;
-use wgpu::util::DeviceExt;
-
-use super::PanelUniforms;
 
 /// Panel's image
 ///
@@ -42,8 +44,10 @@ pub struct PanelImage {
 impl PanelImage {
 	/// Creates a new image
 	pub fn new(
-		wgpu: &Wgpu, uniforms_bind_group_layout: &wgpu::BindGroupLayout,
-		image_bind_group_layout: &wgpu::BindGroupLayout, image: Image,
+		wgpu: &Wgpu,
+		uniforms_bind_group_layout: &wgpu::BindGroupLayout,
+		image_bind_group_layout: &wgpu::BindGroupLayout,
+		image: Image,
 	) -> Self {
 		// Create the texture and sampler
 		let image_size = image.size();
@@ -142,7 +146,10 @@ fn create_texture_sampler(device: &wgpu::Device) -> wgpu::Sampler {
 
 /// Creates the texture bind group
 fn create_image_bind_group(
-	wgpu: &Wgpu, bind_group_layout: &wgpu::BindGroupLayout, view: &wgpu::TextureView, sampler: &wgpu::Sampler,
+	wgpu: &Wgpu,
+	bind_group_layout: &wgpu::BindGroupLayout,
+	view: &wgpu::TextureView,
+	sampler: &wgpu::Sampler,
 ) -> wgpu::BindGroup {
 	let descriptor = wgpu::BindGroupDescriptor {
 		layout:  bind_group_layout,
@@ -192,7 +199,10 @@ fn create_image_texture(wgpu: &Wgpu, path: &Path, image: DynamicImage) -> (wgpu:
 
 /// Builds the texture descriptor
 fn texture_descriptor(
-	label: &str, image_width: u32, image_height: u32, format: wgpu::TextureFormat,
+	label: &str,
+	image_width: u32,
+	image_height: u32,
+	format: wgpu::TextureFormat,
 ) -> wgpu::TextureDescriptor<'_> {
 	wgpu::TextureDescriptor {
 		label: Some(label),

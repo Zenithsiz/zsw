@@ -1,16 +1,17 @@
 //! Distributer
 
 // Imports
-use super::Inner;
-use parking_lot::Mutex;
-use rand::prelude::SliceRandom;
-use std::{
-	collections::HashSet,
-	mem,
-	path::{Path, PathBuf},
-	sync::Arc,
+use {
+	super::Inner,
+	parking_lot::Mutex,
+	rand::prelude::SliceRandom,
+	std::{
+		collections::HashSet,
+		mem,
+		path::{Path, PathBuf},
+		sync::Arc,
+	},
 };
-
 
 /// The distributer
 ///

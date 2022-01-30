@@ -1,9 +1,11 @@
 //! Receiver
 
 // Imports
-use super::Inner;
-use parking_lot::Mutex;
-use std::{path::PathBuf, sync::Arc};
+use {
+	super::Inner,
+	parking_lot::Mutex,
+	std::{path::PathBuf, sync::Arc},
+};
 
 /// A receiver
 #[derive(Clone, Debug)]

@@ -10,13 +10,15 @@
 //! which are tailored for this application.
 
 // Imports
-use anyhow::Context;
-use crossbeam::atomic::AtomicCell;
-use parking_lot::Mutex;
-use pollster::FutureExt;
-use std::marker::PhantomData;
-use wgpu::TextureFormat;
-use winit::{dpi::PhysicalSize, window::Window};
+use {
+	anyhow::Context,
+	crossbeam::atomic::AtomicCell,
+	parking_lot::Mutex,
+	pollster::FutureExt,
+	std::marker::PhantomData,
+	wgpu::TextureFormat,
+	winit::{dpi::PhysicalSize, window::Window},
+};
 
 /// Surface
 // Note: Exists so we may lock both the surface and size behind
@@ -211,7 +213,10 @@ impl<'window> Wgpu<'window> {
 
 /// Configures the window surface and returns the preferred surface texture format
 fn configure_window_surface(
-	window: &Window, surface: &wgpu::Surface, adapter: &wgpu::Adapter, device: &wgpu::Device,
+	window: &Window,
+	surface: &wgpu::Surface,
+	adapter: &wgpu::Adapter,
+	device: &wgpu::Device,
 ) -> Result<(TextureFormat, PhysicalSize<u32>), anyhow::Error> {
 	// Get the format
 	let surface_texture_format = surface
@@ -277,7 +282,8 @@ unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, 
 
 /// Returns the window surface configuration
 const fn window_surface_configuration(
-	surface_texture_format: TextureFormat, size: PhysicalSize<u32>,
+	surface_texture_format: TextureFormat,
+	size: PhysicalSize<u32>,
 ) -> wgpu::SurfaceConfiguration {
 	wgpu::SurfaceConfiguration {
 		usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,

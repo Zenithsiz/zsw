@@ -7,9 +7,11 @@
 mod load;
 
 // Imports
-use super::Image;
-use crate::{paths, util};
-use anyhow::Context;
+use {
+	super::Image,
+	crate::{paths, util},
+	anyhow::Context,
+};
 
 /// Image loader
 #[derive(Debug)]
@@ -65,7 +67,8 @@ impl ImageLoader {
 
 /// Runs the image loader
 fn run_image_loader(
-	image_tx: &crossbeam::channel::Sender<Image>, paths_rx: &paths::Receiver,
+	image_tx: &crossbeam::channel::Sender<Image>,
+	paths_rx: &paths::Receiver,
 ) -> Result<(), anyhow::Error> {
 	while let Ok(path) = paths_rx.recv() {
 		match util::measure(|| load::load_image(&path)) {

@@ -3,13 +3,15 @@
 // Modules
 
 // Imports
-use anyhow::Context;
-use cgmath::Vector2;
-use image::{io::Reader as ImageReader, DynamicImage};
-use std::{
-	fs,
-	io::{BufReader, Seek},
-	path::Path,
+use {
+	anyhow::Context,
+	cgmath::Vector2,
+	image::{io::Reader as ImageReader, DynamicImage},
+	std::{
+		fs,
+		io::{BufReader, Seek},
+		path::Path,
+	},
 };
 
 /// Loads an image from a path

@@ -5,17 +5,18 @@ mod display_wrapper;
 mod scan_dir;
 
 // Exports
-pub use display_wrapper::DisplayWrapper;
-pub use scan_dir::visit_files_dir;
+pub use {display_wrapper::DisplayWrapper, scan_dir::visit_files_dir};
 
 // Imports
-use anyhow::Context;
-use image::DynamicImage;
-use std::{
-	fs,
-	hash::{Hash, Hasher},
-	path::Path,
-	time::{Duration, Instant},
+use {
+	anyhow::Context,
+	image::DynamicImage,
+	std::{
+		fs,
+		hash::{Hash, Hasher},
+		path::Path,
+		time::{Duration, Instant},
+	},
 };
 
 /// Measures how long it took to execute a function
@@ -46,7 +47,9 @@ pub macro measure_dbg {
 
 /// Spawns a new thread using `crossbeam::thread::Scope` with name
 pub fn spawn_scoped<'scope, 'env, T, F>(
-	s: &'scope crossbeam::thread::Scope<'env>, name: impl Into<String>, f: F,
+	s: &'scope crossbeam::thread::Scope<'env>,
+	name: impl Into<String>,
+	f: F,
 ) -> Result<crossbeam::thread::ScopedJoinHandle<'scope, T>, anyhow::Error>
 where
 	T: Send + 'env,
@@ -61,7 +64,10 @@ where
 
 /// Spawns multiple scoped threads
 pub fn spawn_scoped_multiple<'scope, 'env, T, F>(
-	s: &'scope crossbeam::thread::Scope<'env>, name: impl Into<String>, threads: usize, mut f: impl FnMut() -> F,
+	s: &'scope crossbeam::thread::Scope<'env>,
+	name: impl Into<String>,
+	threads: usize,
+	mut f: impl FnMut() -> F,
 ) -> Result<Vec<crossbeam::thread::ScopedJoinHandle<'scope, T>>, anyhow::Error>
 where
 	T: Send + 'env,

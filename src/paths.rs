@@ -31,8 +31,10 @@ pub use self::{
 };
 
 // Imports
-use parking_lot::Mutex;
-use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use {
+	parking_lot::Mutex,
+	std::{collections::HashSet, path::PathBuf, sync::Arc},
+};
 
 /// Inner
 #[derive(Debug)]
