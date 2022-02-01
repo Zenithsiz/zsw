@@ -84,30 +84,43 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	);
 
 	// Start all threads and then wait in the main thread for events
-	// TODO: Not ignore errors here, although given how `thread::scope` works
-	//       it's somewhat hard to do so
+	// Note: The outer result of `scope` can't be `Err` due to a panic in
+	//       another thread, since we manually join all threads at the end.
 	crossbeam::thread::scope(|s| {
+		// Create the thread spawner
+		let mut thread_spawner = util::ThreadSpawner::new(s);
+
 		// Spawn the path distributer thread
-		let _path_distributer = util::spawn_scoped(s, "Path distributer", || paths_distributer.run())?;
+		thread_spawner.spawn_scoped("Path distributer", || paths_distributer.run())?;
 
 		// Spawn all image loaders
 		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		let _image_loaders = util::spawn_scoped_multiple(s, "Image loader", loader_threads, || || image_loader.run())?;
+		thread_spawner.spawn_scoped_multiple("Image loader", loader_threads, || || image_loader.run())?;
 
 		// Spawn the renderer thread
-		let _renderer_thread = util::spawn_scoped(s, "Renderer", || renderer.run())?;
+		thread_spawner.spawn_scoped("Renderer", || {
+			renderer.run();
+			Ok(())
+		})?;
 
 		// Run event loop in this thread until we quit
 		event_loop.run_return(|event, _, control_flow| {
 			event_handler.handle_event(event, control_flow);
 		});
 
-		anyhow::Ok(())
-	})
-	.expect("Unable to start all threads")
-	.expect("Unable to run all threads 'till completion");
+		// Note: In release builds, once we get here, we can just exit,
+		//       no need to make the user wait for shutdown code.
+		// TODO: Check if anything needs to run drop code, such as possibly
+		//       saving all profiles or something similar?
+		#[cfg(not(debug_assertions))]
+		std::process::exit(0);
 
-	Ok(())
+		// Join all thread
+		// TODO: This doesn't actually join anything currently. Make all threads
+		//       exit here.
+		thread_spawner.join_all().context("Unable to join all threads")
+	})
+	.map_err(|err| anyhow::anyhow!("Unable to start all threads: {err:?}"))?
 }
 
 /// Creates the window, as well as the associated event loop

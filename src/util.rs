@@ -3,9 +3,10 @@
 // Modules
 mod display_wrapper;
 mod scan_dir;
+mod thread;
 
 // Exports
-pub use {display_wrapper::DisplayWrapper, scan_dir::visit_files_dir};
+pub use {display_wrapper::DisplayWrapper, scan_dir::visit_files_dir, thread::ThreadSpawner};
 
 // Imports
 use {
@@ -43,38 +44,6 @@ pub macro measure_dbg {
 	($($val:expr),+ $(,)?) => {
 		($(::std::dbg!($val)),+,)
 	}
-}
-
-/// Spawns a new thread using `crossbeam::thread::Scope` with name
-pub fn spawn_scoped<'scope, 'env, T, F>(
-	s: &'scope crossbeam::thread::Scope<'env>,
-	name: impl Into<String>,
-	f: F,
-) -> Result<crossbeam::thread::ScopedJoinHandle<'scope, T>, anyhow::Error>
-where
-	T: Send + 'env,
-	F: Send + FnOnce() -> T + 'env,
-{
-	let name = name.into();
-	s.builder()
-		.name(name.clone())
-		.spawn(|_| f())
-		.with_context(|| format!("Unable to start thread {name:?}"))
-}
-
-/// Spawns multiple scoped threads
-pub fn spawn_scoped_multiple<'scope, 'env, T, F>(
-	s: &'scope crossbeam::thread::Scope<'env>,
-	name: impl Into<String>,
-	threads: usize,
-	mut f: impl FnMut() -> F,
-) -> Result<Vec<crossbeam::thread::ScopedJoinHandle<'scope, T>>, anyhow::Error>
-where
-	T: Send + 'env,
-	F: Send + FnOnce() -> T + 'env,
-{
-	let name = name.into();
-	(0..threads).map(move |_| self::spawn_scoped(s, &name, f())).collect()
 }
 
 /// Parses json from a file

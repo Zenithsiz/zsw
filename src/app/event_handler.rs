@@ -58,11 +58,6 @@ impl<'a> EventHandler<'a> {
 				WindowEvent::CloseRequested | WindowEvent::Destroyed => {
 					log::warn!("Received close request, closing window");
 					*control_flow = EventLoopControlFlow::Exit;
-
-					// Once we reach here, we can just exit, no need to
-					// drop everything
-					// TODO: Go through the drop in debug mode at least.
-					std::process::exit(0);
 				},
 
 				// If we resized, queue a resize on wgpu
