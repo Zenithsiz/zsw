@@ -6,10 +6,9 @@ mod settings_window;
 // Imports
 use {
 	self::settings_window::SettingsWindow,
-	crate::{paths, Egui, ImageLoader, Panel, PanelsRenderer, Wgpu},
+	crate::{paths, Egui, ImageLoader, Panels, PanelsRenderer, Wgpu},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
-	parking_lot::Mutex,
 	std::{thread, time::Duration},
 	winit::{dpi::PhysicalPosition, window::Window},
 };
@@ -32,7 +31,7 @@ pub struct Renderer<'a> {
 	panels_renderer: &'a PanelsRenderer,
 
 	/// Panels
-	panels: &'a Mutex<Vec<Panel>>,
+	panels: &'a Panels,
 
 	/// Egui
 	egui: &'a Egui,
@@ -49,7 +48,7 @@ impl<'a> Renderer<'a> {
 		paths_distributer: &'a paths::Distributer,
 		image_loader: &'a ImageLoader,
 		panels_renderer: &'a PanelsRenderer,
-		panels: &'a Mutex<Vec<Panel>>,
+		panels: &'a Panels,
 		egui: &'a Egui,
 		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
 	) -> Self {
@@ -97,14 +96,13 @@ impl<'a> Renderer<'a> {
 
 	/// Updates all panels
 	fn update(&mut self) -> Result<(), anyhow::Error> {
-		let mut panels = self.panels.lock();
-		for panel in &mut *panels {
+		self.panels.for_each_mut(|panel| {
 			if let Err(err) = panel.update(self.wgpu, self.panels_renderer, self.image_loader) {
 				log::warn!("Unable to update panel: {err:?}");
 			}
-		}
 
-		Ok(())
+			Ok(())
+		})
 	}
 
 	/// Renders
@@ -130,9 +128,8 @@ impl<'a> Renderer<'a> {
 
 		self.wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
-			let mut panels = self.panels.lock();
 			self.panels_renderer
-				.render(&mut *panels, self.wgpu.queue(), encoder, surface_view, surface_size)
+				.render(self.panels, self.wgpu.queue(), encoder, surface_view, surface_size)
 				.context("Unable to render panels")?;
 
 			// Render egui

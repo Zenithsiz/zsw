@@ -10,7 +10,7 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 // Imports
 use {
 	super::PanelImage,
-	crate::{img::Image, Panel, Wgpu},
+	crate::{img::Image, Panels, Wgpu},
 	parking_lot::Mutex,
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -117,7 +117,7 @@ impl PanelsRenderer {
 	/// Renders panels
 	pub fn render(
 		&self,
-		panels: &mut [Panel],
+		panels: &Panels,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
 		surface_view: &wgpu::TextureView,
@@ -156,7 +156,7 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
-		for panel in panels {
+		panels.for_each_mut::<_, ()>(|panel| {
 			// Calculate the matrix for the panel
 			let matrix = panel.matrix(surface_size);
 
@@ -192,7 +192,7 @@ impl PanelsRenderer {
 				render_pass.set_bind_group(1, image.image_bind_group(), &[]);
 				render_pass.draw_indexed(0..6, 0, 0..1);
 			}
-		}
+		});
 
 		Ok(())
 	}

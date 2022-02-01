@@ -10,10 +10,9 @@ mod renderer;
 // Imports
 use {
 	self::{event_handler::EventHandler, renderer::Renderer},
-	crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, PanelsProfile, PanelsRenderer, Wgpu},
+	crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, Panels, PanelsProfile, PanelsRenderer, Wgpu},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
-	parking_lot::Mutex,
 	std::{num::NonZeroUsize, thread, time::Duration},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -45,9 +44,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let panels = args
 		.panel_geometries
 		.iter()
-		.map(|&geometry| Panel::new(geometry, PanelState::Empty, args.image_duration, args.fade_point))
-		.collect::<Vec<_>>();
-	let panels = Mutex::new(panels);
+		.map(|&geometry| Panel::new(geometry, PanelState::Empty, args.image_duration, args.fade_point));
+	let panels = Panels::new(panels);
 
 	// Create the panels renderer
 	let panels_renderer = PanelsRenderer::new(wgpu.device(), wgpu.surface_texture_format())

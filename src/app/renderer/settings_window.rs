@@ -5,12 +5,11 @@
 
 // Imports
 use {
-	crate::{paths, Panel, PanelState, Rect},
+	crate::{paths, Panel, PanelState, Panels, Rect},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
-	parking_lot::Mutex,
-	std::{mem, time::Duration},
+	std::time::Duration,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
@@ -49,7 +48,7 @@ impl<'a> SettingsWindow<'a> {
 		_frame: &epi::Frame,
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
-		panels: &Mutex<Vec<Panel>>,
+		panels: &Panels,
 		paths_distributer: &paths::Distributer,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
@@ -68,12 +67,14 @@ impl<'a> SettingsWindow<'a> {
 
 		// Then render it
 		settings_window.open(&mut self.open).show(ctx, |ui| {
-			let mut panels = panels.lock();
-			for (idx, panel) in panels.iter_mut().enumerate() {
-				ui.collapsing(format!("Panel {idx}"), |ui| {
+			let mut panel_idx = 0;
+			panels.for_each_mut::<_, ()>(|panel| {
+				ui.collapsing(format!("Panel {panel_idx}"), |ui| {
 					ui.add(PanelWidget::new(panel, surface_size));
 				});
-			}
+
+				panel_idx += 1;
+			});
 			ui.collapsing("Add panel", |ui| {
 				ui.horizontal(|ui| {
 					ui.label("Geometry");
@@ -91,7 +92,7 @@ impl<'a> SettingsWindow<'a> {
 				});
 
 				if ui.button("Add").clicked() {
-					panels.push(Panel::new(
+					panels.add_panel(Panel::new(
 						self.new_panel_state.geometry,
 						PanelState::Empty,
 						Duration::from_secs_f32(self.new_panel_state.duration_secs),
@@ -99,7 +100,6 @@ impl<'a> SettingsWindow<'a> {
 					));
 				}
 			});
-			mem::drop(panels);
 
 			ui.horizontal(|ui| {
 				let cur_root_path = paths_distributer.root_path();

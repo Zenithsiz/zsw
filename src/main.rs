@@ -10,7 +10,8 @@
 	try_trait_v2,
 	backtrace,
 	thread_id_value,
-	unwrap_infallible
+	unwrap_infallible,
+	explicit_generic_args_with_impl_trait
 )]
 // Lints
 #![warn(
@@ -74,7 +75,7 @@ pub use self::{
 	args::Args,
 	egui::Egui,
 	img::ImageLoader,
-	panel::{Panel, PanelState, PanelsProfile, PanelsRenderer},
+	panel::{Panel, PanelState, Panels, PanelsProfile, PanelsRenderer},
 	rect::Rect,
 	wgpu::Wgpu,
 };
