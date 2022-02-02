@@ -60,7 +60,7 @@ native-dialog = "0.6.3"
 
 # Threads
 crossbeam = "0.8.1"
-parking_lot = "0.11.2"
+parking_lot = {version = "0.11.2", features = ["deadlock_detection"]}
 
 # Hashing
 twox-hash = "1.6.1"

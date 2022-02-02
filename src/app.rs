@@ -7,10 +7,11 @@
 // Modules
 mod event_handler;
 mod renderer;
+mod settings_window;
 
 // Imports
 use {
-	self::{event_handler::EventHandler, renderer::Renderer},
+	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
 	crate::{img, paths, util, Args, Egui, Panel, PanelState, Panels, PanelsProfile, PanelsRenderer, Wgpu},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
@@ -74,12 +75,16 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	let queued_settings_window_open_click = AtomicCell::new(None);
 	let should_stop = AtomicBool::new(false);
+	let (paint_jobs_tx, paint_jobs_rx) = crossbeam::channel::bounded(0);
 
 	// Create the event handler
 	let mut event_handler = EventHandler::new();
 
 	// Create the renderer
-	let renderer = Renderer::new(&wgpu, image_receiver);
+	let renderer = Renderer::new(image_receiver);
+
+	// Create the settings window
+	let settings_window = SettingsWindow::new(wgpu.surface_size());
 
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
@@ -98,17 +103,30 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			.map(|image_loader| move || image_loader.run());
 		thread_spawner.spawn_scoped_multiple("Image loader", loader_fns)?;
 
+		// Spawn the settings window thread
+		thread_spawner.spawn_scoped("Settings window", || {
+			settings_window.run(
+				&wgpu,
+				&egui,
+				&window,
+				&panels,
+				&paths_distributer,
+				&queued_settings_window_open_click,
+				&paint_jobs_tx,
+			);
+			Ok(())
+		})?;
+
 		// Spawn the renderer thread
 		thread_spawner.spawn_scoped("Renderer", || {
 			renderer.run(
 				&window,
 				&wgpu,
-				&paths_distributer,
 				&panels_renderer,
 				&panels,
 				&egui,
-				&queued_settings_window_open_click,
 				&should_stop,
+				&paint_jobs_rx,
 			);
 			Ok(())
 		})?;

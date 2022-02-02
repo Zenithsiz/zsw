@@ -1,11 +1,13 @@
 //! Settings window
 
 // Lints
-#![allow(unused_results)] // `egui` returns a response on every operation, but we don't use them
+// `egui` returns a response on every operation, but we don't use them
+#![allow(unused_results)]
+
 
 // Imports
 use {
-	crate::{paths, Panel, PanelState, Panels, Rect},
+	crate::{paths, Egui, Panel, PanelState, Panels, Rect, Wgpu},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -34,8 +36,54 @@ impl SettingsWindow {
 		}
 	}
 
+	/// Runs the setting window
+	// TODO: Not use a channel, but instead something else
+	pub fn run(
+		mut self,
+		wgpu: &Wgpu,
+		egui: &Egui,
+		window: &Window,
+		panels: &Panels,
+		paths_distributer: &paths::Distributer,
+		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
+		paint_jobs_tx: &crossbeam::channel::Sender<Vec<egui::epaint::ClippedMesh>>,
+	) {
+		loop {
+			// Get the surface size
+			// TODO: This can deadlock if put inside the `egui.draw` closure.
+			let surface_size = wgpu.surface_size();
+
+			// Draw egui
+			let res = egui.draw(window, |ctx, frame| {
+				self.draw(
+					ctx,
+					frame,
+					surface_size,
+					window,
+					panels,
+					paths_distributer,
+					queued_settings_window_open_click,
+				)
+			});
+
+			let paint_jobs = match res {
+				Ok(paint_jobs) => paint_jobs,
+				Err(err) => {
+					log::warn!("Unable to draw egui: {err:?}");
+					continue;
+				},
+			};
+
+			// Then send the paint jobs
+			if paint_jobs_tx.send(paint_jobs).is_err() {
+				log::info!("Renderer thread quit, quitting");
+				break;
+			}
+		}
+	}
+
 	/// Draws the settings window
-	pub fn draw(
+	fn draw(
 		&mut self,
 		ctx: &egui::CtxRef,
 		_frame: &epi::Frame,
