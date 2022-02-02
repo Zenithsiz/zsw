@@ -76,20 +76,10 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let should_stop = AtomicBool::new(false);
 
 	// Create the event handler
-	let mut event_handler = EventHandler::new(&wgpu, &egui, &queued_settings_window_open_click);
+	let mut event_handler = EventHandler::new();
 
 	// Create the renderer
-	let renderer = Renderer::new(
-		&window,
-		&wgpu,
-		&paths_distributer,
-		image_receiver,
-		&panels_renderer,
-		&panels,
-		&egui,
-		&queued_settings_window_open_click,
-		&should_stop,
-	);
+	let renderer = Renderer::new(&wgpu, image_receiver);
 
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
@@ -110,13 +100,22 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the renderer thread
 		thread_spawner.spawn_scoped("Renderer", || {
-			renderer.run();
+			renderer.run(
+				&window,
+				&wgpu,
+				&paths_distributer,
+				&panels_renderer,
+				&panels,
+				&egui,
+				&queued_settings_window_open_click,
+				&should_stop,
+			);
 			Ok(())
 		})?;
 
 		// Run event loop in this thread until we quit
 		event_loop.run_return(|event, _, control_flow| {
-			event_handler.handle_event(event, control_flow);
+			event_handler.handle_event(&wgpu, &egui, &queued_settings_window_open_click, event, control_flow);
 		});
 
 		// Note: In release builds, once we get here, we can just exit,

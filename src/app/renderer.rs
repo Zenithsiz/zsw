@@ -19,79 +19,61 @@ use {
 };
 
 /// Renderer
-pub struct Renderer<'a> {
-	/// Window
-	window: &'a Window,
-
-	/// Wgpu
-	wgpu: &'a Wgpu<'a>,
-
-	/// Path distributer
-	paths_distributer: &'a paths::Distributer,
-
+pub struct Renderer {
 	/// Image receiver
 	image_receiver: ImageReceiver,
 
-	/// Panels renderer
-	panels_renderer: &'a PanelsRenderer,
-
-	/// Panels
-	panels: &'a Panels,
-
-	/// Egui
-	egui: &'a Egui,
-
-	/// If we should stop
-	should_stop: &'a AtomicBool,
-
 	/// Settings window
-	settings_window: SettingsWindow<'a>,
+	settings_window: SettingsWindow,
 }
 
-impl<'a> Renderer<'a> {
+impl Renderer {
 	/// Creates a new renderer
-	pub fn new(
-		window: &'a Window,
-		wgpu: &'a Wgpu,
-		paths_distributer: &'a paths::Distributer,
-		image_receiver: ImageReceiver,
-		panels_renderer: &'a PanelsRenderer,
-		panels: &'a Panels,
-		egui: &'a Egui,
-		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
-		should_stop: &'a AtomicBool,
-	) -> Self {
+	pub fn new(wgpu: &Wgpu, image_receiver: ImageReceiver) -> Self {
 		Self {
-			window,
-			wgpu,
-			paths_distributer,
 			image_receiver,
-			panels_renderer,
-			panels,
-			egui,
-			should_stop,
-			settings_window: SettingsWindow::new(wgpu.surface_size(), queued_settings_window_open_click),
+			settings_window: SettingsWindow::new(wgpu.surface_size()),
 		}
 	}
 
 	/// Runs the renderer
-	pub fn run(mut self) {
+	pub fn run(
+		mut self,
+		window: &Window,
+		wgpu: &Wgpu,
+		paths_distributer: &paths::Distributer,
+		panels_renderer: &PanelsRenderer,
+		panels: &Panels,
+		egui: &Egui,
+		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
+		should_stop: &AtomicBool,
+	) {
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-		while !self.should_stop.load(atomic::Ordering::Relaxed) {
+		while !should_stop.load(atomic::Ordering::Relaxed) {
 			// Update
 			// Note: The update is only useful for displaying, so there's no use
 			//       in running it in another thread.
 			//       Especially given that `update` doesn't block.
-			let (res, frame_duration) = crate::util::measure(|| self.update());
+			let (res, frame_duration) = crate::util::measure(|| self.update(wgpu, panels_renderer, panels));
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to update"),
 				Err(err) => log::warn!("Unable to update: {err:?}"),
 			};
 
 			// Render
-			let (res, frame_duration) = crate::util::measure(|| self.render());
+			let (res, frame_duration) = crate::util::measure(|| {
+				self.render(
+					window,
+					wgpu,
+					paths_distributer,
+					panels_renderer,
+					panels,
+					egui,
+					queued_settings_window_open_click,
+				)
+			});
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -105,9 +87,9 @@ impl<'a> Renderer<'a> {
 	}
 
 	/// Updates all panels
-	fn update(&mut self) -> Result<(), anyhow::Error> {
-		self.panels.for_each_mut(|panel| {
-			if let Err(err) = panel.update(self.wgpu, self.panels_renderer, &self.image_receiver) {
+	fn update(&mut self, wgpu: &Wgpu, panels_renderer: &PanelsRenderer, panels: &Panels) -> Result<(), anyhow::Error> {
+		panels.for_each_mut(|panel| {
+			if let Err(err) = panel.update(wgpu, panels_renderer, &self.image_receiver) {
 				log::warn!("Unable to update panel: {err:?}");
 			}
 
@@ -116,30 +98,39 @@ impl<'a> Renderer<'a> {
 	}
 
 	/// Renders
-	fn render(&mut self) -> Result<(), anyhow::Error> {
+	fn render(
+		&mut self,
+		window: &Window,
+		wgpu: &Wgpu,
+		paths_distributer: &paths::Distributer,
+		panels_renderer: &PanelsRenderer,
+		panels: &Panels,
+		egui: &Egui,
+		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
+	) -> Result<(), anyhow::Error> {
 		// Draw egui
 		// TODO: When this is moved to it's own thread, regardless of issues with
 		//       synchronizing the platform, we should synchronize the drawing to ensure
 		//       we don't draw twice without displaying, as the first draw would never be
 		//       visible to the user.
-		let paint_jobs = self
-			.egui
-			.draw(self.window, |ctx, frame| {
+		let paint_jobs = egui
+			.draw(window, |ctx, frame| {
 				self.settings_window.draw(
 					ctx,
 					frame,
-					self.wgpu.surface_size(),
-					self.window,
-					self.panels,
-					self.paths_distributer,
+					wgpu.surface_size(),
+					window,
+					panels,
+					paths_distributer,
+					queued_settings_window_open_click,
 				)
 			})
 			.context("Unable to draw egui")?;
 
-		self.wgpu.render(|encoder, surface_view, surface_size| {
+		wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
-			self.panels_renderer
-				.render(self.panels, self.wgpu.queue(), encoder, surface_view, surface_size)
+			panels_renderer
+				.render(panels, wgpu.queue(), encoder, surface_view, surface_size)
 				.context("Unable to render panels")?;
 
 			// Render egui
@@ -147,15 +138,15 @@ impl<'a> Renderer<'a> {
 			let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
 				physical_width:  surface_size.width,
 				physical_height: surface_size.height,
-				scale_factor:    self.window.scale_factor() as f32,
+				scale_factor:    window.scale_factor() as f32,
 			};
-			let device = self.wgpu.device();
-			let queue = self.wgpu.queue();
-			let mut egui_render_pass = self.egui.render_pass().lock();
+			let device = wgpu.device();
+			let queue = wgpu.queue();
+			let mut egui_render_pass = egui.render_pass().lock();
 
 			// TODO: Check if it's fine to get the platform here without synchronizing
 			//       with the drawing.
-			let egui_platform = self.egui.platform().lock();
+			let egui_platform = egui.platform().lock();
 			egui_render_pass.update_texture(device, queue, &egui_platform.context().font_image());
 			egui_render_pass.update_user_textures(device, queue);
 			egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);

@@ -17,10 +17,7 @@ use {
 };
 
 /// Settings window
-pub struct SettingsWindow<'a> {
-	/// Queued settings window open click
-	queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
-
+pub struct SettingsWindow {
 	/// If open
 	open: bool,
 
@@ -28,15 +25,11 @@ pub struct SettingsWindow<'a> {
 	new_panel_state: NewPanelState,
 }
 
-impl<'a> SettingsWindow<'a> {
+impl SettingsWindow {
 	/// Creates the settings window
-	pub fn new(
-		surface_size: PhysicalSize<u32>,
-		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
-	) -> Self {
+	pub fn new(surface_size: PhysicalSize<u32>) -> Self {
 		Self {
-			queued_settings_window_open_click,
-			open: false,
+			open:            false,
 			new_panel_state: NewPanelState::new(surface_size),
 		}
 	}
@@ -50,12 +43,13 @@ impl<'a> SettingsWindow<'a> {
 		window: &Window,
 		panels: &Panels,
 		paths_distributer: &paths::Distributer,
+		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
 
 		// If we have any queued click, summon the window there
-		if let Some(cursor_pos) = self.queued_settings_window_open_click.take() {
+		if let Some(cursor_pos) = queued_settings_window_open_click.take() {
 			// Adjust cursor pos to account for the scale factor
 			let scale_factor = window.scale_factor();
 			let cursor_pos = cursor_pos.to_logical(scale_factor);

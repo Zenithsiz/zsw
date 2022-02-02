@@ -12,39 +12,28 @@ use {
 };
 
 /// Event handler
-pub struct EventHandler<'a> {
-	/// Wgpu
-	wgpu: &'a Wgpu<'a>,
-
-	/// Egui
-	egui: &'a Egui,
-
+pub struct EventHandler {
 	/// Cursor position
 	cursor_pos: Option<PhysicalPosition<f64>>,
-
-	/// Queued settings window open click
-	queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
 }
 
-impl<'a> EventHandler<'a> {
+impl EventHandler {
 	/// Creates the event handler
-	pub fn new(
-		wgpu: &'a Wgpu,
-		egui: &'a Egui,
-		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
-	) -> Self {
-		Self {
-			wgpu,
-			egui,
-			cursor_pos: None,
-			queued_settings_window_open_click,
-		}
+	pub fn new() -> Self {
+		Self { cursor_pos: None }
 	}
 
 	/// Handles an event
-	pub fn handle_event(&mut self, event: Event<!>, control_flow: &mut EventLoopControlFlow) {
+	pub fn handle_event(
+		&mut self,
+		wgpu: &Wgpu,
+		egui: &Egui,
+		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
+		event: Event<!>,
+		control_flow: &mut EventLoopControlFlow,
+	) {
 		// Update egui
-		self.egui.platform().lock().handle_event(&event);
+		egui.platform().lock().handle_event(&event);
 
 		// Set control for to wait for next event, since we're not doing
 		// anything else on the main thread
@@ -61,7 +50,7 @@ impl<'a> EventHandler<'a> {
 				},
 
 				// If we resized, queue a resize on wgpu
-				WindowEvent::Resized(size) => self.wgpu.resize(size),
+				WindowEvent::Resized(size) => wgpu.resize(size),
 
 				// On move, update the cursor position
 				WindowEvent::CursorMoved { position, .. } => self.cursor_pos = Some(position),
@@ -72,7 +61,7 @@ impl<'a> EventHandler<'a> {
 					button: winit::event::MouseButton::Right,
 					..
 				} => {
-					self.queued_settings_window_open_click.store(self.cursor_pos);
+					queued_settings_window_open_click.store(self.cursor_pos);
 				},
 				_ => (),
 			},
