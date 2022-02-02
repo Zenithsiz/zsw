@@ -1,15 +1,20 @@
 //! Renderer
 
+
 // Modules
 mod settings_window;
 
 // Imports
 use {
 	self::settings_window::SettingsWindow,
-	crate::{paths, Egui, ImageLoader, Panels, PanelsRenderer, Wgpu},
+	crate::{img::ImageReceiver, paths, Egui, Panels, PanelsRenderer, Wgpu},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
-	std::{thread, time::Duration},
+	std::{
+		sync::atomic::{self, AtomicBool},
+		thread,
+		time::Duration,
+	},
 	winit::{dpi::PhysicalPosition, window::Window},
 };
 
@@ -24,8 +29,8 @@ pub struct Renderer<'a> {
 	/// Path distributer
 	paths_distributer: &'a paths::Distributer,
 
-	/// Image loader
-	image_loader: &'a ImageLoader,
+	/// Image receiver
+	image_receiver: ImageReceiver,
 
 	/// Panels renderer
 	panels_renderer: &'a PanelsRenderer,
@@ -35,6 +40,9 @@ pub struct Renderer<'a> {
 
 	/// Egui
 	egui: &'a Egui,
+
+	/// If we should stop
+	should_stop: &'a AtomicBool,
 
 	/// Settings window
 	settings_window: SettingsWindow<'a>,
@@ -46,30 +54,32 @@ impl<'a> Renderer<'a> {
 		window: &'a Window,
 		wgpu: &'a Wgpu,
 		paths_distributer: &'a paths::Distributer,
-		image_loader: &'a ImageLoader,
+		image_receiver: ImageReceiver,
 		panels_renderer: &'a PanelsRenderer,
 		panels: &'a Panels,
 		egui: &'a Egui,
 		queued_settings_window_open_click: &'a AtomicCell<Option<PhysicalPosition<f64>>>,
+		should_stop: &'a AtomicBool,
 	) -> Self {
 		Self {
 			window,
 			wgpu,
 			paths_distributer,
-			image_loader,
+			image_receiver,
 			panels_renderer,
 			panels,
 			egui,
+			should_stop,
 			settings_window: SettingsWindow::new(wgpu.surface_size(), queued_settings_window_open_click),
 		}
 	}
 
 	/// Runs the renderer
-	pub fn run(&mut self) {
-		// Duration we're sleep
+	pub fn run(mut self) {
+		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-		loop {
+		while !self.should_stop.load(atomic::Ordering::Relaxed) {
 			// Update
 			// Note: The update is only useful for displaying, so there's no use
 			//       in running it in another thread.
@@ -97,7 +107,7 @@ impl<'a> Renderer<'a> {
 	/// Updates all panels
 	fn update(&mut self) -> Result<(), anyhow::Error> {
 		self.panels.for_each_mut(|panel| {
-			if let Err(err) = panel.update(self.wgpu, self.panels_renderer, self.image_loader) {
+			if let Err(err) = panel.update(self.wgpu, self.panels_renderer, &self.image_receiver) {
 				log::warn!("Unable to update panel: {err:?}");
 			}
 

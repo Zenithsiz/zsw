@@ -1,7 +1,8 @@
 //! App
 
 // Lints
-#![allow(clippy::too_many_arguments)] // We need to share a lot of state and we can't couple it together in most cases
+// We need to share a lot of state and we can't couple it together in most cases
+#![allow(clippy::too_many_arguments)]
 
 // Modules
 mod event_handler;
@@ -10,10 +11,15 @@ mod renderer;
 // Imports
 use {
 	self::{event_handler::EventHandler, renderer::Renderer},
-	crate::{paths, util, Args, Egui, ImageLoader, Panel, PanelState, Panels, PanelsProfile, PanelsRenderer, Wgpu},
+	crate::{img, paths, util, Args, Egui, Panel, PanelState, Panels, PanelsProfile, PanelsRenderer, Wgpu},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
-	std::{num::NonZeroUsize, thread, time::Duration},
+	std::{
+		num::NonZeroUsize,
+		sync::atomic::{self, AtomicBool},
+		thread,
+		time::Duration,
+	},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::EventLoop,
@@ -38,7 +44,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let (paths_distributer, paths_rx) = paths::new(args.images_dir.clone());
 
 	// Create the image loader
-	let image_loader = ImageLoader::new(paths_rx).context("Unable to create image loader")?;
+	let (image_loader, image_receiver) = img::loader::new(paths_rx);
 
 	// Create all panels
 	let panels = args
@@ -67,20 +73,22 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	};
 
 	let queued_settings_window_open_click = AtomicCell::new(None);
+	let should_stop = AtomicBool::new(false);
 
 	// Create the event handler
 	let mut event_handler = EventHandler::new(&wgpu, &egui, &queued_settings_window_open_click);
 
 	// Create the renderer
-	let mut renderer = Renderer::new(
+	let renderer = Renderer::new(
 		&window,
 		&wgpu,
 		&paths_distributer,
-		&image_loader,
+		image_receiver,
 		&panels_renderer,
 		&panels,
 		&egui,
 		&queued_settings_window_open_click,
+		&should_stop,
 	);
 
 	// Start all threads and then wait in the main thread for events
@@ -95,7 +103,10 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn all image loaders
 		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		thread_spawner.spawn_scoped_multiple("Image loader", loader_threads, || || image_loader.run())?;
+		let loader_fns = vec![image_loader; loader_threads]
+			.into_iter()
+			.map(|image_loader| move || image_loader.run());
+		thread_spawner.spawn_scoped_multiple("Image loader", loader_fns)?;
 
 		// Spawn the renderer thread
 		thread_spawner.spawn_scoped("Renderer", || {
@@ -115,10 +126,20 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		#[cfg(not(debug_assertions))]
 		std::process::exit(0);
 
-		// Join all thread
-		// TODO: This doesn't actually join anything currently. Make all threads
-		//       exit here.
-		thread_spawner.join_all().context("Unable to join all threads")
+		let (res, duration) = util::measure(|| {
+			// Stop the renderer
+			// Note: Stopping the renderer will cause it to drop the image receiver,
+			//       which will stop the image loaders and in turn the path loader.
+			should_stop.store(true, atomic::Ordering::Relaxed);
+
+			// Join all thread
+			// TODO: This doesn't actually join anything currently. Make all threads
+			//       exit here.
+			thread_spawner.join_all().context("Unable to join all threads")
+		});
+		log::info!("Took {duration:?} to join all threads");
+
+		res
 	})
 	.map_err(|err| anyhow::anyhow!("Unable to start all threads: {err:?}"))?
 }

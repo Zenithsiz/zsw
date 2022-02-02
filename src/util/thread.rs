@@ -46,19 +46,22 @@ impl<'scope, 'env> ThreadSpawner<'scope, 'env> {
 	pub fn spawn_scoped_multiple<F>(
 		&mut self,
 		name: impl Into<String>,
-		threads: usize,
-		mut f: impl FnMut() -> F,
+		threads: impl Iterator<Item = F>,
 	) -> Result<(), anyhow::Error>
 	where
 		F: Send + FnOnce() -> Result<(), anyhow::Error> + 'env,
 	{
 		let name = name.into();
-		(0..threads).try_for_each(move |idx| self.spawn_scoped(format!("{name}${idx}"), f()))
+		threads
+			.enumerate()
+			.try_for_each(move |(idx, f)| self.spawn_scoped(format!("{name}${idx}"), f))
 	}
 
 	/// Joins all threads
 	pub fn join_all(self) -> Result<(), anyhow::Error> {
-		self.join_handles.into_iter().try_for_each(|handle| {
+		// Note: We only join in reverse order because that's usually the order
+		//       the threads will stop, nothing else. No sequencing exists.
+		self.join_handles.into_iter().rev().try_for_each(|handle| {
 			let name = handle.thread().name().unwrap_or("<unnamed>").to_owned();
 			log::debug!("Joining thread '{name:?}'");
 			handle

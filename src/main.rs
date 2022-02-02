@@ -110,9 +110,5 @@ fn main() -> Result<(), anyhow::Error> {
 		}
 	}
 
-	// TODO: Wgpu seems to segfault during a global destructor.
-	//       Not sure what's causing this, but happens after "Destroying 2 command encoders"
-	//       log comes out. If instead of 2, 3 are being destroyed, it doesn't segfault.
-
 	Ok(())
 }

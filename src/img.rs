@@ -2,11 +2,14 @@
 
 
 // Modules
-mod loader;
+pub mod loader;
 mod uvs;
 
 // Exports
-pub use {loader::ImageLoader, uvs::ImageUvs};
+pub use {
+	loader::{ImageLoader, ImageReceiver},
+	uvs::ImageUvs,
+};
 
 // Imports
 use {

@@ -14,11 +14,8 @@ use {
 };
 
 /// Image loader
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ImageLoader {
-	/// Image receiver
-	image_rx: crossbeam::channel::Receiver<Image>,
-
 	/// Image sender
 	image_tx: crossbeam::channel::Sender<Image>,
 
@@ -27,28 +24,22 @@ pub struct ImageLoader {
 }
 
 impl ImageLoader {
-	/// Creates a new image loader.
-	pub fn new(paths_rx: paths::Receiver) -> Result<Self, anyhow::Error> {
-		// TODO: Check if a 0 capacity channel is fine here.
-		//       Given we'll have a few runner threads, each one
-		//       will hold an image, which should be fine, but we might
-		//       want to hold more? Maybe let the user decide somewhere.
-		let (image_tx, image_rx) = crossbeam::channel::bounded(0);
-
-		Ok(Self {
-			image_rx,
-			image_tx,
-			paths_rx,
-		})
-	}
-
-	/// Runs an image loader.
+	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
-	pub fn run(&self) -> Result<(), anyhow::Error> {
+	pub fn run(self) -> Result<(), anyhow::Error> {
 		self::run_image_loader(&self.image_tx, &self.paths_rx)
 	}
+}
 
+/// Image receiver
+#[derive(Clone, Debug)]
+pub struct ImageReceiver {
+	/// Image receiver
+	image_rx: crossbeam::channel::Receiver<Image>,
+}
+
+impl ImageReceiver {
 	/// Receives the image, waiting if not ready yet
 	pub fn recv(&self) -> Result<Image, anyhow::Error> {
 		self.image_rx.recv().context("Unable to get image from loader thread")
@@ -63,6 +54,17 @@ impl ImageLoader {
 			Err(_) => anyhow::bail!("Unable to get image from loader thread"),
 		}
 	}
+}
+
+/// Creates a new image loader.
+pub fn new(paths_rx: paths::Receiver) -> (ImageLoader, ImageReceiver) {
+	// TODO: Check if a 0 capacity channel is fine here.
+	//       Given we'll have a few runner threads, each one
+	//       will hold an image, which should be fine, but we might
+	//       want to hold more? Maybe let the user decide somewhere.
+	let (image_tx, image_rx) = crossbeam::channel::bounded(0);
+
+	(ImageLoader { image_tx, paths_rx }, ImageReceiver { image_rx })
 }
 
 /// Runs the image loader
