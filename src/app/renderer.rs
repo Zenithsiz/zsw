@@ -1,6 +1,5 @@
 //! Renderer
 
-
 // Modules
 mod settings_window;
 

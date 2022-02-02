@@ -132,8 +132,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			should_stop.store(true, atomic::Ordering::Relaxed);
 
 			// Join all thread
-			// TODO: This doesn't actually join anything currently. Make all threads
-			//       exit here.
 			thread_spawner.join_all().context("Unable to join all threads")
 		});
 		log::info!("Took {duration:?} to join all threads");
@@ -176,7 +174,6 @@ fn create_window(args: &Args) -> Result<(EventLoop<!>, Window), anyhow::Error> {
 ///
 /// # Safety
 /// TODO
-#[allow(clippy::expect_used)] // TODO: Refactor all of this
 unsafe fn set_display_always_below(window: &Window) {
 	// Get the xlib display and window
 	let display = window.xlib_display().expect("No `X` display found").cast();
