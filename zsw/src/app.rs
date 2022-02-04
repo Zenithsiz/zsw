@@ -15,7 +15,7 @@ use {
 	crate::{
 		img,
 		paths,
-		util::{self, MightBlock},
+		util::{self, MightDeadlock},
 		Args,
 		Egui,
 		Panel,
@@ -96,8 +96,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let renderer = Renderer::new(image_receiver);
 
 	// Create the settings window
-	// BLOCKING: No other threads exist yet, so `Wgpu::render` isn't running.
-	let settings_window = SettingsWindow::new(wgpu.surface_size().allow::<MightBlock>());
+	// DEADLOCK: We're not calling it from within `Wgpu::render`
+	let settings_window = SettingsWindow::new(wgpu.surface_size().allow::<MightDeadlock>());
 
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
@@ -118,15 +118,19 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the settings window thread
 		thread_spawner.spawn_scoped("Settings window", || {
-			settings_window.run(
-				&wgpu,
-				&egui,
-				&window,
-				&panels,
-				&paths_distributer,
-				&queued_settings_window_open_click,
-				&paint_jobs_tx,
-			);
+			// DEADLOCK: We're calling it from a separate thread, so we're not
+			//           within `Wgpu::Render`.
+			settings_window
+				.run(
+					&wgpu,
+					&egui,
+					&window,
+					&panels,
+					&paths_distributer,
+					&queued_settings_window_open_click,
+					&paint_jobs_tx,
+				)
+				.allow::<MightDeadlock>();
 			Ok(())
 		})?;
 

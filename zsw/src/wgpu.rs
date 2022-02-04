@@ -11,7 +11,7 @@
 
 // Imports
 use {
-	crate::util::{MightBlock, WithSideEffect},
+	crate::util::{MightDeadlock, WithSideEffect},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	parking_lot::Mutex,
@@ -130,14 +130,14 @@ impl<'window> Wgpu<'window> {
 
 	/// Returns the current surface's size
 	///
-	/// # Blocking
-	/// This function blocks while `Self::render` is running.
+	/// # DEADLOCK
+	/// Deadlocks if called from the closure within `Self::render`.
 	///
 	/// # Warning
 	/// This surface size might change at any time, so you shouldn't
 	/// use it on `wgpu` operations that might panic on wrong surface
 	/// sizes.
-	pub fn surface_size(&self) -> WithSideEffect<PhysicalSize<u32>, MightBlock> {
+	pub fn surface_size(&self) -> WithSideEffect<PhysicalSize<u32>, MightDeadlock> {
 		WithSideEffect::new(self.surface.lock().size)
 	}
 
@@ -160,7 +160,11 @@ impl<'window> Wgpu<'window> {
 
 	/// Renders a frame using `f`
 	///
-	/// `f` receives the command encoder and the surface texture / size. This allows you to
+	/// # DEADLOCK
+	/// Deadlocks if called recursively from within `f`.
+	///
+	/// # Callback
+	/// Callback `f` receives the command encoder and the surface texture / size. This allows you to
 	/// start render passes to the surface texture.
 	///
 	/// Once `f` returns, all commands are sent via the `wgpu` queue and the surface is presented.

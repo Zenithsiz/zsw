@@ -10,7 +10,7 @@ mod thread;
 pub use {
 	display_wrapper::DisplayWrapper,
 	scan_dir::visit_files_dir,
-	side_effect::{MightBlock, SideEffect, WithSideEffect},
+	side_effect::{MightDeadlock, SideEffect, WithSideEffect},
 	thread::ThreadSpawner,
 };
 

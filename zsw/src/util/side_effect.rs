@@ -24,6 +24,22 @@ impl<Value, Effects: SideEffect> WithSideEffect<Value, Effects> {
 		}
 	}
 
+	/// Maps this side effect
+	pub fn map<MappedValue>(self, f: impl FnOnce(Value) -> MappedValue) -> WithSideEffect<MappedValue, Effects> {
+		WithSideEffect {
+			value:   f(self.value),
+			effects: self.effects,
+		}
+	}
+
+	/// Converts a `&WithSideEffect<T, S>` to `WithSideEffect<&T, S>`
+	pub fn as_ref(&self) -> WithSideEffect<&Value, Effects> {
+		WithSideEffect {
+			value:   &self.value,
+			effects: self.effects,
+		}
+	}
+
 	/// Allows all effects and returns the inner value
 	///
 	/// This must be used with turbofish to ensure that you write the side
@@ -46,11 +62,11 @@ impl<E1: SideEffect> SideEffect for (E1,) {}
 impl<E1: SideEffect, E2: SideEffect> SideEffect for (E1, E2) {}
 impl<E1: SideEffect, E2: SideEffect, E3: SideEffect, E4: SideEffect> SideEffect for (E1, E2, E3, E4) {}
 
-/// Side effect to indicate that a function might block
+/// Side effect to indicate that a function might deadlock if a lock is in use.
 #[derive(Clone, Copy, Debug)]
-pub struct MightBlock;
+pub struct MightDeadlock;
 
-impl SideEffect for MightBlock {}
+impl SideEffect for MightDeadlock {}
 
 /// Trait to check if two types are equal
 // TODO: Possibly make this sealed?
