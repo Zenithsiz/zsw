@@ -4,7 +4,7 @@
 use {
 	crate::{
 		img::ImageReceiver,
-		util::{extse::CrossBeamChannelReceiverSE, MightDeadlock},
+		util::{extse::CrossBeamChannelReceiverSE, MightBlock},
 		Egui,
 		Panels,
 		PanelsRenderer,
@@ -34,9 +34,11 @@ impl Renderer {
 
 	/// Runs the renderer
 	///
-	/// # Deadlock
-	/// Deadlocks if the paint jobs sender deadlock.
-	#[side_effect(MightDeadlock)]
+	/// # Blocking
+	/// Blocks waiting for a value from the sender of `paint_jobs_rx`.
+	/// Blocks for calls to [`Wgpu::surface_size`] to finish.
+	/// Deadlocks if called within a [`Wgpu::render`] callback.
+	#[side_effect(MightBlock)]
 	pub fn run(
 		mut self,
 		window: &Window,
@@ -62,9 +64,9 @@ impl Renderer {
 			};
 
 			// Render
-			// DEADLOCK: Caller guarantees the paint jobs sender won't deadlock
+			// DEADLOCK: Caller is responsible for avoiding deadlocks
 			let (res, frame_duration) = crate::util::measure(|| {
-				Self::render(window, wgpu, panels_renderer, panels, egui, paint_jobs_rx).allow::<MightDeadlock>()
+				Self::render(window, wgpu, panels_renderer, panels, egui, paint_jobs_rx).allow::<MightBlock>()
 			});
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
@@ -91,10 +93,11 @@ impl Renderer {
 
 	/// Renders
 	///
-	/// # Deadlock
-	/// Deadlocks if the paint jobs sender deadlock, or if called from
-	/// within a `Wgpu::render` callback.
-	#[side_effect(MightDeadlock)]
+	/// # Blocking
+	/// Blocks waiting for a value from the sender of `paint_jobs_rx`.
+	/// Blocks for calls to [`Wgpu::surface_size`] to finish.
+	/// Deadlocks if called within a [`Wgpu::render`] callback.
+	#[side_effect(MightBlock)]
 	fn render(
 		window: &Window,
 		wgpu: &Wgpu,
@@ -105,13 +108,16 @@ impl Renderer {
 	) -> Result<(), anyhow::Error> {
 		// Get the egui render results
 		// Note: The settings window shouldn't quit while we're alive.
-		// BLOCKING: Caller guarantees that the sender won't deadlock if we're
-		//           not within a `Wgpu::render` call, and we're not.
+		// BLOCKING: Caller is responsible for avoiding deadlocks.
+		//           We ensure we're not calling it from within [`Wgpu::render`].
 		let paint_jobs = paint_jobs_rx
 			.recv_se()
-			.allow::<MightDeadlock>()
+			.allow::<MightBlock>()
 			.context("Unable to get paint jobs from settings window")?;
 
+		// Then render
+		// DEADLOCK: Caller is responsible for avoiding deadlocks.
+		//           We ensure we don't block within [`Wgpu::render`].
 		wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
 			panels_renderer
@@ -142,5 +148,6 @@ impl Renderer {
 
 			Ok(())
 		})
+		.allow::<MightBlock>()
 	}
 }

@@ -65,11 +65,11 @@ impl<E1: SideEffect> SideEffect for (E1,) {}
 impl<E1: SideEffect, E2: SideEffect> SideEffect for (E1, E2) {}
 impl<E1: SideEffect, E2: SideEffect, E3: SideEffect, E4: SideEffect> SideEffect for (E1, E2, E3, E4) {}
 
-/// Side effect to indicate that a function might deadlock.
+/// Side effect to indicate that a function might block
 #[derive(Clone, Copy, Debug)]
-pub struct MightDeadlock;
+pub struct MightBlock;
 
-impl SideEffect for MightDeadlock {}
+impl SideEffect for MightBlock {}
 
 /// Trait to check if two types are equal
 // TODO: Possibly make this sealed?

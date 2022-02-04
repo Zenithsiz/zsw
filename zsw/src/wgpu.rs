@@ -11,7 +11,7 @@
 
 // Imports
 use {
-	crate::util::{MightDeadlock, WithSideEffect},
+	crate::util::MightBlock,
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	parking_lot::Mutex,
@@ -19,6 +19,7 @@ use {
 	std::marker::PhantomData,
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
+	zsw_side_effect_macros::side_effect,
 };
 
 /// Surface
@@ -130,15 +131,17 @@ impl<'window> Wgpu<'window> {
 
 	/// Returns the current surface's size
 	///
-	/// # Deadlock
-	/// Deadlocks if called from the closure within `Self::render`.
+	/// # Blocking
+	/// Blocks until any calls to [`Wgpu::render`] are finished.
 	///
 	/// # Warning
 	/// This surface size might change at any time, so you shouldn't
 	/// use it on `wgpu` operations that might panic on wrong surface
 	/// sizes.
-	pub fn surface_size(&self) -> WithSideEffect<PhysicalSize<u32>, MightDeadlock> {
-		WithSideEffect::new(self.surface.lock().size)
+	#[side_effect(MightBlock)]
+	pub fn surface_size(&self) -> PhysicalSize<u32> {
+		// DEADLOCK: Caller is responsible for avoiding deadlocks
+		self.surface.lock().size
 	}
 
 	/// Returns the surface texture format
@@ -160,8 +163,8 @@ impl<'window> Wgpu<'window> {
 
 	/// Renders a frame using `f`
 	///
-	/// # Deadlock
-	/// Deadlocks if called recursively from within `f`.
+	/// # Blocking
+	/// Blocks until any calls to [`Wgpu::surface_size`] are finished.
 	///
 	/// # Callback
 	/// Callback `f` receives the command encoder and the surface texture / size. This allows you to
@@ -171,6 +174,7 @@ impl<'window> Wgpu<'window> {
 	///
 	/// If any resize is queued, it will be executed *before* the frame starts, so the frame will start
 	/// with the new size.
+	#[side_effect(MightBlock)]
 	pub fn render(
 		&self,
 		f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView, PhysicalSize<u32>) -> Result<(), anyhow::Error>,
@@ -178,6 +182,7 @@ impl<'window> Wgpu<'window> {
 		// Note: We want to keep the surface locked until the end of the
 		//       method to prevent any possible changes from another thread
 		//       mid-frame, which could cause panics in `wgpu` validation.
+		// DEADLOCK: Caller is responsible for avoiding deadlocks
 		let mut surface = self.surface.lock();
 
 		// Check for resizes

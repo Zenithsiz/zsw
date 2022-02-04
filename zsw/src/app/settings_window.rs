@@ -8,7 +8,7 @@ use crate::util::extse::CrossBeamChannelSenderSE;
 
 // Imports
 use {
-	crate::{paths, util::MightDeadlock, Egui, Panel, PanelState, Panels, Rect, Wgpu},
+	crate::{paths, util::MightBlock, Egui, Panel, PanelState, Panels, Rect, Wgpu},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -40,11 +40,10 @@ impl SettingsWindow {
 
 	/// Runs the setting window
 	///
-	/// # Deadlock
-	/// Deadlocks if called from within `Wgpu::Render`, or if the
-	/// paint job receiver deadlocks.
-	/// Blocks while waiting for the surface size.
-	#[side_effect(MightDeadlock)]
+	/// # Blocking
+	/// Blocks until any calls to [`Wgpu::render`] are finished.
+	/// Blocks until the receiver of `paint_jobs_tx` receives a value.
+	#[side_effect(MightBlock)]
 	pub fn run(
 		mut self,
 		wgpu: &Wgpu,
@@ -57,9 +56,8 @@ impl SettingsWindow {
 	) -> () {
 		loop {
 			// Get the surface size
-			// TODO: This can deadlock if put inside the `egui.draw` closure.
-			// DEADLOCK: Caller guarantees we aren't calling it from within `Wgpu::render`.
-			let surface_size = wgpu.surface_size().allow::<MightDeadlock>();
+			// DEADLOCK: Caller guarantees we aren't calling it from within `Wgpu::Render`
+			let surface_size = wgpu.surface_size().allow::<MightBlock>();
 
 			// Draw egui
 			let res = egui.draw(window, |ctx, frame| {
@@ -83,8 +81,8 @@ impl SettingsWindow {
 			};
 
 			// Then send the paint jobs
-			// DEADLOCK: Caller ensures receiver doesn't deadlock
-			if paint_jobs_tx.send_se(paint_jobs).allow::<MightDeadlock>().is_err() {
+			// DEADLOCK: Caller is responsible for avoiding deadlocks
+			if paint_jobs_tx.send_se(paint_jobs).allow::<MightBlock>().is_err() {
 				log::info!("Renderer thread quit, quitting");
 				break;
 			}

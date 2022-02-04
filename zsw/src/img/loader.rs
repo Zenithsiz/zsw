@@ -14,7 +14,7 @@ use {
 		util::{
 			self,
 			extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSenderSE},
-			MightDeadlock,
+			MightBlock,
 		},
 	},
 	anyhow::Context,
@@ -36,21 +36,22 @@ impl ImageLoader {
 	///
 	/// Multiple image loaders may run at the same time
 	///
-	/// # Deadlock
-	/// Deadlocks if the path distributer deadlocks, or if all receivers deadlock.
-	#[side_effect(MightDeadlock)]
+	/// # Blocking
+	/// Blocks until the path distributer sends a path via [`Distributer::run`](super::Distributer::run).
+	/// Blocks until a receiver receives via [`ImageReceiverReceiver::recv`](`ImageReceiver::recv`).
+	#[side_effect(MightBlock)]
 	pub fn run(self) -> Result<(), anyhow::Error> {
-		// DEADLOCK: Caller ensures the paths distributer isn't deadlocked
-		while let Ok(path) = self.paths_rx.recv().allow::<MightDeadlock>() {
+		// DEADLOCK: Caller is responsible for avoiding deadlocks
+		while let Ok(path) = self.paths_rx.recv().allow::<MightBlock>() {
 			match util::measure(|| load::load_image(&path)) {
 				// If we got it, send it
 				(Ok(image), duration) => {
 					let format = util::image_format(&image);
 					log::debug!(target: "zsw::perf", "Took {duration:?} to load {path:?} (format: {format})");
 
-					// DEADLOCK: Caller guarantees a receiver isn't deadlocked
+					// DEADLOCK: Caller is responsible for avoiding deadlocks
 					let image = Image { path, image };
-					if self.image_tx.send_se(image).allow::<MightDeadlock>().is_err() {
+					if self.image_tx.send_se(image).allow::<MightBlock>().is_err() {
 						log::info!("No more receivers found, quitting");
 						break;
 					}
@@ -77,14 +78,14 @@ pub struct ImageReceiver {
 impl ImageReceiver {
 	/// Receives the image, waiting if not ready yet
 	///
-	/// # Deadlock
-	/// Deadlocks if the image loader deadlocks in [`ImageLoader::run`]
-	#[side_effect(MightDeadlock)]
+	/// # Blocking
+	/// Blocks until the loader sends an image via [`ImageLoader::run`]
+	#[side_effect(MightBlock)]
 	pub fn recv(&self) -> Result<Image, anyhow::Error> {
-		// DEADLOCK: Caller ensures we don't deadlock
+		// DEADLOCK: Caller is responsible for avoiding deadlocks
 		self.image_rx
 			.recv_se()
-			.allow::<MightDeadlock>()
+			.allow::<MightBlock>()
 			.context("Unable to get image from loader thread")
 	}
 

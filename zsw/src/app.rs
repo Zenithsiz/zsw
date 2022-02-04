@@ -15,7 +15,7 @@ use {
 	crate::{
 		img,
 		paths,
-		util::{self, MightDeadlock},
+		util::{self, MightBlock},
 		Args,
 		Egui,
 		Panel,
@@ -96,8 +96,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let renderer = Renderer::new(image_rx);
 
 	// Create the settings window
-	// DEADLOCK: We're not calling it from within `Wgpu::render`
-	let settings_window = SettingsWindow::new(wgpu.surface_size().allow::<MightDeadlock>());
+	// DEADLOCK: No calls to `Wgpu::render` are active.
+	let settings_window = SettingsWindow::new(wgpu.surface_size().allow::<MightBlock>());
 
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
@@ -107,23 +107,25 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		let mut thread_spawner = util::ThreadSpawner::new(s);
 
 		// Spawn the path distributer thread
-		// DEADLOCK: The image loader thread ensures no path receiver deadlocks
-		thread_spawner.spawn_scoped("Path distributer", || paths_distributer.run().allow::<MightDeadlock>())?;
+		// DEADLOCK: Image loader thread ensures it will receive paths
+		//           We ensure we will keep sending paths.
+		thread_spawner.spawn_scoped("Path distributer", || paths_distributer.run().allow::<MightBlock>())?;
 
 		// Spawn all image loaders
-		// DEADLOCK: The path distributer thread ensures the path distributer won't deadlock
-		//           The renderer thread ensures no image receiver deadlocks
+		// DEADLOCK: The path distributer thread ensures it will send paths
+		//           The renderer thread ensures it will receive images
+		//           We ensure we will keep sending images.
 		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
 		let loader_fns = vec![image_loader; loader_threads]
 			.into_iter()
-			.map(|image_loader| move || image_loader.run().allow::<MightDeadlock>());
+			.map(|image_loader| move || image_loader.run().allow::<MightBlock>());
 		thread_spawner.spawn_scoped_multiple("Image loader", loader_fns)?;
 
 		// Spawn the settings window thread
 		thread_spawner.spawn_scoped("Settings window", || {
-			// DEADLOCK: We're calling it from a separate thread, so we're not within `Wgpu::Render`.
-			//           The renderer thread owns the receiver and ensures it won't deadlock the receiver.
-			//           This thread ensures the paints job sender won't deadlock
+			// DEADLOCK: Renderer thread ensures all threads to [`Wgpu::render`] eventually return.
+			//           Renderer thread ensures it will receive paint jobs.
+			//           We ensure we keep sending paint jobs.
 			settings_window
 				.run(
 					&wgpu,
@@ -134,14 +136,15 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 					&queued_settings_window_open_click,
 					&paint_jobs_tx,
 				)
-				.allow::<MightDeadlock>();
+				.allow::<MightBlock>();
 			Ok(())
 		})?;
 
 		// Spawn the renderer thread
-		// DEADLOCK: Settings window ensures the paints job sender won't deadlock
-		//           This thread ensures that no image receiver will deadlock.
-		//           This thread ensures that the paints job receiver won't deadlock.
+		// DEADLOCK: Settings window ensures it will send paint jobs.
+		//           All threads ensure calls to [`Wgpu::surface_size`] will return.
+		//           We ensure we're not calling it within a [`Wgpu::render`] callback.
+		//           This thread ensures it will receive images.
 		thread_spawner.spawn_scoped("Renderer", || {
 			renderer
 				.run(
@@ -153,7 +156,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 					&should_stop,
 					&paint_jobs_rx,
 				)
-				.allow::<MightDeadlock>();
+				.allow::<MightBlock>();
 			Ok(())
 		})?;
 

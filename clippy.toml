@@ -1,4 +1,4 @@
 disallowed-methods = [
-  {path = "crossbeam::channel::Receiver::recv", reason = "Might deadlock"},
-  {path = "crossbeam::channel::Sender::send", reason = "Might deadlock"},
+  {path = "crossbeam::channel::Receiver::recv", reason = "Might block"},
+  {path = "crossbeam::channel::Sender::send", reason = "Might block"},
 ]

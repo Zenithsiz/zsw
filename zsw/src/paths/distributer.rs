@@ -3,7 +3,7 @@
 // Imports
 use {
 	super::Inner,
-	crate::util::{extse::CrossBeamChannelSenderSE, MightDeadlock},
+	crate::util::{extse::CrossBeamChannelSenderSE, MightBlock},
 	parking_lot::Mutex,
 	rand::prelude::SliceRandom,
 	std::{
@@ -31,9 +31,9 @@ pub struct Distributer {
 impl Distributer {
 	/// Runs the distributer until all receivers have quit
 	///
-	/// # Deadlock
-	/// Deadlocks if all receivers deadlock.
-	#[side_effect(MightDeadlock)]
+	/// # Blocking
+	/// Blocks until a receiver receives via [`Receiver::recv`](`super::Receiver::recv`).
+	#[side_effect(MightBlock)]
 	pub fn run(&self) -> Result<(), anyhow::Error> {
 		let mut cur_paths = vec![];
 		'run: loop {
@@ -64,8 +64,8 @@ impl Distributer {
 				}
 
 				// Else send the path
-				// DEADLOCK: Caller guarantees at least one receiver isn't deadlocked
-				if self.tx.send_se(path).allow::<MightDeadlock>().is_err() {
+				// DEADLOCK: Caller is responsible for avoiding deadlocks
+				if self.tx.send_se(path).allow::<MightBlock>().is_err() {
 					log::debug!("All receivers quit, quitting");
 					break 'run;
 				}
