@@ -21,8 +21,8 @@ pub struct Receiver {
 impl Receiver {
 	/// Receives the next path
 	///
-	/// # Deadlocks
-	/// Deadlocks if the distributer associated with this receiver deadlocks
+	/// # Deadlock
+	/// Deadlocks if the path distributer deadlocks in [`Distributer::run`](super::Distributer::run)
 	pub fn recv(&self) -> WithSideEffect<Result<Arc<PathBuf>, DistributerQuitError>, MightDeadlock> {
 		self.rx.recv_se().map(|res| res.map_err(|_| DistributerQuitError))
 	}

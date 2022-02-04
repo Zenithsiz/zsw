@@ -55,7 +55,9 @@
 	// happened and instead just bubbles it up
 	clippy::missing_errors_doc,
 	// Too many false positives and not too important
-	clippy::missing_const_for_fn
+	clippy::missing_const_for_fn,
+	// This is a binary crate, so we don't expose any API
+	rustdoc::private_intra_doc_links,
 )]
 
 // Modules

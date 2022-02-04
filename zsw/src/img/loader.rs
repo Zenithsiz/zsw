@@ -32,9 +32,32 @@ impl ImageLoader {
 	/// Multiple image loaders may run at the same time
 	///
 	/// # Deadlock
-	/// Deadlocks if the path distributer associated with this instance deadlocks.
+	/// Deadlocks if the path distributer deadlocks in [`paths::Distributer::run`],
+	/// or if all receivers' deadlock in [`ImageReceiver::recv`].
 	pub fn run(self) -> WithSideEffect<Result<(), anyhow::Error>, MightDeadlock> {
-		self::run_image_loader(&self.image_tx, &self.paths_rx)
+		// DEADLOCK: Caller ensures the paths distributer doesn't deadlock
+		while let Ok(path) = self.paths_rx.recv().allow::<MightDeadlock>() {
+			match util::measure(|| load::load_image(&path)) {
+				// If we got it, send it
+				(Ok(image), duration) => {
+					let format = util::image_format(&image);
+					log::debug!(target: "zsw::perf", "Took {duration:?} to load {path:?} (format: {format})");
+
+					let image = Image { path, image };
+					if self.image_tx.send(image).is_err() {
+						log::info!("No more receivers found, quitting");
+						break;
+					}
+				},
+				// If we couldn't load, log, remove the path and retry
+				(Err(err), _) => {
+					log::info!("Unable to load {path:?}: {err:?}");
+					self.paths_rx.remove(&path);
+				},
+			};
+		}
+
+		WithSideEffect::new(Ok(()))
 	}
 }
 
@@ -49,7 +72,7 @@ impl ImageReceiver {
 	/// Receives the image, waiting if not ready yet
 	///
 	/// # Deadlock
-	/// Deadlocks if [`ImageLoader::run`] deadlocks.
+	/// Deadlocks if the image loader deadlocks in [`ImageLoader::run`]
 	pub fn recv(&self) -> WithSideEffect<Result<Image, anyhow::Error>, MightDeadlock> {
 		self.image_rx
 			.recv_se()
@@ -76,37 +99,4 @@ pub fn new(paths_rx: paths::Receiver) -> (ImageLoader, ImageReceiver) {
 	let (image_tx, image_rx) = crossbeam::channel::bounded(0);
 
 	(ImageLoader { image_tx, paths_rx }, ImageReceiver { image_rx })
-}
-
-/// Runs the image loader
-///
-/// # Deadlock
-/// Deadlocks if the path distributer associated with `paths_rx` deadlocks.
-fn run_image_loader(
-	image_tx: &crossbeam::channel::Sender<Image>,
-	paths_rx: &paths::Receiver,
-) -> WithSideEffect<Result<(), anyhow::Error>, MightDeadlock> {
-	// DEADLOCK: Caller ensures the paths distributer doesn't deadlock
-	while let Ok(path) = paths_rx.recv().allow::<MightDeadlock>() {
-		match util::measure(|| load::load_image(&path)) {
-			// If we got it, send it
-			(Ok(image), duration) => {
-				let format = util::image_format(&image);
-				log::debug!(target: "zsw::perf", "Took {duration:?} to load {path:?} (format: {format})");
-
-				let image = Image { path, image };
-				if image_tx.send(image).is_err() {
-					log::info!("No more receivers found, quitting");
-					break;
-				}
-			},
-			// If we couldn't load, log, remove the path and retry
-			(Err(err), _) => {
-				log::info!("Unable to load {path:?}: {err:?}");
-				paths_rx.remove(&path);
-			},
-		};
-	}
-
-	WithSideEffect::new(Ok(()))
 }

@@ -65,7 +65,7 @@ impl<E1: SideEffect> SideEffect for (E1,) {}
 impl<E1: SideEffect, E2: SideEffect> SideEffect for (E1, E2) {}
 impl<E1: SideEffect, E2: SideEffect, E3: SideEffect, E4: SideEffect> SideEffect for (E1, E2, E3, E4) {}
 
-/// Side effect to indicate that a function might deadlock if a lock is in use.
+/// Side effect to indicate that a function might deadlock.
 #[derive(Clone, Copy, Debug)]
 pub struct MightDeadlock;
 
