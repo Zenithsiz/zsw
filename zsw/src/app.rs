@@ -121,8 +121,9 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the settings window thread
 		thread_spawner.spawn_scoped("Settings window", || {
-			// DEADLOCK: We're calling it from a separate thread, so we're not
-			//           within `Wgpu::Render`.
+			// DEADLOCK: We're calling it from a separate thread, so we're not within `Wgpu::Render`.
+			//           The renderer thread owns the receiver and ensures it won't deadlock the receiver.
+			//           This thread ensures the paints job sender won't deadlock
 			settings_window
 				.run(
 					&wgpu,
@@ -138,17 +139,21 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		})?;
 
 		// Spawn the renderer thread
-		// DEADLOCK: This thread ensures that no image receiver will deadlock
+		// DEADLOCK: Settings window ensures the paints job sender won't deadlock
+		//           This thread ensures that no image receiver will deadlock.
+		//           This thread ensures that the paints job receiver won't deadlock.
 		thread_spawner.spawn_scoped("Renderer", || {
-			renderer.run(
-				&window,
-				&wgpu,
-				&panels_renderer,
-				&panels,
-				&egui,
-				&should_stop,
-				&paint_jobs_rx,
-			);
+			renderer
+				.run(
+					&window,
+					&wgpu,
+					&panels_renderer,
+					&panels,
+					&egui,
+					&should_stop,
+					&paint_jobs_rx,
+				)
+				.allow::<MightDeadlock>();
 			Ok(())
 		})?;
 

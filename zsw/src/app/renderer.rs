@@ -1,11 +1,15 @@
 //! Renderer
 
-// Modules
-
-
 // Imports
 use {
-	crate::{img::ImageReceiver, Egui, Panels, PanelsRenderer, Wgpu},
+	crate::{
+		img::ImageReceiver,
+		util::{extse::CrossBeamChannelReceiverSE, MightDeadlock},
+		Egui,
+		Panels,
+		PanelsRenderer,
+		Wgpu,
+	},
 	anyhow::Context,
 	std::{
 		sync::atomic::{self, AtomicBool},
@@ -13,6 +17,7 @@ use {
 		time::Duration,
 	},
 	winit::window::Window,
+	zsw_side_effect_macros::side_effect,
 };
 
 /// Renderer
@@ -28,6 +33,10 @@ impl Renderer {
 	}
 
 	/// Runs the renderer
+	///
+	/// # Deadlock
+	/// Deadlocks if the paint jobs sender deadlock.
+	#[side_effect(MightDeadlock)]
 	pub fn run(
 		mut self,
 		window: &Window,
@@ -37,7 +46,7 @@ impl Renderer {
 		egui: &Egui,
 		should_stop: &AtomicBool,
 		paint_jobs_rx: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
-	) {
+	) -> () {
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
@@ -53,8 +62,10 @@ impl Renderer {
 			};
 
 			// Render
-			let (res, frame_duration) =
-				crate::util::measure(|| Self::render(window, wgpu, panels_renderer, panels, egui, paint_jobs_rx));
+			// DEADLOCK: Caller guarantees the paint jobs sender won't deadlock
+			let (res, frame_duration) = crate::util::measure(|| {
+				Self::render(window, wgpu, panels_renderer, panels, egui, paint_jobs_rx).allow::<MightDeadlock>()
+			});
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -79,6 +90,11 @@ impl Renderer {
 	}
 
 	/// Renders
+	///
+	/// # Deadlock
+	/// Deadlocks if the paint jobs sender deadlock, or if called from
+	/// within a `Wgpu::render` callback.
+	#[side_effect(MightDeadlock)]
 	fn render(
 		window: &Window,
 		wgpu: &Wgpu,
@@ -87,40 +103,42 @@ impl Renderer {
 		egui: &Egui,
 		paint_jobs_rx: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
 	) -> Result<(), anyhow::Error> {
+		// Get the egui render results
+		// Note: The settings window shouldn't quit while we're alive.
+		// BLOCKING: Caller guarantees that the sender won't deadlock if we're
+		//           not within a `Wgpu::render` call, and we're not.
+		let paint_jobs = paint_jobs_rx
+			.recv_se()
+			.allow::<MightDeadlock>()
+			.context("Unable to get paint jobs from settings window")?;
+
 		wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
 			panels_renderer
 				.render(panels, wgpu.queue(), encoder, surface_view, surface_size)
 				.context("Unable to render panels")?;
 
+			#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
+			let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
+				physical_width:  surface_size.width,
+				physical_height: surface_size.height,
+				scale_factor:    window.scale_factor() as f32,
+			};
+			let device = wgpu.device();
+			let queue = wgpu.queue();
+			let mut egui_render_pass = egui.render_pass().lock();
 
-			// Render egui
-			// TODO: Not ignore when the paint jobs transmitter quits?
-			// TODO: `try_recv` causes some stutters where sometimes we don't render,
-			//       but doing a `recv` causes a deadlock sometimes, so check it out
-			if let Ok(paint_jobs) = paint_jobs_rx.try_recv() {
-				#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
-				let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-					physical_width:  surface_size.width,
-					physical_height: surface_size.height,
-					scale_factor:    window.scale_factor() as f32,
-				};
-				let device = wgpu.device();
-				let queue = wgpu.queue();
-				let mut egui_render_pass = egui.render_pass().lock();
+			// TODO: Check if it's fine to get the platform here without synchronizing
+			//       with the drawing.
+			let egui_platform = egui.platform().lock();
+			egui_render_pass.update_texture(device, queue, &egui_platform.context().font_image());
+			egui_render_pass.update_user_textures(device, queue);
+			egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
 
-				// TODO: Check if it's fine to get the platform here without synchronizing
-				//       with the drawing.
-				let egui_platform = egui.platform().lock();
-				egui_render_pass.update_texture(device, queue, &egui_platform.context().font_image());
-				egui_render_pass.update_user_textures(device, queue);
-				egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
-
-				// Record all render passes.
-				egui_render_pass
-					.execute(encoder, surface_view, &paint_jobs, &screen_descriptor, None)
-					.context("Unable to render egui")?;
-			}
+			// Record all render passes.
+			egui_render_pass
+				.execute(encoder, surface_view, &paint_jobs, &screen_descriptor, None)
+				.context("Unable to render egui")?;
 
 			Ok(())
 		})

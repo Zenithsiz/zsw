@@ -41,8 +41,9 @@ impl SettingsWindow {
 	/// Runs the setting window
 	///
 	/// # Deadlock
-	/// Cannot be called from within `Wgpu::Render`
-	// TODO: Not use a channel, but instead something else
+	/// Deadlocks if called from within `Wgpu::Render`, or if the
+	/// paint job receiver deadlocks.
+	/// Blocks while waiting for the surface size.
 	#[side_effect(MightDeadlock)]
 	pub fn run(
 		mut self,
@@ -82,7 +83,7 @@ impl SettingsWindow {
 			};
 
 			// Then send the paint jobs
-			// DEADLOCK: TODO
+			// DEADLOCK: Caller ensures receiver doesn't deadlock
 			if paint_jobs_tx.send_se(paint_jobs).allow::<MightDeadlock>().is_err() {
 				log::info!("Renderer thread quit, quitting");
 				break;
