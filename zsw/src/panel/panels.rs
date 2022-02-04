@@ -1,7 +1,13 @@
 //! Panels
 
 // Imports
-use {crate::Panel, parking_lot::Mutex};
+use {
+	crate::{
+		util::{extse::ParkingLotMutexSe, MightBlock},
+		Panel,
+	},
+	parking_lot::Mutex,
+};
 
 /// All panels
 #[derive(Debug)]
@@ -20,12 +26,20 @@ impl Panels {
 
 	/// Adds a new panel
 	pub fn add_panel(&self, panel: Panel) {
-		self.panels.lock().push(panel);
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		self.panels.lock_se().allow::<MightBlock>().push(panel);
 	}
 
-	/// Iterates over all panels mutably
+	/// Iterates over all panels mutably.
+	///
+	/// # Blocking
+	/// Will deadlock if `f` blocks.
 	pub fn for_each_mut<T, C: FromIterator<T>>(&self, f: impl FnMut(&mut Panel) -> T) -> C {
-		let mut panels = self.panels.lock();
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		//           Caller ensures `f` won't block
+		let mut panels = self.panels.lock_se().allow::<MightBlock>();
 		panels.iter_mut().map(f).collect()
 	}
 }

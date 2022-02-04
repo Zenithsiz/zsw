@@ -28,3 +28,15 @@ impl<T> CrossBeamChannelSenderSE<T> for crossbeam::channel::Sender<T> {
 		WithSideEffect::new(self.send(msg))
 	}
 }
+
+/// Side effect wrapper for [`parking_lot::Mutex`]
+pub trait ParkingLotMutexSe<T> {
+	fn lock_se(&self) -> WithSideEffect<parking_lot::MutexGuard<'_, T>, MightBlock>;
+}
+
+impl<T> ParkingLotMutexSe<T> for parking_lot::Mutex<T> {
+	fn lock_se(&self) -> WithSideEffect<parking_lot::MutexGuard<'_, T>, MightBlock> {
+		#[allow(clippy::disallowed_methods)] // We're wrapping it
+		WithSideEffect::new(self.lock())
+	}
+}

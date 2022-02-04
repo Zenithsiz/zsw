@@ -11,7 +11,7 @@
 
 // Imports
 use {
-	crate::util::MightBlock,
+	crate::util::{extse::ParkingLotMutexSe, MightBlock},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	parking_lot::Mutex,
@@ -141,7 +141,7 @@ impl<'window> Wgpu<'window> {
 	#[side_effect(MightBlock)]
 	pub fn surface_size(&self) -> PhysicalSize<u32> {
 		// DEADLOCK: Caller is responsible for avoiding deadlocks
-		self.surface.lock().size
+		self.surface.lock_se().allow::<MightBlock>().size
 	}
 
 	/// Returns the surface texture format
@@ -183,7 +183,7 @@ impl<'window> Wgpu<'window> {
 		//       method to prevent any possible changes from another thread
 		//       mid-frame, which could cause panics in `wgpu` validation.
 		// DEADLOCK: Caller is responsible for avoiding deadlocks
-		let mut surface = self.surface.lock();
+		let mut surface = self.surface.lock_se().allow::<MightBlock>();
 
 		// Check for resizes
 		if let Some(size) = self.queued_resize.take() {

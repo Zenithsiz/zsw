@@ -3,7 +3,10 @@
 // Imports
 use {
 	super::Inner,
-	crate::util::{extse::CrossBeamChannelReceiverSE, MightBlock},
+	crate::util::{
+		extse::{CrossBeamChannelReceiverSE, ParkingLotMutexSe},
+		MightBlock,
+	},
 	parking_lot::Mutex,
 	std::{path::PathBuf, sync::Arc},
 	zsw_side_effect_macros::side_effect,
@@ -35,7 +38,9 @@ impl Receiver {
 
 	/// Removes a path
 	pub fn remove(&self, path: &Arc<PathBuf>) {
-		let mut inner = self.inner.lock();
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		let mut inner = self.inner.lock_se().allow::<MightBlock>();
 
 		// If the paths need reloading, no use in removing the path
 		if inner.reload_cached {

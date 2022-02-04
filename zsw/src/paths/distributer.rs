@@ -3,7 +3,10 @@
 // Imports
 use {
 	super::Inner,
-	crate::util::{extse::CrossBeamChannelSenderSE, MightBlock},
+	crate::util::{
+		extse::{CrossBeamChannelSenderSE, ParkingLotMutexSe},
+		MightBlock,
+	},
 	parking_lot::Mutex,
 	rand::prelude::SliceRandom,
 	std::{
@@ -22,6 +25,8 @@ use {
 #[derive(Debug)]
 pub struct Distributer {
 	/// Inner
+	// DEADLOCK: We ensure this lock can't deadlock by not blocking
+	//           while locked.
 	pub(super) inner: Arc<Mutex<Inner>>,
 
 	/// Path sender
@@ -37,7 +42,9 @@ impl Distributer {
 	pub fn run(&self) -> Result<(), anyhow::Error> {
 		let mut cur_paths = vec![];
 		'run: loop {
-			let mut inner = self.inner.lock();
+			// DEADLOCK: We ensure this lock can't deadlock by not blocking
+			//           while locked.
+			let mut inner = self.inner.lock_se().allow::<MightBlock>();
 
 			// If we need to reload, clear and load the paths
 			let cur_root_path = Arc::clone(&inner.root_path);
@@ -50,6 +57,7 @@ impl Distributer {
 			// Copy all paths and shuffle
 			// Note: We also drop the lock after copying, since we don't need
 			//       inner anymore
+			// DEADLOCK: We drop the lock here, so calls to `self.tx.send` aren't under the lock
 			cur_paths.extend(inner.cached_paths.iter().cloned());
 			mem::drop(inner);
 			cur_paths.shuffle(&mut rand::thread_rng());
@@ -57,8 +65,10 @@ impl Distributer {
 			// Then send them all
 			for path in cur_paths.drain(..) {
 				// If the root path changed in the meantime, reload
+				// DEADLOCK: We ensure this lock can't deadlock by not blocking
+				//           while locked.
 				// TODO: `ptr_eq` here? Not sure if it's worth it
-				if self.inner.lock().root_path != cur_root_path {
+				if self.inner.lock_se().allow::<MightBlock>().root_path != cur_root_path {
 					log::debug!("Root path changed, resetting");
 					continue 'run;
 				}
@@ -91,7 +101,9 @@ impl Distributer {
 
 	/// Returns the current root path
 	pub fn root_path(&self) -> Arc<PathBuf> {
-		Arc::clone(&self.inner.lock().root_path)
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		Arc::clone(&self.inner.lock_se().allow::<MightBlock>().root_path)
 	}
 
 	/// Sets the root path
@@ -99,7 +111,9 @@ impl Distributer {
 		log::info!("Setting root path to {path:?}");
 
 		// Set the root path and clear all paths
-		let mut inner = self.inner.lock();
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		let mut inner = self.inner.lock_se().allow::<MightBlock>();
 		inner.root_path = Arc::new(path);
 		inner.reload_cached = true;
 	}

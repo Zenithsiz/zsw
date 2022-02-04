@@ -10,7 +10,12 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 // Imports
 use {
 	super::PanelImage,
-	crate::{img::Image, Panels, Wgpu},
+	crate::{
+		img::Image,
+		util::{extse::ParkingLotMutexSe, MightBlock},
+		Panels,
+		Wgpu,
+	},
 	parking_lot::Mutex,
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -45,6 +50,8 @@ pub struct PanelsRenderer {
 	image_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// All images
+	// DEADLOCK: We ensure this lock can't deadlock by not blocking
+	//           while locked.
 	// TODO: Deal with panels being removed somehow.
 	images: Mutex<Vec<PanelImage>>,
 }
@@ -83,7 +90,9 @@ impl PanelsRenderer {
 	/// Creates a new image and returns it's path
 	pub fn create_image(&self, wgpu: &Wgpu, image: Image) -> PanelImageId {
 		// Lock the images and calculate the id for the new image
-		let mut images = self.images.lock();
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		let mut images = self.images.lock_se().allow::<MightBlock>();
 		let id = images.len();
 
 		// Create the new image and insert it
@@ -101,7 +110,9 @@ impl PanelsRenderer {
 	/// Updates an image
 	pub fn update_image(&self, wgpu: &Wgpu, id: PanelImageId, image: Image) {
 		// Lock the images and try to get the image
-		let mut images = self.images.lock();
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		let mut images = self.images.lock_se().allow::<MightBlock>();
 		let panel_image = match images.get_mut(id.0) {
 			Some(panel_image) => panel_image,
 			None => {
@@ -125,10 +136,12 @@ impl PanelsRenderer {
 	) -> Result<(), anyhow::Error> {
 		// Note: We need to lock images before starting the render pass,
 		//       as the render pass borrows it.
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
 		// TODO: Explicitly dropping the render pass before the drop of images
 		//       wasn't compiling, so I had to move the lock over here, check out
 		//       why not.
-		let images = self.images.lock();
+		let images = self.images.lock_se().allow::<MightBlock>();
 
 		// Create the render pass for all panels
 		let render_pass_descriptor = wgpu::RenderPassDescriptor {

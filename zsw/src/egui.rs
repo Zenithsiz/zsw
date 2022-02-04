@@ -16,9 +16,11 @@ use {
 /// All egui state
 pub struct Egui {
 	/// Platform
+	// TODO: Only lock internally
 	platform: Mutex<egui_winit_platform::Platform>,
 
 	/// Render pass
+	// TODO: Only lock internally
 	render_pass: Mutex<egui_wgpu_backend::RenderPass>,
 
 	/// Repaint signal
