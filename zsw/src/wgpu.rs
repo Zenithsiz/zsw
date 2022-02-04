@@ -11,6 +11,7 @@
 
 // Imports
 use {
+	crate::util::{MightBlock, WithSideEffect},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	parking_lot::Mutex,
@@ -129,12 +130,15 @@ impl<'window> Wgpu<'window> {
 
 	/// Returns the current surface's size
 	///
+	/// # Blocking
+	/// This function blocks while `Self::render` is running.
+	///
 	/// # Warning
 	/// This surface size might change at any time, so you shouldn't
 	/// use it on `wgpu` operations that might panic on wrong surface
 	/// sizes.
-	pub fn surface_size(&self) -> PhysicalSize<u32> {
-		self.surface.lock().size
+	pub fn surface_size(&self) -> WithSideEffect<PhysicalSize<u32>, MightBlock> {
+		WithSideEffect::new(self.surface.lock().size)
 	}
 
 	/// Returns the surface texture format

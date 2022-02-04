@@ -12,7 +12,19 @@ mod settings_window;
 // Imports
 use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
-	crate::{img, paths, util, Args, Egui, Panel, PanelState, Panels, PanelsProfile, PanelsRenderer, Wgpu},
+	crate::{
+		img,
+		paths,
+		util::{self, MightBlock},
+		Args,
+		Egui,
+		Panel,
+		PanelState,
+		Panels,
+		PanelsProfile,
+		PanelsRenderer,
+		Wgpu,
+	},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	std::{
@@ -84,7 +96,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let renderer = Renderer::new(image_receiver);
 
 	// Create the settings window
-	let settings_window = SettingsWindow::new(wgpu.surface_size());
+	// BLOCKING: No other threads exist yet, so `Wgpu::render` isn't running.
+	let settings_window = SettingsWindow::new(wgpu.surface_size().allow::<MightBlock>());
 
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in

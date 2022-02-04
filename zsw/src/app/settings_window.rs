@@ -7,7 +7,7 @@
 
 // Imports
 use {
-	crate::{paths, Egui, Panel, PanelState, Panels, Rect, Wgpu},
+	crate::{paths, util::MightBlock, Egui, Panel, PanelState, Panels, Rect, Wgpu},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -51,7 +51,8 @@ impl SettingsWindow {
 		loop {
 			// Get the surface size
 			// TODO: This can deadlock if put inside the `egui.draw` closure.
-			let surface_size = wgpu.surface_size();
+			// BLOCKING: TODO
+			let surface_size = wgpu.surface_size().allow::<MightBlock>();
 
 			// Draw egui
 			let res = egui.draw(window, |ctx, frame| {

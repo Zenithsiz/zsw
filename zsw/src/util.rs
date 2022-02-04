@@ -3,10 +3,16 @@
 // Modules
 mod display_wrapper;
 mod scan_dir;
+mod side_effect;
 mod thread;
 
 // Exports
-pub use {display_wrapper::DisplayWrapper, scan_dir::visit_files_dir, thread::ThreadSpawner};
+pub use {
+	display_wrapper::DisplayWrapper,
+	scan_dir::visit_files_dir,
+	side_effect::{MightBlock, SideEffect, WithSideEffect},
+	thread::ThreadSpawner,
+};
 
 // Imports
 use {
