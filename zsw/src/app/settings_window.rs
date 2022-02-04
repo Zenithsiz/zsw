@@ -47,7 +47,7 @@ impl SettingsWindow {
 
 	/// Runs the setting window
 	///
-	/// # DEADLOCK
+	/// # Deadlock
 	/// Cannot be called from within `Wgpu::Render`
 	// TODO: Not use a channel, but instead something else
 	pub fn run(

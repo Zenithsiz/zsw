@@ -1,5 +1,8 @@
 //! Side effect
 
+// Module
+pub mod extse;
+
 // Imports
 use std::marker::PhantomData;
 

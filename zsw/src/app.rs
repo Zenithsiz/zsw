@@ -110,10 +110,11 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn_scoped("Path distributer", || paths_distributer.run())?;
 
 		// Spawn all image loaders
+		// DEADLOCK: We ensure the paths distributer doesn't deadlock
 		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
 		let loader_fns = vec![image_loader; loader_threads]
 			.into_iter()
-			.map(|image_loader| move || image_loader.run());
+			.map(|image_loader| move || image_loader.run().allow::<MightDeadlock>());
 		thread_spawner.spawn_scoped_multiple("Image loader", loader_fns)?;
 
 		// Spawn the settings window thread

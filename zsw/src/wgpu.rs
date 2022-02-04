@@ -130,7 +130,7 @@ impl<'window> Wgpu<'window> {
 
 	/// Returns the current surface's size
 	///
-	/// # DEADLOCK
+	/// # Deadlock
 	/// Deadlocks if called from the closure within `Self::render`.
 	///
 	/// # Warning
@@ -160,7 +160,7 @@ impl<'window> Wgpu<'window> {
 
 	/// Renders a frame using `f`
 	///
-	/// # DEADLOCK
+	/// # Deadlock
 	/// Deadlocks if called recursively from within `f`.
 	///
 	/// # Callback

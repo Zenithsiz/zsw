@@ -3,6 +3,7 @@
 // Imports
 use {
 	super::Inner,
+	crate::util::{extse::CrossBeamChannelReceiverSE, MightDeadlock, WithSideEffect},
 	parking_lot::Mutex,
 	std::{path::PathBuf, sync::Arc},
 };
@@ -19,8 +20,11 @@ pub struct Receiver {
 
 impl Receiver {
 	/// Receives the next path
-	pub fn recv(&self) -> Result<Arc<PathBuf>, DistributerQuitError> {
-		self.rx.recv().map_err(|_| DistributerQuitError)
+	///
+	/// # Deadlocks
+	/// Deadlocks if the distributer associated with this receiver deadlocks
+	pub fn recv(&self) -> WithSideEffect<Result<Arc<PathBuf>, DistributerQuitError>, MightDeadlock> {
+		self.rx.recv_se().map(|res| res.map_err(|_| DistributerQuitError))
 	}
 
 	/// Removes a path

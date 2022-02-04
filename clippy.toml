@@ -1,0 +1,3 @@
+disallowed-methods = [
+  {path = "crossbeam::channel::Receiver::recv", reason = "Might deadlock"},
+]
