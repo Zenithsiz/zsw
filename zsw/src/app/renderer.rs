@@ -18,13 +18,13 @@ use {
 /// Renderer
 pub struct Renderer {
 	/// Image receiver
-	image_receiver: ImageReceiver,
+	image_rx: ImageReceiver,
 }
 
 impl Renderer {
 	/// Creates a new renderer
-	pub fn new(image_receiver: ImageReceiver) -> Self {
-		Self { image_receiver }
+	pub fn new(image_rx: ImageReceiver) -> Self {
+		Self { image_rx }
 	}
 
 	/// Runs the renderer
@@ -36,7 +36,7 @@ impl Renderer {
 		panels: &Panels,
 		egui: &Egui,
 		should_stop: &AtomicBool,
-		paint_jobs_receiver: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
+		paint_jobs_rx: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
 	) {
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -54,7 +54,7 @@ impl Renderer {
 
 			// Render
 			let (res, frame_duration) =
-				crate::util::measure(|| Self::render(window, wgpu, panels_renderer, panels, egui, paint_jobs_receiver));
+				crate::util::measure(|| Self::render(window, wgpu, panels_renderer, panels, egui, paint_jobs_rx));
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -70,7 +70,7 @@ impl Renderer {
 	/// Updates all panels
 	fn update(&mut self, wgpu: &Wgpu, panels_renderer: &PanelsRenderer, panels: &Panels) -> Result<(), anyhow::Error> {
 		panels.for_each_mut(|panel| {
-			if let Err(err) = panel.update(wgpu, panels_renderer, &self.image_receiver) {
+			if let Err(err) = panel.update(wgpu, panels_renderer, &self.image_rx) {
 				log::warn!("Unable to update panel: {err:?}");
 			}
 
@@ -85,7 +85,7 @@ impl Renderer {
 		panels_renderer: &PanelsRenderer,
 		panels: &Panels,
 		egui: &Egui,
-		paint_jobs_receiver: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
+		paint_jobs_rx: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
 	) -> Result<(), anyhow::Error> {
 		wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
@@ -98,7 +98,7 @@ impl Renderer {
 			// TODO: Not ignore when the paint jobs transmitter quits?
 			// TODO: `try_recv` causes some stutters where sometimes we don't render,
 			//       but doing a `recv` causes a deadlock sometimes, so check it out
-			if let Ok(paint_jobs) = paint_jobs_receiver.try_recv() {
+			if let Ok(paint_jobs) = paint_jobs_rx.try_recv() {
 				#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 				let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
 					physical_width:  surface_size.width,

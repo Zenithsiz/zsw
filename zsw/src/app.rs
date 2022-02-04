@@ -57,7 +57,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let (paths_distributer, paths_rx) = paths::new(args.images_dir.clone());
 
 	// Create the image loader
-	let (image_loader, image_receiver) = img::loader::new(paths_rx);
+	let (image_loader, image_rx) = img::loader::new(paths_rx);
 
 	// Create all panels
 	let panels = args
@@ -93,7 +93,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let mut event_handler = EventHandler::new();
 
 	// Create the renderer
-	let renderer = Renderer::new(image_receiver);
+	let renderer = Renderer::new(image_rx);
 
 	// Create the settings window
 	// DEADLOCK: We're not calling it from within `Wgpu::render`

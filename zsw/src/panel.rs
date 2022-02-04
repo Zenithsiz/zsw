@@ -71,7 +71,7 @@ impl Panel {
 		&mut self,
 		wgpu: &Wgpu,
 		renderer: &PanelsRenderer,
-		image_receiver: &ImageReceiver,
+		image_rx: &ImageReceiver,
 	) -> Result<(), anyhow::Error> {
 		// Next frame's progress
 		let next_progress = self.progress + (1.0 / 60.0) / self.image_duration.as_secs_f32();
@@ -85,7 +85,7 @@ impl Panel {
 		// Update the image state
 		(self.state, self.progress) = match self.state {
 			// If we're empty, try to get a next image
-			PanelState::Empty => match image_receiver.try_recv().context("Unable to get next image")? {
+			PanelState::Empty => match image_rx.try_recv().context("Unable to get next image")? {
 				Some(image) => (
 					PanelState::PrimaryOnly {
 						front: PanelStateImage {
@@ -100,7 +100,7 @@ impl Panel {
 			},
 
 			// If we only have the primary, try to load the next image
-			PanelState::PrimaryOnly { front } => match image_receiver.try_recv().context("Unable to get next image")? {
+			PanelState::PrimaryOnly { front } => match image_rx.try_recv().context("Unable to get next image")? {
 				Some(image) => (
 					PanelState::Both {
 						front,
@@ -116,7 +116,7 @@ impl Panel {
 
 			// If we have both, try to update the progress and swap them if finished
 			PanelState::Both { mut front, back } if finished => {
-				match image_receiver.try_recv().context("Unable to get next image")? {
+				match image_rx.try_recv().context("Unable to get next image")? {
 					// Note: We update the front and swap them
 					Some(image) => {
 						renderer.update_image(wgpu, front.id, image);
