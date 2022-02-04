@@ -4,19 +4,9 @@
 // `egui` returns a response on every operation, but we don't use them
 #![allow(unused_results)]
 
-
 // Imports
 use {
-	crate::{
-		paths,
-		util::{MightDeadlock, WithSideEffect},
-		Egui,
-		Panel,
-		PanelState,
-		Panels,
-		Rect,
-		Wgpu,
-	},
+	crate::{paths, util::MightDeadlock, Egui, Panel, PanelState, Panels, Rect, Wgpu},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -25,6 +15,7 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
 	},
+	zsw_side_effect_macros::side_effect,
 };
 
 /// Settings window
@@ -50,6 +41,7 @@ impl SettingsWindow {
 	/// # Deadlock
 	/// Cannot be called from within `Wgpu::Render`
 	// TODO: Not use a channel, but instead something else
+	#[side_effect(MightDeadlock)]
 	pub fn run(
 		mut self,
 		wgpu: &Wgpu,
@@ -59,7 +51,7 @@ impl SettingsWindow {
 		paths_distributer: &paths::Distributer,
 		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
 		paint_jobs_tx: &crossbeam::channel::Sender<Vec<egui::epaint::ClippedMesh>>,
-	) -> WithSideEffect<(), MightDeadlock> {
+	) -> () {
 		loop {
 			// Get the surface size
 			// TODO: This can deadlock if put inside the `egui.draw` closure.
@@ -93,8 +85,6 @@ impl SettingsWindow {
 				break;
 			}
 		}
-
-		WithSideEffect::new(())
 	}
 
 	/// Draws the settings window

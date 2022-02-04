@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["zsw"]
+members = ["zsw", "zsw-side-effect-macros"]
 resolver = "2"
 
 # Compile `image` in release mode, else it's too slow to meaningfully

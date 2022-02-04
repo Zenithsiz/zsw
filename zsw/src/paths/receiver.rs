@@ -3,9 +3,10 @@
 // Imports
 use {
 	super::Inner,
-	crate::util::{extse::CrossBeamChannelReceiverSE, MightDeadlock, WithSideEffect},
+	crate::util::{extse::CrossBeamChannelReceiverSE, MightDeadlock},
 	parking_lot::Mutex,
 	std::{path::PathBuf, sync::Arc},
+	zsw_side_effect_macros::side_effect,
 };
 
 /// A receiver
@@ -23,8 +24,10 @@ impl Receiver {
 	///
 	/// # Deadlock
 	/// Deadlocks if the path distributer deadlocks in [`Distributer::run`](super::Distributer::run)
-	pub fn recv(&self) -> WithSideEffect<Result<Arc<PathBuf>, DistributerQuitError>, MightDeadlock> {
-		self.rx.recv_se().map(|res| res.map_err(|_| DistributerQuitError))
+	#[side_effect(MightDeadlock)]
+	pub fn recv(&self) ->Result<Arc<PathBuf>, DistributerQuitError> {
+		// DEADLOCK: Caller ensures we don't deadlock
+		self.rx.recv_se().allow::<MightDeadlock>().map_err(|_| DistributerQuitError)
 	}
 
 	/// Removes a path

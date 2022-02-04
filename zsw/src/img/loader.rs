@@ -11,9 +11,10 @@ use {
 	super::Image,
 	crate::{
 		paths,
-		util::{self, extse::CrossBeamChannelReceiverSE, MightDeadlock, WithSideEffect},
+		util::{self, extse::CrossBeamChannelReceiverSE, MightDeadlock},
 	},
 	anyhow::Context,
+	zsw_side_effect_macros::side_effect,
 };
 
 /// Image loader
@@ -34,7 +35,8 @@ impl ImageLoader {
 	/// # Deadlock
 	/// Deadlocks if the path distributer deadlocks in [`paths::Distributer::run`],
 	/// or if all receivers' deadlock in [`ImageReceiver::recv`].
-	pub fn run(self) -> WithSideEffect<Result<(), anyhow::Error>, MightDeadlock> {
+	#[side_effect(MightDeadlock)]
+	pub fn run(self) -> Result<(), anyhow::Error> {
 		// DEADLOCK: Caller ensures the paths distributer doesn't deadlock
 		while let Ok(path) = self.paths_rx.recv().allow::<MightDeadlock>() {
 			match util::measure(|| load::load_image(&path)) {
@@ -57,7 +59,7 @@ impl ImageLoader {
 			};
 		}
 
-		WithSideEffect::new(Ok(()))
+		Ok(())
 	}
 }
 
@@ -73,10 +75,13 @@ impl ImageReceiver {
 	///
 	/// # Deadlock
 	/// Deadlocks if the image loader deadlocks in [`ImageLoader::run`]
-	pub fn recv(&self) -> WithSideEffect<Result<Image, anyhow::Error>, MightDeadlock> {
+	#[side_effect(MightDeadlock)]
+	pub fn recv(&self) -> Result<Image, anyhow::Error> {
+		// DEADLOCK: Caller ensures we don't deadlock
 		self.image_rx
 			.recv_se()
-			.map(|res| res.context("Unable to get image from loader thread"))
+			.allow::<MightDeadlock>()
+			.context("Unable to get image from loader thread")
 	}
 
 	/// Attempts to receive the image
