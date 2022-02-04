@@ -107,10 +107,12 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		let mut thread_spawner = util::ThreadSpawner::new(s);
 
 		// Spawn the path distributer thread
-		thread_spawner.spawn_scoped("Path distributer", || paths_distributer.run())?;
+		// DEADLOCK: The image loader thread ensures no path receiver deadlocks
+		thread_spawner.spawn_scoped("Path distributer", || paths_distributer.run().allow::<MightDeadlock>())?;
 
 		// Spawn all image loaders
-		// DEADLOCK: We ensure the paths distributer doesn't deadlock
+		// DEADLOCK: The path distributer thread ensures the path distributer won't deadlock
+		//           The renderer thread ensures no image receiver deadlocks
 		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
 		let loader_fns = vec![image_loader; loader_threads]
 			.into_iter()
@@ -136,6 +138,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		})?;
 
 		// Spawn the renderer thread
+		// DEADLOCK: This thread ensures that no image receiver will deadlock
 		thread_spawner.spawn_scoped("Renderer", || {
 			renderer.run(
 				&window,
@@ -163,8 +166,9 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		let (res, duration) = util::measure(|| {
 			// Stop the renderer
-			// Note: Stopping the renderer will cause it to drop the image receiver,
-			//       which will stop the image loaders and in turn the path loader.
+			// BLOCKING: Stopping the renderer will cause it to drop the image receivers,
+			//           which will stop the image loaders, which will in turn stop
+			//           the path loader.
 			should_stop.store(true, atomic::Ordering::Relaxed);
 
 			// Join all thread

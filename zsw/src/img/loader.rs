@@ -11,7 +11,11 @@ use {
 	super::Image,
 	crate::{
 		paths,
-		util::{self, extse::CrossBeamChannelReceiverSE, MightDeadlock},
+		util::{
+			self,
+			extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSenderSE},
+			MightDeadlock,
+		},
 	},
 	anyhow::Context,
 	zsw_side_effect_macros::side_effect,
@@ -33,11 +37,10 @@ impl ImageLoader {
 	/// Multiple image loaders may run at the same time
 	///
 	/// # Deadlock
-	/// Deadlocks if the path distributer deadlocks in [`paths::Distributer::run`],
-	/// or if all receivers' deadlock in [`ImageReceiver::recv`].
+	/// Deadlocks if the path distributer deadlocks, or if all receivers deadlock.
 	#[side_effect(MightDeadlock)]
 	pub fn run(self) -> Result<(), anyhow::Error> {
-		// DEADLOCK: Caller ensures the paths distributer doesn't deadlock
+		// DEADLOCK: Caller ensures the paths distributer isn't deadlocked
 		while let Ok(path) = self.paths_rx.recv().allow::<MightDeadlock>() {
 			match util::measure(|| load::load_image(&path)) {
 				// If we got it, send it
@@ -45,8 +48,9 @@ impl ImageLoader {
 					let format = util::image_format(&image);
 					log::debug!(target: "zsw::perf", "Took {duration:?} to load {path:?} (format: {format})");
 
+					// DEADLOCK: Caller guarantees a receiver isn't deadlocked
 					let image = Image { path, image };
-					if self.image_tx.send(image).is_err() {
+					if self.image_tx.send_se(image).allow::<MightDeadlock>().is_err() {
 						log::info!("No more receivers found, quitting");
 						break;
 					}

@@ -16,3 +16,15 @@ impl<T> CrossBeamChannelReceiverSE<T> for crossbeam::channel::Receiver<T> {
 		WithSideEffect::new(self.recv())
 	}
 }
+
+/// Side effect wrapper for [`crossbeam::channel::Sender`]
+pub trait CrossBeamChannelSenderSE<T> {
+	fn send_se(&self, msg: T) -> WithSideEffect<Result<(), crossbeam::channel::SendError<T>>, MightDeadlock>;
+}
+
+impl<T> CrossBeamChannelSenderSE<T> for crossbeam::channel::Sender<T> {
+	fn send_se(&self, msg: T) -> WithSideEffect<Result<(), crossbeam::channel::SendError<T>>, MightDeadlock> {
+		#[allow(clippy::disallowed_methods)] // We're wrapping it
+		WithSideEffect::new(self.send(msg))
+	}
+}

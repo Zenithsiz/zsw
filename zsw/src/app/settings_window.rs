@@ -4,6 +4,8 @@
 // `egui` returns a response on every operation, but we don't use them
 #![allow(unused_results)]
 
+use crate::util::extse::CrossBeamChannelSenderSE;
+
 // Imports
 use {
 	crate::{paths, util::MightDeadlock, Egui, Panel, PanelState, Panels, Rect, Wgpu},
@@ -55,7 +57,7 @@ impl SettingsWindow {
 		loop {
 			// Get the surface size
 			// TODO: This can deadlock if put inside the `egui.draw` closure.
-			// DEADLOCK: We aren't calling it from within `Wgpu::render`.
+			// DEADLOCK: Caller guarantees we aren't calling it from within `Wgpu::render`.
 			let surface_size = wgpu.surface_size().allow::<MightDeadlock>();
 
 			// Draw egui
@@ -80,7 +82,8 @@ impl SettingsWindow {
 			};
 
 			// Then send the paint jobs
-			if paint_jobs_tx.send(paint_jobs).is_err() {
+			// DEADLOCK: TODO
+			if paint_jobs_tx.send_se(paint_jobs).allow::<MightDeadlock>().is_err() {
 				log::info!("Renderer thread quit, quitting");
 				break;
 			}
