@@ -131,16 +131,13 @@ impl<'window> Wgpu<'window> {
 
 	/// Returns the current surface's size
 	///
-	/// # Blocking
-	/// Blocks until any calls to [`Wgpu::render`] are finished.
-	///
 	/// # Warning
 	/// This surface size might change at any time, so you shouldn't
 	/// use it on `wgpu` operations that might panic on wrong surface
 	/// sizes.
-	#[side_effect(MightBlock)]
 	pub fn surface_size(&self) -> PhysicalSize<u32> {
-		// DEADLOCK: Caller is responsible for avoiding deadlocks
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
 		self.surface.lock_se().allow::<MightBlock>().size
 	}
 
@@ -164,7 +161,7 @@ impl<'window> Wgpu<'window> {
 	/// Renders a frame using `f`
 	///
 	/// # Blocking
-	/// Blocks until any calls to [`Wgpu::surface_size`] are finished.
+	/// Deadlocks if `f` blocks.
 	/// Deadlocks if called recursively.
 	///
 	/// # Callback
@@ -183,7 +180,9 @@ impl<'window> Wgpu<'window> {
 		// Note: We want to keep the surface locked until the end of the
 		//       method to prevent any possible changes from another thread
 		//       mid-frame, which could cause panics in `wgpu` validation.
-		// DEADLOCK: Caller is responsible for avoiding deadlocks
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		//           Caller ensures `f` doesn't block.
 		let mut surface = self.surface.lock_se().allow::<MightBlock>();
 
 		// Check for resizes

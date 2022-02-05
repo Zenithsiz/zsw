@@ -96,8 +96,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let renderer = Renderer::new(image_rx);
 
 	// Create the settings window
-	// DEADLOCK: No calls to `Wgpu::render` are active.
-	let settings_window = SettingsWindow::new(wgpu.surface_size().allow::<MightBlock>());
+	let settings_window = SettingsWindow::new(wgpu.surface_size());
 
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
@@ -123,8 +122,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the settings window thread
 		thread_spawner.spawn_scoped("Settings window", || {
-			// DEADLOCK: Renderer thread ensures all threads to [`Wgpu::render`] eventually return.
-			//           Renderer thread ensures it will receive paint jobs.
+			// DEADLOCK: Renderer thread ensures it will receive paint jobs.
 			//           We ensure we keep sending paint jobs.
 			settings_window
 				.run(
@@ -142,7 +140,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the renderer thread
 		// DEADLOCK: Settings window ensures it will send paint jobs.
-		//           All threads ensure calls to [`Wgpu::surface_size`] will return.
 		//           We ensure we're not calling it within a [`Wgpu::render`] callback.
 		//           This thread ensures it will receive images.
 		thread_spawner.spawn_scoped("Renderer", || {

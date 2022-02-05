@@ -36,7 +36,6 @@ impl Renderer {
 	///
 	/// # Blocking
 	/// Blocks waiting for a value from the sender of `paint_jobs_rx`.
-	/// Blocks for calls to [`Wgpu::surface_size`] to finish.
 	/// Deadlocks if called within a [`Wgpu::render`] callback.
 	#[side_effect(MightBlock)]
 	pub fn run(
@@ -98,7 +97,6 @@ impl Renderer {
 	///
 	/// # Blocking
 	/// Blocks waiting for a value from the sender of `paint_jobs_rx`.
-	/// Blocks for calls to [`Wgpu::surface_size`] to finish.
 	/// Deadlocks if called within a [`Wgpu::render`] callback.
 	#[side_effect(MightBlock)]
 	fn render(
@@ -119,8 +117,7 @@ impl Renderer {
 			.context("Unable to get paint jobs from settings window")?;
 
 		// Then render
-		// DEADLOCK: Caller is responsible for avoiding deadlocks.
-		//           We ensure we don't block within [`Wgpu::render`].
+		// DEADLOCK: We ensure we don't block within [`Wgpu::render`].
 		//           We also ensure we don't call it recursively.
 		wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels

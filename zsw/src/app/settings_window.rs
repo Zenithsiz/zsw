@@ -41,7 +41,6 @@ impl SettingsWindow {
 	/// Runs the setting window
 	///
 	/// # Blocking
-	/// Blocks until any calls to [`Wgpu::render`] are finished.
 	/// Blocks until the receiver of `paint_jobs_tx` receives a value.
 	#[side_effect(MightBlock)]
 	pub fn run(
@@ -56,8 +55,7 @@ impl SettingsWindow {
 	) -> () {
 		loop {
 			// Get the surface size
-			// DEADLOCK: Caller guarantees we aren't calling it from within `Wgpu::Render`
-			let surface_size = wgpu.surface_size().allow::<MightBlock>();
+			let surface_size = wgpu.surface_size();
 
 			// Draw egui
 			let res = egui.draw(window, |ctx, frame| {
