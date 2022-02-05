@@ -7,6 +7,7 @@ use {
 		Wgpu,
 	},
 	anyhow::Context,
+	crossbeam::atomic::AtomicCell,
 	parking_lot::Mutex,
 	std::{
 		sync::Arc,
@@ -33,8 +34,7 @@ pub struct Egui {
 	repaint_signal: Arc<RepaintSignal>,
 
 	/// Last frame time
-	// TODO: Change to atomic cell
-	frame_time: Mutex<Option<Duration>>,
+	frame_time: AtomicCell<Option<Duration>>,
 }
 
 impl std::fmt::Debug for Egui {
@@ -73,11 +73,14 @@ impl Egui {
 			platform: Mutex::new(platform),
 			render_pass: Mutex::new(render_pass),
 			repaint_signal,
-			frame_time: Mutex::new(None),
+			frame_time: AtomicCell::new(None),
 		})
 	}
 
 	/// Draws egui
+	///
+	/// If called simultaneously from multiple threads,
+	/// frame times may be wrong.
 	pub fn draw(
 		&self,
 		window: &Window,
@@ -93,20 +96,13 @@ impl Egui {
 		egui_platform.begin_frame();
 
 		// Create the frame
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
 		let app_output = epi::backend::AppOutput::default();
 		#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 		let egui_frame = epi::Frame::new(epi::backend::FrameData {
 			info:           epi::IntegrationInfo {
 				name:                    "egui",
 				web_info:                None,
-				cpu_usage:               self
-					.frame_time
-					.lock_se()
-					.allow::<MightBlock>()
-					.as_ref()
-					.map(Duration::as_secs_f32),
+				cpu_usage:               self.frame_time.load().as_ref().map(Duration::as_secs_f32),
 				native_pixels_per_point: Some(window.scale_factor() as f32),
 				prefer_dark_mode:        None,
 			},
@@ -122,7 +118,7 @@ impl Egui {
 		//           while locked.
 		let (_output, paint_commands) = egui_platform.end_frame(Some(window));
 		let paint_jobs = egui_platform.context().tessellate(paint_commands);
-		*self.frame_time.lock_se().allow::<MightBlock>() = Some(egui_frame_start.elapsed());
+		self.frame_time.store(Some(egui_frame_start.elapsed()));
 
 		Ok(paint_jobs)
 	}
