@@ -165,6 +165,7 @@ impl<'window> Wgpu<'window> {
 	///
 	/// # Blocking
 	/// Blocks until any calls to [`Wgpu::surface_size`] are finished.
+	/// Deadlocks if called recursively.
 	///
 	/// # Callback
 	/// Callback `f` receives the command encoder and the surface texture / size. This allows you to

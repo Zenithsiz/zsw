@@ -169,43 +169,46 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
-		panels.for_each_mut::<_, ()>(|panel| {
-			// Calculate the matrix for the panel
-			let matrix = panel.matrix(surface_size);
+		// DEADLOCK: We ensure we don't block within the callback
+		panels
+			.for_each_mut::<_, ()>(|panel| {
+				// Calculate the matrix for the panel
+				let matrix = panel.matrix(surface_size);
 
-			// Then go through all image descriptors to render
-			for descriptor in panel.image_descriptors() {
-				// Skip rendering if alpha is 0
-				if descriptor.alpha == 0.0 {
-					continue;
-				}
-
-				// Try to get the image
-				let image = match images.get(descriptor.image_id.0) {
-					Some(value) => value,
-					None => {
-						log::warn!("Image index was invalid: {:?}", descriptor.image_id);
+				// Then go through all image descriptors to render
+				for descriptor in panel.image_descriptors() {
+					// Skip rendering if alpha is 0
+					if descriptor.alpha == 0.0 {
 						continue;
-					},
-				};
+					}
 
-				// Then update the uniforms
-				let uvs = image.uvs(panel.geometry.size, descriptor.swap_dir);
-				let uniforms = PanelUniforms {
-					matrix:     matrix.into(),
-					uvs_start:  uvs.start(),
-					uvs_offset: uvs.offset(descriptor.progress),
-					alpha:      descriptor.alpha,
-					_pad:       [0.0; 3],
-				};
-				queue.write_buffer(image.uniforms(), 0, bytemuck::cast_slice(&[uniforms]));
+					// Try to get the image
+					let image = match images.get(descriptor.image_id.0) {
+						Some(value) => value,
+						None => {
+							log::warn!("Image index was invalid: {:?}", descriptor.image_id);
+							continue;
+						},
+					};
 
-				// Bind the image and draw
-				render_pass.set_bind_group(0, image.uniforms_bind_group(), &[]);
-				render_pass.set_bind_group(1, image.image_bind_group(), &[]);
-				render_pass.draw_indexed(0..6, 0, 0..1);
-			}
-		});
+					// Then update the uniforms
+					let uvs = image.uvs(panel.geometry.size, descriptor.swap_dir);
+					let uniforms = PanelUniforms {
+						matrix:     matrix.into(),
+						uvs_start:  uvs.start(),
+						uvs_offset: uvs.offset(descriptor.progress),
+						alpha:      descriptor.alpha,
+						_pad:       [0.0; 3],
+					};
+					queue.write_buffer(image.uniforms(), 0, bytemuck::cast_slice(&[uniforms]));
+
+					// Bind the image and draw
+					render_pass.set_bind_group(0, image.uniforms_bind_group(), &[]);
+					render_pass.set_bind_group(1, image.image_bind_group(), &[]);
+					render_pass.draw_indexed(0..6, 0, 0..1);
+				}
+			})
+			.allow::<MightBlock>();
 
 		Ok(())
 	}

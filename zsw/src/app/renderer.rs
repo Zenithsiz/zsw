@@ -82,13 +82,16 @@ impl Renderer {
 
 	/// Updates all panels
 	fn update(&mut self, wgpu: &Wgpu, panels_renderer: &PanelsRenderer, panels: &Panels) -> Result<(), anyhow::Error> {
-		panels.for_each_mut(|panel| {
-			if let Err(err) = panel.update(wgpu, panels_renderer, &self.image_rx) {
-				log::warn!("Unable to update panel: {err:?}");
-			}
+		// DEADLOCK: We ensure the callback doesn't block
+		panels
+			.for_each_mut(|panel| {
+				if let Err(err) = panel.update(wgpu, panels_renderer, &self.image_rx) {
+					log::warn!("Unable to update panel: {err:?}");
+				}
 
-			Ok(())
-		})
+				Ok(())
+			})
+			.allow::<MightBlock>()
 	}
 
 	/// Renders
@@ -118,6 +121,7 @@ impl Renderer {
 		// Then render
 		// DEADLOCK: Caller is responsible for avoiding deadlocks.
 		//           We ensure we don't block within [`Wgpu::render`].
+		//           We also ensure we don't call it recursively.
 		wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
 			panels_renderer
@@ -132,19 +136,21 @@ impl Renderer {
 			};
 			let device = wgpu.device();
 			let queue = wgpu.queue();
-			let mut egui_render_pass = egui.render_pass().lock();
 
-			// TODO: Check if it's fine to get the platform here without synchronizing
-			//       with the drawing.
-			let egui_platform = egui.platform().lock();
-			egui_render_pass.update_texture(device, queue, &egui_platform.context().font_image());
-			egui_render_pass.update_user_textures(device, queue);
-			egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
+			// DEADLOCK: We ensure the callback doesn't block.
+			egui.do_render_pass(|egui_render_pass| {
+				// TODO: Check if it's fine to get the platform here without synchronizing
+				//       with the drawing.
+				egui_render_pass.update_texture(device, queue, &egui.font_image());
+				egui_render_pass.update_user_textures(device, queue);
+				egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
 
-			// Record all render passes.
-			egui_render_pass
-				.execute(encoder, surface_view, &paint_jobs, &screen_descriptor, None)
-				.context("Unable to render egui")?;
+				// Record all render passes.
+				egui_render_pass
+					.execute(encoder, surface_view, &paint_jobs, &screen_descriptor, None)
+					.context("Unable to render egui")
+			})
+			.allow::<MightBlock>()?;
 
 			Ok(())
 		})

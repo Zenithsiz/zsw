@@ -116,14 +116,17 @@ impl SettingsWindow {
 
 		// Then render it
 		settings_window.open(&mut self.open).show(ctx, |ui| {
+			// DEADLOCK: We ensure we don't block within the callback.
 			let mut panel_idx = 0;
-			panels.for_each_mut::<_, ()>(|panel| {
-				ui.collapsing(format!("Panel {panel_idx}"), |ui| {
-					ui.add(PanelWidget::new(panel, surface_size));
-				});
+			panels
+				.for_each_mut::<_, ()>(|panel| {
+					ui.collapsing(format!("Panel {panel_idx}"), |ui| {
+						ui.add(PanelWidget::new(panel, surface_size));
+					});
 
-				panel_idx += 1;
-			});
+					panel_idx += 1;
+				})
+				.allow::<MightBlock>();
 			ui.collapsing("Add panel", |ui| {
 				ui.horizontal(|ui| {
 					ui.label("Geometry");

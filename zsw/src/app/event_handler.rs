@@ -33,7 +33,7 @@ impl EventHandler {
 		control_flow: &mut EventLoopControlFlow,
 	) {
 		// Update egui
-		egui.platform().lock().handle_event(&event);
+		egui.handle_event(&event);
 
 		// Set control for to wait for next event, since we're not doing
 		// anything else on the main thread

@@ -7,6 +7,7 @@ use {
 		Panel,
 	},
 	parking_lot::Mutex,
+	zsw_side_effect_macros::side_effect,
 };
 
 /// All panels
@@ -35,6 +36,7 @@ impl Panels {
 	///
 	/// # Blocking
 	/// Will deadlock if `f` blocks.
+	#[side_effect(MightBlock)]
 	pub fn for_each_mut<T, C: FromIterator<T>>(&self, f: impl FnMut(&mut Panel) -> T) -> C {
 		// DEADLOCK: We ensure this lock can't deadlock by not blocking
 		//           while locked.

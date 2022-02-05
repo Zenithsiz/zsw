@@ -2,7 +2,10 @@
 
 // Imports
 use {
-	crate::Wgpu,
+	crate::{
+		util::{extse::ParkingLotMutexSe, MightBlock},
+		Wgpu,
+	},
 	anyhow::Context,
 	parking_lot::Mutex,
 	std::{
@@ -10,23 +13,27 @@ use {
 		time::{Duration, Instant},
 	},
 	winit::window::Window,
+	zsw_side_effect_macros::side_effect,
 };
 
 
 /// All egui state
 pub struct Egui {
 	/// Platform
-	// TODO: Only lock internally
+	// DEADLOCK: We ensure this lock can't deadlock by not blocking
+	//           while locked.
 	platform: Mutex<egui_winit_platform::Platform>,
 
 	/// Render pass
-	// TODO: Only lock internally
+	// DEADLOCK: We ensure this lock can't deadlock by not blocking
+	//           while locked.
 	render_pass: Mutex<egui_wgpu_backend::RenderPass>,
 
 	/// Repaint signal
 	repaint_signal: Arc<RepaintSignal>,
 
 	/// Last frame time
+	// TODO: Change to atomic cell
 	frame_time: Mutex<Option<Duration>>,
 }
 
@@ -77,20 +84,29 @@ impl Egui {
 		f: impl FnOnce(&egui::CtxRef, &epi::Frame) -> Result<(), anyhow::Error>,
 	) -> Result<Vec<egui::ClippedMesh>, anyhow::Error> {
 		// Start the frame
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
 		// Note: We must keep the platform locked until the call to retrieve all the paint jobs,
 		//       in order to ensure the main thread can't process events mid-drawing.
-		let mut egui_platform = self.platform.lock();
+		let mut egui_platform = self.platform.lock_se().allow::<MightBlock>();
 		let egui_frame_start = Instant::now();
 		egui_platform.begin_frame();
 
 		// Create the frame
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
 		let app_output = epi::backend::AppOutput::default();
 		#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 		let egui_frame = epi::Frame::new(epi::backend::FrameData {
 			info:           epi::IntegrationInfo {
 				name:                    "egui",
 				web_info:                None,
-				cpu_usage:               self.frame_time.lock().as_ref().map(Duration::as_secs_f32),
+				cpu_usage:               self
+					.frame_time
+					.lock_se()
+					.allow::<MightBlock>()
+					.as_ref()
+					.map(Duration::as_secs_f32),
 				native_pixels_per_point: Some(window.scale_factor() as f32),
 				prefer_dark_mode:        None,
 			},
@@ -102,21 +118,40 @@ impl Egui {
 		f(&egui_platform.context(), &egui_frame).context("Unable to draw")?;
 
 		// Finally end the frame and retrieve the paint jobs
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
 		let (_output, paint_commands) = egui_platform.end_frame(Some(window));
 		let paint_jobs = egui_platform.context().tessellate(paint_commands);
-		*self.frame_time.lock() = Some(egui_frame_start.elapsed());
+		*self.frame_time.lock_se().allow::<MightBlock>() = Some(egui_frame_start.elapsed());
 
 		Ok(paint_jobs)
 	}
 
-	/// Returns the platform
-	pub const fn platform(&self) -> &Mutex<egui_winit_platform::Platform> {
-		&self.platform
+	/// Handles an event
+	pub fn handle_event(&self, event: &winit::event::Event<!>) {
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		self.platform.lock_se().allow::<MightBlock>().handle_event(event);
 	}
 
-	/// Returns the render pass
-	pub const fn render_pass(&self) -> &Mutex<egui_wgpu_backend::RenderPass> {
-		&self.render_pass
+	/// Returns the font image
+	pub fn font_image(&self) -> Arc<egui::FontImage> {
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		self.platform.lock_se().allow::<MightBlock>().context().font_image()
+	}
+
+	/// Performs a render pass
+	///
+	/// # Blocking
+	/// `f` must not block.
+	#[side_effect(MightBlock)]
+	pub fn do_render_pass<T>(&self, f: impl FnOnce(&mut egui_wgpu_backend::RenderPass) -> T) -> T {
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		//           Caller ensures to not block.
+		let mut render_pass = self.render_pass.lock_se().allow::<MightBlock>();
+		f(&mut *render_pass)
 	}
 }
 
