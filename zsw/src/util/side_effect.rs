@@ -35,6 +35,17 @@ impl<Value, Effects: SideEffect> WithSideEffect<Value, Effects> {
 		}
 	}
 
+	/// Flat maps this side effect
+	pub fn and_then<MappedValue>(
+		self,
+		f: impl FnOnce(Value) -> WithSideEffect<MappedValue, Effects>,
+	) -> WithSideEffect<MappedValue, Effects> {
+		WithSideEffect {
+			value:   f(self.value).value,
+			effects: self.effects,
+		}
+	}
+
 	/// Converts a `&WithSideEffect<T, S>` to `WithSideEffect<&T, S>`
 	pub fn as_ref(&self) -> WithSideEffect<&Value, Effects> {
 		WithSideEffect {
