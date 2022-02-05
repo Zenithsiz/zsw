@@ -18,11 +18,10 @@ use {
 		util::{self, MightBlock},
 		Args,
 		Egui,
-		Panel,
+		PanelImageState,
 		PanelState,
 		Panels,
 		PanelsProfile,
-		PanelsRenderer,
 		Wgpu,
 	},
 	anyhow::Context,
@@ -63,12 +62,9 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let panels = args
 		.panel_geometries
 		.iter()
-		.map(|&geometry| Panel::new(geometry, PanelState::Empty, args.image_duration, args.fade_point));
-	let panels = Panels::new(panels);
-
-	// Create the panels renderer
-	let panels_renderer = PanelsRenderer::new(wgpu.device(), wgpu.surface_texture_format())
-		.context("Unable to create panels renderer")?;
+		.map(|&geometry| PanelState::new(geometry, PanelImageState::Empty, args.image_duration, args.fade_point));
+	let panels = Panels::new(panels, image_rx, wgpu.device(), wgpu.surface_texture_format())
+		.context("Unable to create panels")?;
 
 	// Create egui
 	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
@@ -93,7 +89,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let mut event_handler = EventHandler::new();
 
 	// Create the renderer
-	let renderer = Renderer::new(image_rx);
+	let renderer = Renderer::new();
 
 	// Create the settings window
 	let settings_window = SettingsWindow::new(wgpu.surface_size());
@@ -144,15 +140,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		//           This thread ensures it will receive images.
 		thread_spawner.spawn_scoped("Renderer", || {
 			renderer
-				.run(
-					&window,
-					&wgpu,
-					&panels_renderer,
-					&panels,
-					&egui,
-					&should_stop,
-					&paint_jobs_rx,
-				)
+				.run(&window, &wgpu, &panels, &egui, &should_stop, &paint_jobs_rx)
 				.allow::<MightBlock>();
 			Ok(())
 		})?;
@@ -171,7 +159,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		let (res, duration) = util::measure(|| {
 			// Stop the renderer
-			// BLOCKING: Stopping the renderer will cause it to drop the image receivers,
+			// DEADLOCK: Stopping the renderer will cause it to drop the image receivers,
 			//           which will stop the image loaders, which will in turn stop
 			//           the path loader.
 			should_stop.store(true, atomic::Ordering::Relaxed);

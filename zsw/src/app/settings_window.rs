@@ -8,7 +8,7 @@ use crate::util::extse::CrossBeamChannelSenderSE;
 
 // Imports
 use {
-	crate::{paths, util::MightBlock, Egui, Panel, PanelState, Panels, Rect, Wgpu},
+	crate::{paths, util::MightBlock, Egui, PanelImageState, PanelState, Panels, Rect, Wgpu},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -142,9 +142,9 @@ impl SettingsWindow {
 				});
 
 				if ui.button("Add").clicked() {
-					panels.add_panel(Panel::new(
+					panels.add_panel(PanelState::new(
 						self.new_panel_state.geometry,
-						PanelState::Empty,
+						PanelImageState::Empty,
 						Duration::from_secs_f32(self.new_panel_state.duration_secs),
 						self.new_panel_state.fade_point,
 					));
@@ -209,7 +209,7 @@ impl NewPanelState {
 #[derive(Debug)]
 pub struct PanelWidget<'panel> {
 	/// The panel
-	panel: &'panel mut Panel,
+	panel: &'panel mut PanelState,
 
 	/// Surface size
 	surface_size: PhysicalSize<u32>,
@@ -217,7 +217,7 @@ pub struct PanelWidget<'panel> {
 
 impl<'panel> PanelWidget<'panel> {
 	/// Creates a panel widget
-	pub fn new(panel: &'panel mut Panel, surface_size: PhysicalSize<u32>) -> Self {
+	pub fn new(panel: &'panel mut PanelState, surface_size: PhysicalSize<u32>) -> Self {
 		Self { panel, surface_size }
 	}
 }

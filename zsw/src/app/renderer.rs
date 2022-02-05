@@ -3,11 +3,9 @@
 // Imports
 use {
 	crate::{
-		img::ImageReceiver,
 		util::{extse::CrossBeamChannelReceiverSE, MightBlock},
 		Egui,
 		Panels,
-		PanelsRenderer,
 		Wgpu,
 	},
 	anyhow::Context,
@@ -21,15 +19,12 @@ use {
 };
 
 /// Renderer
-pub struct Renderer {
-	/// Image receiver
-	image_rx: ImageReceiver,
-}
+pub struct Renderer {}
 
 impl Renderer {
 	/// Creates a new renderer
-	pub fn new(image_rx: ImageReceiver) -> Self {
-		Self { image_rx }
+	pub fn new() -> Self {
+		Self {}
 	}
 
 	/// Runs the renderer
@@ -39,10 +34,9 @@ impl Renderer {
 	/// Deadlocks if called within a [`Wgpu::render`] callback.
 	#[side_effect(MightBlock)]
 	pub fn run(
-		mut self,
+		self,
 		window: &Window,
 		wgpu: &Wgpu,
-		panels_renderer: &PanelsRenderer,
 		panels: &Panels,
 		egui: &Egui,
 		should_stop: &AtomicBool,
@@ -56,7 +50,7 @@ impl Renderer {
 			// Note: The update is only useful for displaying, so there's no use
 			//       in running it in another thread.
 			//       Especially given that `update` doesn't block.
-			let (res, frame_duration) = crate::util::measure(|| self.update(wgpu, panels_renderer, panels));
+			let (res, frame_duration) = crate::util::measure(|| Self::update(wgpu, panels));
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to update"),
 				Err(err) => log::warn!("Unable to update: {err:?}"),
@@ -64,9 +58,8 @@ impl Renderer {
 
 			// Render
 			// DEADLOCK: Caller is responsible for avoiding deadlocks
-			let (res, frame_duration) = crate::util::measure(|| {
-				Self::render(window, wgpu, panels_renderer, panels, egui, paint_jobs_rx).allow::<MightBlock>()
-			});
+			let (res, frame_duration) =
+				crate::util::measure(|| Self::render(window, wgpu, panels, egui, paint_jobs_rx).allow::<MightBlock>());
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -80,7 +73,10 @@ impl Renderer {
 	}
 
 	/// Updates all panels
-	fn update(&mut self, wgpu: &Wgpu, panels_renderer: &PanelsRenderer, panels: &Panels) -> Result<(), anyhow::Error> {
+	fn update(wgpu: &Wgpu, panels: &Panels) -> Result<(), anyhow::Error> {
+		// Updates all panels
+		panels.update_all(wgpu)
+		/*
 		// DEADLOCK: We ensure the callback doesn't block
 		panels
 			.for_each_mut(|panel| {
@@ -91,6 +87,7 @@ impl Renderer {
 				Ok(())
 			})
 			.allow::<MightBlock>()
+		*/
 	}
 
 	/// Renders
@@ -102,7 +99,6 @@ impl Renderer {
 	fn render(
 		window: &Window,
 		wgpu: &Wgpu,
-		panels_renderer: &PanelsRenderer,
 		panels: &Panels,
 		egui: &Egui,
 		paint_jobs_rx: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
@@ -121,8 +117,8 @@ impl Renderer {
 		//           We also ensure we don't call it recursively.
 		wgpu.render(|encoder, surface_view, surface_size| {
 			// Render the panels
-			panels_renderer
-				.render(panels, wgpu.queue(), encoder, surface_view, surface_size)
+			panels
+				.render(wgpu.queue(), encoder, surface_view, surface_size)
 				.context("Unable to render panels")?;
 
 			#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`

@@ -77,7 +77,7 @@ pub use self::{
 	args::Args,
 	egui::Egui,
 	img::ImageLoader,
-	panel::{Panel, PanelState, Panels, PanelsProfile, PanelsRenderer},
+	panel::{PanelImageState, PanelState, Panels, PanelsProfile, PanelsRenderer},
 	rect::Rect,
 	wgpu::Wgpu,
 };
