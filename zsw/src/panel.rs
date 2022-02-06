@@ -73,10 +73,79 @@ impl Panels {
 		let mut panels = self.panels.lock_se().allow::<MightBlock>();
 
 		for panel in &mut *panels {
-			panel
-				.update(wgpu, &self.renderer, &self.image_rx)
-				.context("Unable to update panel")?;
+			self.update_panel(panel, wgpu).context("Unable to update panel")?;
 		}
+
+		Ok(())
+	}
+
+	/// Updates a panel
+	pub fn update_panel(&self, panel: &mut PanelState, wgpu: &Wgpu) -> Result<(), anyhow::Error> {
+		// Next frame's progress
+		let next_progress = panel.progress + (1.0 / 60.0) / panel.image_duration.as_secs_f32();
+
+		// Progress on image swap
+		let swapped_progress = panel.progress - panel.fade_point;
+
+		// If we finished the current image
+		let finished = panel.progress >= 1.0;
+
+		// Update the image state
+		(panel.state, panel.progress) = match panel.state {
+			// If we're empty, try to get a next image
+			PanelImageState::Empty => match self.image_rx.try_recv().context("Unable to get next image")? {
+				Some(image) => (
+					PanelImageState::PrimaryOnly {
+						front: PanelImageStateImage {
+							id:       self.renderer.create_image(wgpu, image),
+							swap_dir: rand::random(),
+						},
+					},
+					// Note: Ensure it's below `0.5` to avoid starting during a fade.
+					rand::random::<f32>() / 2.0,
+				),
+				None => (PanelImageState::Empty, 0.0),
+			},
+
+			// If we only have the primary, try to load the next image
+			PanelImageState::PrimaryOnly { front } =>
+				match self.image_rx.try_recv().context("Unable to get next image")? {
+					Some(image) => (
+						PanelImageState::Both {
+							front,
+							back: PanelImageStateImage {
+								id:       self.renderer.create_image(wgpu, image),
+								swap_dir: rand::random(),
+							},
+						},
+						next_progress,
+					),
+					None => (PanelImageState::PrimaryOnly { front }, next_progress),
+				},
+
+			// If we have both, try to update the progress and swap them if finished
+			PanelImageState::Both { mut front, back } if finished => {
+				match self.image_rx.try_recv().context("Unable to get next image")? {
+					// Note: We update the front and swap them
+					Some(image) => {
+						self.renderer.update_image(wgpu, front.id, image);
+						front.swap_dir = rand::random();
+						(
+							PanelImageState::Both {
+								front: back,
+								back:  front,
+							},
+							swapped_progress,
+						)
+					},
+					// Note: If we're done without a next image, then just stay at 1.0
+					None => (PanelImageState::Both { front, back }, 1.0),
+				}
+			},
+
+			// Else just update the progress
+			state @ PanelImageState::Both { .. } => (state, next_progress),
+		};
 
 		Ok(())
 	}
