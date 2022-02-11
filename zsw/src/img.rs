@@ -15,14 +15,14 @@ pub use {
 use {
 	cgmath::Vector2,
 	image::{DynamicImage, GenericImageView},
-	std::{path::PathBuf, sync::Arc},
+	std::path::PathBuf,
 };
 
 /// Loaded image
 #[derive(Debug)]
 pub struct Image {
 	/// Path of the image
-	pub path: Arc<PathBuf>,
+	pub path: PathBuf,
 
 	/// Image
 	pub image: DynamicImage,

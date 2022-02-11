@@ -14,14 +14,14 @@ use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
 	crate::{
 		img,
-		paths,
-		util::{self, MightBlock},
+		util::{self, extse::CrossBeamChannelSenderSE, MightBlock},
 		Args,
 		Egui,
 		PanelImageState,
 		PanelState,
 		Panels,
 		PanelsProfile,
+		Playlist,
 		Wgpu,
 	},
 	anyhow::Context,
@@ -52,11 +52,11 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Create the wgpu interface
 	let wgpu = Wgpu::new(&window).context("Unable to create renderer")?;
 
-	// Create the paths channel
-	let (paths_distributer, paths_rx) = paths::new(args.images_dir.clone());
+	// Create the playlist
+	let playlist = Playlist::new();
 
 	// Create the image loader
-	let (image_loader, image_rx) = img::loader::new(paths_rx);
+	let (image_loader, image_rx) = img::loader::new();
 
 	// Create all panels
 	let panels = args
@@ -94,6 +94,9 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Create the settings window
 	let settings_window = SettingsWindow::new(wgpu.surface_size());
 
+	// Create the closing signal channels
+	let (close_tx, close_rx) = crossbeam::channel::bounded(0);
+
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
 	//       another thread, since we manually join all threads at the end.
@@ -101,10 +104,17 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Create the thread spawner
 		let mut thread_spawner = util::ThreadSpawner::new(s);
 
-		// Spawn the path distributer thread
-		// DEADLOCK: Image loader thread ensures it will receive paths
-		//           We ensure we will keep sending paths.
-		thread_spawner.spawn_scoped("Path distributer", || paths_distributer.run().allow::<MightBlock>())?;
+		// Spawn the playlist loader thread
+		thread_spawner.spawn_scoped("Path distributer loader", || {
+			playlist.add_dir(&args.images_dir);
+			Ok(())
+		})?;
+
+		// Spawn the playlist thread
+		thread_spawner.spawn_scoped("Path distributer", || {
+			playlist.run(&close_rx);
+			Ok(())
+		})?;
 
 		// Spawn all image loaders
 		// DEADLOCK: The path distributer thread ensures it will send paths
@@ -113,7 +123,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
 		let loader_fns = vec![image_loader; loader_threads]
 			.into_iter()
-			.map(|image_loader| move || image_loader.run().allow::<MightBlock>());
+			.map(|image_loader| || image_loader.run(&playlist).allow::<MightBlock>());
 		thread_spawner.spawn_scoped_multiple("Image loader", loader_fns)?;
 
 		// Spawn the settings window thread
@@ -126,7 +136,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 					&egui,
 					&window,
 					&panels,
-					&paths_distributer,
+					&playlist,
 					&queued_settings_window_open_click,
 					&paint_jobs_tx,
 				)
@@ -163,6 +173,9 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			//           which will stop the image loaders, which will in turn stop
 			//           the path loader.
 			should_stop.store(true, atomic::Ordering::Relaxed);
+			if close_tx.send_se(()).allow::<MightBlock>().is_err() {
+				log::warn!("Close channel receivers were closed");
+			}
 
 			// Join all thread
 			thread_spawner.join_all().context("Unable to join all threads")

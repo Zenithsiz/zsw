@@ -67,7 +67,7 @@ mod egui;
 mod img;
 mod logger;
 mod panel;
-mod paths;
+mod playlist;
 mod rect;
 mod util;
 mod wgpu;
@@ -78,6 +78,7 @@ pub use self::{
 	egui::Egui,
 	img::ImageLoader,
 	panel::{PanelImageState, PanelState, Panels, PanelsProfile, PanelsRenderer},
+	playlist::{Playlist, PlaylistImage},
 	rect::Rect,
 	wgpu::Wgpu,
 };

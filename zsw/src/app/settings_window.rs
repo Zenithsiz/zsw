@@ -4,11 +4,18 @@
 // `egui` returns a response on every operation, but we don't use them
 #![allow(unused_results)]
 
-use crate::util::extse::CrossBeamChannelSenderSE;
-
 // Imports
 use {
-	crate::{paths, util::MightBlock, Egui, PanelImageState, PanelState, Panels, Rect, Wgpu},
+	crate::{
+		util::{extse::CrossBeamChannelSenderSE, MightBlock},
+		Egui,
+		PanelImageState,
+		PanelState,
+		Panels,
+		Playlist,
+		Rect,
+		Wgpu,
+	},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -49,7 +56,7 @@ impl SettingsWindow {
 		egui: &Egui,
 		window: &Window,
 		panels: &Panels,
-		paths_distributer: &paths::Distributer,
+		playlist: &Playlist,
 		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
 		paint_jobs_tx: &crossbeam::channel::Sender<Vec<egui::epaint::ClippedMesh>>,
 	) -> () {
@@ -65,7 +72,7 @@ impl SettingsWindow {
 					surface_size,
 					window,
 					panels,
-					paths_distributer,
+					playlist,
 					queued_settings_window_open_click,
 				)
 			});
@@ -95,7 +102,7 @@ impl SettingsWindow {
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
 		panels: &Panels,
-		paths_distributer: &paths::Distributer,
+		playlist: &Playlist,
 		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
@@ -152,19 +159,15 @@ impl SettingsWindow {
 			});
 
 			ui.horizontal(|ui| {
-				let cur_root_path = paths_distributer.root_path();
-
-				ui.label("Root path");
-				ui.label(cur_root_path.display().to_string());
+				ui.label("Re-scan directory");
 				if ui.button("📁").clicked() {
-					let file_dialog = native_dialog::FileDialog::new()
-						.set_location(&*cur_root_path)
-						.show_open_single_dir();
+					let file_dialog = native_dialog::FileDialog::new().show_open_single_dir();
 					match file_dialog {
 						Ok(file_dialog) => {
-							if let Some(root_path) = file_dialog {
+							if let Some(path) = file_dialog {
 								// Set the root path
-								paths_distributer.set_root_path(root_path);
+								playlist.clear();
+								playlist.add_dir(&path);
 
 								// TODO: Reset all existing images and paths loaded from the
 								//       old path distributer, maybe?
