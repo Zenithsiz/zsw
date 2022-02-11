@@ -11,14 +11,12 @@ use {
 	super::Image,
 	crate::{
 		util::{
-			self,
 			extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSenderSE},
 			MightBlock,
 		},
 		Playlist,
 		PlaylistImage,
 	},
-	anyhow::Context,
 	zsw_side_effect_macros::side_effect,
 };
 
@@ -69,38 +67,32 @@ impl ImageLoader {
 			// DEADLOCK: Caller guarantees that `Playlist::run` will running
 			let image = playlist.next().allow::<MightBlock>();
 			match &*image {
-				PlaylistImage::File(path) => {
-					match util::measure(|| load::load_image(path)) {
-						// If we got it, send it
-						(Ok(image), duration) => {
-							let format = util::image_format(&image);
-							log::debug!(target: "zsw::perf", "Took {duration:?} to load {path:?} (format: {format})");
+				PlaylistImage::File(path) => match load::load_image(path) {
+					// If we got it, send it
+					Ok(image) => {
+						let image = Image {
+							path: path.clone(),
+							image,
+						};
+						crossbeam::select! {
+							// Try to send an image
+							// Note: This can't return an `Err` because `self` owns a receiver
+							send(self.image_tx, image) -> res => res.expect("Image receiver was closed"),
 
-							// DEADLOCK: Caller is responsible for avoiding deadlocks
-							let image = Image {
-								path: path.clone(),
-								image,
-							};
+							// If we get anything in the close channel, break
+							// Note: This can't return an `Err` because `self` owns a receiver
+							recv(self.close_rx) -> res => {
+								res.expect("On-close sender was closed");
+								break
+							},
+						}
+					},
 
-							crossbeam::select! {
-								// Try to send an image
-								// Note: This can't return an `Err` because `self` owns a receiver
-								send(self.image_tx, image) -> res => res.expect("Image receiver was closed"),
-
-								// If we get anything in the close channel, break
-								// Note: This can't return an `Err` because `self` owns a receiver
-								recv(self.close_rx) -> res => {
-									res.expect("On-close sender was closed");
-									break
-								},
-							}
-						},
-						// If we couldn't load, log, remove the path and retry
-						(Err(err), _) => {
-							log::info!("Unable to load {path:?}: {err:?}");
-							playlist.remove_image(&image);
-						},
-					};
+					// If we couldn't load, log, remove the path and retry
+					Err(err) => {
+						log::info!("Unable to load {path:?}: {err:?}");
+						playlist.remove_image(&image);
+					},
 				},
 			}
 		}
@@ -121,14 +113,15 @@ impl ImageLoader {
 	/// Receives the image, waiting if not ready yet
 	///
 	/// # Blocking
-	/// Blocks until the loader sends an image via [`ImageLoader::run`]
+	/// Blocks until [`Self::run`] starts running.
 	#[side_effect(MightBlock)]
-	pub fn recv(&self) -> Result<Image, anyhow::Error> {
-		// DEADLOCK: Caller is responsible for avoiding deadlocks
+	pub fn recv(&self) -> Image {
+		// Note: This can't return an `Err` because `self` owns a sender
+		// DEADLOCK: Caller ensures `Self::run` will eventually run.
 		self.image_rx
 			.recv_se()
 			.allow::<MightBlock>()
-			.context("Unable to get image from loader thread")
+			.expect("Image sender was closed")
 	}
 
 	/// Attempts to receive the image

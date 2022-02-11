@@ -155,7 +155,10 @@ impl Playlist {
 	pub fn next(&self) -> Arc<PlaylistImage> {
 		// Note: This can't return an `Err` because `self` owns a sender
 		// DEADLOCK: Caller ensures `Self::run` will eventually run.
-		self.img_rx.recv_se().allow::<MightBlock>().expect("Sender was closed")
+		self.img_rx
+			.recv_se()
+			.allow::<MightBlock>()
+			.expect("Image sender was closed")
 	}
 }
 
