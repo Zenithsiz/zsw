@@ -5,6 +5,7 @@ use {
 	crate::{
 		util::{extse::CrossBeamChannelReceiverSE, MightBlock},
 		Egui,
+		ImageLoader,
 		Panels,
 		Wgpu,
 	},
@@ -39,6 +40,7 @@ impl Renderer {
 		wgpu: &Wgpu,
 		panels: &Panels,
 		egui: &Egui,
+		image_loader: &ImageLoader,
 		should_stop: &AtomicBool,
 		paint_jobs_rx: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
 	) -> () {
@@ -50,7 +52,7 @@ impl Renderer {
 			// Note: The update is only useful for displaying, so there's no use
 			//       in running it in another thread.
 			//       Especially given that `update` doesn't block.
-			let (res, frame_duration) = crate::util::measure(|| Self::update(wgpu, panels));
+			let (res, frame_duration) = crate::util::measure(|| Self::update(wgpu, panels, image_loader));
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to update"),
 				Err(err) => log::warn!("Unable to update: {err:?}"),
@@ -73,21 +75,9 @@ impl Renderer {
 	}
 
 	/// Updates all panels
-	fn update(wgpu: &Wgpu, panels: &Panels) -> Result<(), anyhow::Error> {
+	fn update(wgpu: &Wgpu, panels: &Panels, image_loader: &ImageLoader) -> Result<(), anyhow::Error> {
 		// Updates all panels
-		panels.update_all(wgpu)
-		/*
-		// DEADLOCK: We ensure the callback doesn't block
-		panels
-			.for_each_mut(|panel| {
-				if let Err(err) = panel.update(wgpu, panels_renderer, &self.image_rx) {
-					log::warn!("Unable to update panel: {err:?}");
-				}
-
-				Ok(())
-			})
-			.allow::<MightBlock>()
-		*/
+		panels.update_all(wgpu, image_loader)
 	}
 
 	/// Renders

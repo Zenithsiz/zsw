@@ -13,10 +13,10 @@ mod settings_window;
 use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
 	crate::{
-		img,
-		util::{self, extse::CrossBeamChannelSenderSE, MightBlock},
+		util::{self, MightBlock},
 		Args,
 		Egui,
+		ImageLoader,
 		PanelImageState,
 		PanelState,
 		Panels,
@@ -56,15 +56,15 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let playlist = Playlist::new();
 
 	// Create the image loader
-	let (image_loader, image_rx) = img::loader::new();
+	let image_loader = ImageLoader::new();
 
 	// Create all panels
 	let panels = args
 		.panel_geometries
 		.iter()
 		.map(|&geometry| PanelState::new(geometry, PanelImageState::Empty, args.image_duration, args.fade_point));
-	let panels = Panels::new(panels, image_rx, wgpu.device(), wgpu.surface_texture_format())
-		.context("Unable to create panels")?;
+	let panels =
+		Panels::new(panels, wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
 
 	// Create egui
 	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
@@ -94,9 +94,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Create the settings window
 	let settings_window = SettingsWindow::new(wgpu.surface_size());
 
-	// Create the closing signal channels
-	let (close_tx, close_rx) = crossbeam::channel::bounded(0);
-
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
 	//       another thread, since we manually join all threads at the end.
@@ -112,7 +109,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the playlist thread
 		thread_spawner.spawn_scoped("Path distributer", || {
-			playlist.run(&close_rx);
+			playlist.run();
 			Ok(())
 		})?;
 
@@ -121,7 +118,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		//           The renderer thread ensures it will receive images
 		//           We ensure we will keep sending images.
 		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		let loader_fns = vec![image_loader; loader_threads]
+		let loader_fns = vec![&image_loader; loader_threads]
 			.into_iter()
 			.map(|image_loader| || image_loader.run(&playlist).allow::<MightBlock>());
 		thread_spawner.spawn_scoped_multiple("Image loader", loader_fns)?;
@@ -150,7 +147,15 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		//           This thread ensures it will receive images.
 		thread_spawner.spawn_scoped("Renderer", || {
 			renderer
-				.run(&window, &wgpu, &panels, &egui, &should_stop, &paint_jobs_rx)
+				.run(
+					&window,
+					&wgpu,
+					&panels,
+					&egui,
+					&image_loader,
+					&should_stop,
+					&paint_jobs_rx,
+				)
 				.allow::<MightBlock>();
 			Ok(())
 		})?;
@@ -173,9 +178,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			//           which will stop the image loaders, which will in turn stop
 			//           the path loader.
 			should_stop.store(true, atomic::Ordering::Relaxed);
-			if close_tx.send_se(()).allow::<MightBlock>().is_err() {
-				log::warn!("Close channel receivers were closed");
-			}
+			image_loader.stop();
+			playlist.stop();
 
 			// Join all thread
 			thread_spawner.join_all().context("Unable to join all threads")

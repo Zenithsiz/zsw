@@ -17,8 +17,8 @@ pub use self::{
 // Imports
 use {
 	crate::{
-		img::ImageReceiver,
 		util::{extse::ParkingLotMutexSe, MightBlock},
+		ImageLoader,
 		Wgpu,
 	},
 	anyhow::Context,
@@ -34,9 +34,6 @@ pub struct Panels {
 	/// Panels renderer
 	renderer: PanelsRenderer,
 
-	/// Image receiver
-	image_rx: ImageReceiver,
-
 	/// All of the panels
 	panels: Mutex<Vec<PanelState>>,
 }
@@ -45,7 +42,6 @@ impl Panels {
 	/// Creates the panel
 	pub fn new(
 		panels: impl IntoIterator<Item = PanelState>,
-		image_rx: ImageReceiver,
 		device: &wgpu::Device,
 		surface_texture_format: wgpu::TextureFormat,
 	) -> Result<Self, anyhow::Error> {
@@ -54,7 +50,6 @@ impl Panels {
 
 		Ok(Self {
 			renderer,
-			image_rx,
 			panels: Mutex::new(panels.into_iter().collect()),
 		})
 	}
@@ -67,20 +62,26 @@ impl Panels {
 	}
 
 	/// Updates all panels
-	pub fn update_all(&self, wgpu: &Wgpu) -> Result<(), anyhow::Error> {
+	pub fn update_all(&self, wgpu: &Wgpu, image_loader: &ImageLoader) -> Result<(), anyhow::Error> {
 		// DEADLOCK: We ensure this lock can't deadlock by not blocking
 		//           while locked.
 		let mut panels = self.panels.lock_se().allow::<MightBlock>();
 
 		for panel in &mut *panels {
-			self.update_panel(panel, wgpu).context("Unable to update panel")?;
+			self.update_panel(panel, wgpu, image_loader)
+				.context("Unable to update panel")?;
 		}
 
 		Ok(())
 	}
 
 	/// Updates a panel
-	pub fn update_panel(&self, panel: &mut PanelState, wgpu: &Wgpu) -> Result<(), anyhow::Error> {
+	fn update_panel(
+		&self,
+		panel: &mut PanelState,
+		wgpu: &Wgpu,
+		image_loader: &ImageLoader,
+	) -> Result<(), anyhow::Error> {
 		// Next frame's progress
 		let next_progress = panel.progress + (1.0 / 60.0) / panel.image_duration.as_secs_f32();
 
@@ -93,7 +94,7 @@ impl Panels {
 		// Update the image state
 		(panel.state, panel.progress) = match panel.state {
 			// If we're empty, try to get a next image
-			PanelImageState::Empty => match self.image_rx.try_recv().context("Unable to get next image")? {
+			PanelImageState::Empty => match image_loader.try_recv().context("Unable to get next image")? {
 				Some(image) => (
 					PanelImageState::PrimaryOnly {
 						front: PanelImageStateImage {
@@ -109,7 +110,7 @@ impl Panels {
 
 			// If we only have the primary, try to load the next image
 			PanelImageState::PrimaryOnly { front } =>
-				match self.image_rx.try_recv().context("Unable to get next image")? {
+				match image_loader.try_recv().context("Unable to get next image")? {
 					Some(image) => (
 						PanelImageState::Both {
 							front,
@@ -125,7 +126,7 @@ impl Panels {
 
 			// If we have both, try to update the progress and swap them if finished
 			PanelImageState::Both { mut front, back } if finished => {
-				match self.image_rx.try_recv().context("Unable to get next image")? {
+				match image_loader.try_recv().context("Unable to get next image")? {
 					// Note: We update the front and swap them
 					Some(image) => {
 						self.renderer.update_image(wgpu, front.id, image);

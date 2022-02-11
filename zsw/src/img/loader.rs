@@ -23,24 +23,51 @@ use {
 };
 
 /// Image loader
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ImageLoader {
 	/// Image sender
 	image_tx: crossbeam::channel::Sender<Image>,
+
+	/// Image receiver
+	image_rx: crossbeam::channel::Receiver<Image>,
+
+	/// Closing sender
+	close_tx: crossbeam::channel::Sender<()>,
+
+	/// Closing receiver
+	close_rx: crossbeam::channel::Receiver<()>,
 }
 
 impl ImageLoader {
+	/// Creates a new image loader.
+	#[must_use]
+	pub fn new() -> Self {
+		// Note: Making the close channel unbounded is what allows us to not block
+		//       in `Self::stop`.
+		let (image_tx, image_rx) = crossbeam::channel::bounded(0);
+		let (close_tx, close_rx) = crossbeam::channel::unbounded();
+
+		Self {
+			image_tx,
+			image_rx,
+			close_tx,
+			close_rx,
+		}
+	}
+
 	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
 	///
 	/// # Blocking
-	/// Blocks until the path distributer sends a path via [`Distributer::run`](super::Distributer::run).
-	/// Blocks until a receiver receives via [`ImageReceiverReceiver::recv`](`ImageReceiver::recv`).
+	/// Blocks until [`Playlist::run`] starts.
+	/// Will block in it's own event loop until [`Self::close`] is called.
+	#[allow(clippy::useless_transmute)] // `crossbeam::select` does it
 	#[side_effect(MightBlock)]
-	pub fn run(self, playlist: &Playlist) -> Result<(), anyhow::Error> {
+	pub fn run(&self, playlist: &Playlist) -> Result<(), anyhow::Error> {
 		loop {
-			let image = playlist.next();
+			// DEADLOCK: Caller guarantees that `Playlist::run` will running
+			let image = playlist.next().allow::<MightBlock>();
 			match &*image {
 				PlaylistImage::File(path) => {
 					match util::measure(|| load::load_image(path)) {
@@ -54,9 +81,18 @@ impl ImageLoader {
 								path: path.clone(),
 								image,
 							};
-							if self.image_tx.send_se(image).allow::<MightBlock>().is_err() {
-								log::info!("No more receivers found, quitting");
-								break;
+
+							crossbeam::select! {
+								// Try to send an image
+								// Note: This can't return an `Err` because `self` owns a receiver
+								send(self.image_tx, image) -> res => res.expect("Image receiver was closed"),
+
+								// If we get anything in the close channel, break
+								// Note: This can't return an `Err` because `self` owns a receiver
+								recv(self.close_rx) -> res => {
+									res.expect("On-close sender was closed");
+									break
+								},
 							}
 						},
 						// If we couldn't load, log, remove the path and retry
@@ -71,16 +107,17 @@ impl ImageLoader {
 
 		Ok(())
 	}
-}
 
-/// Image receiver
-#[derive(Clone, Debug)]
-pub struct ImageReceiver {
-	/// Image receiver
-	image_rx: crossbeam::channel::Receiver<Image>,
-}
+	/// Stops the `run` loop
+	pub fn stop(&self) {
+		// Note: This can't return an `Err` because `self` owns a sender
+		// DEADLOCK: The channel is unbounded, so this will not block.
+		self.close_tx
+			.send_se(())
+			.allow::<MightBlock>()
+			.expect("On-close receiver was closed");
+	}
 
-impl ImageReceiver {
 	/// Receives the image, waiting if not ready yet
 	///
 	/// # Blocking
@@ -105,13 +142,8 @@ impl ImageReceiver {
 	}
 }
 
-/// Creates a new image loader.
-pub fn new() -> (ImageLoader, ImageReceiver) {
-	// TODO: Check if a 0 capacity channel is fine here.
-	//       Given we'll have a few runner threads, each one
-	//       will hold an image, which should be fine, but we might
-	//       want to hold more? Maybe let the user decide somewhere.
-	let (image_tx, image_rx) = crossbeam::channel::bounded(0);
-
-	(ImageLoader { image_tx }, ImageReceiver { image_rx })
+impl Default for ImageLoader {
+	fn default() -> Self {
+		Self::new()
+	}
 }
