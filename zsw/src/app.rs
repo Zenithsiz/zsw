@@ -25,7 +25,7 @@ use {
 		Wgpu,
 	},
 	anyhow::Context,
-	std::{num::NonZeroUsize, thread, time::Duration},
+	std::{iter, num::NonZeroUsize, thread, time::Duration},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::EventLoop,
@@ -98,25 +98,21 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		})?;
 
 		// Spawn the playlist thread
+		// DEADLOCK: We call `Playlist::stop` at the end
 		thread_spawner.spawn_scoped("Path distributer", || {
 			playlist.run();
 			Ok(())
 		})?;
 
 		// Spawn all image loaders
-		// DEADLOCK: The path distributer thread ensures it will send paths
-		//           The renderer thread ensures it will receive images
-		//           We ensure we will keep sending images.
+		// DEADLOCK: We call `ImageLoader::stop` at the end.
 		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		let loader_fns = vec![&image_loader; loader_threads]
-			.into_iter()
-			.map(|image_loader| || image_loader.run(&playlist).allow::<MightBlock>());
+		let loader_fns = iter::repeat(|| image_loader.run(&playlist).allow::<MightBlock>()).take(loader_threads);
 		thread_spawner.spawn_scoped_multiple("Image loader", loader_fns)?;
 
 		// Spawn the settings window thread
+		// DEADLOCK: We call `SettingsWindow::run` at the end
 		thread_spawner.spawn_scoped("Settings window", || {
-			// DEADLOCK: Renderer thread ensures it will receive paint jobs.
-			//           We ensure we keep sending paint jobs.
 			settings_window
 				.run(&wgpu, &egui, &window, &panels, &playlist)
 				.allow::<MightBlock>();
@@ -124,9 +120,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		})?;
 
 		// Spawn the renderer thread
-		// DEADLOCK: Settings window ensures it will send paint jobs.
-		//           We ensure we're not calling it within a [`Wgpu::render`] callback.
-		//           This thread ensures it will receive images.
+		// DEADLOCK: We call `Renderer::stop` at the end
+		//           We make sure `SettingsWindow::run` runs eventually
 		thread_spawner.spawn_scoped("Renderer", || {
 			renderer
 				.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window)
@@ -135,6 +130,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		})?;
 
 		// Run event loop in this thread until we quit
+		// DEADLOCK: `run_return` exits once the user requests it.
 		event_loop.run_return(|event, _, control_flow| {
 			event_handler.handle_event(&wgpu, &egui, &settings_window, event, control_flow);
 		});
@@ -146,24 +142,17 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		#[cfg(not(debug_assertions))]
 		std::process::exit(0);
 
-		let (res, duration) = util::measure(|| {
-			// Stop the renderer
-			// DEADLOCK: Stopping the renderer will cause it to drop the image receivers,
-			//           which will stop the image loaders, which will in turn stop
-			//           the path loader.
-			renderer.stop();
-			settings_window.stop();
-			image_loader.stop();
-			playlist.stop();
+		// Stop all systems
+		// Note: As `stop` doesn't block, order doesn't matter.
+		renderer.stop();
+		settings_window.stop();
+		image_loader.stop();
+		playlist.stop();
 
-			// Join all thread
-			thread_spawner.join_all().context("Unable to join all threads")
-		});
-		log::info!("Took {duration:?} to join all threads");
-
-		res
+		// Join all thread
+		thread_spawner.join_all().context("Unable to join all threads")
 	})
-	.map_err(|err| anyhow::anyhow!("Unable to start all threads: {err:?}"))?
+	.map_err(|err| anyhow::anyhow!("Unable to start/join all threads: {err:?}"))?
 }
 
 /// Creates the window, as well as the associated event loop

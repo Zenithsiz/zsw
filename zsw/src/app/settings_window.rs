@@ -87,7 +87,7 @@ impl SettingsWindow {
 	/// Runs the setting window
 	///
 	/// # Blocking
-	/// Blocks until the receiver of `paint_jobs_tx` receives a value.
+	/// Will block in it's own event loop until [`Self::stop`] is called.
 	#[allow(clippy::useless_transmute)] // `crossbeam::select` does it
 	#[side_effect(MightBlock)]
 	pub fn run(&self, wgpu: &Wgpu, egui: &Egui, window: &Window, panels: &Panels, playlist: &Playlist) -> () {

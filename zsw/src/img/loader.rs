@@ -58,14 +58,31 @@ impl ImageLoader {
 	/// Multiple image loaders may run at the same time
 	///
 	/// # Blocking
-	/// Blocks until [`Playlist::run`] starts.
 	/// Will block in it's own event loop until [`Self::close`] is called.
 	#[allow(clippy::useless_transmute)] // `crossbeam::select` does it
 	#[side_effect(MightBlock)]
 	pub fn run(&self, playlist: &Playlist) -> Result<(), anyhow::Error> {
 		loop {
-			// DEADLOCK: Caller guarantees that `Playlist::run` will running
-			let image = playlist.next().allow::<MightBlock>();
+			// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
+			let image = {
+				let mut select = crossbeam::channel::Select::new();
+				let img_idx = playlist.select_next(&mut select);
+				let close_idx = select.recv(&self.close_rx);
+
+				let selected = select.select();
+				match selected.index() {
+					idx if idx == img_idx => playlist.next_selected(selected),
+
+					// Note: This can't return an `Err` because `self` owns a receiver
+					idx if idx == close_idx => {
+						selected.recv(&self.close_rx).expect("On-close sender was closed");
+						break;
+					},
+					_ => unreachable!(),
+				}
+			};
+
+			//let image = playlist.next().allow::<MightBlock>();
 			match &*image {
 				PlaylistImage::File(path) => match load::load_image(path) {
 					// If we got it, send it

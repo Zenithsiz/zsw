@@ -38,8 +38,8 @@ impl Renderer {
 	/// Runs the renderer
 	///
 	/// # Blocking
-	/// Blocks waiting for a value from the sender of `paint_jobs_rx`.
-	/// Deadlocks if called within a [`Wgpu::render`] callback.
+	/// Blocks until [`SettingsWindow::run`] starts.
+	/// Will block in it's own event loop until [`Self::stop`] is called.
 	#[side_effect(MightBlock)]
 	pub fn run(
 		&self,

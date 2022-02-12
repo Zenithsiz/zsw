@@ -138,14 +138,11 @@ impl Playlist {
 
 		// Add all paths
 		log::info!("Loading all paths from {dir_path:?}");
-		let ((), duration) = crate::util::measure(|| {
-			crate::util::visit_files_dir(dir_path, &mut |path| {
-				let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
-				Ok::<(), !>(())
-			})
-			.into_ok();
-		});
-		log::trace!(target: "zsw::perf", "Took {duration:?} to load all paths from {dir_path:?}");
+		crate::util::visit_files_dir(dir_path, &mut |path| {
+			let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
+			Ok::<(), !>(())
+		})
+		.into_ok();
 	}
 
 	/// Retrieves the next image
@@ -160,6 +157,20 @@ impl Playlist {
 			.recv_se()
 			.allow::<MightBlock>()
 			.expect("Image sender was closed")
+	}
+
+	/// Retrieves the next image under `select`.
+	pub fn select_next<'a>(&'a self, select: &mut crossbeam::channel::Select<'a>) -> usize {
+		select.recv(&self.img_rx)
+	}
+
+	/// Retrieves the next image, when selected
+	///
+	/// # Blocking
+	/// Does *not* block, unlike [`Self::next`]
+	pub fn next_selected<'a>(&'a self, selected: crossbeam::channel::SelectedOperation<'a>) -> Arc<PlaylistImage> {
+		// Note: This can't return an `Err` because `self` owns a sender
+		selected.recv(&self.img_rx).expect("Image sender was closed")
 	}
 }
 
