@@ -74,6 +74,8 @@ impl ImageLoader {
 							path: path.clone(),
 							image,
 						};
+
+						// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
 						crossbeam::select! {
 							// Try to send an image
 							// Note: This can't return an `Err` because `self` owns a receiver

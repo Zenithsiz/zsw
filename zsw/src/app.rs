@@ -25,13 +25,7 @@ use {
 		Wgpu,
 	},
 	anyhow::Context,
-	crossbeam::atomic::AtomicCell,
-	std::{
-		num::NonZeroUsize,
-		sync::atomic::{self, AtomicBool},
-		thread,
-		time::Duration,
-	},
+	std::{num::NonZeroUsize, thread, time::Duration},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::EventLoop,
@@ -81,10 +75,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		},
 	};
 
-	let queued_settings_window_open_click = AtomicCell::new(None);
-	let should_stop = AtomicBool::new(false);
-	let (paint_jobs_tx, paint_jobs_rx) = crossbeam::channel::bounded(0);
-
 	// Create the event handler
 	let mut event_handler = EventHandler::new();
 
@@ -92,7 +82,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let renderer = Renderer::new();
 
 	// Create the settings window
-	let settings_window = SettingsWindow::new(wgpu.surface_size());
+	let settings_window = SettingsWindow::new();
 
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
@@ -128,15 +118,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			// DEADLOCK: Renderer thread ensures it will receive paint jobs.
 			//           We ensure we keep sending paint jobs.
 			settings_window
-				.run(
-					&wgpu,
-					&egui,
-					&window,
-					&panels,
-					&playlist,
-					&queued_settings_window_open_click,
-					&paint_jobs_tx,
-				)
+				.run(&wgpu, &egui, &window, &panels, &playlist)
 				.allow::<MightBlock>();
 			Ok(())
 		})?;
@@ -147,22 +129,14 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		//           This thread ensures it will receive images.
 		thread_spawner.spawn_scoped("Renderer", || {
 			renderer
-				.run(
-					&window,
-					&wgpu,
-					&panels,
-					&egui,
-					&image_loader,
-					&should_stop,
-					&paint_jobs_rx,
-				)
+				.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window)
 				.allow::<MightBlock>();
 			Ok(())
 		})?;
 
 		// Run event loop in this thread until we quit
 		event_loop.run_return(|event, _, control_flow| {
-			event_handler.handle_event(&wgpu, &egui, &queued_settings_window_open_click, event, control_flow);
+			event_handler.handle_event(&wgpu, &egui, &settings_window, event, control_flow);
 		});
 
 		// Note: In release builds, once we get here, we can just exit,
@@ -177,7 +151,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			// DEADLOCK: Stopping the renderer will cause it to drop the image receivers,
 			//           which will stop the image loaders, which will in turn stop
 			//           the path loader.
-			should_stop.store(true, atomic::Ordering::Relaxed);
+			renderer.stop();
+			settings_window.stop();
 			image_loader.stop();
 			playlist.stop();
 

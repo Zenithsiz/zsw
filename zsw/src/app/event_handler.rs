@@ -1,9 +1,10 @@
 //! Event handler
 
+use super::settings_window::SettingsWindow;
+
 // Imports
 use {
 	crate::{Egui, Wgpu},
-	crossbeam::atomic::AtomicCell,
 	winit::{
 		dpi::PhysicalPosition,
 		event::{Event, WindowEvent},
@@ -28,7 +29,7 @@ impl EventHandler {
 		&mut self,
 		wgpu: &Wgpu,
 		egui: &Egui,
-		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
+		settings_window: &SettingsWindow,
 		event: Event<!>,
 		control_flow: &mut EventLoopControlFlow,
 	) {
@@ -60,9 +61,7 @@ impl EventHandler {
 					state: winit::event::ElementState::Pressed,
 					button: winit::event::MouseButton::Right,
 					..
-				} => {
-					queued_settings_window_open_click.store(self.cursor_pos);
-				},
+				} => settings_window.queue_open_click(self.cursor_pos),
 				_ => (),
 			},
 			_ => (),

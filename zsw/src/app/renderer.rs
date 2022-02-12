@@ -2,30 +2,37 @@
 
 // Imports
 use {
+	super::settings_window::SettingsWindow,
 	crate::{
-		util::{extse::CrossBeamChannelReceiverSE, MightBlock},
+		util::{extse::CrossBeamChannelSenderSE, MightBlock},
 		Egui,
 		ImageLoader,
 		Panels,
 		Wgpu,
 	},
 	anyhow::Context,
-	std::{
-		sync::atomic::{self, AtomicBool},
-		thread,
-		time::Duration,
-	},
+	std::{thread, time::Duration},
 	winit::window::Window,
 	zsw_side_effect_macros::side_effect,
 };
 
 /// Renderer
-pub struct Renderer {}
+pub struct Renderer {
+	/// Closing sender
+	close_tx: crossbeam::channel::Sender<()>,
+
+	/// Closing receiver
+	close_rx: crossbeam::channel::Receiver<()>,
+}
 
 impl Renderer {
 	/// Creates a new renderer
 	pub fn new() -> Self {
-		Self {}
+		// Note: Making the close channel unbounded is what allows us to not block
+		//       in `Self::stop`.
+		let (close_tx, close_rx) = crossbeam::channel::unbounded();
+
+		Self { close_tx, close_rx }
 	}
 
 	/// Runs the renderer
@@ -35,19 +42,19 @@ impl Renderer {
 	/// Deadlocks if called within a [`Wgpu::render`] callback.
 	#[side_effect(MightBlock)]
 	pub fn run(
-		self,
+		&self,
 		window: &Window,
 		wgpu: &Wgpu,
 		panels: &Panels,
 		egui: &Egui,
 		image_loader: &ImageLoader,
-		should_stop: &AtomicBool,
-		paint_jobs_rx: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
+		settings_window: &SettingsWindow,
 	) -> () {
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-		while !should_stop.load(atomic::Ordering::Relaxed) {
+		// TODO: Use the stop channel better
+		while self.close_rx.try_recv().is_err() {
 			// Update
 			// Note: The update is only useful for displaying, so there's no use
 			//       in running it in another thread.
@@ -59,9 +66,10 @@ impl Renderer {
 			};
 
 			// Render
-			// DEADLOCK: Caller is responsible for avoiding deadlocks
-			let (res, frame_duration) =
-				crate::util::measure(|| Self::render(window, wgpu, panels, egui, paint_jobs_rx).allow::<MightBlock>());
+			// DEADLOCK: `Self::render` doesn't block
+			let (res, frame_duration) = crate::util::measure(|| {
+				Self::render(window, wgpu, panels, egui, settings_window).allow::<MightBlock>()
+			});
 			match res {
 				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -72,6 +80,16 @@ impl Renderer {
 				thread::sleep(duration);
 			}
 		}
+	}
+
+	/// Stops the `run` loop
+	pub fn stop(&self) {
+		// Note: This can't return an `Err` because `self` owns a sender
+		// DEADLOCK: The channel is unbounded, so this will not block.
+		self.close_tx
+			.send_se(())
+			.allow::<MightBlock>()
+			.expect("On-close receiver was closed");
 	}
 
 	/// Updates all panels
@@ -91,16 +109,12 @@ impl Renderer {
 		wgpu: &Wgpu,
 		panels: &Panels,
 		egui: &Egui,
-		paint_jobs_rx: &crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
+		settings_window: &SettingsWindow,
 	) -> Result<(), anyhow::Error> {
 		// Get the egui render results
 		// Note: The settings window shouldn't quit while we're alive.
-		// BLOCKING: Caller is responsible for avoiding deadlocks.
-		//           We ensure we're not calling it from within [`Wgpu::render`].
-		let paint_jobs = paint_jobs_rx
-			.recv_se()
-			.allow::<MightBlock>()
-			.context("Unable to get paint jobs from settings window")?;
+		// BLOCKING: TODO
+		let paint_jobs = settings_window.paint_jobs().allow::<MightBlock>();
 
 		// Then render
 		// DEADLOCK: We ensure we don't block within [`Wgpu::render`].

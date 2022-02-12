@@ -84,6 +84,7 @@ impl Playlist {
 			images.shuffle(&mut rand::thread_rng());
 
 			// Then try to send each one and check for the close channel
+			// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
 			for image in images.drain(..) {
 				crossbeam::select! {
 					// Try to send an image

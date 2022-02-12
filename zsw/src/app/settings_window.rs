@@ -7,7 +7,10 @@
 // Imports
 use {
 	crate::{
-		util::{extse::CrossBeamChannelSenderSE, MightBlock},
+		util::{
+			extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSenderSE},
+			MightBlock,
+		},
 		Egui,
 		PanelImageState,
 		PanelState,
@@ -27,8 +30,8 @@ use {
 	zsw_side_effect_macros::side_effect,
 };
 
-/// Settings window
-pub struct SettingsWindow {
+/// Inner data
+struct Inner {
 	/// If open
 	open: bool,
 
@@ -36,12 +39,48 @@ pub struct SettingsWindow {
 	new_panel_state: NewPanelState,
 }
 
-impl SettingsWindow {
-	/// Creates the settings window
+impl Inner {
+	/// Creates the inner data
 	pub fn new(surface_size: PhysicalSize<u32>) -> Self {
 		Self {
 			open:            false,
 			new_panel_state: NewPanelState::new(surface_size),
+		}
+	}
+}
+
+/// Settings window
+pub struct SettingsWindow {
+	/// Queued open click
+	queued_open_click: AtomicCell<Option<PhysicalPosition<f64>>>,
+
+	/// Paint jobs sender
+	paint_jobs_tx: crossbeam::channel::Sender<Vec<egui::epaint::ClippedMesh>>,
+
+	/// Paint jobs receiver
+	paint_jobs_rx: crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
+
+	/// Closing sender
+	close_tx: crossbeam::channel::Sender<()>,
+
+	/// Closing receiver
+	close_rx: crossbeam::channel::Receiver<()>,
+}
+
+impl SettingsWindow {
+	/// Creates the settings window
+	pub fn new() -> Self {
+		// Note: Making the close channel unbounded is what allows us to not block
+		//       in `Self::stop`.
+		let (paint_jobs_tx, paint_jobs_rx) = crossbeam::channel::bounded(0);
+		let (close_tx, close_rx) = crossbeam::channel::unbounded();
+
+		Self {
+			queued_open_click: AtomicCell::new(None),
+			paint_jobs_tx,
+			paint_jobs_rx,
+			close_tx,
+			close_rx,
 		}
 	}
 
@@ -49,32 +88,20 @@ impl SettingsWindow {
 	///
 	/// # Blocking
 	/// Blocks until the receiver of `paint_jobs_tx` receives a value.
+	#[allow(clippy::useless_transmute)] // `crossbeam::select` does it
 	#[side_effect(MightBlock)]
-	pub fn run(
-		mut self,
-		wgpu: &Wgpu,
-		egui: &Egui,
-		window: &Window,
-		panels: &Panels,
-		playlist: &Playlist,
-		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
-		paint_jobs_tx: &crossbeam::channel::Sender<Vec<egui::epaint::ClippedMesh>>,
-	) -> () {
+	pub fn run(&self, wgpu: &Wgpu, egui: &Egui, window: &Window, panels: &Panels, playlist: &Playlist) -> () {
+		// Create the inner data
+		// TODO: Check if it's fine to call `wgpu.surface_size`
+		let mut inner = Inner::new(wgpu.surface_size());
+
 		loop {
 			// Get the surface size
 			let surface_size = wgpu.surface_size();
 
 			// Draw egui
 			let res = egui.draw(window, |ctx, frame| {
-				self.draw(
-					ctx,
-					frame,
-					surface_size,
-					window,
-					panels,
-					playlist,
-					queued_settings_window_open_click,
-				)
+				self.draw(&mut inner, ctx, frame, surface_size, window, panels, playlist)
 			});
 
 			let paint_jobs = match res {
@@ -86,41 +113,73 @@ impl SettingsWindow {
 			};
 
 			// Then send the paint jobs
-			// DEADLOCK: Caller is responsible for avoiding deadlocks
-			if paint_jobs_tx.send_se(paint_jobs).allow::<MightBlock>().is_err() {
-				log::info!("Renderer thread quit, quitting");
-				break;
+			// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
+			crossbeam::select! {
+				// Try to send an image
+				// Note: This can't return an `Err` because `self` owns a receiver
+				send(self.paint_jobs_tx, paint_jobs) -> res => res.expect("Paint jobs receiver was closed"),
+
+				// If we get anything in the close channel, break
+				// Note: This can't return an `Err` because `self` owns a receiver
+				recv(self.close_rx) -> res => {
+					res.expect("On-close sender was closed");
+					break
+				},
 			}
 		}
 	}
 
+	/// Stops the `run` loop
+	pub fn stop(&self) {
+		// Note: This can't return an `Err` because `self` owns a sender
+		// DEADLOCK: The channel is unbounded, so this will not block.
+		self.close_tx
+			.send_se(())
+			.allow::<MightBlock>()
+			.expect("On-close receiver was closed");
+	}
+
+	/// Retrieves the paint jobs for the next frame
+	///
+	/// # Blocking
+	/// Blocks until [`Self::run`] is running.
+	#[side_effect(MightBlock)]
+	pub fn paint_jobs(&self) -> Vec<egui::epaint::ClippedMesh> {
+		// Note: This can't return an `Err` because `self` owns a sender
+		// DEADLOCK: Caller ensures `Self::run` will eventually run.
+		self.paint_jobs_rx
+			.recv_se()
+			.allow::<MightBlock>()
+			.expect("Paint jobs sender was closed")
+	}
+
 	/// Draws the settings window
 	fn draw(
-		&mut self,
+		&self,
+		inner: &mut Inner,
 		ctx: &egui::CtxRef,
 		_frame: &epi::Frame,
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
 		panels: &Panels,
 		playlist: &Playlist,
-		queued_settings_window_open_click: &AtomicCell<Option<PhysicalPosition<f64>>>,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
 
 		// If we have any queued click, summon the window there
-		if let Some(cursor_pos) = queued_settings_window_open_click.take() {
+		if let Some(cursor_pos) = self.queued_open_click.take() {
 			// Adjust cursor pos to account for the scale factor
 			let scale_factor = window.scale_factor();
 			let cursor_pos = cursor_pos.to_logical(scale_factor);
 
 			// Then set the current position and that we're open
 			settings_window = settings_window.current_pos(egui::pos2(cursor_pos.x, cursor_pos.y));
-			self.open = true;
+			inner.open = true;
 		}
 
 		// Then render it
-		settings_window.open(&mut self.open).show(ctx, |ui| {
+		settings_window.open(&mut inner.open).show(ctx, |ui| {
 			// DEADLOCK: We ensure we don't block within the callback.
 			let mut panel_idx = 0;
 			panels
@@ -135,25 +194,25 @@ impl SettingsWindow {
 			ui.collapsing("Add panel", |ui| {
 				ui.horizontal(|ui| {
 					ui.label("Geometry");
-					self::draw_rect(ui, &mut self.new_panel_state.geometry, surface_size);
+					self::draw_rect(ui, &mut inner.new_panel_state.geometry, surface_size);
 				});
 
 				ui.horizontal(|ui| {
 					ui.label("Fade point");
-					egui::Slider::new(&mut self.new_panel_state.fade_point, 0.5..=1.0).ui(ui);
+					egui::Slider::new(&mut inner.new_panel_state.fade_point, 0.5..=1.0).ui(ui);
 				});
 
 				ui.horizontal(|ui| {
 					ui.label("Duration");
-					egui::Slider::new(&mut self.new_panel_state.duration_secs, 0.5..=180.0).ui(ui);
+					egui::Slider::new(&mut inner.new_panel_state.duration_secs, 0.5..=180.0).ui(ui);
 				});
 
 				if ui.button("Add").clicked() {
 					panels.add_panel(PanelState::new(
-						self.new_panel_state.geometry,
+						inner.new_panel_state.geometry,
 						PanelImageState::Empty,
-						Duration::from_secs_f32(self.new_panel_state.duration_secs),
-						self.new_panel_state.fade_point,
+						Duration::from_secs_f32(inner.new_panel_state.duration_secs),
+						inner.new_panel_state.fade_point,
 					));
 				}
 			});
@@ -180,6 +239,11 @@ impl SettingsWindow {
 		});
 
 		Ok(())
+	}
+
+	/// Queues an open click
+	pub fn queue_open_click(&self, cursor_pos: Option<PhysicalPosition<f64>>) {
+		self.queued_open_click.store(cursor_pos);
 	}
 }
 
