@@ -9,78 +9,34 @@ mod load;
 // Imports
 use {
 	super::Image,
-	crate::{
-		util::{
-			extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSelectSE, CrossBeamChannelSenderSE},
-			MightBlock,
-		},
-		Playlist,
-		PlaylistImage,
-	},
-	zsw_side_effect_macros::side_effect,
+	crate::{Playlist, PlaylistImage},
 };
 
 /// Image loader
 #[derive(Debug)]
 pub struct ImageLoader {
 	/// Image sender
-	image_tx: crossbeam::channel::Sender<Image>,
+	image_tx: async_channel::Sender<Image>,
 
 	/// Image receiver
-	image_rx: crossbeam::channel::Receiver<Image>,
-
-	/// Closing sender
-	close_tx: crossbeam::channel::Sender<()>,
-
-	/// Closing receiver
-	close_rx: crossbeam::channel::Receiver<()>,
+	image_rx: async_channel::Receiver<Image>,
 }
 
 impl ImageLoader {
 	/// Creates a new image loader.
 	#[must_use]
 	pub fn new() -> Self {
-		// Note: Making the close channel unbounded is what allows us to not block
-		//       in `Self::stop`.
-		let (image_tx, image_rx) = crossbeam::channel::bounded(0);
-		let (close_tx, close_rx) = crossbeam::channel::unbounded();
+		let (image_tx, image_rx) = async_channel::bounded(1);
 
-		Self {
-			image_tx,
-			image_rx,
-			close_tx,
-			close_rx,
-		}
+		Self { image_tx, image_rx }
 	}
 
 	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
-	///
-	/// # Blocking
-	/// Will block in it's own event loop until [`Self::close`] is called.
-	#[allow(clippy::useless_transmute)] // `crossbeam::select` does it
-	#[side_effect(MightBlock)]
-	pub fn run(&self, playlist: &Playlist) -> Result<(), anyhow::Error> {
+	pub async fn run(&self, playlist: &Playlist) -> ! {
 		loop {
-			let image = {
-				let mut select = crossbeam::channel::Select::new();
-				let img_idx = playlist.select_next(&mut select);
-				let close_idx = select.recv(&self.close_rx);
-
-				// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
-				let selected = select.select_se().allow::<MightBlock>();
-				match selected.index() {
-					idx if idx == img_idx => playlist.next_selected(selected),
-
-					// Note: This can't return an `Err` because `self` owns a receiver
-					idx if idx == close_idx => {
-						selected.recv(&self.close_rx).expect("On-close sender was closed");
-						break;
-					},
-					_ => unreachable!(),
-				}
-			};
+			let image = playlist.next().await;
 
 			match &*image {
 				PlaylistImage::File(path) => match load::load_image(path) {
@@ -91,19 +47,8 @@ impl ImageLoader {
 							image,
 						};
 
-						// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
-						crossbeam::select! {
-							// Try to send an image
-							// Note: This can't return an `Err` because `self` owns a receiver
-							send(self.image_tx, image) -> res => res.expect("Image receiver was closed"),
-
-							// If we get anything in the close channel, break
-							// Note: This can't return an `Err` because `self` owns a receiver
-							recv(self.close_rx) -> res => {
-								res.expect("On-close sender was closed");
-								break
-							},
-						}
+						// Note: This can't return an `Err` because `self` owns a receiver
+						self.image_tx.send(image).await.expect("Image receiver was closed");
 					},
 
 					// If we couldn't load, log, remove the path and retry
@@ -114,41 +59,18 @@ impl ImageLoader {
 				},
 			}
 		}
-
-		Ok(())
-	}
-
-	/// Stops the `run` loop
-	pub fn stop(&self) {
-		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: The channel is unbounded, so this will not block.
-		self.close_tx
-			.send_se(())
-			.allow::<MightBlock>()
-			.expect("On-close receiver was closed");
-	}
-
-	/// Receives the image, waiting if not ready yet
-	///
-	/// # Blocking
-	/// Blocks until [`Self::run`] starts running.
-	#[side_effect(MightBlock)]
-	pub fn recv(&self) -> Image {
-		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: Caller ensures `Self::run` will eventually run.
-		self.image_rx
-			.recv_se()
-			.allow::<MightBlock>()
-			.expect("Image sender was closed")
 	}
 
 	/// Attempts to receive the image
-	pub fn try_recv(&self) -> Result<Option<Image>, anyhow::Error> {
+	#[must_use]
+	#[allow(clippy::missing_panics_doc)] // It's an internal assertion
+	pub fn try_recv(&self) -> Option<Image> {
 		// Try to get the result
+		// Note: This can't return an `Err` because `self` owns a sender
 		match self.image_rx.try_recv() {
-			Ok(image) => Ok(Some(image)),
-			Err(crossbeam::channel::TryRecvError::Empty) => Ok(None),
-			Err(_) => anyhow::bail!("Unable to get image from loader thread"),
+			Ok(image) => Some(image),
+			Err(async_channel::TryRecvError::Empty) => None,
+			Err(async_channel::TryRecvError::Closed) => panic!("Image loader sender was dropped"),
 		}
 	}
 }

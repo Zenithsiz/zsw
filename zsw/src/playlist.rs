@@ -4,10 +4,7 @@
 
 // Imports
 use {
-	crate::util::{
-		extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSenderSE, ParkingLotMutexSe},
-		MightBlock,
-	},
+	crate::util::{extse::ParkingLotMutexSe, MightBlock},
 	parking_lot::Mutex,
 	rand::prelude::SliceRandom,
 	std::{
@@ -15,7 +12,6 @@ use {
 		path::{Path, PathBuf},
 		sync::Arc,
 	},
-	zsw_side_effect_macros::side_effect,
 };
 
 /// Inner
@@ -29,16 +25,10 @@ struct Inner {
 #[derive(Debug)]
 pub struct Playlist {
 	/// Image sender
-	img_tx: crossbeam::channel::Sender<Arc<PlaylistImage>>,
+	img_tx: async_channel::Sender<Arc<PlaylistImage>>,
 
 	/// Image receiver
-	img_rx: crossbeam::channel::Receiver<Arc<PlaylistImage>>,
-
-	/// Closing sender
-	close_tx: crossbeam::channel::Sender<()>,
-
-	/// Closing receiver
-	close_rx: crossbeam::channel::Receiver<()>,
+	img_rx: async_channel::Receiver<Arc<PlaylistImage>>,
 
 	/// Inner
 	inner: Mutex<Inner>,
@@ -50,8 +40,7 @@ impl Playlist {
 	pub fn new() -> Self {
 		// Note: Making the close channel unbounded is what allows us to not block
 		//       in `Self::stop`.
-		let (img_tx, img_rx) = crossbeam::channel::bounded(0);
-		let (close_tx, close_rx) = crossbeam::channel::unbounded();
+		let (img_tx, img_rx) = async_channel::bounded(1);
 
 		// Create the empty inner data
 		let inner = Inner { images: HashSet::new() };
@@ -59,22 +48,17 @@ impl Playlist {
 		Self {
 			img_tx,
 			img_rx,
-			close_tx,
-			close_rx,
 			inner: Mutex::new(inner),
 		}
 	}
 
 	/// Runs the playlist
-	///
-	/// # Blocking
-	/// Will block in it's own event loop until [`Self::stop`] is called.
 	#[allow(clippy::useless_transmute)] // `crossbeam::select` does it
-	pub fn run(&self) {
+	pub async fn run(&self) -> ! {
 		// All images to send
 		let mut images = vec![];
 
-		'run: loop {
+		loop {
 			// Retrieve the next images and shuffle them
 			// DEADLOCK: We ensure we don't block while `inner` is locked
 			{
@@ -83,33 +67,12 @@ impl Playlist {
 			}
 			images.shuffle(&mut rand::thread_rng());
 
-			// Then try to send each one and check for the close channel
-			// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
+			// Then try to send each image
 			for image in images.drain(..) {
-				crossbeam::select! {
-					// Try to send an image
-					// Note: This can't return an `Err` because `self` owns a receiver
-					send(self.img_tx, image) -> res => res.expect("Image receiver was closed"),
-
-					// If we get anything in the close channel, break
-					// Note: This can't return an `Err` because `self` owns a receiver
-					recv(self.close_rx) -> res => {
-						res.expect("On-close sender was closed");
-						break 'run;
-					},
-				}
+				// Note: This can't return an `Err` because `self` owns a receiver
+				self.img_tx.send(image).await.expect("Image receiver was closed");
 			}
 		}
-	}
-
-	/// Stops the `run` loop
-	pub fn stop(&self) {
-		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: The channel is unbounded, so this will not block.
-		self.close_tx
-			.send_se(())
-			.allow::<MightBlock>()
-			.expect("On-close receiver was closed");
 	}
 
 	/// Clears all existing images
@@ -146,31 +109,9 @@ impl Playlist {
 	}
 
 	/// Retrieves the next image
-	///
-	/// # Blocking
-	/// Blocks until [`Self::run`] starts running.
-	#[side_effect(MightBlock)]
-	pub fn next(&self) -> Arc<PlaylistImage> {
+	pub async fn next(&self) -> Arc<PlaylistImage> {
 		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: Caller ensures `Self::run` will eventually run.
-		self.img_rx
-			.recv_se()
-			.allow::<MightBlock>()
-			.expect("Image sender was closed")
-	}
-
-	/// Retrieves the next image under `select`.
-	pub fn select_next<'a>(&'a self, select: &mut crossbeam::channel::Select<'a>) -> usize {
-		select.recv(&self.img_rx)
-	}
-
-	/// Retrieves the next image, when selected
-	///
-	/// # Blocking
-	/// Does *not* block, unlike [`Self::next`]
-	pub fn next_selected<'a>(&'a self, selected: crossbeam::channel::SelectedOperation<'a>) -> Arc<PlaylistImage> {
-		// Note: This can't return an `Err` because `self` owns a sender
-		selected.recv(&self.img_rx).expect("Image sender was closed")
+		self.img_rx.recv().await.expect("Image sender was closed")
 	}
 }
 

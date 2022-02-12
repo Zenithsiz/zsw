@@ -22,6 +22,7 @@ egui_winit_platform = "0.13.0"
 epi = "0.16.0"
 
 # Async
+async-channel = "1.6.1"
 pollster = "0.2.4"
 
 # X11

@@ -25,8 +25,8 @@ impl<'scope, 'env> ThreadSpawner<'scope, 'env> {
 		}
 	}
 
-	/// Spawns a new thread using `crossbeam::thread::Scope` with name
-	pub fn spawn_scoped<F>(&mut self, name: impl Into<String>, f: F) -> Result<(), anyhow::Error>
+	/// Spawns a new thread
+	pub fn spawn<F>(&mut self, name: impl Into<String>, f: F) -> Result<(), anyhow::Error>
 	where
 		F: Send + FnOnce() -> Result<(), anyhow::Error> + 'env,
 	{
@@ -43,7 +43,7 @@ impl<'scope, 'env> ThreadSpawner<'scope, 'env> {
 	}
 
 	/// Spawns multiple scoped threads
-	pub fn spawn_scoped_multiple<F>(
+	pub fn spawn_multiple<F>(
 		&mut self,
 		name: impl Into<String>,
 		threads: impl Iterator<Item = F>,
@@ -54,7 +54,7 @@ impl<'scope, 'env> ThreadSpawner<'scope, 'env> {
 		let name = name.into();
 		threads
 			.enumerate()
-			.try_for_each(move |(idx, f)| self.spawn_scoped(format!("{name}${idx}"), f))
+			.try_for_each(move |(idx, f)| self.spawn(format!("{name}${idx}"), f))
 	}
 
 	/// Joins all threads

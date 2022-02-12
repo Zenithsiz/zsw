@@ -94,7 +94,7 @@ impl Panels {
 		// Update the image state
 		(panel.state, panel.progress) = match panel.state {
 			// If we're empty, try to get a next image
-			PanelImageState::Empty => match image_loader.try_recv().context("Unable to get next image")? {
+			PanelImageState::Empty => match image_loader.try_recv() {
 				Some(image) => (
 					PanelImageState::PrimaryOnly {
 						front: PanelImageStateImage {
@@ -109,24 +109,23 @@ impl Panels {
 			},
 
 			// If we only have the primary, try to load the next image
-			PanelImageState::PrimaryOnly { front } =>
-				match image_loader.try_recv().context("Unable to get next image")? {
-					Some(image) => (
-						PanelImageState::Both {
-							front,
-							back: PanelImageStateImage {
-								id:       self.renderer.create_image(wgpu, image),
-								swap_dir: rand::random(),
-							},
+			PanelImageState::PrimaryOnly { front } => match image_loader.try_recv() {
+				Some(image) => (
+					PanelImageState::Both {
+						front,
+						back: PanelImageStateImage {
+							id:       self.renderer.create_image(wgpu, image),
+							swap_dir: rand::random(),
 						},
-						next_progress,
-					),
-					None => (PanelImageState::PrimaryOnly { front }, next_progress),
-				},
+					},
+					next_progress,
+				),
+				None => (PanelImageState::PrimaryOnly { front }, next_progress),
+			},
 
 			// If we have both, try to update the progress and swap them if finished
 			PanelImageState::Both { mut front, back } if finished => {
-				match image_loader.try_recv().context("Unable to get next image")? {
+				match image_loader.try_recv() {
 					// Note: We update the front and swap them
 					Some(image) => {
 						self.renderer.update_image(wgpu, front.id, image);

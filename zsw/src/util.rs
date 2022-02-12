@@ -16,12 +16,20 @@ pub use {
 
 // Imports
 use {
+	self::extse::ParkingLotMutexSe,
 	anyhow::Context,
 	image::DynamicImage,
+	parking_lot::{Condvar, Mutex},
 	std::{
 		fs,
+		future::Future,
 		hash::{Hash, Hasher},
 		path::Path,
+		sync::{
+			atomic::{self, AtomicBool},
+			Arc,
+		},
+		task,
 		time::{Duration, Instant},
 	},
 };
@@ -81,5 +89,80 @@ pub fn image_format(image: &DynamicImage) -> &'static str {
 		DynamicImage::ImageLumaA16(_) => "LumaA16",
 		DynamicImage::ImageRgb16(_) => "Rgb16",
 		DynamicImage::ImageRgba16(_) => "Rgba16",
+	}
+}
+
+/// Adapts a future into a thread to be run on it's own thread.
+///
+/// Will drop the future once `should_quit` becomes true.
+pub fn never_fut_thread_fn<'a, T, F>(should_quit: &'a AtomicBool, res: T, f: F) -> impl FnOnce() -> T + 'a
+where
+	T: 'a,
+	F: Future<Output = !> + Send + 'a,
+{
+	move || {
+		// TODO: Not allocate here
+		let mut f = Box::pin(f);
+
+		// Create the waker
+		let signal = Arc::new(NeverFutSignal::new());
+		let waker = task::Waker::from(Arc::clone(&signal));
+		let mut ctx = task::Context::from_waker(&waker);
+
+		// Then poll it until we should quit
+		loop {
+			match f.as_mut().poll(&mut ctx) {
+				task::Poll::Ready(never) => never,
+				task::Poll::Pending => match should_quit.load(atomic::Ordering::Relaxed) {
+					true => break,
+					false => signal.wait(),
+				},
+			}
+		}
+
+		res
+	}
+}
+
+/// Signal for [`spawn_fut_never`]'s waker
+struct NeverFutSignal {
+	/// If the future should be polled
+	should_poll: Mutex<bool>,
+
+	/// Condvar for waiting
+	cond_var: Condvar,
+}
+
+impl NeverFutSignal {
+	fn new() -> Self {
+		Self {
+			should_poll: Mutex::new(true),
+			cond_var:    Condvar::new(),
+		}
+	}
+
+	/// Waits until the future should be polled
+	pub fn wait(&self) {
+		// Keep waiting until `should_poll` is true
+		// DEADLOCK: Waker will set `should_poll` to true eventually.
+		let mut should_poll = self.should_poll.lock_se().allow::<MightBlock>();
+		while !*should_poll {
+			self.cond_var.wait(&mut should_poll);
+		}
+
+		// Then set it to false so the waker may re-set it to true
+		*should_poll = false;
+	}
+}
+
+impl task::Wake for NeverFutSignal {
+	fn wake(self: std::sync::Arc<Self>) {
+		// Set that we should be polling
+		// DEADLOCK: Mutex is only ever locked temporarily (as `wait`ing unlocks the mutex).
+		let mut should_poll = self.should_poll.lock_se().allow::<MightBlock>();
+		*should_poll = true;
+
+		// Then notify the waiter
+		let _ = self.cond_var.notify_one();
 	}
 }
