@@ -4,8 +4,8 @@
 
 // Imports
 use {
-	crate::util::{extse::ParkingLotMutexSe, MightBlock},
-	parking_lot::Mutex,
+	crate::util,
+	async_lock::Mutex,
 	rand::prelude::SliceRandom,
 	std::{
 		collections::HashSet,
@@ -62,7 +62,7 @@ impl Playlist {
 			// Retrieve the next images and shuffle them
 			// DEADLOCK: We ensure we don't block while `inner` is locked
 			{
-				let inner = self.inner.lock_se().allow::<MightBlock>();
+				let inner = self.inner.lock().await;
 				images.extend(inner.images.iter().cloned());
 			}
 			images.shuffle(&mut rand::thread_rng());
@@ -76,16 +76,16 @@ impl Playlist {
 	}
 
 	/// Clears all existing images
-	pub fn clear(&self) {
+	pub async fn clear(&self) {
 		// DEADLOCK: We ensure we don't block while `inner` is locked
-		let mut inner = self.inner.lock_se().allow::<MightBlock>();
+		let mut inner = self.inner.lock().await;
 		inner.images.clear();
 	}
 
 	/// Removes an image
-	pub fn remove_image(&self, image: &PlaylistImage) {
+	pub async fn remove_image(&self, image: &PlaylistImage) {
 		// DEADLOCK: We ensure we don't block while `inner` is locked
-		let mut inner = self.inner.lock_se().allow::<MightBlock>();
+		let mut inner = self.inner.lock().await;
 
 		// Note: We don't care if the image actually existed or not
 		let _ = inner.images.remove(image);
@@ -95,17 +95,14 @@ impl Playlist {
 	///
 	/// # Errors
 	/// Logs all errors via `log::warn`
-	pub fn add_dir(&self, dir_path: &Path) {
+	pub async fn add_dir(&self, dir_path: &Path) {
 		// Add all paths
 		// Note: We lock on every path so that `run` can start running before
 		//       we fully read everything, in case of a really big directory
-		crate::util::visit_files_dir(dir_path, &mut |path| {
-			// DEADLOCK: We ensure we don't block while `inner` is locked
-			let mut inner = self.inner.lock_se().allow::<MightBlock>();
+		for path in util::dir_files_iter(dir_path.to_path_buf()) {
+			let mut inner = self.inner.lock().await;
 			let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
-			Ok::<(), !>(())
-		})
-		.into_ok();
+		}
 	}
 
 	/// Retrieves the next image

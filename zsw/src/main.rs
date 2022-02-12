@@ -11,7 +11,11 @@
 	backtrace,
 	thread_id_value,
 	unwrap_infallible,
-	explicit_generic_args_with_impl_trait
+	explicit_generic_args_with_impl_trait,
+	async_closure,
+	result_into_ok_or_err,
+	generators,
+	generator_trait
 )]
 // Lints
 #![warn(

@@ -14,7 +14,7 @@ use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
 	crate::{
 		util,
-		util::NeverFutureRunner,
+		util::FutureRunner,
 		Args,
 		Egui,
 		ImageLoader,
@@ -88,13 +88,14 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// All runners
 	// Note: They must exit outside of the thread scope because
 	//       their `run` can last until the very end of the function
-	let playlist_runner = NeverFutureRunner::new();
+	let playlist_loader_runner = FutureRunner::new();
+	let playlist_runner = FutureRunner::new();
 	let image_loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-	let image_loader_runners = iter::repeat_with(NeverFutureRunner::new)
+	let image_loader_runners = iter::repeat_with(FutureRunner::new)
 		.take(image_loader_threads)
 		.collect::<Vec<_>>();
-	let settings_window_runner = NeverFutureRunner::new();
-	let renderer_runner = NeverFutureRunner::new();
+	let settings_window_runner = FutureRunner::new();
+	let renderer_runner = FutureRunner::new();
 
 
 	// Start all threads and then wait in the main thread for events
@@ -105,29 +106,39 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		let mut thread_spawner = util::ThreadSpawner::new(s);
 
 		// Spawn the playlist loader thread
-		thread_spawner.spawn("Playlist loader", || playlist.add_dir(&args.images_dir))?;
+		// Note: We don't care whether we got cancelled or returned successfully
+		thread_spawner.spawn("Playlist loader", || {
+			playlist_loader_runner
+				.run(playlist.add_dir(&args.images_dir))
+				.into_ok_or_err();
+		})?;
 
 		// Spawn the playlist thread
-		// DEADLOCK: We set `never_futures_should_quit` to `true` at the end, before joining
-		thread_spawner.spawn("Playlist", || playlist_runner.run(playlist.run()))?;
+		thread_spawner.spawn("Playlist", || {
+			playlist_runner.run(playlist.run()).into_err();
+		})?;
 
 		// Spawn all image loaders
 		for (thread_idx, runner) in image_loader_runners.iter().enumerate() {
 			thread_spawner.spawn(format!("Image Loader${thread_idx}"), || {
-				runner.run(image_loader.run(&playlist));
+				runner.run(image_loader.run(&playlist)).into_err();
 			})?;
 		}
 
 		// Spawn the settings window thread
 		thread_spawner.spawn("Settings window", || {
-			settings_window_runner.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist));
+			settings_window_runner
+				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist))
+				.into_err();
 		})?;
 
 		// Spawn the renderer thread
 		// DEADLOCK: We call `Renderer::stop` at the end
 		//           We make sure `SettingsWindow::run` runs eventually
 		thread_spawner.spawn("Renderer", || {
-			renderer_runner.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window));
+			renderer_runner
+				.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window))
+				.into_err();
 		})?;
 
 		// Run event loop in this thread until we quit
@@ -145,7 +156,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Join all threads
 		playlist_runner.stop();
-		image_loader_runners.iter().for_each(NeverFutureRunner::stop);
+		image_loader_runners.iter().for_each(FutureRunner::stop);
 		settings_window_runner.stop();
 		renderer_runner.stop();
 		thread_spawner.join_all().context("Unable to join all threads")

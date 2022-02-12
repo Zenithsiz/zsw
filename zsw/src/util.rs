@@ -9,9 +9,9 @@ mod thread;
 // Exports
 pub use {
 	display_wrapper::DisplayWrapper,
-	scan_dir::visit_files_dir,
+	scan_dir::dir_files_iter,
 	side_effect::{extse, MightBlock, SideEffect, WithSideEffect},
-	thread::{NeverFutureRunner, ThreadSpawner},
+	thread::{FutureRunner, ThreadSpawner},
 };
 
 // Imports

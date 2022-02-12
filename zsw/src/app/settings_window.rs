@@ -10,6 +10,7 @@ use {
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
+	pollster::FutureExt,
 	std::time::Duration,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -172,8 +173,12 @@ impl SettingsWindow {
 						Ok(file_dialog) => {
 							if let Some(path) = file_dialog {
 								// Set the root path
-								playlist.clear();
-								playlist.add_dir(&path);
+								// TODO: Not block on this?
+								async {
+									playlist.clear().await;
+									playlist.add_dir(&path).await;
+								}
+								.block_on();
 
 								// TODO: Reset all existing images and paths loaded from the
 								//       old path distributer, maybe?

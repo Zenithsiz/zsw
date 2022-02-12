@@ -63,28 +63,28 @@ impl<'scope, 'env, T> ThreadSpawner<'scope, 'env, T> {
 	}
 }
 
-/// Never future runner
+/// Future runner
 ///
-/// Adapts a future returning `!`, so it may run on it's own thread,
-/// and be stopped eventually
-pub struct NeverFutureRunner {
+/// Adapts a future to run on it's own thread, and be cancellable
+/// when polling.
+pub struct FutureRunner {
 	/// Signal
-	signal: Arc<NeverFutureSignal>,
+	signal: Arc<FutureSignal>,
 }
 
-impl NeverFutureRunner {
-	/// Creates a new never future fn
+impl FutureRunner {
+	/// Creates a new future runner
 	pub fn new() -> Self {
 		// Create the waker
 		Self {
-			signal: Arc::new(NeverFutureSignal::new()),
+			signal: Arc::new(FutureSignal::new()),
 		}
 	}
 
 	/// Executes the future
-	pub fn run<F>(&self, f: F)
+	pub fn run<F>(&self, f: F) -> Result<F::Output, ()>
 	where
-		F: Future<Output = !> + Send,
+		F: Future,
 	{
 		// Pin the future
 		// TODO: Don't allocate?
@@ -96,12 +96,14 @@ impl NeverFutureRunner {
 
 		// Then poll it until we should exit
 		// Note: On the first loop, `wait` instantly returns for us to loop
-		while let NeverFutureSignalStatus::Poll = self.signal.wait() {
+		while let FutureSignalStatus::Poll = self.signal.wait() {
 			match f.as_mut().poll(&mut ctx) {
-				task::Poll::Ready(never) => never,
+				task::Poll::Ready(output) => return Ok(output),
 				task::Poll::Pending => (),
 			}
 		}
+
+		Err(())
 	}
 
 	/// Stops the future
@@ -110,7 +112,7 @@ impl NeverFutureRunner {
 	}
 }
 
-impl Drop for NeverFutureRunner {
+impl Drop for FutureRunner {
 	fn drop(&mut self) {
 		// Stop the future on-drop
 		self.stop();
@@ -118,7 +120,7 @@ impl Drop for NeverFutureRunner {
 }
 
 /// Signal inner
-struct NeverFutureSignalInner {
+struct FutureSignalInner {
 	/// If we should exit
 	should_exit: bool,
 
@@ -127,7 +129,7 @@ struct NeverFutureSignalInner {
 }
 
 /// Status on signal waiting
-enum NeverFutureSignalStatus {
+enum FutureSignalStatus {
 	/// Should poll
 	Poll,
 
@@ -135,20 +137,20 @@ enum NeverFutureSignalStatus {
 	Exit,
 }
 
-/// Waker signal for [`NeverFuturesRunner`]
-struct NeverFutureSignal {
+/// Waker signal for [`FuturesRunner`]
+struct FutureSignal {
 	/// Inner
-	inner: Mutex<NeverFutureSignalInner>,
+	inner: Mutex<FutureSignalInner>,
 
 	/// Condvar for waiting
 	cond_var: Condvar,
 }
 
-impl NeverFutureSignal {
+impl FutureSignal {
 	/// Creates a new signal
 	fn new() -> Self {
 		Self {
-			inner:    Mutex::new(NeverFutureSignalInner {
+			inner:    Mutex::new(FutureSignalInner {
 				should_exit: false,
 				should_poll: true,
 			}),
@@ -157,7 +159,7 @@ impl NeverFutureSignal {
 	}
 
 	/// Waits until the future should be polled, or we should quit
-	pub fn wait(&self) -> NeverFutureSignalStatus {
+	pub fn wait(&self) -> FutureSignalStatus {
 		// Keep waiting until either `should_poll` or `should_exit` are true
 		// DEADLOCK: We'll be woken up in the waker eventually
 		let mut inner = self.inner.lock_se().allow::<MightBlock>();
@@ -165,12 +167,12 @@ impl NeverFutureSignal {
 			match (inner.should_exit, inner.should_poll) {
 				// If we should exit, regardless if we should poll, return
 				// Note: Doesn't matter if we set `should_poll` to false here
-				(true, _) => break NeverFutureSignalStatus::Exit,
+				(true, _) => break FutureSignalStatus::Exit,
 
 				// Else if we should poll, set it to false and return
 				(_, true) => {
 					inner.should_poll = false;
-					break NeverFutureSignalStatus::Poll;
+					break FutureSignalStatus::Poll;
 				},
 
 				// Else wait
@@ -189,7 +191,7 @@ impl NeverFutureSignal {
 	}
 }
 
-impl task::Wake for NeverFutureSignal {
+impl task::Wake for FutureSignal {
 	fn wake(self: std::sync::Arc<Self>) {
 		// Set that we should be polling
 		// DEADLOCK: `Self::wait` only locks it temporarily without blocking

@@ -54,7 +54,7 @@ impl ImageLoader {
 					// If we couldn't load, log, remove the path and retry
 					Err(err) => {
 						log::info!("Unable to load {path:?}: {err:?}");
-						playlist.remove_image(&image);
+						playlist.remove_image(&image).await;
 					},
 				},
 			}
