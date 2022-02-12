@@ -3,94 +3,59 @@
 // Imports
 use {
 	super::settings_window::SettingsWindow,
-	crate::{
-		util::{
-			extse::{CrossBeamChannelSelectSE, CrossBeamChannelSenderSE},
-			MightBlock,
-		},
-		Egui,
-		ImageLoader,
-		Panels,
-		Wgpu,
-	},
+	crate::{util::MightBlock, Egui, ImageLoader, Panels, Wgpu},
 	anyhow::Context,
-	std::{thread, time::Duration},
+	std::{
+		thread,
+		time::{Duration, Instant},
+	},
 	winit::window::Window,
-	zsw_side_effect_macros::side_effect,
 };
 
 /// Renderer
-pub struct Renderer {
-	/// Closing sender
-	close_tx: crossbeam::channel::Sender<()>,
-
-	/// Closing receiver
-	close_rx: crossbeam::channel::Receiver<()>,
-}
+pub struct Renderer {}
 
 impl Renderer {
 	/// Creates a new renderer
 	pub fn new() -> Self {
-		// Note: Making the close channel unbounded is what allows us to not block
-		//       in `Self::stop`.
-		let (close_tx, close_rx) = crossbeam::channel::unbounded();
-
-		Self { close_tx, close_rx }
+		Self {}
 	}
 
 	/// Runs the renderer
-	///
-	/// # Blocking
-	/// Will block in it's own event loop until [`Self::stop`] is called.
-	#[side_effect(MightBlock)]
-	pub fn run(
+	pub async fn run(
 		&self,
 		window: &Window,
-		wgpu: &Wgpu,
+		wgpu: &Wgpu<'_>,
 		panels: &Panels,
 		egui: &Egui,
 		image_loader: &ImageLoader,
 		settings_window: &SettingsWindow,
-	) -> () {
+	) -> ! {
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
-		// TODO: Use the stop channel better
-		while self.close_rx.try_recv().is_err() {
+		loop {
+			let start_instant = Instant::now();
+
 			// Update
-			// Note: The update is only useful for displaying, so there's no use
-			//       in running it in another thread.
-			//       Especially given that `update` doesn't block.
-			let (res, frame_duration) = crate::util::measure(|| Self::update(wgpu, panels, image_loader));
-			match res {
-				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to update"),
+			match Self::update(wgpu, panels, image_loader) {
+				Ok(()) => (),
 				Err(err) => log::warn!("Unable to update: {err:?}"),
 			};
 
 			// Render
-			match self.render(window, wgpu, panels, egui, settings_window) {
-				Ok(should_exit) => match should_exit {
-					true => break,
-					false => (),
-				},
+			match Self::render(window, wgpu, panels, egui, settings_window).await {
+				Ok(()) => (),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
 			};
 
 			// Then sleep until next frame
+			// TODO: Await while sleeping
+			let frame_duration = start_instant.elapsed();
 			if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
 				thread::sleep(duration);
 			}
 		}
-	}
-
-	/// Stops the `run` loop
-	pub fn stop(&self) {
-		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: The channel is unbounded, so this will not block.
-		self.close_tx
-			.send_se(())
-			.allow::<MightBlock>()
-			.expect("On-close receiver was closed");
 	}
 
 	/// Updates all panels
@@ -100,36 +65,15 @@ impl Renderer {
 	}
 
 	/// Renders
-	///
-	/// Returns `Ok(true)` if the close channel was received from.
-	fn render(
-		&self,
+	async fn render(
 		window: &Window,
-		wgpu: &Wgpu,
+		wgpu: &Wgpu<'_>,
 		panels: &Panels,
 		egui: &Egui,
 		settings_window: &SettingsWindow,
-	) -> Result<bool, anyhow::Error> {
+	) -> Result<(), anyhow::Error> {
 		// Get the egui render results
-		// Note: The settings window shouldn't quit while we're alive.
-		let paint_jobs = {
-			let mut select = crossbeam::channel::Select::new();
-			let img_idx = settings_window.select_paint_jobs(&mut select);
-			let close_idx = select.recv(&self.close_rx);
-
-			// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
-			let selected = select.select_se().allow::<MightBlock>();
-			match selected.index() {
-				idx if idx == img_idx => settings_window.paint_jobs_selected(selected),
-
-				// Note: This can't return an `Err` because `self` owns a receiver
-				idx if idx == close_idx => {
-					selected.recv(&self.close_rx).expect("On-close sender was closed");
-					return Ok(true);
-				},
-				_ => unreachable!(),
-			}
-		};
+		let paint_jobs = settings_window.paint_jobs().await;
 
 		// Then render
 		// DEADLOCK: We ensure we don't block within [`Wgpu::render`].
@@ -168,6 +112,6 @@ impl Renderer {
 		})
 		.allow::<MightBlock>()?;
 
-		Ok(false)
+		Ok(())
 	}
 }

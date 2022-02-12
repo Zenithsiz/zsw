@@ -95,6 +95,7 @@ pub fn image_format(image: &DynamicImage) -> &'static str {
 /// Adapts a future into a thread to be run on it's own thread.
 ///
 /// Will drop the future once `should_quit` becomes true.
+// TODO: Use custom type to we can set `should_quit` to `true` and wake the waker simultaneously.
 pub fn never_fut_thread_fn<'a, T, F>(should_quit: &'a AtomicBool, res: T, f: F) -> impl FnOnce() -> T + 'a
 where
 	T: 'a,

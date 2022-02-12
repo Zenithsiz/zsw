@@ -6,19 +6,7 @@
 
 // Imports
 use {
-	crate::{
-		util::{
-			extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSenderSE},
-			MightBlock,
-		},
-		Egui,
-		PanelImageState,
-		PanelState,
-		Panels,
-		Playlist,
-		Rect,
-		Wgpu,
-	},
+	crate::{util::MightBlock, Egui, PanelImageState, PanelState, Panels, Playlist, Rect, Wgpu},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -27,7 +15,6 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
 	},
-	zsw_side_effect_macros::side_effect,
 };
 
 /// Inner data
@@ -55,16 +42,10 @@ pub struct SettingsWindow {
 	queued_open_click: AtomicCell<Option<PhysicalPosition<f64>>>,
 
 	/// Paint jobs sender
-	paint_jobs_tx: crossbeam::channel::Sender<Vec<egui::epaint::ClippedMesh>>,
+	paint_jobs_tx: async_channel::Sender<Vec<egui::epaint::ClippedMesh>>,
 
 	/// Paint jobs receiver
-	paint_jobs_rx: crossbeam::channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
-
-	/// Closing sender
-	close_tx: crossbeam::channel::Sender<()>,
-
-	/// Closing receiver
-	close_rx: crossbeam::channel::Receiver<()>,
+	paint_jobs_rx: async_channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
 }
 
 impl SettingsWindow {
@@ -72,25 +53,17 @@ impl SettingsWindow {
 	pub fn new() -> Self {
 		// Note: Making the close channel unbounded is what allows us to not block
 		//       in `Self::stop`.
-		let (paint_jobs_tx, paint_jobs_rx) = crossbeam::channel::bounded(0);
-		let (close_tx, close_rx) = crossbeam::channel::unbounded();
+		let (paint_jobs_tx, paint_jobs_rx) = async_channel::bounded(1);
 
 		Self {
 			queued_open_click: AtomicCell::new(None),
 			paint_jobs_tx,
 			paint_jobs_rx,
-			close_tx,
-			close_rx,
 		}
 	}
 
 	/// Runs the setting window
-	///
-	/// # Blocking
-	/// Will block in it's own event loop until [`Self::stop`] is called.
-	#[allow(clippy::useless_transmute)] // `crossbeam::select` does it
-	#[side_effect(MightBlock)]
-	pub fn run(&self, wgpu: &Wgpu, egui: &Egui, window: &Window, panels: &Panels, playlist: &Playlist) -> () {
+	pub async fn run(&self, wgpu: &Wgpu<'_>, egui: &Egui, window: &Window, panels: &Panels, playlist: &Playlist) -> ! {
 		// Create the inner data
 		// TODO: Check if it's fine to call `wgpu.surface_size`
 		let mut inner = Inner::new(wgpu.surface_size());
@@ -113,63 +86,18 @@ impl SettingsWindow {
 			};
 
 			// Then send the paint jobs
-			// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
-			crossbeam::select! {
-				// Try to send an image
-				// Note: This can't return an `Err` because `self` owns a receiver
-				send(self.paint_jobs_tx, paint_jobs) -> res => res.expect("Paint jobs receiver was closed"),
-
-				// If we get anything in the close channel, break
-				// Note: This can't return an `Err` because `self` owns a receiver
-				recv(self.close_rx) -> res => {
-					res.expect("On-close sender was closed");
-					break
-				},
-			}
+			// DEADLOCK: TODO
+			self.paint_jobs_tx
+				.send(paint_jobs)
+				.await
+				.expect("Paint jobs receiver was closed");
 		}
 	}
 
-	/// Stops the `run` loop
-	pub fn stop(&self) {
-		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: The channel is unbounded, so this will not block.
-		self.close_tx
-			.send_se(())
-			.allow::<MightBlock>()
-			.expect("On-close receiver was closed");
-	}
-
 	/// Retrieves the paint jobs for the next frame
-	///
-	/// # Blocking
-	/// Blocks until [`Self::run`] is running.
-	#[side_effect(MightBlock)]
-	pub fn paint_jobs(&self) -> Vec<egui::epaint::ClippedMesh> {
+	pub async fn paint_jobs(&self) -> Vec<egui::epaint::ClippedMesh> {
 		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: Caller ensures `Self::run` will eventually run.
-		self.paint_jobs_rx
-			.recv_se()
-			.allow::<MightBlock>()
-			.expect("Paint jobs sender was closed")
-	}
-
-	/// Retrieves the paint jobs under `select`.
-	pub fn select_paint_jobs<'a>(&'a self, select: &mut crossbeam::channel::Select<'a>) -> usize {
-		select.recv(&self.paint_jobs_rx)
-	}
-
-	/// Retrieves the paint jobs, when selected
-	///
-	/// # Blocking
-	/// Does *not* block, unlike [`Self::paint_jobs`]
-	pub fn paint_jobs_selected<'a>(
-		&'a self,
-		selected: crossbeam::channel::SelectedOperation<'a>,
-	) -> Vec<egui::epaint::ClippedMesh> {
-		// Note: This can't return an `Err` because `self` owns a sender
-		selected
-			.recv(&self.paint_jobs_rx)
-			.expect("Paint jobs sender was closed")
+		self.paint_jobs_rx.recv().await.expect("Paint jobs sender was closed")
 	}
 
 	/// Draws the settings window

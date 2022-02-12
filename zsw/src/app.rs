@@ -13,7 +13,7 @@ mod settings_window;
 use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
 	crate::{
-		util::{self, MightBlock},
+		util,
 		Args,
 		Egui,
 		ImageLoader,
@@ -128,22 +128,26 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the settings window thread
 		// DEADLOCK: We call `SettingsWindow::run` at the end
-		thread_spawner.spawn("Settings window", || {
-			settings_window
-				.run(&wgpu, &egui, &window, &panels, &playlist)
-				.allow::<MightBlock>();
-			Ok(())
-		})?;
+		thread_spawner.spawn(
+			"Settings window",
+			util::never_fut_thread_fn(
+				&never_futures_should_quit,
+				Ok(()),
+				settings_window.run(&wgpu, &egui, &window, &panels, &playlist),
+			),
+		)?;
 
 		// Spawn the renderer thread
 		// DEADLOCK: We call `Renderer::stop` at the end
 		//           We make sure `SettingsWindow::run` runs eventually
-		thread_spawner.spawn("Renderer", || {
-			renderer
-				.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window)
-				.allow::<MightBlock>();
-			Ok(())
-		})?;
+		thread_spawner.spawn(
+			"Renderer",
+			util::never_fut_thread_fn(
+				&never_futures_should_quit,
+				Ok(()),
+				renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window),
+			),
+		)?;
 
 		// Run event loop in this thread until we quit
 		// DEADLOCK: `run_return` exits once the user requests it.
@@ -158,11 +162,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		#[cfg(not(debug_assertions))]
 		std::process::exit(0);
 
-		// Stop all systems
-		// Note: As `stop` doesn't block, order doesn't matter.
-		renderer.stop();
-		settings_window.stop();
-
+		// Join all threads
 		never_futures_should_quit.store(true, atomic::Ordering::Relaxed);
 		thread_spawner.join_all().context("Unable to join all threads")
 	})
