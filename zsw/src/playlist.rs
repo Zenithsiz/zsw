@@ -74,7 +74,7 @@ impl Playlist {
 		// All images to send
 		let mut images = vec![];
 
-		loop {
+		'run: loop {
 			// Retrieve the next images and shuffle them
 			// DEADLOCK: We ensure we don't block while `inner` is locked
 			{
@@ -95,7 +95,7 @@ impl Playlist {
 					// Note: This can't return an `Err` because `self` owns a receiver
 					recv(self.close_rx) -> res => {
 						res.expect("On-close sender was closed");
-						break
+						break 'run;
 					},
 				}
 			}

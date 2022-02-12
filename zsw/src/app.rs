@@ -92,14 +92,14 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		let mut thread_spawner = util::ThreadSpawner::new(s);
 
 		// Spawn the playlist loader thread
-		thread_spawner.spawn_scoped("Path distributer loader", || {
+		thread_spawner.spawn_scoped("Playlist loader", || {
 			playlist.add_dir(&args.images_dir);
 			Ok(())
 		})?;
 
 		// Spawn the playlist thread
 		// DEADLOCK: We call `Playlist::stop` at the end
-		thread_spawner.spawn_scoped("Path distributer", || {
+		thread_spawner.spawn_scoped("Playlist", || {
 			playlist.run();
 			Ok(())
 		})?;
@@ -146,7 +146,9 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Note: As `stop` doesn't block, order doesn't matter.
 		renderer.stop();
 		settings_window.stop();
-		image_loader.stop();
+		for _ in 0..loader_threads {
+			image_loader.stop();
+		}
 		playlist.stop();
 
 		// Join all thread
