@@ -2230,6 +2230,7 @@ dependencies = [
  "parking_lot",
  "pollster",
  "rand",
+ "rayon",
  "serde",
  "serde_json",
  "thiserror",

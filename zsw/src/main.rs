@@ -101,6 +101,13 @@ fn main() -> Result<(), anyhow::Error> {
 	#[cfg(debug_assertions)]
 	self::deadlock_init();
 
+	// Customize the rayon pool thread
+	// Note: This is used indirectly in `image` by `jpeg-decoder`
+	rayon::ThreadPoolBuilder::new()
+		.thread_name(|idx| format!("rayon${idx}"))
+		.build_global()
+		.context("Unable to build `rayon` global thread pool")?;
+
 	// Get arguments
 	let args = args::get().context("Unable to retrieve arguments")?;
 	log::debug!("Arguments: {args:#?}");
