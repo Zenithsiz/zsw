@@ -96,12 +96,12 @@ impl Playlist {
 	/// # Errors
 	/// Logs all errors via `log::warn`
 	pub fn add_dir(&self, dir_path: &Path) {
-		// DEADLOCK: We ensure we don't block while `inner` is locked
-		let mut inner = self.inner.lock_se().allow::<MightBlock>();
-
 		// Add all paths
-		log::info!("Loading all paths from {dir_path:?}");
+		// Note: We lock on every path so that `run` can start running before
+		//       we fully read everything, in case of a really big directory
 		crate::util::visit_files_dir(dir_path, &mut |path| {
+			// DEADLOCK: We ensure we don't block while `inner` is locked
+			let mut inner = self.inner.lock_se().allow::<MightBlock>();
 			let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
 			Ok::<(), !>(())
 		})
