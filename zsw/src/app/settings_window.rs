@@ -11,7 +11,6 @@ use {
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
 	pollster::FutureExt,
-	std::time::Duration,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
@@ -139,6 +138,7 @@ impl SettingsWindow {
 					panel_idx += 1;
 				})
 				.allow::<MightBlock>();
+
 			ui.collapsing("Add panel", |ui| {
 				ui.horizontal(|ui| {
 					ui.label("Geometry");
@@ -146,21 +146,23 @@ impl SettingsWindow {
 				});
 
 				ui.horizontal(|ui| {
-					ui.label("Fade point");
-					egui::Slider::new(&mut inner.new_panel_state.fade_point, 0.5..=1.0).ui(ui);
+					ui.label("Fade progress");
+					let min = inner.new_panel_state.max_progress / 2;
+					let max = inner.new_panel_state.max_progress.saturating_sub(1);
+					egui::Slider::new(&mut inner.new_panel_state.fade_progress, min..=max).ui(ui);
 				});
 
 				ui.horizontal(|ui| {
-					ui.label("Duration");
-					egui::Slider::new(&mut inner.new_panel_state.duration_secs, 0.5..=180.0).ui(ui);
+					ui.label("Max progress");
+					egui::Slider::new(&mut inner.new_panel_state.max_progress, 0..=10800).ui(ui);
 				});
 
 				if ui.button("Add").clicked() {
 					panels.add_panel(PanelState::new(
 						inner.new_panel_state.geometry,
 						PanelImageState::Empty,
-						Duration::from_secs_f32(inner.new_panel_state.duration_secs),
-						inner.new_panel_state.fade_point,
+						inner.new_panel_state.max_progress,
+						inner.new_panel_state.fade_progress,
 					));
 				}
 			});
@@ -204,22 +206,23 @@ struct NewPanelState {
 	/// Geometry
 	geometry: Rect<u32>,
 
-	/// Duration seconds
-	duration_secs: f32,
+	/// Max progress (in frames)
+	pub max_progress: u64,
 
-	/// Fade point
-	fade_point: f32,
+	/// Fade progress (in frames)
+	pub fade_progress: u64,
 }
 
 impl NewPanelState {
 	fn new(surface_size: PhysicalSize<u32>) -> Self {
+		#[allow(clippy::cast_sign_loss)] // It's positive
 		Self {
 			geometry:      Rect {
 				pos:  Point2::new(0, 0),
 				size: Vector2::new(surface_size.width, surface_size.height),
 			},
-			duration_secs: 15.0,
-			fade_point:    0.95,
+			max_progress:  15 * 60,
+			fade_progress: (0.95 * 15.0 * 60.0) as u64,
 		}
 	}
 }
@@ -249,28 +252,28 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 		});
 
 		ui.horizontal(|ui| {
-			ui.label("Progress");
-			egui::Slider::new(&mut self.panel.progress, 0.0..=0.99).ui(ui);
+			ui.label("Cur progress");
+			let max = self.panel.max_progress.saturating_sub(1);
+			egui::Slider::new(&mut self.panel.cur_progress, 0..=max).ui(ui);
 		});
 
 		ui.horizontal(|ui| {
-			ui.label("Fade point");
-			egui::Slider::new(&mut self.panel.fade_point, 0.5..=1.0).ui(ui);
+			ui.label("Fade progress");
+			let min = self.panel.max_progress / 2;
+			let max = self.panel.max_progress.saturating_sub(1);
+			egui::Slider::new(&mut self.panel.fade_progress, min..=max).ui(ui);
 		});
 
 		ui.horizontal(|ui| {
-			ui.label("Duration");
-
-			let mut seconds = self.panel.image_duration.as_secs_f32();
-			egui::Slider::new(&mut seconds, 0.5..=180.0).ui(ui);
-			self.panel.image_duration = Duration::from_secs_f32(seconds);
+			ui.label("Max progress");
+			egui::Slider::new(&mut self.panel.max_progress, 0..=10800).ui(ui);
 		});
 
 		// TODO: Return more than just the skip button here
 		ui.horizontal(|ui| {
 			ui.label("Skip");
 			if ui.button("🔄").clicked() {
-				self.panel.progress = 1.0;
+				self.panel.cur_progress = self.panel.max_progress;
 			}
 		})
 		.response

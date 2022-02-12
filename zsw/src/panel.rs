@@ -83,18 +83,19 @@ impl Panels {
 		image_loader: &ImageLoader,
 	) -> Result<(), anyhow::Error> {
 		// Next frame's progress
-		let next_progress = panel.progress + (1.0 / 60.0) / panel.image_duration.as_secs_f32();
+		let next_progress = panel.cur_progress.saturating_add(1).clamp(0, panel.max_progress);
 
 		// Progress on image swap
-		let swapped_progress = panel.progress - panel.fade_point;
+		let swapped_progress = panel.cur_progress.saturating_sub(panel.fade_progress);
 
 		// If we finished the current image
-		let finished = panel.progress >= 1.0;
+		let finished = panel.cur_progress >= panel.max_progress;
 
 		// Update the image state
-		(panel.state, panel.progress) = match panel.state {
+		(panel.state, panel.cur_progress) = match panel.state {
 			// If we're empty, try to get a next image
 			PanelImageState::Empty => match image_loader.try_recv() {
+				#[allow(clippy::cast_sign_loss)] // It's positive
 				Some(image) => (
 					PanelImageState::PrimaryOnly {
 						front: PanelImageStateImage {
@@ -103,9 +104,9 @@ impl Panels {
 						},
 					},
 					// Note: Ensure it's below `0.5` to avoid starting during a fade.
-					rand::random::<f32>() / 2.0,
+					(rand::random::<f32>() / 2.0 * panel.max_progress as f32) as u64,
 				),
-				None => (PanelImageState::Empty, 0.0),
+				None => (PanelImageState::Empty, 0),
 			},
 
 			// If we only have the primary, try to load the next image
@@ -138,8 +139,7 @@ impl Panels {
 							swapped_progress,
 						)
 					},
-					// Note: If we're done without a next image, then just stay at 1.0
-					None => (PanelImageState::Both { front, back }, 1.0),
+					None => (PanelImageState::Both { front, back }, next_progress),
 				}
 			},
 

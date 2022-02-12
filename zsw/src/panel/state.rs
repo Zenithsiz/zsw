@@ -5,7 +5,6 @@ use {
 	super::PanelImageId,
 	crate::Rect,
 	cgmath::{Matrix4, Vector3},
-	std::time::Duration,
 	winit::dpi::PhysicalSize,
 };
 
@@ -19,27 +18,26 @@ pub struct PanelState {
 	/// Panel state
 	pub state: PanelImageState,
 
-	/// Progress
-	pub progress: f32,
+	/// Progress (in frames)
+	pub cur_progress: u64,
 
-	/// Image duration
-	pub image_duration: Duration,
+	/// Max progress (in frames)
+	pub max_progress: u64,
 
-	/// Fade point
-	// TODO: Ensure it's between 0.5 and 1.0
-	pub fade_point: f32,
+	/// Fade progress (in frames)
+	pub fade_progress: u64,
 }
 
 impl PanelState {
 	/// Creates a new panel
 	#[must_use]
-	pub const fn new(geometry: Rect<u32>, state: PanelImageState, image_duration: Duration, fade_point: f32) -> Self {
+	pub const fn new(geometry: Rect<u32>, state: PanelImageState, max_progress: u64, fade_progress: u64) -> Self {
 		Self {
 			geometry,
 			state,
-			progress: 0.0,
-			image_duration,
-			fade_point,
+			cur_progress: 0,
+			max_progress,
+			fade_progress,
 		}
 	}
 
@@ -67,13 +65,16 @@ impl PanelState {
 	#[must_use]
 	pub fn image_descriptors(&self) -> impl IntoIterator<Item = PanelImageDescriptor> + '_ {
 		// Calculate the alpha and progress for the back image
-		let (back_alpha, back_progress) = match self.progress {
-			f if f >= self.fade_point => (
-				(self.progress - self.fade_point) / (1.0 - self.fade_point),
-				self.progress - self.fade_point,
+		let (back_alpha, back_progress) = match self.cur_progress {
+			f if f >= self.fade_progress => (
+				(self.cur_progress - self.fade_progress) as f32 / (self.max_progress - self.fade_progress) as f32,
+				(self.cur_progress - self.fade_progress) as f32 / self.max_progress as f32,
 			),
 			_ => (0.0, 0.0),
 		};
+
+		// Progress, clamped to `0.0..1.0`
+		let progress = self.cur_progress as f32 / self.max_progress as f32;
 
 		// Get the images to render
 		let (front, back) = match self.state {
@@ -81,8 +82,8 @@ impl PanelState {
 			PanelImageState::PrimaryOnly { front, .. } => (
 				Some(PanelImageDescriptor {
 					image_id: front.id,
-					alpha:    1.0,
-					progress: self.progress,
+					alpha: 1.0,
+					progress,
 					swap_dir: front.swap_dir,
 				}),
 				None,
@@ -90,8 +91,8 @@ impl PanelState {
 			PanelImageState::Both { front, back } => (
 				Some(PanelImageDescriptor {
 					image_id: front.id,
-					alpha:    1.0 - back_alpha,
-					progress: self.progress,
+					alpha: 1.0 - back_alpha,
+					progress,
 					swap_dir: front.swap_dir,
 				}),
 				Some(PanelImageDescriptor {
