@@ -14,6 +14,7 @@ use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
 	crate::{
 		util,
+		util::NeverFutureRunner,
 		Args,
 		Egui,
 		ImageLoader,
@@ -25,13 +26,7 @@ use {
 		Wgpu,
 	},
 	anyhow::Context,
-	std::{
-		iter,
-		num::NonZeroUsize,
-		sync::{atomic, atomic::AtomicBool},
-		thread,
-		time::Duration,
-	},
+	std::{iter, num::NonZeroUsize, thread, time::Duration},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::EventLoop,
@@ -90,8 +85,17 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Create the settings window
 	let settings_window = SettingsWindow::new();
 
-	// If the `!` futures should quit.
-	let never_futures_should_quit = AtomicBool::new(false);
+	// All runners
+	// Note: They must exit outside of the thread scope because
+	//       their `run` can last until the very end of the function
+	let playlist_runner = NeverFutureRunner::new();
+	let image_loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
+	let image_loader_runners = iter::repeat_with(NeverFutureRunner::new)
+		.take(image_loader_threads)
+		.collect::<Vec<_>>();
+	let settings_window_runner = NeverFutureRunner::new();
+	let renderer_runner = NeverFutureRunner::new();
+
 
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
@@ -101,53 +105,30 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		let mut thread_spawner = util::ThreadSpawner::new(s);
 
 		// Spawn the playlist loader thread
-		thread_spawner.spawn("Playlist loader", || {
-			playlist.add_dir(&args.images_dir);
-			Ok(())
-		})?;
+		thread_spawner.spawn("Playlist loader", || playlist.add_dir(&args.images_dir))?;
 
 		// Spawn the playlist thread
 		// DEADLOCK: We set `never_futures_should_quit` to `true` at the end, before joining
-		thread_spawner.spawn(
-			"Playlist",
-			util::never_fut_thread_fn(&never_futures_should_quit, Ok(()), playlist.run()),
-		)?;
+		thread_spawner.spawn("Playlist", || playlist_runner.run(playlist.run()))?;
 
 		// Spawn all image loaders
-		// DEADLOCK: We set `never_futures_should_quit` to `true` at the end, before joining
-		let loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		let loader_fns = iter::from_fn(|| {
-			Some(util::never_fut_thread_fn(
-				&never_futures_should_quit,
-				Ok(()),
-				image_loader.run(&playlist),
-			))
-		})
-		.take(loader_threads);
-		thread_spawner.spawn_multiple("Image loader", loader_fns)?;
+		for (thread_idx, runner) in image_loader_runners.iter().enumerate() {
+			thread_spawner.spawn(format!("Image Loader${thread_idx}"), || {
+				runner.run(image_loader.run(&playlist));
+			})?;
+		}
 
 		// Spawn the settings window thread
-		// DEADLOCK: We call `SettingsWindow::run` at the end
-		thread_spawner.spawn(
-			"Settings window",
-			util::never_fut_thread_fn(
-				&never_futures_should_quit,
-				Ok(()),
-				settings_window.run(&wgpu, &egui, &window, &panels, &playlist),
-			),
-		)?;
+		thread_spawner.spawn("Settings window", || {
+			settings_window_runner.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist));
+		})?;
 
 		// Spawn the renderer thread
 		// DEADLOCK: We call `Renderer::stop` at the end
 		//           We make sure `SettingsWindow::run` runs eventually
-		thread_spawner.spawn(
-			"Renderer",
-			util::never_fut_thread_fn(
-				&never_futures_should_quit,
-				Ok(()),
-				renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window),
-			),
-		)?;
+		thread_spawner.spawn("Renderer", || {
+			renderer_runner.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window));
+		})?;
 
 		// Run event loop in this thread until we quit
 		// DEADLOCK: `run_return` exits once the user requests it.
@@ -163,7 +144,10 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		std::process::exit(0);
 
 		// Join all threads
-		never_futures_should_quit.store(true, atomic::Ordering::Relaxed);
+		playlist_runner.stop();
+		image_loader_runners.iter().for_each(NeverFutureRunner::stop);
+		settings_window_runner.stop();
+		renderer_runner.stop();
 		thread_spawner.join_all().context("Unable to join all threads")
 	})
 	.map_err(|err| anyhow::anyhow!("Unable to start/join all threads: {err:?}"))?
