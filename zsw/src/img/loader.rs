@@ -11,7 +11,7 @@ use {
 	super::Image,
 	crate::{
 		util::{
-			extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSenderSE},
+			extse::{CrossBeamChannelReceiverSE, CrossBeamChannelSelectSE, CrossBeamChannelSenderSE},
 			MightBlock,
 		},
 		Playlist,
@@ -63,13 +63,13 @@ impl ImageLoader {
 	#[side_effect(MightBlock)]
 	pub fn run(&self, playlist: &Playlist) -> Result<(), anyhow::Error> {
 		loop {
-			// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
 			let image = {
 				let mut select = crossbeam::channel::Select::new();
 				let img_idx = playlist.select_next(&mut select);
 				let close_idx = select.recv(&self.close_rx);
 
-				let selected = select.select();
+				// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
+				let selected = select.select_se().allow::<MightBlock>();
 				match selected.index() {
 					idx if idx == img_idx => playlist.next_selected(selected),
 
@@ -82,7 +82,6 @@ impl ImageLoader {
 				}
 			};
 
-			//let image = playlist.next().allow::<MightBlock>();
 			match &*image {
 				PlaylistImage::File(path) => match load::load_image(path) {
 					// If we got it, send it
