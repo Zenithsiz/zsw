@@ -4,7 +4,10 @@
 use {
 	super::settings_window::SettingsWindow,
 	crate::{
-		util::{extse::CrossBeamChannelSenderSE, MightBlock},
+		util::{
+			extse::{CrossBeamChannelSelectSE, CrossBeamChannelSenderSE},
+			MightBlock,
+		},
 		Egui,
 		ImageLoader,
 		Panels,
@@ -38,7 +41,6 @@ impl Renderer {
 	/// Runs the renderer
 	///
 	/// # Blocking
-	/// Blocks until [`SettingsWindow::run`] starts.
 	/// Will block in it's own event loop until [`Self::stop`] is called.
 	#[side_effect(MightBlock)]
 	pub fn run(
@@ -66,12 +68,11 @@ impl Renderer {
 			};
 
 			// Render
-			// DEADLOCK: `Self::render` doesn't block
-			let (res, frame_duration) = crate::util::measure(|| {
-				Self::render(window, wgpu, panels, egui, settings_window).allow::<MightBlock>()
-			});
-			match res {
-				Ok(()) => log::trace!(target: "zsw::perf", "Took {frame_duration:?} to render"),
+			match self.render(window, wgpu, panels, egui, settings_window) {
+				Ok(should_exit) => match should_exit {
+					true => break,
+					false => (),
+				},
 				Err(err) => log::warn!("Unable to render: {err:?}"),
 			};
 
@@ -100,21 +101,35 @@ impl Renderer {
 
 	/// Renders
 	///
-	/// # Blocking
-	/// Blocks waiting for a value from the sender of `paint_jobs_rx`.
-	/// Deadlocks if called within a [`Wgpu::render`] callback.
-	#[side_effect(MightBlock)]
+	/// Returns `Ok(true)` if the close channel was received from.
 	fn render(
+		&self,
 		window: &Window,
 		wgpu: &Wgpu,
 		panels: &Panels,
 		egui: &Egui,
 		settings_window: &SettingsWindow,
-	) -> Result<(), anyhow::Error> {
+	) -> Result<bool, anyhow::Error> {
 		// Get the egui render results
 		// Note: The settings window shouldn't quit while we're alive.
-		// BLOCKING: TODO
-		let paint_jobs = settings_window.paint_jobs().allow::<MightBlock>();
+		let paint_jobs = {
+			let mut select = crossbeam::channel::Select::new();
+			let img_idx = settings_window.select_paint_jobs(&mut select);
+			let close_idx = select.recv(&self.close_rx);
+
+			// DEADLOCK: Caller can call `Self::stop` for us to stop at any moment.
+			let selected = select.select_se().allow::<MightBlock>();
+			match selected.index() {
+				idx if idx == img_idx => settings_window.paint_jobs_selected(selected),
+
+				// Note: This can't return an `Err` because `self` owns a receiver
+				idx if idx == close_idx => {
+					selected.recv(&self.close_rx).expect("On-close sender was closed");
+					return Ok(true);
+				},
+				_ => unreachable!(),
+			}
+		};
 
 		// Then render
 		// DEADLOCK: We ensure we don't block within [`Wgpu::render`].
@@ -151,6 +166,8 @@ impl Renderer {
 
 			Ok(())
 		})
-		.allow::<MightBlock>()
+		.allow::<MightBlock>()?;
+
+		Ok(false)
 	}
 }

@@ -153,6 +153,25 @@ impl SettingsWindow {
 			.expect("Paint jobs sender was closed")
 	}
 
+	/// Retrieves the paint jobs under `select`.
+	pub fn select_paint_jobs<'a>(&'a self, select: &mut crossbeam::channel::Select<'a>) -> usize {
+		select.recv(&self.paint_jobs_rx)
+	}
+
+	/// Retrieves the paint jobs, when selected
+	///
+	/// # Blocking
+	/// Does *not* block, unlike [`Self::paint_jobs`]
+	pub fn paint_jobs_selected<'a>(
+		&'a self,
+		selected: crossbeam::channel::SelectedOperation<'a>,
+	) -> Vec<egui::epaint::ClippedMesh> {
+		// Note: This can't return an `Err` because `self` owns a sender
+		selected
+			.recv(&self.paint_jobs_rx)
+			.expect("Paint jobs sender was closed")
+	}
+
 	/// Draws the settings window
 	fn draw(
 		&self,
