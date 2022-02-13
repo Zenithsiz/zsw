@@ -1,12 +1,14 @@
 //! Panel state
 
 // Imports
-use super::PanelImageId;
+use {super::PanelImageId, crate::Panel};
 
 /// Panel state
 #[derive(Debug)]
-#[allow(missing_copy_implementations)] // We don't want it to be trivially copyable yet because it manages a resource
 pub struct PanelState {
+	/// Panel
+	pub panel: Panel,
+
 	/// Images
 	pub images: PanelStateImages,
 
@@ -17,26 +19,22 @@ pub struct PanelState {
 impl PanelState {
 	/// Creates a new panel
 	#[must_use]
-	pub const fn new() -> Self {
+	pub const fn new(panel: Panel) -> Self {
 		Self {
-			images:       PanelStateImages::Empty,
+			panel,
+			images: PanelStateImages::Empty,
 			cur_progress: 0,
 		}
 	}
 }
 
-impl Default for PanelState {
-	fn default() -> Self {
-		Self::new()
-	}
-}
-
 /// Images for a panel state
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Default, Debug)]
 pub enum PanelStateImages {
 	/// Empty
 	///
 	/// This means no images have been loaded yet
+	#[default]
 	Empty,
 
 	/// Primary only
@@ -60,7 +58,8 @@ pub enum PanelStateImages {
 }
 
 /// Panel image state image
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
+#[allow(missing_copy_implementations)] // We don't want it to be trivially copyable yet because it manages a resource
 pub struct PanelImageStateImage {
 	/// Image id
 	pub id: PanelImageId,

@@ -130,7 +130,7 @@ impl PanelsRenderer {
 	/// Renders panels
 	pub fn render<'a>(
 		&self,
-		panels: impl IntoIterator<Item = (&'a Panel, &'a PanelState)>,
+		panels: impl IntoIterator<Item = &'a PanelState>,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
 		surface_view: &wgpu::TextureView,
@@ -172,12 +172,12 @@ impl PanelsRenderer {
 
 		// And draw each panel
 		// DEADLOCK: We ensure we don't block within the callback
-		for (panel, state) in panels {
+		for panel in panels {
 			// Calculate the matrix for the panel
-			let matrix = self::panel_matrix(panel, surface_size);
+			let matrix = self::panel_matrix(&panel.panel, surface_size);
 
 			// Then go through all image descriptors to render
-			for descriptor in self::panel_image_descriptors(panel, state) {
+			for descriptor in self::panel_image_descriptors(panel) {
 				// Skip rendering if alpha is 0
 				if descriptor.alpha == 0.0 {
 					continue;
@@ -193,7 +193,7 @@ impl PanelsRenderer {
 				};
 
 				// Then update the uniforms
-				let uvs = image.uvs(panel.geometry.size, descriptor.swap_dir);
+				let uvs = image.uvs(panel.panel.geometry.size, descriptor.swap_dir);
 				let uniforms = PanelUniforms {
 					matrix:     matrix.into(),
 					uvs_start:  uvs.start(),
@@ -372,24 +372,22 @@ fn panel_matrix(panel: &Panel, surface_size: PhysicalSize<u32>) -> Matrix4<f32> 
 
 /// Returns all images descriptors of a panel to render
 #[must_use]
-fn panel_image_descriptors<'a>(
-	panel: &'a Panel,
-	state: &'a PanelState,
-) -> impl IntoIterator<Item = PanelImageDescriptor> + 'a {
+fn panel_image_descriptors(panel: &PanelState) -> impl IntoIterator<Item = PanelImageDescriptor> + '_ {
 	// Calculate the alpha and progress for the back image
-	let (back_alpha, back_progress) = match state.cur_progress {
-		f if f >= panel.fade_point => (
-			(state.cur_progress - panel.fade_point) as f32 / (panel.duration - panel.fade_point) as f32,
-			(state.cur_progress - panel.fade_point) as f32 / panel.duration as f32,
+	let (back_alpha, back_progress) = match panel.cur_progress {
+		f if f >= panel.panel.fade_point => (
+			(panel.cur_progress - panel.panel.fade_point) as f32 /
+				(panel.panel.duration - panel.panel.fade_point) as f32,
+			(panel.cur_progress - panel.panel.fade_point) as f32 / panel.panel.duration as f32,
 		),
 		_ => (0.0, 0.0),
 	};
 
 	// Progress, clamped to `0.0..1.0`
-	let progress = state.cur_progress as f32 / panel.duration as f32;
+	let progress = panel.cur_progress as f32 / panel.panel.duration as f32;
 
 	// Get the images to render
-	let (front, back) = match state.images {
+	let (front, back) = match &panel.images {
 		PanelStateImages::Empty => (None, None),
 		PanelStateImages::PrimaryOnly { front, .. } => (
 			Some(PanelImageDescriptor {

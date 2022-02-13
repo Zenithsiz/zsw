@@ -16,7 +16,8 @@
 	result_into_ok_or_err,
 	generators,
 	generator_trait,
-	scoped_threads
+	scoped_threads,
+	derive_default_enum
 )]
 // Lints
 #![warn(
