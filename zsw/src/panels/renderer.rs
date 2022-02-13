@@ -9,15 +9,13 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 
 // Imports
 use {
-	super::{Panel, PanelImage},
+	super::PanelImage,
 	crate::{
 		img::Image,
 		util::{extse::ParkingLotMutexSe, MightBlock},
 		PanelState,
-		PanelStateImages,
 		Wgpu,
 	},
-	cgmath::{Matrix4, Vector3},
 	parking_lot::Mutex,
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -174,10 +172,10 @@ impl PanelsRenderer {
 		// DEADLOCK: We ensure we don't block within the callback
 		for panel in panels {
 			// Calculate the matrix for the panel
-			let matrix = self::panel_matrix(&panel.panel, surface_size);
+			let matrix = panel.matrix(surface_size);
 
 			// Then go through all image descriptors to render
-			for descriptor in self::panel_image_descriptors(panel) {
+			for descriptor in panel.image_descriptors() {
 				// Skip rendering if alpha is 0
 				if descriptor.alpha == 0.0 {
 					continue;
@@ -348,87 +346,4 @@ fn create_render_pipeline(
 	};
 
 	device.create_render_pipeline(&render_pipeline_descriptor)
-}
-
-/// Calculates the matrix for a panel
-// Note: This matrix simply goes from a geometry in physical units
-//       onto shader coordinates.
-#[must_use]
-fn panel_matrix(panel: &Panel, surface_size: PhysicalSize<u32>) -> Matrix4<f32> {
-	let x_scale = panel.geometry.size[0] as f32 / surface_size.width as f32;
-	let y_scale = panel.geometry.size[1] as f32 / surface_size.height as f32;
-
-	let x_offset = panel.geometry.pos[0] as f32 / surface_size.width as f32;
-	let y_offset = panel.geometry.pos[1] as f32 / surface_size.height as f32;
-
-	let translation = Matrix4::from_translation(Vector3::new(
-		-1.0 + x_scale + 2.0 * x_offset,
-		1.0 - y_scale - 2.0 * y_offset,
-		0.0,
-	));
-	let scaling = Matrix4::from_nonuniform_scale(x_scale, -y_scale, 1.0);
-	translation * scaling
-}
-
-/// Returns all images descriptors of a panel to render
-#[must_use]
-fn panel_image_descriptors(panel: &PanelState) -> impl IntoIterator<Item = PanelImageDescriptor> + '_ {
-	// Calculate the alpha and progress for the back image
-	let (back_alpha, back_progress) = match panel.cur_progress {
-		f if f >= panel.panel.fade_point => (
-			(panel.cur_progress - panel.panel.fade_point) as f32 /
-				(panel.panel.duration - panel.panel.fade_point) as f32,
-			(panel.cur_progress - panel.panel.fade_point) as f32 / panel.panel.duration as f32,
-		),
-		_ => (0.0, 0.0),
-	};
-
-	// Progress, clamped to `0.0..1.0`
-	let progress = panel.cur_progress as f32 / panel.panel.duration as f32;
-
-	// Get the images to render
-	let (front, back) = match &panel.images {
-		PanelStateImages::Empty => (None, None),
-		PanelStateImages::PrimaryOnly { front, .. } => (
-			Some(PanelImageDescriptor {
-				image_id: front.id,
-				alpha: 1.0,
-				progress,
-				swap_dir: front.swap_dir,
-			}),
-			None,
-		),
-		PanelStateImages::Both { front, back } => (
-			Some(PanelImageDescriptor {
-				image_id: front.id,
-				alpha: 1.0 - back_alpha,
-				progress,
-				swap_dir: front.swap_dir,
-			}),
-			Some(PanelImageDescriptor {
-				image_id: back.id,
-				alpha:    back_alpha,
-				progress: back_progress,
-				swap_dir: back.swap_dir,
-			}),
-		),
-	};
-
-	[front, back].into_iter().flatten()
-}
-
-/// Panel image descriptor
-#[derive(Clone, Copy, Debug)]
-struct PanelImageDescriptor {
-	/// Image
-	image_id: PanelImageId,
-
-	/// Alpha
-	alpha: f32,
-
-	/// Progress
-	progress: f32,
-
-	/// Swap direction?
-	swap_dir: bool,
 }

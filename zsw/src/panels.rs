@@ -25,7 +25,6 @@ use {
 	},
 	anyhow::Context,
 	parking_lot::Mutex,
-	std::mem,
 	winit::dpi::PhysicalSize,
 	zsw_side_effect_macros::side_effect,
 };
@@ -74,85 +73,10 @@ impl Panels {
 		let mut panels = self.panels.lock_se().allow::<MightBlock>();
 
 		for panel in &mut *panels {
-			self.update_panel(panel, wgpu, image_loader)
+			panel
+				.update(&self.renderer, wgpu, image_loader)
 				.context("Unable to update panel")?;
 		}
-
-		Ok(())
-	}
-
-	/// Updates a panel
-	fn update_panel(
-		&self,
-		panel: &mut PanelState,
-		wgpu: &Wgpu,
-		image_loader: &ImageLoader,
-	) -> Result<(), anyhow::Error> {
-		// Next frame's progress
-		let next_progress = panel.cur_progress.saturating_add(1).clamp(0, panel.panel.duration);
-
-		// Progress on image swap
-		let swapped_progress = panel.cur_progress.saturating_sub(panel.panel.fade_point);
-
-		// If we finished the current image
-		let finished = panel.cur_progress >= panel.panel.duration;
-
-		// Update the image state
-		// Note: We're only `take`ing the images because we need them by value
-		(panel.images, panel.cur_progress) = match mem::take(&mut panel.images) {
-			// If we're empty, try to get a next image
-			PanelStateImages::Empty => match image_loader.try_recv() {
-				#[allow(clippy::cast_sign_loss)] // It's positive
-				Some(image) => (
-					PanelStateImages::PrimaryOnly {
-						front: PanelImageStateImage {
-							id:       self.renderer.create_image(wgpu, image),
-							swap_dir: rand::random(),
-						},
-					},
-					// Note: Ensure it's below `0.5` to avoid starting during a fade.
-					(rand::random::<f32>() / 2.0 * panel.panel.duration as f32) as u64,
-				),
-				None => (PanelStateImages::Empty, 0),
-			},
-
-			// If we only have the primary, try to load the next image
-			PanelStateImages::PrimaryOnly { front } => match image_loader.try_recv() {
-				Some(image) => (
-					PanelStateImages::Both {
-						front,
-						back: PanelImageStateImage {
-							id:       self.renderer.create_image(wgpu, image),
-							swap_dir: rand::random(),
-						},
-					},
-					next_progress,
-				),
-				None => (PanelStateImages::PrimaryOnly { front }, next_progress),
-			},
-
-			// If we have both, try to update the progress and swap them if finished
-			PanelStateImages::Both { mut front, back } if finished => {
-				match image_loader.try_recv() {
-					// Note: We update the front and swap them
-					Some(image) => {
-						self.renderer.update_image(wgpu, front.id, image);
-						front.swap_dir = rand::random();
-						(
-							PanelStateImages::Both {
-								front: back,
-								back:  front,
-							},
-							swapped_progress,
-						)
-					},
-					None => (PanelStateImages::Both { front, back }, next_progress),
-				}
-			},
-
-			// Else just update the progress
-			state @ PanelStateImages::Both { .. } => (state, next_progress),
-		};
 
 		Ok(())
 	}
