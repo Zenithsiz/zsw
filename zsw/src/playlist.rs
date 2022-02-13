@@ -53,7 +53,6 @@ impl Playlist {
 	}
 
 	/// Runs the playlist
-	#[allow(clippy::useless_transmute)] // `crossbeam::select` does it
 	pub async fn run(&self) -> ! {
 		// All images to send
 		let mut images = vec![];
