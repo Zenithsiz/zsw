@@ -71,7 +71,7 @@ mod args;
 mod egui;
 mod img;
 mod logger;
-mod panel;
+mod panel; // TODO: Rename to `panels`.
 mod playlist;
 mod rect;
 mod util;
@@ -82,7 +82,7 @@ pub use self::{
 	args::Args,
 	egui::Egui,
 	img::ImageLoader,
-	panel::{PanelImageState, PanelState, Panels, PanelsProfile, PanelsRenderer},
+	panel::{Panel, PanelState, PanelStateImages, Panels, PanelsProfile, PanelsRenderer},
 	playlist::{Playlist, PlaylistImage},
 	rect::Rect,
 	wgpu::Wgpu,

@@ -12,19 +12,7 @@ mod settings_window;
 // Imports
 use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
-	crate::{
-		util,
-		util::FutureRunner,
-		Args,
-		Egui,
-		ImageLoader,
-		PanelImageState,
-		PanelState,
-		Panels,
-		PanelsProfile,
-		Playlist,
-		Wgpu,
-	},
+	crate::{util, util::FutureRunner, Args, Egui, ImageLoader, Panel, Panels, PanelsProfile, Playlist, Wgpu},
 	anyhow::Context,
 	std::{iter, num::NonZeroUsize, thread, time::Duration},
 	winit::{
@@ -55,15 +43,10 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Create all panels
 	let panels = args.panel_geometries.iter().map(|&geometry| {
-		let max_progress = args.image_duration.as_secs_f32() * 60.0;
-		let fade_progress = args.fade_point * max_progress;
+		let duration = args.image_duration.as_secs_f32() * 60.0;
+		let fade_point = args.fade_point * duration;
 		#[allow(clippy::cast_sign_loss)] // They're both positive
-		PanelState::new(
-			geometry,
-			PanelImageState::Empty,
-			max_progress as u64,
-			fade_progress as u64,
-		)
+		Panel::new(geometry, duration as u64, fade_point as u64)
 	});
 	let panels =
 		Panels::new(panels, wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
