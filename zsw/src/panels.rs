@@ -3,7 +3,6 @@
 // Modules
 mod image;
 mod panel;
-mod profile;
 mod renderer;
 mod state;
 
@@ -11,7 +10,6 @@ mod state;
 pub use self::{
 	image::PanelImage,
 	panel::Panel,
-	profile::PanelsProfile,
 	renderer::{PanelUniforms, PanelVertex, PanelsRenderer},
 	state::{PanelState, PanelStateImage, PanelStateImages},
 };
@@ -37,6 +35,7 @@ pub struct Panels {
 	renderer: PanelsRenderer,
 
 	/// All panels with their state
+	// TODO: Make `async`
 	panels: Mutex<Vec<PanelState>>,
 }
 
@@ -64,6 +63,27 @@ impl Panels {
 		// DEADLOCK: We ensure this lock can't deadlock by not blocking
 		//           while locked.
 		self.panels.lock_se().allow::<MightBlock>().push(PanelState::new(panel));
+	}
+
+	/// Returns all panels
+	pub fn panels(&self) -> Vec<Panel> {
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		self.panels
+			.lock_se()
+			.allow::<MightBlock>()
+			.iter()
+			.map(|panel| panel.panel)
+			.collect()
+	}
+
+	/// Replaces all panels
+	pub fn replace_panels(&self, new_panels: impl IntoIterator<Item = Panel>) {
+		// DEADLOCK: We ensure this lock can't deadlock by not blocking
+		//           while locked.
+		let mut panels = self.panels.lock_se().allow::<MightBlock>();
+
+		*panels = new_panels.into_iter().map(PanelState::new).collect();
 	}
 
 	/// Updates all panels

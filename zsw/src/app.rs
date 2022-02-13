@@ -12,7 +12,17 @@ mod settings_window;
 // Imports
 use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
-	crate::{util, util::FutureRunner, Args, Egui, ImageLoader, Panel, Panels, PanelsProfile, Playlist, Wgpu},
+	crate::{
+		util::{self, FutureRunner},
+		Args,
+		Egui,
+		ImageLoader,
+		Panel,
+		Panels,
+		Playlist,
+		Profiles,
+		Wgpu,
+	},
 	anyhow::Context,
 	std::{iter, num::NonZeroUsize, thread, time::Duration},
 	winit::{
@@ -54,17 +64,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Create egui
 	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
 
-	// Read all profiles
-	let _profiles: Vec<PanelsProfile> = match util::parse_json_from_file("zsw_profiles.json") {
-		Ok(profiles) => {
-			log::info!("Loaded profiles {profiles:#?}");
-			profiles
-		},
-		Err(err) => {
-			log::info!("Unable to load profiles: {err:?}");
-			vec![]
-		},
-	};
+	// Create the profiles
+	let profiles = Profiles::new().context("Unable to load profiles")?;
 
 	// Create the event handler
 	let mut event_handler = EventHandler::new();
@@ -99,7 +100,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Note: We don't care whether we got cancelled or returned successfully
 		thread_spawner.spawn("Playlist loader", || {
 			playlist_loader_runner
-				.run(playlist.add_dir(&args.images_dir))
+				.run(playlist.add_dir(args.images_dir.clone()))
 				.into_ok_or_err();
 		})?;
 
@@ -118,7 +119,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Spawn the settings window thread
 		thread_spawner.spawn("Settings window", || {
 			settings_window_runner
-				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist))
+				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles))
 				.into_err();
 		})?;
 

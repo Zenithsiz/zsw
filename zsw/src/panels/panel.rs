@@ -5,6 +5,7 @@ use crate::Rect;
 
 /// A panel
 #[derive(Clone, Copy, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Panel {
 	/// Geometry
 	pub geometry: Rect<u32>,

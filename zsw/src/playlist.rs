@@ -7,16 +7,16 @@ use {
 	crate::util,
 	async_lock::Mutex,
 	rand::prelude::SliceRandom,
-	std::{
-		collections::HashSet,
-		path::{Path, PathBuf},
-		sync::Arc,
-	},
+	std::{collections::HashSet, path::PathBuf, sync::Arc},
 };
 
 /// Inner
 #[derive(Clone, Debug)]
 struct Inner {
+	/// Root path
+	// TODO: Use this properly
+	root_path: Option<PathBuf>,
+
 	/// All images
 	images: HashSet<Arc<PlaylistImage>>,
 }
@@ -43,7 +43,10 @@ impl Playlist {
 		let (img_tx, img_rx) = async_channel::bounded(1);
 
 		// Create the empty inner data
-		let inner = Inner { images: HashSet::new() };
+		let inner = Inner {
+			root_path: None,
+			images:    HashSet::new(),
+		};
 
 		Self {
 			img_tx,
@@ -94,14 +97,21 @@ impl Playlist {
 	///
 	/// # Errors
 	/// Logs all errors via `log::warn`
-	pub async fn add_dir(&self, dir_path: &Path) {
+	pub async fn add_dir(&self, root_path: PathBuf) {
+		let mut inner = self.inner.lock().await;
+
 		// Add all paths
-		// Note: We lock on every path so that `run` can start running before
-		//       we fully read everything, in case of a really big directory
-		for path in util::dir_files_iter(dir_path.to_path_buf()) {
-			let mut inner = self.inner.lock().await;
+		for path in util::dir_files_iter(root_path.clone()) {
 			let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
 		}
+
+		// Save the root path
+		inner.root_path = Some(root_path);
+	}
+
+	/// Returns the root path
+	pub async fn root_path(&self) -> Option<PathBuf> {
+		self.inner.lock().await.root_path.clone()
 	}
 
 	/// Retrieves the next image

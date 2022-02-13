@@ -74,6 +74,7 @@ mod img;
 mod logger;
 mod panels;
 mod playlist;
+mod profile;
 mod rect;
 mod util;
 mod wgpu;
@@ -83,8 +84,9 @@ pub use self::{
 	args::Args,
 	egui::Egui,
 	img::ImageLoader,
-	panels::{Panel, PanelState, PanelStateImages, Panels, PanelsProfile, PanelsRenderer},
+	panels::{Panel, PanelState, PanelStateImages, Panels, PanelsRenderer},
 	playlist::{Playlist, PlaylistImage},
+	profile::{Profile, Profiles},
 	rect::Rect,
 	wgpu::Wgpu,
 };

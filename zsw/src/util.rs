@@ -61,6 +61,18 @@ pub fn parse_json_from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Pat
 	serde_json::from_reader(file).context("Unable to parse file")
 }
 
+/// Serializes json to a file
+pub fn serialize_json_to_file<T: serde::ser::Serialize>(
+	path: impl AsRef<Path>,
+	value: &T,
+) -> Result<(), anyhow::Error> {
+	// Open the file
+	let file = fs::File::create(path).context("Unable to create file")?;
+
+	// Then serialize it
+	serde_json::to_writer_pretty(file, value).context("Unable to serialize to file")
+}
+
 /// Hashes a value using `twox_hash`
 pub fn _hash_of<T: ?Sized + Hash>(value: &T) -> u64 {
 	let mut hasher = twox_hash::XxHash64::with_seed(0);
