@@ -108,7 +108,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
 	//       another thread, since we manually join all threads at the end.
-	crossbeam::thread::scope(|s| {
+	thread::scope(|s| {
 		// Create the thread spawner
 		let mut thread_spawner = util::ThreadSpawner::new(s);
 
@@ -161,14 +161,18 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		#[cfg(not(debug_assertions))]
 		std::process::exit(0);
 
-		// Join all threads
+		// Stop all runners at the end
+		// Note: Order doesn't matter, as they don't block
 		playlist_runner.stop();
 		image_loader_runners.iter().for_each(FutureRunner::stop);
 		settings_window_runner.stop();
 		renderer_runner.stop();
-		thread_spawner.join_all().context("Unable to join all threads")
+
+		// Then join all threads
+		thread_spawner.join_all().context("Unable to join all threads")?;
+
+		Ok(())
 	})
-	.map_err(|err| anyhow::anyhow!("Unable to start/join all threads: {err:?}"))?
 }
 
 /// Creates the window, as well as the associated event loop

@@ -15,7 +15,8 @@
 	async_closure,
 	result_into_ok_or_err,
 	generators,
-	generator_trait
+	generator_trait,
+	scoped_threads
 )]
 // Lints
 #![warn(
@@ -136,26 +137,28 @@ fn main() -> Result<(), anyhow::Error> {
 fn deadlock_init() {
 	// Create a background thread which checks for deadlocks every 10s
 	#[allow(clippy::let_underscore_drop)] // We want to detach the thread
-	let _ = std::thread::spawn(move || loop {
-		// Sleep so we aren't continuously checking
-		std::thread::sleep(std::time::Duration::from_secs(10));
+	let _ = std::thread::Builder::new()
+		.name("Deadlock detection".to_owned())
+		.spawn(move || loop {
+			// Sleep so we aren't continuously checking
+			std::thread::sleep(std::time::Duration::from_secs(10));
 
-		// Then check if we have any and continue if we don't
-		log::debug!("Checking for deadlocks");
-		let deadlocks = parking_lot::deadlock::check_deadlock();
-		if deadlocks.is_empty() {
-			log::debug!("Found no deadlocks");
-			continue;
-		}
-
-		// If we do, log them
-		log::warn!("Detected {} deadlocks", deadlocks.len());
-		for (idx, threads) in deadlocks.iter().enumerate() {
-			log::warn!("Deadlock #{idx}");
-			for thread in threads {
-				log::warn!("\tThread Id {:#?}", thread.thread_id());
-				log::warn!("\tBacktrace: {:#?}", thread.backtrace());
+			// Then check if we have any and continue if we don't
+			log::debug!("Checking for deadlocks");
+			let deadlocks = parking_lot::deadlock::check_deadlock();
+			if deadlocks.is_empty() {
+				log::debug!("Found no deadlocks");
+				continue;
 			}
-		}
-	});
+
+			// If we do, log them
+			log::warn!("Detected {} deadlocks", deadlocks.len());
+			for (idx, threads) in deadlocks.iter().enumerate() {
+				log::warn!("Deadlock #{idx}");
+				for thread in threads {
+					log::warn!("\tThread Id {:#?}", thread.thread_id());
+					log::warn!("\tBacktrace: {:#?}", thread.backtrace());
+				}
+			}
+		});
 }

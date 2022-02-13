@@ -1,12 +1,18 @@
 //! Threading utilities
 
+use std::thread;
+
 // Imports
 use {
 	super::{extse::ParkingLotMutexSe, MightBlock},
 	anyhow::Context,
-	crossbeam::thread::{Scope, ScopedJoinHandle},
 	parking_lot::{Condvar, Mutex},
-	std::{future::Future, sync::Arc, task},
+	std::{
+		future::Future,
+		sync::Arc,
+		task,
+		thread::{Scope, ScopedJoinHandle},
+	},
 };
 
 /// Thread spawned
@@ -34,12 +40,10 @@ impl<'scope, 'env, T> ThreadSpawner<'scope, 'env, T> {
 		T: Send + 'env,
 	{
 		let name = name.into();
-		let handle = self
-			.scope
-			.builder()
+		let handle = thread::Builder::new()
 			.name(name.clone())
-			.spawn(|_| f())
-			.with_context(|| format!("Unable to start thread {name:?}"))?;
+			.spawn_scoped(self.scope, |_| f())
+			.with_context(|| format!("Unable to spawn thread {name:?}"))?;
 		self.join_handles.push(handle);
 
 		Ok(())
