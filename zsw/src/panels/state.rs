@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::PanelImageId,
+	super::PanelImage,
 	crate::{ImageLoader, Panel, PanelsRenderer, Wgpu},
 	cgmath::{Matrix4, Vector3},
 	std::mem,
@@ -57,8 +57,8 @@ impl PanelState {
 				#[allow(clippy::cast_sign_loss)] // It's positive
 				Some(image) => (
 					PanelStateImages::PrimaryOnly {
-						front: PanelImageStateImage {
-							id:       renderer.create_image(wgpu, image),
+						front: PanelStateImage {
+							image:    PanelImage::new(renderer, wgpu, image),
 							swap_dir: rand::random(),
 						},
 					},
@@ -73,8 +73,8 @@ impl PanelState {
 				Some(image) => (
 					PanelStateImages::Both {
 						front,
-						back: PanelImageStateImage {
-							id:       renderer.create_image(wgpu, image),
+						back: PanelStateImage {
+							image:    PanelImage::new(renderer, wgpu, image),
 							swap_dir: rand::random(),
 						},
 					},
@@ -88,7 +88,7 @@ impl PanelState {
 				match image_loader.try_recv() {
 					// Note: We update the front and swap them
 					Some(image) => {
-						renderer.update_image(wgpu, front.id, image);
+						front.image.update(renderer, wgpu, image);
 						front.swap_dir = rand::random();
 						(
 							PanelStateImages::Both {
@@ -131,7 +131,7 @@ impl PanelState {
 
 	/// Returns all image descriptors to render
 	#[must_use]
-	pub fn image_descriptors(&self) -> impl IntoIterator<Item = PanelImageDescriptor> + '_ {
+	pub fn image_descriptors(&self) -> impl IntoIterator<Item = PanelStateImageDescriptor> + '_ {
 		// Calculate the alpha and progress for the back image
 		let (back_alpha, back_progress) = match self.cur_progress {
 			f if f >= self.panel.fade_point => (
@@ -149,8 +149,8 @@ impl PanelState {
 		let (front, back) = match &self.images {
 			PanelStateImages::Empty => (None, None),
 			PanelStateImages::PrimaryOnly { front, .. } => (
-				Some(PanelImageDescriptor {
-					image_id: front.id,
+				Some(PanelStateImageDescriptor {
+					image: &front.image,
 					alpha: 1.0,
 					progress,
 					swap_dir: front.swap_dir,
@@ -158,14 +158,14 @@ impl PanelState {
 				None,
 			),
 			PanelStateImages::Both { front, back } => (
-				Some(PanelImageDescriptor {
-					image_id: front.id,
+				Some(PanelStateImageDescriptor {
+					image: &front.image,
 					alpha: 1.0 - back_alpha,
 					progress,
 					swap_dir: front.swap_dir,
 				}),
-				Some(PanelImageDescriptor {
-					image_id: back.id,
+				Some(PanelStateImageDescriptor {
+					image:    &back.image,
 					alpha:    back_alpha,
 					progress: back_progress,
 					swap_dir: back.swap_dir,
@@ -178,7 +178,7 @@ impl PanelState {
 }
 
 /// Images for a panel state
-#[derive(Clone, Default, Debug)]
+#[derive(Default, Debug)]
 pub enum PanelStateImages {
 	/// Empty
 	///
@@ -191,7 +191,7 @@ pub enum PanelStateImages {
 	/// The primary image is loaded. The back image is still not available
 	PrimaryOnly {
 		/// Image
-		front: PanelImageStateImage,
+		front: PanelStateImage,
 	},
 
 	/// Both
@@ -199,29 +199,28 @@ pub enum PanelStateImages {
 	/// Both images are loaded to be faded in between
 	Both {
 		/// Front image
-		front: PanelImageStateImage,
+		front: PanelStateImage,
 
 		/// Back image
-		back: PanelImageStateImage,
+		back: PanelStateImage,
 	},
 }
 
-/// Panel image state image
-#[derive(Clone, Debug)]
-#[allow(missing_copy_implementations)] // We don't want it to be trivially copyable yet because it manages a resource
-pub struct PanelImageStateImage {
-	/// Image id
-	pub id: PanelImageId,
+/// Single image of a panel state
+#[derive(Debug)]
+pub struct PanelStateImage {
+	/// Image
+	pub image: PanelImage,
 
-	/// If swapping directions
+	/// If swapping directions for this image
 	pub swap_dir: bool,
 }
 
 /// Panel image descriptor
 #[derive(Clone, Copy, Debug)]
-pub struct PanelImageDescriptor {
+pub struct PanelStateImageDescriptor<'a> {
 	/// Image
-	pub image_id: PanelImageId,
+	pub image: &'a PanelImage,
 
 	/// Alpha
 	pub alpha: f32,

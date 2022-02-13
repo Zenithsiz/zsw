@@ -12,8 +12,8 @@ pub use self::{
 	image::PanelImage,
 	panel::Panel,
 	profile::PanelsProfile,
-	renderer::{PanelImageId, PanelUniforms, PanelVertex, PanelsRenderer},
-	state::{PanelImageStateImage, PanelState, PanelStateImages},
+	renderer::{PanelUniforms, PanelVertex, PanelsRenderer},
+	state::{PanelState, PanelStateImage, PanelStateImages},
 };
 
 // Imports

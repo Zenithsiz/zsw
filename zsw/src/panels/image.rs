@@ -6,6 +6,7 @@ use {
 	crate::{
 		img::{Image, ImageUvs},
 		util,
+		PanelsRenderer,
 		Wgpu,
 	},
 	cgmath::Vector2,
@@ -43,12 +44,7 @@ pub struct PanelImage {
 
 impl PanelImage {
 	/// Creates a new image
-	pub fn new(
-		wgpu: &Wgpu,
-		uniforms_bind_group_layout: &wgpu::BindGroupLayout,
-		image_bind_group_layout: &wgpu::BindGroupLayout,
-		image: Image,
-	) -> Self {
+	pub fn new(renderer: &PanelsRenderer, wgpu: &Wgpu, image: Image) -> Self {
 		// Create the texture and sampler
 		let image_size = image.size();
 		let (texture, texture_view) = self::create_image_texture(wgpu, &image.path, image.image);
@@ -66,7 +62,7 @@ impl PanelImage {
 
 		// Create the uniform bind group
 		let uniforms_bind_group_descriptor = wgpu::BindGroupDescriptor {
-			layout:  uniforms_bind_group_layout,
+			layout:  renderer.uniforms_bind_group_layout(),
 			entries: &[wgpu::BindGroupEntry {
 				binding:  0,
 				resource: uniforms.as_entire_binding(),
@@ -76,8 +72,12 @@ impl PanelImage {
 		let uniforms_bind_group = wgpu.device().create_bind_group(&uniforms_bind_group_descriptor);
 
 		// Create the texture bind group
-		let image_bind_group =
-			self::create_image_bind_group(wgpu, image_bind_group_layout, &texture_view, &texture_sampler);
+		let image_bind_group = self::create_image_bind_group(
+			wgpu,
+			renderer.image_bind_group_layout(),
+			&texture_view,
+			&texture_sampler,
+		);
 
 		Self {
 			texture,
@@ -91,14 +91,18 @@ impl PanelImage {
 	}
 
 	/// Updates this image
-	pub fn update(&mut self, wgpu: &Wgpu, image_bind_group_layout: &wgpu::BindGroupLayout, image: Image) {
+	pub fn update(&mut self, renderer: &PanelsRenderer, wgpu: &Wgpu, image: Image) {
 		// Update the image
 		self.image_size = image.size();
 
 		// Then update our texture
 		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.path, image.image);
-		self.image_bind_group =
-			self::create_image_bind_group(wgpu, image_bind_group_layout, &self.texture_view, &self.texture_sampler);
+		self.image_bind_group = self::create_image_bind_group(
+			wgpu,
+			renderer.image_bind_group_layout(),
+			&self.texture_view,
+			&self.texture_sampler,
+		);
 	}
 
 	/// Returns this image's uvs for a panel size
