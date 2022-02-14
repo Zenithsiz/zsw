@@ -1,7 +1,14 @@
 //! Utility
 
 // Features
-#![feature(decl_macro, generator_trait, generators, scoped_threads, mixed_integer_ops)]
+#![feature(
+	decl_macro,
+	generator_trait,
+	generators,
+	scoped_threads,
+	mixed_integer_ops,
+	never_type
+)]
 // Lints
 #![warn(
 	clippy::pedantic,
@@ -61,7 +68,7 @@ pub use {
 	display_wrapper::DisplayWrapper,
 	rect::Rect,
 	scan_dir::dir_files_iter,
-	side_effect::{extse, MightBlock, SideEffect, WithSideEffect},
+	side_effect::{extse, MightBlock, MightLock, SideEffect, WithSideEffect},
 	thread::{FutureRunner, ThreadSpawner},
 };
 

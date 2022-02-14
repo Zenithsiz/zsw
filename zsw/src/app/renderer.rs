@@ -12,7 +12,8 @@ use {
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
 	zsw_panels::Panels,
-	zsw_util::MightBlock,
+	zsw_side_effect_macros::side_effect,
+	zsw_util::{MightBlock, MightLock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -26,10 +27,14 @@ impl Renderer {
 	}
 
 	/// Runs the renderer
-	pub async fn run(
+	///
+	/// # Locking
+	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
+	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'window, 'wgpu>>)]
+	pub async fn run<'window, 'wgpu>(
 		&self,
 		window: &Window,
-		wgpu: &Wgpu<'_>,
+		wgpu: &'wgpu Wgpu<'window>,
 		panels: &Panels,
 		egui: &Egui,
 		image_loader: &ImageLoader,
@@ -48,7 +53,11 @@ impl Renderer {
 			};
 
 			// Render
-			match Self::render(window, wgpu, panels, egui, settings_window).await {
+			// DEADLOCK: Caller ensures we can lock it
+			match Self::render(window, wgpu, panels, egui, settings_window)
+				.await
+				.allow::<MightLock<zsw_wgpu::SurfaceLock>>()
+			{
 				Ok(()) => (),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
 			};
@@ -69,20 +78,31 @@ impl Renderer {
 	}
 
 	/// Renders
-	async fn render(
+	///
+	/// # Locking
+	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
+	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'window, 'wgpu>>)]
+	async fn render<'window, 'wgpu>(
 		window: &Window,
-		wgpu: &Wgpu<'_>,
+		wgpu: &'wgpu Wgpu<'window>,
 		panels: &Panels,
 		egui: &Egui,
 		settings_window: &SettingsWindow,
 	) -> Result<(), anyhow::Error> {
 		// Get the egui render results
-		let paint_jobs = settings_window.paint_jobs().await;
+		// DEADLOCK: We don't hold the `wgpu::SurfaceLock` lock from `wgpu`.
+		//           Caller ensures we can lock it.
+		let paint_jobs = settings_window
+			.paint_jobs()
+			.await
+			.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+
+		// Lock the wgpu surface
+		// DEADLOCK: Caller ensures we can lock it
+		let mut surface_lock = wgpu.lock_surface().allow::<MightLock<zsw_wgpu::SurfaceLock>>();
 
 		// Then render
-		// DEADLOCK: We ensure we don't block within [`Wgpu::render`].
-		//           We also ensure we don't call it recursively.
-		wgpu.render(|encoder, surface_view, surface_size| {
+		wgpu.render(&mut surface_lock, |encoder, surface_view, surface_size| {
 			// Render the panels
 			panels
 				.render(wgpu.queue(), encoder, surface_view, surface_size)
@@ -114,8 +134,5 @@ impl Renderer {
 
 			Ok(())
 		})
-		.allow::<MightBlock>()?;
-
-		Ok(())
 	}
 }

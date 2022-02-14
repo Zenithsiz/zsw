@@ -18,7 +18,8 @@ use {
 	zsw_panels::{Panel, PanelState, Panels},
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_profiles::{Profile, Profiles},
-	zsw_util::{MightBlock, Rect},
+	zsw_side_effect_macros::side_effect,
+	zsw_util::{MightBlock, MightLock, Rect},
 	zsw_wgpu::Wgpu,
 };
 
@@ -68,6 +69,10 @@ impl SettingsWindow {
 	}
 
 	/// Runs the setting window
+	///
+	/// # Locking
+	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
+	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'_, '_>>)]
 	pub async fn run(
 		&self,
 		wgpu: &Wgpu<'_>,
@@ -78,12 +83,20 @@ impl SettingsWindow {
 		profiles: &Profiles,
 	) -> ! {
 		// Create the inner data
+		// DEADLOCK: Caller ensures we can lock it
 		// TODO: Check if it's fine to call `wgpu.surface_size`
-		let mut inner = Inner::new(wgpu.surface_size());
+		let mut inner = {
+			let surface_lock = wgpu.lock_surface().allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+			Inner::new(wgpu.surface_size(&surface_lock))
+		};
 
 		loop {
 			// Get the surface size
-			let surface_size = wgpu.surface_size();
+			// DEADLOCK: Caller ensures we can lock it
+			let surface_size = {
+				let surface_lock = wgpu.lock_surface().allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+				wgpu.surface_size(&surface_lock)
+			};
 
 			// Draw egui
 			let res = egui.draw(window, |ctx, frame| {
@@ -108,6 +121,12 @@ impl SettingsWindow {
 	}
 
 	/// Retrieves the paint jobs for the next frame
+	///
+	/// # Locking
+	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
+	// Note: Doesn't literally lock it, but the other side of the channel
+	//       needs to lock it in order to progress, so it's equivalent
+	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'_, '_>>)]
 	pub async fn paint_jobs(&self) -> Vec<egui::epaint::ClippedMesh> {
 		// Note: This can't return an `Err` because `self` owns a sender
 		self.paint_jobs_rx.recv().await.expect("Paint jobs sender was closed")

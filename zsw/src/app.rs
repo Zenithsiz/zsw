@@ -31,7 +31,7 @@ use {
 	zsw_panels::Panels,
 	zsw_playlist::Playlist,
 	zsw_profiles::Profiles,
-	zsw_util::{FutureRunner, Rect},
+	zsw_util::{FutureRunner, MightLock, Rect, WithSideEffect},
 	zsw_wgpu::Wgpu,
 };
 
@@ -83,6 +83,10 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Start all threads and then wait in the main thread for events
 	// Note: The outer result of `scope` can't be `Err` due to a panic in
 	//       another thread, since we manually join all threads at the end.
+	// DEADLOCK: We ensure all threads lock each lock in the same order,
+	//           and that we don't lock them.
+	//           All threads ensure they will eventually release any lock
+	//           they obtain.
 	thread::scope(|s| {
 		// Create the thread spawner
 		let mut thread_spawner = zsw_util::ThreadSpawner::new(s);
@@ -118,18 +122,20 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		}
 
 		// Spawn the settings window thread
+		// DEADLOCK: See above
 		thread_spawner.spawn("Settings window", || {
 			settings_window_runner
 				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles))
+				.map::<!, _>(WithSideEffect::allow::<MightLock<zsw_wgpu::SurfaceLock>>)
 				.into_err();
 		})?;
 
 		// Spawn the renderer thread
-		// DEADLOCK: We call `Renderer::stop` at the end
-		//           We make sure `SettingsWindow::run` runs eventually
+		// DEADLOCK: See above
 		thread_spawner.spawn("Renderer", || {
 			renderer_runner
 				.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window))
+				.map::<!, _>(WithSideEffect::allow::<MightLock<zsw_wgpu::SurfaceLock>>)
 				.into_err();
 		})?;
 
