@@ -38,7 +38,7 @@ impl ImageLoader {
 	/// Multiple image loaders may run at the same time
 	///
 	/// # Locking
-	/// Locks the `zsw_playlist::PlaylistLock` lock on `playlist`
+	/// [`zsw_playlist::PlaylistLock`]
 	#[side_effect(MightLock<zsw_playlist::PlaylistLock<'_>>)]
 	pub async fn run(&self, playlist: &Playlist) -> ! {
 		loop {
@@ -65,7 +65,7 @@ impl ImageLoader {
 
 						// DEADLOCK: Caller ensures we can lock it
 						let mut playlist_lock = playlist
-							.lock_inner()
+							.lock_playlist()
 							.await
 							.allow::<MightLock<zsw_playlist::PlaylistLock>>();
 						playlist.remove_image(&mut playlist_lock, &image).await;

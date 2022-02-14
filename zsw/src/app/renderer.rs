@@ -30,11 +30,13 @@ impl Renderer {
 	/// Runs the renderer
 	///
 	/// # Locking
-	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`,
-	/// followed by the `zsw_egui::RenderPassLock` on `egui`,
-	/// followed by the `zsw_egui::PlatformLock` on `egui`,
-	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::RenderPassLock<'egui>, zsw_egui::PlatformLock<'egui>)>)]
-	pub async fn run<'window, 'wgpu, 'egui>(
+	/// [`zsw_panels::PanelsLock`]
+	/// [`zsw_wgpu::SurfaceLock`]
+	/// - [`zsw_panels::PanelsLock`]
+	/// - [`zsw_egui::RenderPassLock`]
+	///   - [`zsw_egui::PlatformLock`]
+	#[side_effect(MightLock<(zsw_panels::PanelsLock<'panels>, zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::RenderPassLock<'egui>, zsw_egui::PlatformLock<'egui>)>)]
+	pub async fn run<'window, 'wgpu, 'egui, 'panels>(
 		&self,
 		window: &Window,
 		wgpu: &'wgpu Wgpu<'window>,
@@ -50,7 +52,7 @@ impl Renderer {
 			let start_instant = Instant::now();
 
 			// Update
-			match Self::update(wgpu, panels, image_loader) {
+			match Self::update(wgpu, panels, image_loader).allow::<MightLock<zsw_panels::PanelsLock>>() {
 				Ok(()) => (),
 				Err(err) => log::warn!("Unable to update: {err:?}"),
 			};
@@ -59,8 +61,12 @@ impl Renderer {
 			// DEADLOCK: Caller ensures we can lock it
 			match Self::render(window, wgpu, panels, egui, settings_window)
 				.await
-				.allow::<MightLock<(zsw_wgpu::SurfaceLock, zsw_egui::RenderPassLock, zsw_egui::PlatformLock)>>()
-			{
+				.allow::<MightLock<(
+					zsw_wgpu::SurfaceLock,
+					zsw_panels::PanelsLock,
+					zsw_egui::RenderPassLock,
+					zsw_egui::PlatformLock,
+				)>>() {
 				Ok(()) => (),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
 			};
@@ -75,22 +81,30 @@ impl Renderer {
 	}
 
 	/// Updates all panels
-	fn update(wgpu: &Wgpu, panels: &Panels, image_loader: &ImageLoader) -> Result<(), anyhow::Error> {
+	///
+	/// # Locking
+	/// [`zsw_panels::PanelsLock`]
+	#[side_effect(MightLock<zsw_panels::PanelsLock<'panels>>)]
+	fn update<'panels>(wgpu: &Wgpu, panels: &'panels Panels, image_loader: &ImageLoader) -> Result<(), anyhow::Error> {
+		// DEADLOCK: Caller ensures we can lock it
+		let mut panels_lock = panels.lock_panels().allow::<MightLock<zsw_panels::PanelsLock>>();
+
 		// Updates all panels
-		panels.update_all(wgpu, image_loader)
+		panels.update_all(&mut panels_lock, wgpu, image_loader)
 	}
 
 	/// Renders
 	///
 	/// # Locking
-	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`,
-	/// followed by the `zsw_egui::RenderPassLock` on `egui`,
-	/// followed by the `zsw_egui::PlatformLock` on `egui`,
-	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::RenderPassLock<'egui>, zsw_egui::PlatformLock<'egui>)>)]
-	async fn render<'window, 'wgpu, 'egui>(
+	/// [`zsw_wgpu::SurfaceLock`]
+	/// - [`zsw_panels::PanelsLock`]
+	/// - [`zsw_egui::RenderPassLock`]
+	///   - [`zsw_egui::PlatformLock`]
+	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_panels::PanelsLock<'panels>, zsw_egui::RenderPassLock<'egui>, zsw_egui::PlatformLock<'egui>)>)]
+	async fn render<'window, 'wgpu, 'egui, 'panels>(
 		window: &Window,
 		wgpu: &'wgpu Wgpu<'window>,
-		panels: &Panels,
+		panels: &'panels Panels,
 		egui: &'egui Egui,
 		settings_window: &SettingsWindow,
 	) -> Result<(), anyhow::Error> {
@@ -109,9 +123,15 @@ impl Renderer {
 		// Then render
 		wgpu.render(&mut surface_lock, |encoder, surface_view, surface_size| {
 			// Render the panels
-			panels
-				.render(wgpu.queue(), encoder, surface_view, surface_size)
-				.context("Unable to render panels")?;
+			{
+				// Lock the wgpu surface
+				// DEADLOCK: Caller ensures we can lock it after the surface
+				let panels_lock = panels.lock_panels().allow::<MightLock<zsw_panels::PanelsLock>>();
+
+				panels
+					.render(&panels_lock, wgpu.queue(), encoder, surface_view, surface_size)
+					.context("Unable to render panels")?;
+			}
 
 			#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 			let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {

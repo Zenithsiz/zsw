@@ -62,15 +62,14 @@ pub use self::{
 	renderer::{PanelUniforms, PanelVertex, PanelsRenderer},
 	state::{PanelState, PanelStateImage, PanelStateImages},
 };
-
 // Imports
 use {
 	anyhow::Context,
-	parking_lot::Mutex,
+	parking_lot::{Mutex, MutexGuard},
 	winit::dpi::PhysicalSize,
 	zsw_img::ImageLoader,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::ParkingLotMutexSe, MightBlock},
+	zsw_util::{extse::ParkingLotMutexSe, MightBlock, MightLock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -84,6 +83,9 @@ pub struct Panels {
 	/// All panels with their state
 	// TODO: Make `async`
 	panels: Mutex<Vec<PanelState>>,
+
+	/// Lock source
+	lock_source: LockSource,
 }
 
 impl Panels {
@@ -95,42 +97,49 @@ impl Panels {
 		Ok(Self {
 			renderer,
 			panels: Mutex::new(vec![]),
+			lock_source: LockSource,
 		})
 	}
 
+	/// Creates a panels lock
+	///
+	/// # Blocking
+	/// Will block until any existing panels locks are dropped
+	#[side_effect(MightLock<PanelsLock<'a>>)]
+	pub fn lock_panels<'a>(&'a self) -> PanelsLock<'a> {
+		// DEADLOCK: Caller is responsible to ensure we don't deadlock
+		//           We don't lock it outside of this method
+		let guard = self.panels.lock_se().allow::<MightBlock>();
+		PanelsLock::new(guard, &self.lock_source)
+	}
+
 	/// Adds a new panel
-	pub fn add_panel(&self, panel: Panel) {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		self.panels.lock_se().allow::<MightBlock>().push(PanelState::new(panel));
+	pub fn add_panel(&self, panels_lock: &mut PanelsLock, panel: Panel) {
+		panels_lock.get_mut(&self.lock_source).push(PanelState::new(panel));
 	}
 
 	/// Returns all panels
-	pub fn panels(&self) -> Vec<Panel> {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		self.panels
-			.lock_se()
-			.allow::<MightBlock>()
+	pub fn panels(&self, panels_lock: &PanelsLock) -> Vec<Panel> {
+		panels_lock
+			.get(&self.lock_source)
 			.iter()
 			.map(|panel| panel.panel)
 			.collect()
 	}
 
 	/// Replaces all panels
-	pub fn replace_panels(&self, new_panels: impl IntoIterator<Item = Panel>) {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		let mut panels = self.panels.lock_se().allow::<MightBlock>();
-
-		*panels = new_panels.into_iter().map(PanelState::new).collect();
+	pub fn replace_panels(&self, panels_lock: &mut PanelsLock, panels: impl IntoIterator<Item = Panel>) {
+		*panels_lock.get_mut(&self.lock_source) = panels.into_iter().map(PanelState::new).collect();
 	}
 
 	/// Updates all panels
-	pub fn update_all(&self, wgpu: &Wgpu, image_loader: &ImageLoader) -> Result<(), anyhow::Error> {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		let mut panels = self.panels.lock_se().allow::<MightBlock>();
+	pub fn update_all(
+		&self,
+		panels_lock: &mut PanelsLock,
+		wgpu: &Wgpu,
+		image_loader: &ImageLoader,
+	) -> Result<(), anyhow::Error> {
+		let panels = panels_lock.get_mut(&self.lock_source);
 
 		for panel in &mut *panels {
 			panel
@@ -145,29 +154,38 @@ impl Panels {
 	///
 	/// # Blocking
 	/// Will deadlock if `f` blocks.
+	// TODO: Maybe just return a `&mut Vec<_>`
 	#[side_effect(MightBlock)]
-	pub fn for_each_mut<T, C: FromIterator<T>>(&self, f: impl FnMut(&mut PanelState) -> T) -> C {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		//           Caller ensures `f` won't block
-		let mut panels = self.panels.lock_se().allow::<MightBlock>();
+	pub fn for_each_mut<T, C: FromIterator<T>>(
+		&self,
+		panels_lock: &mut PanelsLock,
+		f: impl FnMut(&mut PanelState) -> T,
+	) -> C {
+		let panels = panels_lock.get_mut(&self.lock_source);
 		panels.iter_mut().map(f).collect()
 	}
 
 	/// Renders all panels
 	pub fn render(
 		&self,
+		panels_lock: &PanelsLock,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
 		surface_view: &wgpu::TextureView,
 		surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked. `PanelRenderer::render` doesn't block.
-		let panels = self.panels.lock_se().allow::<MightBlock>();
+		let panels = panels_lock.get(&self.lock_source);
 
 		// Then render
-		self.renderer
-			.render(panels.iter(), queue, encoder, surface_view, surface_size)
+		self.renderer.render(panels, queue, encoder, surface_view, surface_size)
 	}
 }
+
+/// Source for all locks
+// Note: This is to ensure user can't create the locks themselves
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct LockSource;
+
+/// Panels lock
+pub type PanelsLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, Vec<PanelState>>, LockSource>;

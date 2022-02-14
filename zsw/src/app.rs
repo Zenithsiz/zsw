@@ -37,6 +37,7 @@ use {
 };
 
 /// Runs the application
+#[allow(clippy::too_many_lines)] // TODO: Refactor
 pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Build the window
 	let (mut event_loop, window) = self::create_window()?;
@@ -105,10 +106,13 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 								// DEADLOCK: See above
 								let mut playlist_lock = playlist
-									.lock_inner()
+									.lock_playlist()
 									.await
 									.allow::<MightLock<zsw_playlist::PlaylistLock>>();
-								profile.apply(&playlist, &panels, &mut playlist_lock).await;
+								let mut panels_lock = panels.lock_panels().allow::<MightLock<zsw_panels::PanelsLock>>();
+								profile
+									.apply(&playlist, &panels, &mut playlist_lock, &mut panels_lock)
+									.await;
 							},
 							Err(err) => log::warn!("Unable to load profile: {err:?}"),
 						}
@@ -148,6 +152,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 							zsw_wgpu::SurfaceLock,
 							zsw_egui::PlatformLock,
 							zsw_playlist::PlaylistLock,
+							zsw_panels::PanelsLock,
 						)>,
 					>,
 				)
@@ -161,7 +166,12 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 				.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window))
 				.map::<!, _>(
 					WithSideEffect::allow::<
-						MightLock<(zsw_wgpu::SurfaceLock, zsw_egui::RenderPassLock, zsw_egui::PlatformLock)>,
+						MightLock<(
+							zsw_panels::PanelsLock,
+							zsw_wgpu::SurfaceLock,
+							zsw_egui::RenderPassLock,
+							zsw_egui::PlatformLock,
+						)>,
 					>,
 				)
 				.into_err();

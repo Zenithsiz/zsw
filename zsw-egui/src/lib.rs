@@ -137,7 +137,7 @@ impl Egui {
 		PlatformLock::new(guard, &self.lock_source)
 	}
 
-	/// Creates a render pas lock
+	/// Creates a render pass lock
 	///
 	/// # Blocking
 	/// Will block until any existing render pass locks are dropped

@@ -29,7 +29,7 @@ impl EventHandler {
 	/// Handles an event
 	///
 	/// # Locking
-	/// Locks the `zsw_egui::PlatformLock` on `egui`,
+	/// [`zsw_egui::PlatformLock`]
 	#[side_effect(MightLock<zsw_egui::PlatformLock<'egui>>)]
 	pub async fn handle_event<'window, 'egui>(
 		&mut self,

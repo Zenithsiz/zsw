@@ -71,16 +71,15 @@ impl SettingsWindow {
 	/// Runs the setting window
 	///
 	/// # Locking
-	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`,
-	/// followed by the `zsw_egui::PlatformLock` lock on `egui`
-	#[allow(clippy::future_not_send)] // This future will be run on it's own thread
-	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::PlatformLock<'egui>, zsw_playlist::PlaylistLock<'playlist>)>)]
-	pub async fn run<'wgpu, 'egui, 'playlist>(
+	/// [`zsw_wgpu::SurfaceLock`]
+	/// - [`zsw_egui::PlatformLock`]
+	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::PlatformLock<'egui>, zsw_playlist::PlaylistLock<'playlist>, zsw_panels::PanelsLock<'panels>)>)]
+	pub async fn run<'wgpu, 'egui, 'playlist, 'panels>(
 		&self,
 		wgpu: &'wgpu Wgpu<'_>,
 		egui: &'egui Egui,
 		window: &Window,
-		panels: &Panels,
+		panels: &'panels Panels,
 		playlist: &'playlist Playlist,
 		profiles: &Profiles,
 	) -> ! {
@@ -107,9 +106,12 @@ impl SettingsWindow {
 
 				// DEADLOCK: Caller ensures we can lock it after the platform lock
 				let mut playlist_lock = playlist
-					.lock_inner()
+					.lock_playlist()
 					.await
 					.allow::<MightLock<zsw_playlist::PlaylistLock>>();
+
+				// DEADLOCK: Caller ensures we can lock it after the playlist lock
+				let mut panels_lock = panels.lock_panels().allow::<MightLock<zsw_panels::PanelsLock>>();
 
 				egui.draw(window, &mut platform_lock, |ctx, frame| {
 					self.draw(
@@ -122,6 +124,7 @@ impl SettingsWindow {
 						playlist,
 						profiles,
 						&mut playlist_lock,
+						&mut panels_lock,
 					)
 				})
 			};
@@ -147,7 +150,7 @@ impl SettingsWindow {
 	/// Retrieves the paint jobs for the next frame
 	///
 	/// # Locking
-	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
+	/// [`zsw_wgpu::SurfaceLock`]
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
 	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
@@ -160,17 +163,18 @@ impl SettingsWindow {
 	}
 
 	/// Draws the settings window
-	fn draw<'playlist>(
+	fn draw<'playlist, 'panels>(
 		&self,
 		inner: &mut Inner,
 		ctx: &egui::CtxRef,
 		_frame: &epi::Frame,
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
-		panels: &Panels,
+		panels: &'panels Panels,
 		playlist: &'playlist Playlist,
 		profiles: &Profiles,
 		playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
+		panels_lock: &mut zsw_panels::PanelsLock<'panels>,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
@@ -196,6 +200,7 @@ impl SettingsWindow {
 				playlist,
 				profiles,
 				playlist_lock,
+				panels_lock,
 			);
 		});
 
@@ -209,34 +214,36 @@ impl SettingsWindow {
 }
 
 /// Draws the settings window
-fn draw_settings_window<'playlist>(
+fn draw_settings_window<'playlist, 'panels>(
 	ui: &mut egui::Ui,
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
-	panels: &Panels,
+	panels: &'panels Panels,
 	playlist: &'playlist Playlist,
 	profiles: &Profiles,
 	playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
+	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
 ) {
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
-		self::draw_panels(ui, new_panel_state, surface_size, panels);
+		self::draw_panels(ui, new_panel_state, surface_size, panels, panels_lock);
 	});
 	ui.collapsing("Playlist", |ui| {
 		self::draw_playlist(ui, playlist, playlist_lock);
 	});
 	ui.collapsing("Profile", |ui| {
-		self::draw_profile(ui, panels, playlist, profiles, playlist_lock);
+		self::draw_profile(ui, panels, playlist, profiles, playlist_lock, panels_lock);
 	});
 }
 
 /// Draws the profile settings
-fn draw_profile<'playlist>(
+fn draw_profile<'playlist, 'panels>(
 	ui: &mut egui::Ui,
-	panels: &Panels,
+	panels: &'panels Panels,
 	playlist: &'playlist Playlist,
 	profiles: &Profiles,
 	playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
+	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
 ) {
 	// Get the profile to apply, if any
 	// DEADLOCK: We don't block within it.
@@ -254,7 +261,7 @@ fn draw_profile<'playlist>(
 
 	// If we had any, apply it
 	if let Some(profile) = profile_to_apply {
-		profile.apply(playlist, panels, playlist_lock).block_on();
+		profile.apply(playlist, panels, playlist_lock, panels_lock).block_on();
 	}
 
 	// Draw the load button
@@ -292,7 +299,7 @@ fn draw_profile<'playlist>(
 										return;
 									},
 								},
-								panels:    panels.panels(),
+								panels:    panels.panels(panels_lock),
 							}
 						};
 
@@ -357,17 +364,18 @@ fn draw_playlist<'playlist>(
 }
 
 /// Draws the panels settings
-fn draw_panels(
+fn draw_panels<'panels>(
 	ui: &mut egui::Ui,
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
-	panels: &Panels,
+	panels: &'panels Panels,
+	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
 ) {
 	// Draw all panels in their own header
 	// BLOCKING: TODO
 	let mut panel_idx = 0;
 	panels
-		.for_each_mut::<_, ()>(|panel| {
+		.for_each_mut::<_, ()>(panels_lock, |panel| {
 			ui.collapsing(format!("Panel {panel_idx}"), |ui| {
 				ui.add(PanelWidget::new(panel, surface_size));
 			});
@@ -396,11 +404,14 @@ fn draw_panels(
 		});
 
 		if ui.button("Add").clicked() {
-			panels.add_panel(Panel::new(
-				new_panel_state.geometry,
-				new_panel_state.duration,
-				new_panel_state.fade_point,
-			));
+			panels.add_panel(
+				panels_lock,
+				Panel::new(
+					new_panel_state.geometry,
+					new_panel_state.duration,
+					new_panel_state.fade_point,
+				),
+			);
 		}
 	});
 }

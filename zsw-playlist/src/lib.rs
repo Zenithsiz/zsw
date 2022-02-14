@@ -119,7 +119,7 @@ impl Playlist {
 	/// # Blocking
 	/// Will block until any existing inner locks are dropped
 	#[side_effect(MightLock<PlaylistLock<'_>>)]
-	pub async fn lock_inner(&self) -> PlaylistLock<'_> {
+	pub async fn lock_playlist(&self) -> PlaylistLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
 		let guard = self.inner.lock_se().await.allow::<MightBlock>();
@@ -129,7 +129,7 @@ impl Playlist {
 	/// Runs the playlist
 	///
 	/// # Locking
-	/// Locks the `PlaylistLock` lock on `self`
+	/// [`PlaylistLock`]
 	#[side_effect(MightLock<PlaylistLock<'_>>)]
 	pub async fn run(&self) -> ! {
 		loop {
@@ -138,7 +138,7 @@ impl Playlist {
 			// Note: It's important to not have this in the match expression, as it would
 			//       keep the lock through the whole match.
 			let next = self
-				.lock_inner()
+				.lock_playlist()
 				.await
 				.allow::<MightLock<PlaylistLock>>()
 				.get_mut(&self.lock_source)
@@ -156,7 +156,7 @@ impl Playlist {
 				// Else get the next batch and shuffle them
 				// DEADLOCK: Caller ensures we can lock it.
 				None => {
-					let mut inner = self.lock_inner().await.allow::<MightLock<PlaylistLock>>();
+					let mut inner = self.lock_playlist().await.allow::<MightLock<PlaylistLock>>();
 					let inner = inner.get_mut(&self.lock_source);
 					inner.cur_images.extend(inner.images.iter().cloned());
 					inner.cur_images.shuffle(&mut rand::thread_rng());
@@ -196,7 +196,7 @@ impl Playlist {
 	/// Retrieves the next image
 	///
 	/// # Locking
-	/// Locks the `PlaylistLock` lock on `self`
+	/// [`PlaylistLock`]
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
 	#[side_effect(MightLock<PlaylistLock<'_>>)]
