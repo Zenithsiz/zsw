@@ -60,7 +60,7 @@ use {
 	},
 	winit::window::Window,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::MightLock,
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -133,7 +133,7 @@ impl Egui {
 	pub async fn lock_platform<'a>(&'a self) -> PlatformLock<'a> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.platform.lock().await;
+		let guard = self.platform.lock_se().await.allow::<MightBlock>();
 		PlatformLock::new(guard, &self.lock_source)
 	}
 
@@ -145,7 +145,7 @@ impl Egui {
 	pub async fn lock_render_pass<'a>(&'a self) -> RenderPassLock<'a> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.render_pass.lock().await;
+		let guard = self.render_pass.lock_se().await.allow::<MightBlock>();
 		RenderPassLock::new(guard, &self.lock_source)
 	}
 

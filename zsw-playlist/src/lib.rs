@@ -2,6 +2,8 @@
 //!
 //! Manages the paths/urls of all images to display.
 
+use zsw_util::{extse::AsyncLockMutexSe, MightBlock};
+
 // Imports
 use {
 	async_lock::Mutex,
@@ -62,10 +64,10 @@ impl Playlist {
 	pub async fn run(&self) -> ! {
 		loop {
 			// Get the next image to send
-			// DEADLOCK: We ensure we don't block while `inner` is locked
+			// DEADLOCK: TODO
 			// Note: It's important to not have this in the match expression, as it would
 			//       keep the lock through the whole match.
-			let next = self.inner.lock().await.cur_images.pop();
+			let next = self.inner.lock_se().await.allow::<MightBlock>().cur_images.pop();
 
 			// Then check if we got it
 			match next {
@@ -74,9 +76,9 @@ impl Playlist {
 				Some(image) => self.img_tx.send(image).await.expect("Image receiver was closed"),
 
 				// Else get the next batch and shuffle them
-				// DEADLOCK: We ensure we don't block while `inner` is locked
+				// DEADLOCK: TODO
 				None => {
-					let mut inner = self.inner.lock().await;
+					let mut inner = self.inner.lock_se().await.allow::<MightBlock>();
 					let inner = &mut *inner;
 					inner.cur_images.extend(inner.images.iter().cloned());
 					inner.cur_images.shuffle(&mut rand::thread_rng());
@@ -87,8 +89,8 @@ impl Playlist {
 
 	/// Removes an image
 	pub async fn remove_image(&self, image: &PlaylistImage) {
-		// DEADLOCK: We ensure we don't block while `inner` is locked
-		let mut inner = self.inner.lock().await;
+		// DEADLOCK: TODO
+		let mut inner = self.inner.lock_se().await.allow::<MightBlock>();
 
 		// Note: We don't care if the image actually existed or not
 		let _ = inner.images.remove(image);
@@ -96,8 +98,8 @@ impl Playlist {
 
 	/// Sets the root path
 	pub async fn set_root_path(&self, root_path: PathBuf) {
-		// DEADLOCK: We ensure we don't block while `inner` is locked
-		let mut inner = self.inner.lock().await;
+		// DEADLOCK: TODO
+		let mut inner = self.inner.lock_se().await.allow::<MightBlock>();
 
 		// Remove all existing paths and add new ones
 		inner.images.clear();
@@ -114,7 +116,8 @@ impl Playlist {
 
 	/// Returns the root path
 	pub async fn root_path(&self) -> Option<PathBuf> {
-		self.inner.lock().await.root_path.clone()
+		// DEADLOCK: TODO
+		self.inner.lock_se().await.allow::<MightBlock>().root_path.clone()
 	}
 
 	/// Retrieves the next image
@@ -128,9 +131,8 @@ impl Playlist {
 	/// # Blocking
 	/// Deadlocks if `f` blocks.
 	pub async fn peek_next(&self, mut f: impl FnMut(&PlaylistImage) + Send) {
-		// DEADLOCK: We ensure we don't block while `inner` is locked.
-		//           Caller ensures `f` doesn't block
-		let inner = self.inner.lock().await;
+		// DEADLOCK: TODO
+		let inner = self.inner.lock_se().await.allow::<MightBlock>();
 
 		for image in inner.cur_images.iter().rev() {
 			f(image);

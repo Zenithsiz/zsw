@@ -10,6 +10,9 @@ version = "0.1.0"
 # Image
 image = "0.23.14"
 
+# Async
+async-lock = "2.4.0"
+
 # Math
 cgmath = {version = "0.18.0", features = ["serde"]}
 

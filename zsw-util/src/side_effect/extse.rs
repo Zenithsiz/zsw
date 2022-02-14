@@ -3,7 +3,10 @@
 //! `EXTern Side Effect`
 
 // Imports
-use super::{MightBlock, WithSideEffect};
+use {
+	super::{MightBlock, WithSideEffect},
+	std::future::Future,
+};
 
 /// Side effect wrapper for [`crossbeam::channel::Receiver`]
 pub trait CrossBeamChannelReceiverSE<T> {
@@ -50,5 +53,29 @@ impl<T> ParkingLotMutexSe<T> for parking_lot::Mutex<T> {
 	fn lock_se(&self) -> WithSideEffect<parking_lot::MutexGuard<'_, T>, MightBlock> {
 		#[allow(clippy::disallowed_methods)] // We're wrapping it
 		WithSideEffect::new(self.lock())
+	}
+}
+
+/// Side effect wrapper for [`async_lock::Mutex`]
+pub trait AsyncLockMutexSe<T> {
+	type LockSeFuture<'a>: Future<Output = WithSideEffect<async_lock::MutexGuard<'a, T>, MightBlock>>
+	where
+		Self: 'a,
+		T: 'a;
+
+	fn lock_se(&self) -> Self::LockSeFuture<'_>;
+}
+
+impl<T> AsyncLockMutexSe<T> for async_lock::Mutex<T> {
+	type LockSeFuture<'a>
+	where
+		T: 'a,
+	= impl Future<Output = WithSideEffect<async_lock::MutexGuard<'a, T>, MightBlock>> + 'a;
+
+	fn lock_se(&self) -> Self::LockSeFuture<'_> {
+		async {
+			#[allow(clippy::disallowed_methods)] // We're wrapping it
+			WithSideEffect::new(self.lock().await)
+		}
 	}
 }

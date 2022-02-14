@@ -7,7 +7,9 @@
 	generators,
 	scoped_threads,
 	mixed_integer_ops,
-	never_type
+	never_type,
+	generic_associated_types,
+	type_alias_impl_trait
 )]
 // Lints
 #![warn(
