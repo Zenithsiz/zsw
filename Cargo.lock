@@ -2320,6 +2320,7 @@ name = "zsw-profiles"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-lock",
  "parking_lot",
  "serde",
  "zsw-panels",

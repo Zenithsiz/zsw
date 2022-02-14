@@ -50,7 +50,7 @@
 // Imports
 use {
 	anyhow::Context,
-	parking_lot::{Mutex, MutexGuard},
+	async_lock::{Mutex, MutexGuard},
 	std::{
 		collections::HashMap,
 		path::{Path, PathBuf},
@@ -58,7 +58,7 @@ use {
 	zsw_panels::{Panel, Panels},
 	zsw_playlist::Playlist,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::ParkingLotMutexSe, MightBlock, MightLock},
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
 };
 
 /// Profiles
@@ -87,10 +87,10 @@ impl Profiles {
 	/// # Blocking
 	/// Will block until any existing profiles locks are dropped
 	#[side_effect(MightLock<ProfilesLock<'a>>)]
-	pub fn lock_profiles<'a>(&'a self) -> ProfilesLock<'a> {
+	pub async fn lock_profiles<'a>(&'a self) -> ProfilesLock<'a> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.profiles.lock_se().allow::<MightBlock>();
+		let guard = self.profiles.lock_se().await.allow::<MightBlock>();
 		ProfilesLock::new(guard, &self.lock_source)
 	}
 

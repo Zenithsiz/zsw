@@ -105,6 +105,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 						let res = {
 							let mut profiles_lock = profiles
 								.lock_profiles()
+								.await
 								.allow::<MightLock<zsw_profiles::ProfilesLock>>();
 
 							profiles.load(&mut profiles_lock, path.clone())

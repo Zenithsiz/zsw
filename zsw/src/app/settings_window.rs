@@ -111,6 +111,7 @@ impl SettingsWindow {
 				// DEADLOCK: Caller ensures we can lock it after the platform lock
 				let mut profiles_lock = profiles
 					.lock_profiles()
+					.await
 					.allow::<MightLock<zsw_profiles::ProfilesLock>>();
 
 				// DEADLOCK: Caller ensures we can lock it after the profiles lock

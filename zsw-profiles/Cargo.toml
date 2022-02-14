@@ -13,6 +13,9 @@ zsw-playlist = {path = "../zsw-playlist"}
 zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
 zsw-util = {path = "../zsw-util"}
 
+# Async
+async-lock = "2.4.0"
+
 # Serialization
 serde = {version = "1.0.132", features = ["derive"]}
 
