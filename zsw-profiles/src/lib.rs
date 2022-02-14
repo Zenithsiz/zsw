@@ -94,6 +94,51 @@ impl Profiles {
 		ProfilesLock::new(guard, &self.lock_source)
 	}
 
+	/// Runs the initial profile loader and applier
+	///
+	/// # Lock
+	/// [`ProfilesLock`]
+	/// [`zsw_playlist::PlaylistLock`]
+	/// - [`zsw_panels::PanelsLock`]
+	#[side_effect(MightLock<(ProfilesLock<'profiles>, zsw_playlist::PlaylistLock<'playlist>, zsw_panels::PanelsLock<'panels>)>)]
+	pub async fn run_loader_applier<'profiles, 'playlist, 'panels>(
+		&'profiles self,
+		path: &Path,
+		playlist: &'playlist Playlist,
+		panels: &'panels Panels,
+	) {
+		// Try to load the profile
+		// DEADLOCK: Caller ensures we can lock it
+		let res = {
+			let mut profiles_lock = self.lock_profiles().await.allow::<MightLock<ProfilesLock>>();
+
+			self.load(&mut profiles_lock, path.to_path_buf())
+		};
+
+		// Then check if we got it
+		match res {
+			// If we did, apply it
+			// DEADLOCK: Caller ensures we can lock both in this order
+			Ok(profile) => {
+				log::info!("Successfully loaded profile: {profile:?}");
+
+				// Lock
+				let mut playlist_lock = playlist
+					.lock_playlist()
+					.await
+					.allow::<MightLock<zsw_playlist::PlaylistLock>>();
+				let mut panels_lock = panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
+
+				// Then apply
+				profile
+					.apply(playlist, panels, &mut playlist_lock, &mut panels_lock)
+					.await;
+			},
+
+			Err(err) => log::warn!("Unable to load profile: {err:?}"),
+		}
+	}
+
 	/// Loads a profile
 	pub fn load(&self, profiles_lock: &mut ProfilesLock, path: PathBuf) -> Result<Profile, anyhow::Error> {
 		// Try to load it

@@ -2321,6 +2321,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-lock",
+ "log",
  "parking_lot",
  "serde",
  "zsw-panels",

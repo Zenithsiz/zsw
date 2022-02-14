@@ -95,42 +95,21 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		let mut thread_spawner = zsw_util::ThreadSpawner::new(s);
 
 		// Spawn the profile loader if we have any
-		// TODO: Move to it's own function
 		if let Some(path) = &args.profile {
 			// Note: We don't care whether we got cancelled or returned successfully
+			// DEADLOCK: See above
 			thread_spawner.spawn("Profile loader", || {
 				profile_loader_runner
-					.run(async {
-						// DEADLOCK: See above
-						let res = {
-							let mut profiles_lock = profiles
-								.lock_profiles()
-								.await
-								.allow::<MightLock<zsw_profiles::ProfilesLock>>();
-
-							profiles.load(&mut profiles_lock, path.clone())
-						};
-
-						match res {
-							Ok(profile) => {
-								log::info!("Successfully loaded profile: {profile:?}");
-
-								// DEADLOCK: See above
-								let mut playlist_lock = playlist
-									.lock_playlist()
-									.await
-									.allow::<MightLock<zsw_playlist::PlaylistLock>>();
-
-								// DEADLOCK: See above
-								let mut panels_lock =
-									panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
-								profile
-									.apply(&playlist, &panels, &mut playlist_lock, &mut panels_lock)
-									.await;
-							},
-							Err(err) => log::warn!("Unable to load profile: {err:?}"),
-						}
-					})
+					.run(profiles.run_loader_applier(path, &playlist, &panels))
+					.map(
+						WithSideEffect::allow::<
+							MightLock<(
+								zsw_profiles::ProfilesLock,
+								zsw_playlist::PlaylistLock,
+								zsw_panels::PanelsLock,
+							)>,
+						>,
+					)
 					.into_ok_or_err();
 			})?;
 		}
