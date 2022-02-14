@@ -5,7 +5,7 @@ use {
 	super::PanelUniforms,
 	crate::PanelsRenderer,
 	cgmath::Vector2,
-	image::{DynamicImage, GenericImageView},
+	image::DynamicImage,
 	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	zsw_img::{Image, ImageUvs},

@@ -2,7 +2,6 @@
 
 // Features
 #![feature(never_type)]
-
 // Lints
 #![warn(
 	clippy::pedantic,
@@ -58,11 +57,7 @@ mod uvs;
 pub use {loader::ImageLoader, uvs::ImageUvs};
 
 // Imports
-use {
-	cgmath::Vector2,
-	image::{DynamicImage, GenericImageView},
-	std::path::PathBuf,
-};
+use {cgmath::Vector2, image::DynamicImage, std::path::PathBuf};
 
 /// Loaded image
 #[derive(Debug)]
