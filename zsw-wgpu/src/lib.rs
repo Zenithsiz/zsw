@@ -59,14 +59,14 @@
 // Imports
 use {
 	anyhow::Context,
+	async_lock::{Mutex, MutexGuard},
 	crossbeam::atomic::AtomicCell,
-	parking_lot::{Mutex, MutexGuard},
 	pollster::FutureExt,
 	std::marker::PhantomData,
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::ParkingLotMutexSe, MightBlock, MightLock},
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
 };
 
 /// Surface
@@ -184,11 +184,11 @@ impl<'window> Wgpu<'window> {
 	///
 	/// # Blocking
 	/// Will block until any existing surface locks are dropped
-	#[side_effect(MightLock<SurfaceLock>)]
-	pub fn lock_surface(&self) -> SurfaceLock {
+	#[side_effect(MightLock<SurfaceLock<'_>>)]
+	pub async fn lock_surface(&self) -> SurfaceLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.surface.lock_se().allow::<MightBlock>();
+		let guard = self.surface.lock_se().await.allow::<MightBlock>();
 		SurfaceLock::new(guard, &self.lock_source)
 	}
 

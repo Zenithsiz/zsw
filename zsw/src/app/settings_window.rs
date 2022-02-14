@@ -90,7 +90,7 @@ impl SettingsWindow {
 		// DEADLOCK: Caller ensures we can lock it
 		// TODO: Check if it's fine to call `wgpu.surface_size`
 		let mut inner = {
-			let surface_lock = wgpu.lock_surface().allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+			let surface_lock = wgpu.lock_surface().await.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
 			Inner::new(wgpu.surface_size(&surface_lock))
 		};
 
@@ -98,7 +98,7 @@ impl SettingsWindow {
 			// Get the surface size
 			// DEADLOCK: Caller ensures we can lock it
 			let surface_size = {
-				let surface_lock = wgpu.lock_surface().allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+				let surface_lock = wgpu.lock_surface().await.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
 				wgpu.surface_size(&surface_lock)
 			};
 

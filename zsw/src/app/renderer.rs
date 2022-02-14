@@ -125,7 +125,7 @@ impl Renderer {
 
 		// Lock the wgpu surface
 		// DEADLOCK: Caller ensures we can lock it
-		let mut surface_lock = wgpu.lock_surface().allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+		let mut surface_lock = wgpu.lock_surface().await.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
 
 		// Then render
 		wgpu.render(&mut surface_lock, |encoder, surface_view, surface_size| {
