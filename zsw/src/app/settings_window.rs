@@ -73,15 +73,18 @@ impl SettingsWindow {
 	/// # Locking
 	/// [`zsw_wgpu::SurfaceLock`]
 	/// - [`zsw_egui::PlatformLock`]
-	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::PlatformLock<'egui>, zsw_playlist::PlaylistLock<'playlist>, zsw_panels::PanelsLock<'panels>)>)]
-	pub async fn run<'wgpu, 'egui, 'playlist, 'panels>(
+	///   - [`zsw_profiles::ProfilesLock`]
+	///     - [`zsw_playlist::PlaylistLock`]
+	///       - [`zsw_panels::PanelsLock`]
+	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::PlatformLock<'egui>, zsw_profiles::ProfilesLock<'profiles>, zsw_playlist::PlaylistLock<'playlist>, zsw_panels::PanelsLock<'panels>)>)]
+	pub async fn run<'wgpu, 'egui, 'playlist, 'panels, 'profiles>(
 		&self,
 		wgpu: &'wgpu Wgpu<'_>,
 		egui: &'egui Egui,
 		window: &Window,
 		panels: &'panels Panels,
 		playlist: &'playlist Playlist,
-		profiles: &Profiles,
+		profiles: &'profiles Profiles,
 	) -> ! {
 		// Create the inner data
 		// DEADLOCK: Caller ensures we can lock it
@@ -104,13 +107,19 @@ impl SettingsWindow {
 				// DEADLOCK: Caller ensures we can lock it after the surface lock
 				let mut platform_lock = egui.lock_platform().await.allow::<MightLock<zsw_egui::PlatformLock>>();
 
+
 				// DEADLOCK: Caller ensures we can lock it after the platform lock
+				let mut profiles_lock = profiles
+					.lock_profiles()
+					.allow::<MightLock<zsw_profiles::ProfilesLock>>();
+
+				// DEADLOCK: Caller ensures we can lock it after the profiles lock
 				let mut playlist_lock = playlist
 					.lock_playlist()
 					.await
 					.allow::<MightLock<zsw_playlist::PlaylistLock>>();
 
-				// DEADLOCK: Caller ensures we can lock it after the playlist lock
+				// DEADLOCK: Caller ensures we can lock it after the panels lock
 				let mut panels_lock = panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
 
 				egui.draw(window, &mut platform_lock, |ctx, frame| {
@@ -125,6 +134,7 @@ impl SettingsWindow {
 						profiles,
 						&mut playlist_lock,
 						&mut panels_lock,
+						&mut profiles_lock,
 					)
 				})
 			};
@@ -163,7 +173,7 @@ impl SettingsWindow {
 	}
 
 	/// Draws the settings window
-	fn draw<'playlist, 'panels>(
+	fn draw<'playlist, 'panels, 'profiles>(
 		&self,
 		inner: &mut Inner,
 		ctx: &egui::CtxRef,
@@ -172,9 +182,10 @@ impl SettingsWindow {
 		window: &Window,
 		panels: &'panels Panels,
 		playlist: &'playlist Playlist,
-		profiles: &Profiles,
+		profiles: &'profiles Profiles,
 		playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
 		panels_lock: &mut zsw_panels::PanelsLock<'panels>,
+		profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
@@ -201,6 +212,7 @@ impl SettingsWindow {
 				profiles,
 				playlist_lock,
 				panels_lock,
+				profiles_lock,
 			);
 		});
 
@@ -214,15 +226,16 @@ impl SettingsWindow {
 }
 
 /// Draws the settings window
-fn draw_settings_window<'playlist, 'panels>(
+fn draw_settings_window<'playlist, 'panels, 'profiles>(
 	ui: &mut egui::Ui,
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
 	panels: &'panels Panels,
 	playlist: &'playlist Playlist,
-	profiles: &Profiles,
+	profiles: &'profiles Profiles,
 	playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
 	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
+	profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
 ) {
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
@@ -232,24 +245,33 @@ fn draw_settings_window<'playlist, 'panels>(
 		self::draw_playlist(ui, playlist, playlist_lock);
 	});
 	ui.collapsing("Profile", |ui| {
-		self::draw_profile(ui, panels, playlist, profiles, playlist_lock, panels_lock);
+		self::draw_profile(
+			ui,
+			panels,
+			playlist,
+			profiles,
+			playlist_lock,
+			panels_lock,
+			profiles_lock,
+		);
 	});
 }
 
 /// Draws the profile settings
-fn draw_profile<'playlist, 'panels>(
+fn draw_profile<'playlist, 'panels, 'profiles>(
 	ui: &mut egui::Ui,
 	panels: &'panels Panels,
 	playlist: &'playlist Playlist,
-	profiles: &Profiles,
+	profiles: &'profiles Profiles,
 	playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
 	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
+	profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
 ) {
 	// Get the profile to apply, if any
 	// DEADLOCK: We don't block within it.
 	let mut profile_to_apply = None;
 	profiles
-		.for_each::<_, ()>(|path, profile| {
+		.for_each::<_, ()>(profiles_lock, |path, profile| {
 			ui.horizontal(|ui| {
 				ui.label(path.display().to_string());
 				if ui.button("Apply").clicked() {
@@ -272,7 +294,7 @@ fn draw_profile<'playlist, 'panels>(
 			match file_dialog {
 				Ok(file_dialog) =>
 					if let Some(path) = file_dialog {
-						match profiles.load(path.clone()) {
+						match profiles.load(profiles_lock, path.clone()) {
 							Ok(profile) => log::info!("Successfully loaded profile: {profile:?}"),
 							Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
 						}
@@ -303,7 +325,7 @@ fn draw_profile<'playlist, 'panels>(
 							}
 						};
 
-						match profiles.save(path.clone(), profile) {
+						match profiles.save(profiles_lock, path.clone(), profile) {
 							Ok(()) => (),
 							Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
 						}

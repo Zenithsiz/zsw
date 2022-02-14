@@ -89,6 +89,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	//           and that we don't lock them.
 	//           All threads ensure they will eventually release any lock
 	//           they obtain.
+	// TODO: Get every lock graph in here so we can more easily see possible deadlocks
 	thread::scope(|s| {
 		// Create the thread spawner
 		let mut thread_spawner = zsw_util::ThreadSpawner::new(s);
@@ -100,7 +101,16 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			thread_spawner.spawn("Profile loader", || {
 				profile_loader_runner
 					.run(async {
-						match profiles.load(path.clone()) {
+						// DEADLOCK: See above
+						let res = {
+							let mut profiles_lock = profiles
+								.lock_profiles()
+								.allow::<MightLock<zsw_profiles::ProfilesLock>>();
+
+							profiles.load(&mut profiles_lock, path.clone())
+						};
+
+						match res {
 							Ok(profile) => {
 								log::info!("Successfully loaded profile: {profile:?}");
 
@@ -109,6 +119,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 									.lock_playlist()
 									.await
 									.allow::<MightLock<zsw_playlist::PlaylistLock>>();
+
+								// DEADLOCK: See above
 								let mut panels_lock =
 									panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
 								profile
@@ -152,6 +164,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 						MightLock<(
 							zsw_wgpu::SurfaceLock,
 							zsw_egui::PlatformLock,
+							zsw_profiles::ProfilesLock,
 							zsw_playlist::PlaylistLock,
 							zsw_panels::PanelsLock,
 						)>,
