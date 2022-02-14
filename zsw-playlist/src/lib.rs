@@ -118,19 +118,19 @@ impl Playlist {
 	///
 	/// # Blocking
 	/// Will block until any existing inner locks are dropped
-	#[side_effect(MightLock<InnerLock<'_>>)]
-	pub async fn lock_inner(&self) -> InnerLock<'_> {
+	#[side_effect(MightLock<PlaylistLock<'_>>)]
+	pub async fn lock_inner(&self) -> PlaylistLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
 		let guard = self.inner.lock_se().await.allow::<MightBlock>();
-		InnerLock::new(guard, &self.lock_source)
+		PlaylistLock::new(guard, &self.lock_source)
 	}
 
 	/// Runs the playlist
 	///
 	/// # Locking
-	/// Locks the `InnerLock` lock on `self`
-	#[side_effect(MightLock<InnerLock<'_>>)]
+	/// Locks the `PlaylistLock` lock on `self`
+	#[side_effect(MightLock<PlaylistLock<'_>>)]
 	pub async fn run(&self) -> ! {
 		loop {
 			// Get the next image to send
@@ -140,7 +140,7 @@ impl Playlist {
 			let next = self
 				.lock_inner()
 				.await
-				.allow::<MightLock<InnerLock>>()
+				.allow::<MightLock<PlaylistLock>>()
 				.get_mut(&self.lock_source)
 				.cur_images
 				.pop();
@@ -156,7 +156,7 @@ impl Playlist {
 				// Else get the next batch and shuffle them
 				// DEADLOCK: Caller ensures we can lock it.
 				None => {
-					let mut inner = self.lock_inner().await.allow::<MightLock<InnerLock>>();
+					let mut inner = self.lock_inner().await.allow::<MightLock<PlaylistLock>>();
 					let inner = inner.get_mut(&self.lock_source);
 					inner.cur_images.extend(inner.images.iter().cloned());
 					inner.cur_images.shuffle(&mut rand::thread_rng());
@@ -166,14 +166,14 @@ impl Playlist {
 	}
 
 	/// Removes an image
-	pub async fn remove_image<'a>(&'a self, inner_lock: &mut InnerLock<'a>, image: &PlaylistImage) {
+	pub async fn remove_image<'a>(&'a self, playlist_lock: &mut PlaylistLock<'a>, image: &PlaylistImage) {
 		// Note: We don't care if the image actually existed or not
-		let _ = inner_lock.get_mut(&self.lock_source).images.remove(image);
+		let _ = playlist_lock.get_mut(&self.lock_source).images.remove(image);
 	}
 
 	/// Sets the root path
-	pub async fn set_root_path<'a>(&'a self, inner_lock: &mut InnerLock<'a>, root_path: PathBuf) {
-		let inner = inner_lock.get_mut(&self.lock_source);
+	pub async fn set_root_path<'a>(&'a self, playlist_lock: &mut PlaylistLock<'a>, root_path: PathBuf) {
+		let inner = playlist_lock.get_mut(&self.lock_source);
 
 		// Remove all existing paths and add new ones
 		inner.images.clear();
@@ -189,28 +189,28 @@ impl Playlist {
 	}
 
 	/// Returns the root path
-	pub async fn root_path<'a>(&'a self, inner_lock: &InnerLock<'a>) -> Option<PathBuf> {
-		inner_lock.get(&self.lock_source).root_path.clone()
+	pub async fn root_path<'a>(&'a self, playlist_lock: &PlaylistLock<'a>) -> Option<PathBuf> {
+		playlist_lock.get(&self.lock_source).root_path.clone()
 	}
 
 	/// Retrieves the next image
 	///
 	/// # Locking
-	/// Locks the `InnerLock` lock on `self`
+	/// Locks the `PlaylistLock` lock on `self`
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
-	#[side_effect(MightLock<InnerLock<'_>>)]
+	#[side_effect(MightLock<PlaylistLock<'_>>)]
 	pub async fn next(&self) -> Arc<PlaylistImage> {
 		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: Caller ensures it won't hold an `InnerLock`,
+		// DEADLOCK: Caller ensures it won't hold an `PlaylistLock`,
 		//           and we ensure the other side of the channel
 		//           can progress.
 		self.img_rx.recv().await.expect("Image sender was closed")
 	}
 
 	/// Peeks the next images
-	pub async fn peek_next(&self, inner_lock: &InnerLock<'_>, mut f: impl FnMut(&PlaylistImage) + Send) {
-		let inner = inner_lock.get(&self.lock_source);
+	pub async fn peek_next(&self, playlist_lock: &PlaylistLock<'_>, mut f: impl FnMut(&PlaylistImage) + Send) {
+		let inner = playlist_lock.get(&self.lock_source);
 
 		for image in inner.cur_images.iter().rev() {
 			f(image);
@@ -232,7 +232,7 @@ pub struct LockSource;
 
 /// Inner lock
 // TODO: Rename to `PlaylistLock`, maybe?
-pub type InnerLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, Inner>, LockSource>;
+pub type PlaylistLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, Inner>, LockSource>;
 
 
 /// A playlist image

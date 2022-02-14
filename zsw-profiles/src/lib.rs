@@ -141,9 +141,9 @@ impl Profile {
 		&self,
 		playlist: &'playlist Playlist,
 		panels: &Panels,
-		inner_lock: &mut zsw_playlist::InnerLock<'playlist>,
+		playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
 	) {
-		playlist.set_root_path(inner_lock, self.root_path.clone()).await;
+		playlist.set_root_path(playlist_lock, self.root_path.clone()).await;
 		panels.replace_panels(self.panels.iter().copied());
 	}
 }
