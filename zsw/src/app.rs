@@ -109,7 +109,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 									.lock_playlist()
 									.await
 									.allow::<MightLock<zsw_playlist::PlaylistLock>>();
-								let mut panels_lock = panels.lock_panels().allow::<MightLock<zsw_panels::PanelsLock>>();
+								let mut panels_lock =
+									panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
 								profile
 									.apply(&playlist, &panels, &mut playlist_lock, &mut panels_lock)
 									.await;

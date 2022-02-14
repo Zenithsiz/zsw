@@ -111,7 +111,7 @@ impl SettingsWindow {
 					.allow::<MightLock<zsw_playlist::PlaylistLock>>();
 
 				// DEADLOCK: Caller ensures we can lock it after the playlist lock
-				let mut panels_lock = panels.lock_panels().allow::<MightLock<zsw_panels::PanelsLock>>();
+				let mut panels_lock = panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
 
 				egui.draw(window, &mut platform_lock, |ctx, frame| {
 					self.draw(

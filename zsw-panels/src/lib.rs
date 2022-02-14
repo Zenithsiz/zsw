@@ -65,11 +65,11 @@ pub use self::{
 // Imports
 use {
 	anyhow::Context,
-	parking_lot::{Mutex, MutexGuard},
+	async_lock::{Mutex, MutexGuard},
 	winit::dpi::PhysicalSize,
 	zsw_img::ImageLoader,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::ParkingLotMutexSe, MightBlock, MightLock},
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -81,7 +81,6 @@ pub struct Panels {
 	renderer: PanelsRenderer,
 
 	/// All panels with their state
-	// TODO: Make `async`
 	panels: Mutex<Vec<PanelState>>,
 
 	/// Lock source
@@ -106,10 +105,10 @@ impl Panels {
 	/// # Blocking
 	/// Will block until any existing panels locks are dropped
 	#[side_effect(MightLock<PanelsLock<'a>>)]
-	pub fn lock_panels<'a>(&'a self) -> PanelsLock<'a> {
+	pub async fn lock_panels<'a>(&'a self) -> PanelsLock<'a> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.panels.lock_se().allow::<MightBlock>();
+		let guard = self.panels.lock_se().await.allow::<MightBlock>();
 		PanelsLock::new(guard, &self.lock_source)
 	}
 

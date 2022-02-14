@@ -52,7 +52,10 @@ impl Renderer {
 			let start_instant = Instant::now();
 
 			// Update
-			match Self::update(wgpu, panels, image_loader).allow::<MightLock<zsw_panels::PanelsLock>>() {
+			match Self::update(wgpu, panels, image_loader)
+				.await
+				.allow::<MightLock<zsw_panels::PanelsLock>>()
+			{
 				Ok(()) => (),
 				Err(err) => log::warn!("Unable to update: {err:?}"),
 			};
@@ -85,9 +88,13 @@ impl Renderer {
 	/// # Locking
 	/// [`zsw_panels::PanelsLock`]
 	#[side_effect(MightLock<zsw_panels::PanelsLock<'panels>>)]
-	fn update<'panels>(wgpu: &Wgpu, panels: &'panels Panels, image_loader: &ImageLoader) -> Result<(), anyhow::Error> {
+	async fn update<'window, 'panels>(
+		wgpu: &Wgpu<'window>,
+		panels: &'panels Panels,
+		image_loader: &ImageLoader,
+	) -> Result<(), anyhow::Error> {
 		// DEADLOCK: Caller ensures we can lock it
-		let mut panels_lock = panels.lock_panels().allow::<MightLock<zsw_panels::PanelsLock>>();
+		let mut panels_lock = panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
 
 		// Updates all panels
 		panels.update_all(&mut panels_lock, wgpu, image_loader)
@@ -124,9 +131,12 @@ impl Renderer {
 		wgpu.render(&mut surface_lock, |encoder, surface_view, surface_size| {
 			// Render the panels
 			{
-				// Lock the wgpu surface
 				// DEADLOCK: Caller ensures we can lock it after the surface
-				let panels_lock = panels.lock_panels().allow::<MightLock<zsw_panels::PanelsLock>>();
+				// TODO: Not block on this
+				let panels_lock = panels
+					.lock_panels()
+					.block_on()
+					.allow::<MightLock<zsw_panels::PanelsLock>>();
 
 				panels
 					.render(&panels_lock, wgpu.queue(), encoder, surface_view, surface_size)

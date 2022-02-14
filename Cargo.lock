@@ -2288,6 +2288,7 @@ name = "zsw-panels"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-lock",
  "bytemuck",
  "cgmath",
  "image",
