@@ -1,0 +1,23 @@
+[package]
+edition = "2021"
+name = "zsw-profiles"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+# Zsw
+zsw-panels = {path = "../zsw-panels"}
+zsw-playlist = {path = "../zsw-playlist"}
+zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
+zsw-util = {path = "../zsw-util"}
+
+# Serialization
+serde = {version = "1.0.132", features = ["derive"]}
+
+# Error handling
+anyhow = "1.0.52"
+
+# Threads
+parking_lot = {version = "0.11.2", features = ["deadlock_detection"]}

@@ -1,9 +1,8 @@
 //! Event handler
 
-use super::settings_window::SettingsWindow;
-
 // Imports
 use {
+	super::settings_window::SettingsWindow,
 	winit::{
 		dpi::PhysicalPosition,
 		event::{Event, WindowEvent},

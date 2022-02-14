@@ -71,13 +71,9 @@
 mod app;
 mod args;
 mod logger;
-mod profile;
 
 // Exports
-pub use self::{
-	args::Args,
-	profile::{Profile, Profiles},
-};
+pub use self::args::Args;
 
 // Imports
 use {anyhow::Context, clap::StructOpt};

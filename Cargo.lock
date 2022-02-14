@@ -2245,6 +2245,7 @@ dependencies = [
  "zsw-img",
  "zsw-panels",
  "zsw-playlist",
+ "zsw-profiles",
  "zsw-side-effect-macros",
  "zsw-util",
  "zsw-wgpu",
@@ -2306,6 +2307,19 @@ dependencies = [
  "async-channel",
  "async-lock",
  "rand",
+ "zsw-util",
+]
+
+[[package]]
+name = "zsw-profiles"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "parking_lot",
+ "serde",
+ "zsw-panels",
+ "zsw-playlist",
+ "zsw-side-effect-macros",
  "zsw-util",
 ]
 

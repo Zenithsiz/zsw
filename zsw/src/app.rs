@@ -12,7 +12,7 @@ mod settings_window;
 // Imports
 use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
-	crate::{Args, Profiles},
+	crate::Args,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	std::{iter, num::NonZeroUsize, thread, time::Duration},
@@ -30,6 +30,7 @@ use {
 	zsw_img::ImageLoader,
 	zsw_panels::Panels,
 	zsw_playlist::Playlist,
+	zsw_profiles::Profiles,
 	zsw_util::{FutureRunner, Rect},
 	zsw_wgpu::Wgpu,
 };
