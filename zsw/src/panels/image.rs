@@ -3,15 +3,12 @@
 // Imports
 use {
 	super::PanelUniforms,
-	crate::{
-		img::{Image, ImageUvs},
-		PanelsRenderer,
-		Wgpu,
-	},
+	crate::{PanelsRenderer, Wgpu},
 	cgmath::Vector2,
 	image::{DynamicImage, GenericImageView},
 	std::path::Path,
 	wgpu::util::DeviceExt,
+	zsw_img::{Image, ImageUvs},
 };
 
 /// Panel's image

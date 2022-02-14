@@ -1,0 +1,28 @@
+[package]
+edition = "2021"
+name = "zsw-img"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+# Zsw
+zsw-playlist = {path = "../zsw-playlist"}
+#zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
+#zsw-util = {path = "../zsw-util"}
+
+# Async
+async-channel = "1.6.1"
+
+# Math
+cgmath = {version = "0.18.0", features = ["serde"]}
+
+# Image
+image = "0.23.14"
+
+# Error handling
+anyhow = "1.0.52"
+
+# Logging
+log = "0.4.14"

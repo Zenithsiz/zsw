@@ -2241,9 +2241,22 @@ dependencies = [
  "wgpu",
  "winit",
  "x11",
+ "zsw-img",
  "zsw-playlist",
  "zsw-side-effect-macros",
  "zsw-util",
+]
+
+[[package]]
+name = "zsw-img"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "cgmath",
+ "image",
+ "log",
+ "zsw-playlist",
 ]
 
 [[package]]

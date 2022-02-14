@@ -71,7 +71,6 @@
 mod app;
 mod args;
 mod egui;
-mod img;
 mod logger;
 mod panels;
 mod profile;
@@ -82,7 +81,6 @@ mod wgpu;
 pub use self::{
 	args::Args,
 	egui::Egui,
-	img::ImageLoader,
 	panels::{Panel, PanelState, PanelStateImages, Panels, PanelsRenderer},
 	profile::{Profile, Profiles},
 	rect::Rect,

@@ -2,15 +2,16 @@
 
 // Imports
 use {
-	zsw_util::MightBlock,
 	super::settings_window::SettingsWindow,
-	crate::{Egui, ImageLoader, Panels, Wgpu},
+	crate::{Egui, Panels, Wgpu},
 	anyhow::Context,
 	std::{
 		thread,
 		time::{Duration, Instant},
 	},
 	winit::window::Window,
+	zsw_img::ImageLoader,
+	zsw_util::MightBlock,
 };
 
 /// Renderer

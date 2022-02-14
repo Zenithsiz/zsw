@@ -12,7 +12,7 @@ mod settings_window;
 // Imports
 use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
-	crate::{Args, Egui, ImageLoader, Panels, Profiles, Rect, Wgpu},
+	crate::{Args, Egui, Panels, Profiles, Rect, Wgpu},
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	std::{iter, num::NonZeroUsize, thread, time::Duration},
@@ -26,6 +26,7 @@ use {
 		window::{Window, WindowBuilder},
 	},
 	x11::xlib,
+	zsw_img::ImageLoader,
 	zsw_playlist::Playlist,
 	zsw_util::FutureRunner,
 };
