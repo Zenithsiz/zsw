@@ -2,13 +2,13 @@
 
 // Imports
 use {
-	crate::{Panel, Panels},
 	anyhow::Context,
 	parking_lot::Mutex,
 	std::{
 		collections::HashMap,
 		path::{Path, PathBuf},
 	},
+	zsw_panels::{Panel, Panels},
 	zsw_playlist::Playlist,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::{extse::ParkingLotMutexSe, MightBlock},

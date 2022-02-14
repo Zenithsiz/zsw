@@ -2243,6 +2243,7 @@ dependencies = [
  "x11",
  "zsw-egui",
  "zsw-img",
+ "zsw-panels",
  "zsw-playlist",
  "zsw-side-effect-macros",
  "zsw-util",
@@ -2279,6 +2280,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "zsw-panels"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "cgmath",
+ "image",
+ "log",
+ "parking_lot",
+ "rand",
+ "serde",
+ "wgpu",
+ "winit",
+ "zsw-img",
+ "zsw-side-effect-macros",
+ "zsw-util",
+ "zsw-wgpu",
+]
+
+[[package]]
 name = "zsw-playlist"
 version = "0.1.0"
 dependencies = [
@@ -2302,6 +2323,7 @@ name = "zsw-util"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cgmath",
  "crossbeam",
  "image",
  "log",

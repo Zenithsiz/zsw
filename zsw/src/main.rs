@@ -71,16 +71,12 @@
 mod app;
 mod args;
 mod logger;
-mod panels;
 mod profile;
-mod rect;
 
 // Exports
 pub use self::{
 	args::Args,
-	panels::{Panel, PanelState, PanelStateImages, Panels, PanelsRenderer},
 	profile::{Profile, Profiles},
-	rect::Rect,
 };
 
 // Imports

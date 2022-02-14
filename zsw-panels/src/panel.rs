@@ -1,7 +1,7 @@
 //! Panel
 
 // Imports
-use crate::Rect;
+use zsw_util::Rect;
 
 /// A panel
 #[derive(Clone, Copy, Debug)]

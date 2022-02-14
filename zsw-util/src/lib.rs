@@ -1,7 +1,7 @@
 //! Utility
 
 // Features
-#![feature(decl_macro, generator_trait, generators, scoped_threads)]
+#![feature(decl_macro, generator_trait, generators, scoped_threads, mixed_integer_ops)]
 // Lints
 #![warn(
 	clippy::pedantic,
@@ -51,6 +51,7 @@
 
 // Modules
 mod display_wrapper;
+mod rect;
 mod scan_dir;
 mod side_effect;
 mod thread;
@@ -58,6 +59,7 @@ mod thread;
 // Exports
 pub use {
 	display_wrapper::DisplayWrapper,
+	rect::Rect,
 	scan_dir::dir_files_iter,
 	side_effect::{extse, MightBlock, SideEffect, WithSideEffect},
 	thread::{FutureRunner, ThreadSpawner},

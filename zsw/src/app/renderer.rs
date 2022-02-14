@@ -3,7 +3,6 @@
 // Imports
 use {
 	super::settings_window::SettingsWindow,
-	crate::Panels,
 	anyhow::Context,
 	std::{
 		thread,
@@ -12,6 +11,7 @@ use {
 	winit::window::Window,
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
+	zsw_panels::Panels,
 	zsw_util::MightBlock,
 	zsw_wgpu::Wgpu,
 };
