@@ -17,13 +17,14 @@ use {
 		Args,
 		Egui,
 		ImageLoader,
-		Panel,
 		Panels,
 		Playlist,
 		Profiles,
+		Rect,
 		Wgpu,
 	},
 	anyhow::Context,
+	cgmath::{Point2, Vector2},
 	std::{iter, num::NonZeroUsize, thread, time::Duration},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -40,7 +41,7 @@ use {
 /// Runs the application
 pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Build the window
-	let (mut event_loop, window) = self::create_window(args)?;
+	let (mut event_loop, window) = self::create_window()?;
 
 	// Create the wgpu interface
 	let wgpu = Wgpu::new(&window).context("Unable to create renderer")?;
@@ -51,15 +52,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Create the image loader
 	let image_loader = ImageLoader::new();
 
-	// Create all panels
-	let panels = args.panel_geometries.iter().map(|&geometry| {
-		let duration = args.image_duration.as_secs_f32() * 60.0;
-		let fade_point = args.fade_point * duration;
-		#[allow(clippy::cast_sign_loss)] // They're both positive
-		Panel::new(geometry, duration as u64, fade_point as u64)
-	});
-	let panels =
-		Panels::new(panels, wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
+	// Create the panels
+	let panels = Panels::new(wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
 
 	// Create egui
 	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
@@ -79,7 +73,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// All runners
 	// Note: They must exit outside of the thread scope because
 	//       their `run` can last until the very end of the function
-	let playlist_loader_runner = FutureRunner::new();
+	let profile_loader_runner = FutureRunner::new();
 	let playlist_runner = FutureRunner::new();
 	let image_loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
 	let image_loader_runners = iter::repeat_with(FutureRunner::new)
@@ -96,13 +90,23 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Create the thread spawner
 		let mut thread_spawner = util::ThreadSpawner::new(s);
 
-		// Spawn the playlist loader thread
-		// Note: We don't care whether we got cancelled or returned successfully
-		thread_spawner.spawn("Playlist loader", || {
-			playlist_loader_runner
-				.run(playlist.add_dir(args.images_dir.clone()))
-				.into_ok_or_err();
-		})?;
+		// Spawn the profile loader if we have any
+		if let Some(path) = &args.profile {
+			// Note: We don't care whether we got cancelled or returned successfully
+			thread_spawner.spawn("Profile loader", || {
+				profile_loader_runner
+					.run(async {
+						match profiles.load(path.clone()) {
+							Ok(profile) => {
+								log::info!("Successfully loaded profile: {profile:?}");
+								profile.apply(&playlist, &panels).await;
+							},
+							Err(err) => log::warn!("Unable to load profile: {err:?}"),
+						}
+					})
+					.into_ok_or_err();
+			})?;
+		}
 
 		// Spawn the playlist thread
 		thread_spawner.spawn("Playlist", || {
@@ -160,18 +164,27 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 }
 
 /// Creates the window, as well as the associated event loop
-fn create_window(args: &Args) -> Result<(EventLoop<!>, Window), anyhow::Error> {
+fn create_window() -> Result<(EventLoop<!>, Window), anyhow::Error> {
 	// Build the window
 	let event_loop = EventLoop::with_user_event();
-	log::debug!("Creating window (geometry: {:?})", args.window_geometry);
+
+	// Find the window geometry
+	// Note: We just merge all monitors' geometry.
+	let window_geometry = event_loop
+		.available_monitors()
+		.map(|monitor| self::monitor_geometry(&monitor))
+		.reduce(Rect::merge)
+		.context("No monitors found")?;
+
+	log::debug!("Creating window (geometry: {:?})", window_geometry);
 	let window = WindowBuilder::new()
 		.with_position(PhysicalPosition {
-			x: args.window_geometry.pos[0],
-			y: args.window_geometry.pos[1],
+			x: window_geometry.pos[0],
+			y: window_geometry.pos[1],
 		})
 		.with_inner_size(PhysicalSize {
-			width:  args.window_geometry.size[0],
-			height: args.window_geometry.size[1],
+			width:  window_geometry.size[0],
+			height: window_geometry.size[1],
 		})
 		.with_decorations(false)
 		.with_x11_window_type(vec![XWindowType::Desktop])
@@ -186,6 +199,16 @@ fn create_window(args: &Args) -> Result<(EventLoop<!>, Window), anyhow::Error> {
 	}
 
 	Ok((event_loop, window))
+}
+
+/// Returns a monitor's geometry
+fn monitor_geometry(monitor: &winit::monitor::MonitorHandle) -> Rect<i32, u32> {
+	let monitor_pos = monitor.position();
+	let monitor_size = monitor.size();
+	Rect {
+		pos:  Point2::new(monitor_pos.x, monitor_pos.y),
+		size: Vector2::new(monitor_size.width, monitor_size.height),
+	}
 }
 
 /// Sets the display as always below

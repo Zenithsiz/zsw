@@ -17,7 +17,8 @@
 	generators,
 	generator_trait,
 	scoped_threads,
-	derive_default_enum
+	derive_default_enum,
+	mixed_integer_ops
 )]
 // Lints
 #![warn(
@@ -92,7 +93,7 @@ pub use self::{
 };
 
 // Imports
-use anyhow::Context;
+use {anyhow::Context, clap::StructOpt};
 
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
@@ -113,7 +114,13 @@ fn main() -> Result<(), anyhow::Error> {
 		.context("Unable to build `rayon` global thread pool")?;
 
 	// Get arguments
-	let args = args::get().context("Unable to retrieve arguments")?;
+	let args = match Args::try_parse() {
+		Ok(args) => args,
+		Err(err) => {
+			log::warn!("Unable to retrieve arguments: {err:?}");
+			err.exit();
+		},
+	};
 	log::debug!("Arguments: {args:#?}");
 
 	// Run the app and restart if we get an error (up to 5 errors)

@@ -214,13 +214,8 @@ impl SettingsWindow {
 						ui.horizontal(|ui| {
 							ui.label(path.display().to_string());
 							if ui.button("Apply").clicked() {
-								// Set the root path and set the paths
-								async {
-									playlist.clear().await;
-									playlist.add_dir(profile.root_path.clone()).await;
-									panels.replace_panels(profile.panels.iter().copied());
-								}
-								.block_on();
+								// Apply the profile
+								profile.apply(playlist, panels).block_on();
 							}
 						});
 					})
@@ -234,7 +229,7 @@ impl SettingsWindow {
 							Ok(file_dialog) =>
 								if let Some(path) = file_dialog {
 									match profiles.load(path.clone()) {
-										Ok(()) => (),
+										Ok(profile) => log::info!("Successfully loaded profile: {profile:?}"),
 										Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
 									}
 								},
@@ -285,7 +280,7 @@ impl SettingsWindow {
 /// New panel state
 struct NewPanelState {
 	/// Geometry
-	geometry: Rect<u32>,
+	geometry: Rect<i32, u32>,
 
 	/// Max progress (in frames)
 	duration: u64,
@@ -362,7 +357,7 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 }
 
 /// Draws a geometry rectangle
-fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<u32>, max_size: PhysicalSize<u32>) {
+fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>, max_size: PhysicalSize<u32>) {
 	// Calculate the limits
 	// TODO: If two values are changed at the same time, during 1 frame it's
 	//       possible for the values to be out of range.

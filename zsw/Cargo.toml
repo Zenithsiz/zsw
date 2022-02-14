@@ -52,7 +52,7 @@ fern = {version = "0.6", features = ["colored"]}
 log = "0.4.14"
 
 # Cmd
-clap = "3.0.7"
+clap = {version = "3.0.7", features = ["derive"]}
 
 # Util
 bytemuck = {version = "1.7.3", features = ["derive"]}

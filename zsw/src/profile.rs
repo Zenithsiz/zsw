@@ -1,19 +1,20 @@
 //! Profiles
 
-use std::path::Path;
-
-use zsw_side_effect_macros::side_effect;
-
 // Imports
 use {
 	crate::{
-		util,
-		util::{extse::ParkingLotMutexSe, MightBlock},
+		util::{self, extse::ParkingLotMutexSe, MightBlock},
 		Panel,
+		Panels,
+		Playlist,
 	},
 	anyhow::Context,
 	parking_lot::Mutex,
-	std::{collections::HashMap, path::PathBuf},
+	std::{
+		collections::HashMap,
+		path::{Path, PathBuf},
+	},
+	zsw_side_effect_macros::side_effect,
 };
 
 /// Profiles
@@ -33,16 +34,24 @@ impl Profiles {
 	}
 
 	/// Loads a profile
-	pub fn load(&self, path: PathBuf) -> Result<(), anyhow::Error> {
+	pub fn load(&self, path: PathBuf) -> Result<Profile, anyhow::Error> {
 		// Try to load it
 		let profile = util::parse_json_from_file(&path).context("Unable to load profile")?;
 
 		// Then add it
+		// TODO: Maybe don't clone?
 		// DEADLOCK: We only lock it internally and we don't block while locked
 		#[allow(clippy::let_underscore_drop)] // We can drop the old profile
-		let _ = self.profiles.lock_se().allow::<MightBlock>().insert(path, profile);
+		let profile = self
+			.profiles
+			.lock_se()
+			.allow::<MightBlock>()
+			.entry(path)
+			.insert_entry(profile)
+			.get()
+			.clone();
 
-		Ok(())
+		Ok(profile)
 	}
 
 	/// Adds and saves a profile
@@ -80,4 +89,13 @@ pub struct Profile {
 
 	/// All panels
 	pub panels: Vec<Panel>,
+}
+
+impl Profile {
+	/// Applies a profile
+	pub async fn apply(&self, playlist: &Playlist, panels: &Panels) {
+		playlist.clear().await;
+		playlist.add_dir(self.root_path.clone()).await;
+		panels.replace_panels(self.panels.iter().copied());
+	}
 }

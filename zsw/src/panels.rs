@@ -42,19 +42,15 @@ pub struct Panels {
 impl Panels {
 	/// Creates the panel
 	pub fn new(
-		panels: impl IntoIterator<Item = Panel>,
 		device: &wgpu::Device,
 		surface_texture_format: wgpu::TextureFormat,
 	) -> Result<Self, anyhow::Error> {
 		// Create the renderer
 		let renderer = PanelsRenderer::new(device, surface_texture_format).context("Unable to create renderer")?;
 
-		// Collect all panels
-		let panels = panels.into_iter().map(PanelState::new).collect();
-
 		Ok(Self {
 			renderer,
-			panels: Mutex::new(panels),
+			panels: Mutex::new(vec![]),
 		})
 	}
 
