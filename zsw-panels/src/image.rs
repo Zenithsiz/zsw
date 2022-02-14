@@ -6,7 +6,7 @@ use {
 	crate::PanelsRenderer,
 	cgmath::Vector2,
 	image::{DynamicImage, GenericImageView},
-	std::path::Path,
+	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	zsw_img::{Image, ImageUvs},
 	zsw_wgpu::Wgpu,
@@ -37,6 +37,9 @@ pub struct PanelImage {
 
 	/// Image size
 	image_size: Vector2<u32>,
+
+	/// Path
+	image_path: PathBuf,
 }
 
 impl PanelImage {
@@ -84,15 +87,15 @@ impl PanelImage {
 			uniforms,
 			uniforms_bind_group,
 			image_size,
+			image_path: image.path,
 		}
 	}
 
 	/// Updates this image
 	pub fn update(&mut self, renderer: &PanelsRenderer, wgpu: &Wgpu, image: Image) {
-		// Update the image
-		self.image_size = image.size();
+		let size = image.size();
 
-		// Then update our texture
+		// Update our texture
 		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.path, image.image);
 		self.image_bind_group = self::create_image_bind_group(
 			wgpu,
@@ -100,6 +103,10 @@ impl PanelImage {
 			&self.texture_view,
 			&self.texture_sampler,
 		);
+
+		// Then update the image size and path
+		self.image_size = size;
+		self.image_path = image.path;
 	}
 
 	/// Returns this image's uvs for a panel size
@@ -126,6 +133,11 @@ impl PanelImage {
 	/// Returns this image's image bind group
 	pub fn image_bind_group(&self) -> &wgpu::BindGroup {
 		&self.image_bind_group
+	}
+
+	/// Returns the path
+	pub fn image_path(&self) -> &Path {
+		&self.image_path
 	}
 }
 

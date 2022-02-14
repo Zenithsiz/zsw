@@ -181,6 +181,7 @@ impl PanelState {
 
 /// Images for a panel state
 #[derive(Default, Debug)]
+#[allow(clippy::large_enum_variant)] // They'll all progress towards the largest variant
 pub enum PanelStateImages {
 	/// Empty
 	///

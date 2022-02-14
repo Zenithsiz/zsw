@@ -15,7 +15,7 @@ use {
 		window::Window,
 	},
 	zsw_egui::Egui,
-	zsw_panels::{Panel, PanelState, Panels},
+	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels},
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_profiles::{Profile, Profiles},
 	zsw_side_effect_macros::side_effect,
@@ -507,6 +507,18 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 			egui::Slider::new(&mut self.panel.panel.duration, 0..=10800).ui(ui);
 		});
 
+		ui.collapsing("Images", |ui| {
+			match &mut self.panel.images {
+				PanelStateImages::Empty => (),
+				PanelStateImages::PrimaryOnly { front } => self::draw_panel_state_images(ui, "Front", front),
+				PanelStateImages::Both { front, back } => {
+					self::draw_panel_state_images(ui, "Front", front);
+					ui.separator();
+					self::draw_panel_state_images(ui, "Back", back);
+				},
+			};
+		});
+
 		// TODO: Return more than just the skip button here
 		ui.horizontal(|ui| {
 			ui.label("Skip");
@@ -516,6 +528,16 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 		})
 		.response
 	}
+}
+
+fn draw_panel_state_images(ui: &mut egui::Ui, kind: &str, image: &mut PanelStateImage) {
+	ui.horizontal(|ui| {
+		ui.label(kind);
+		ui.label(image.image.image_path().display().to_string());
+	});
+	ui.horizontal(|ui| {
+		ui.checkbox(&mut image.swap_dir, "Swap direction");
+	});
 }
 
 /// Draws a geometry rectangle
