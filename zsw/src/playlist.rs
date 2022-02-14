@@ -97,6 +97,7 @@ impl Playlist {
 
 	/// Sets the root path
 	pub async fn set_root_path(&self, root_path: PathBuf) {
+		// DEADLOCK: We ensure we don't block while `inner` is locked
 		let mut inner = self.inner.lock().await;
 
 		// Remove all existing paths and add new ones
@@ -104,7 +105,7 @@ impl Playlist {
 		for path in util::dir_files_iter(root_path.clone()) {
 			let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
 		}
-		
+
 		// Remove all current paths too
 		inner.cur_images.clear();
 
@@ -121,6 +122,20 @@ impl Playlist {
 	pub async fn next(&self) -> Arc<PlaylistImage> {
 		// Note: This can't return an `Err` because `self` owns a sender
 		self.img_rx.recv().await.expect("Image sender was closed")
+	}
+
+	/// Peeks the next images
+	///
+	/// # Blocking
+	/// Deadlocks if `f` blocks.
+	pub async fn peek_next(&self, mut f: impl FnMut(&PlaylistImage) + Send) {
+		// DEADLOCK: We ensure we don't block while `inner` is locked.
+		//           Caller ensures `f` doesn't block
+		let inner = self.inner.lock().await;
+
+		for image in inner.cur_images.iter().rev() {
+			f(image);
+		}
 	}
 }
 

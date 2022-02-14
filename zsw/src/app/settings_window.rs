@@ -6,7 +6,19 @@
 
 // Imports
 use {
-	crate::{util::MightBlock, Egui, Panel, PanelState, Panels, Playlist, Profile, Profiles, Rect, Wgpu},
+	crate::{
+		util::MightBlock,
+		Egui,
+		Panel,
+		PanelState,
+		Panels,
+		Playlist,
+		PlaylistImage,
+		Profile,
+		Profiles,
+		Rect,
+		Wgpu,
+	},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -240,6 +252,7 @@ fn draw_profile(ui: &mut egui::Ui, panels: &Panels, playlist: &Playlist, profile
 
 /// Draws the playlist settings
 fn draw_playlist(ui: &mut egui::Ui, playlist: &Playlist) {
+	// Draw the root path
 	ui.horizontal(|ui| {
 		// Show the current root path
 		ui.label("Root path");
@@ -266,6 +279,19 @@ fn draw_playlist(ui: &mut egui::Ui, playlist: &Playlist) {
 				Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
 			}
 		}
+	});
+
+	// Draw all paths in the pipeline
+	ui.collapsing("Upcoming", |ui| {
+		egui::ScrollArea::new([true, true]).max_height(500.0).show(ui, |ui| {
+			playlist
+				.peek_next(|image| match image {
+					PlaylistImage::File(path) => {
+						ui.label(path.display().to_string());
+					},
+				})
+				.block_on();
+		});
 	});
 }
 
