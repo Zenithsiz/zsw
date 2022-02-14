@@ -60,7 +60,7 @@
 use {
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
-	parking_lot::Mutex,
+	parking_lot::{Mutex, MutexGuard},
 	pollster::FutureExt,
 	std::marker::PhantomData,
 	wgpu::TextureFormat,
@@ -283,7 +283,7 @@ impl<'window> Wgpu<'window> {
 pub struct LockSource;
 
 /// Surface lock
-pub type SurfaceLock<'a> = zsw_util::Lock<'a, Surface, LockSource>;
+pub type SurfaceLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, Surface>, LockSource>;
 
 /// Configures the window surface and returns the preferred surface texture format
 fn configure_window_surface(

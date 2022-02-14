@@ -4,6 +4,7 @@
 use {
 	super::settings_window::SettingsWindow,
 	anyhow::Context,
+	pollster::FutureExt,
 	std::{
 		thread,
 		time::{Duration, Instant},
@@ -122,11 +123,19 @@ impl Renderer {
 			let queue = wgpu.queue();
 
 			// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
-			let mut render_pass_lock = egui.lock_render_pass().allow::<MightLock<zsw_egui::RenderPassLock>>();
+			// TODO: Not block on this
+			let mut render_pass_lock = egui
+				.lock_render_pass()
+				.block_on()
+				.allow::<MightLock<zsw_egui::RenderPassLock>>();
 			egui.do_render_pass(&mut render_pass_lock, |egui_render_pass| {
 				let font_image = {
 					// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
-					let platform_lock = egui.lock_platform().allow::<MightLock<zsw_egui::PlatformLock>>();
+					// TODO: Not block on this
+					let platform_lock = egui
+						.lock_platform()
+						.block_on()
+						.allow::<MightLock<zsw_egui::PlatformLock>>();
 					egui.font_image(&platform_lock)
 				};
 

@@ -103,7 +103,7 @@ impl SettingsWindow {
 			// Draw egui
 			// DEADLOCK: Caller ensures we can lock it
 			let res = {
-				let mut platform_lock = egui.lock_platform().allow::<MightLock<zsw_egui::PlatformLock>>();
+				let mut platform_lock = egui.lock_platform().await.allow::<MightLock<zsw_egui::PlatformLock>>();
 				egui.draw(window, &mut platform_lock, |ctx, frame| {
 					self.draw(&mut inner, ctx, frame, surface_size, window, panels, playlist, profiles)
 				})

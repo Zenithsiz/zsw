@@ -52,15 +52,15 @@
 // Imports
 use {
 	anyhow::Context,
+	async_lock::{Mutex, MutexGuard},
 	crossbeam::atomic::AtomicCell,
-	parking_lot::Mutex,
 	std::{
 		sync::Arc,
 		time::{Duration, Instant},
 	},
 	winit::window::Window,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::ParkingLotMutexSe, MightBlock, MightLock},
+	zsw_util::MightLock,
 	zsw_wgpu::Wgpu,
 };
 
@@ -129,11 +129,11 @@ impl Egui {
 	///
 	/// # Blocking
 	/// Will block until any existing platform locks are dropped
-	#[side_effect(MightLock<PlatformLock>)]
-	pub fn lock_platform(&self) -> PlatformLock {
+	#[side_effect(MightLock<PlatformLock<'a>>)]
+	pub async fn lock_platform<'a>(&'a self) -> PlatformLock<'a> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.platform.lock_se().allow::<MightBlock>();
+		let guard = self.platform.lock().await;
 		PlatformLock::new(guard, &self.lock_source)
 	}
 
@@ -141,11 +141,11 @@ impl Egui {
 	///
 	/// # Blocking
 	/// Will block until any existing render pass locks are dropped
-	#[side_effect(MightLock<RenderPassLock>)]
-	pub fn lock_render_pass(&self) -> RenderPassLock {
+	#[side_effect(MightLock<RenderPassLock<'a>>)]
+	pub async fn lock_render_pass<'a>(&'a self) -> RenderPassLock<'a> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.render_pass.lock_se().allow::<MightBlock>();
+		let guard = self.render_pass.lock().await;
 		RenderPassLock::new(guard, &self.lock_source)
 	}
 
@@ -218,10 +218,10 @@ impl Egui {
 pub struct LockSource;
 
 /// Platform lock
-pub type PlatformLock<'a> = zsw_util::Lock<'a, egui_winit_platform::Platform, LockSource>;
+pub type PlatformLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, egui_winit_platform::Platform>, LockSource>;
 
 /// Render pass lock
-pub type RenderPassLock<'a> = zsw_util::Lock<'a, egui_wgpu_backend::RenderPass, LockSource>;
+pub type RenderPassLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, egui_wgpu_backend::RenderPass>, LockSource>;
 
 /// Repaint signal
 // Note: We paint egui every frame, so this isn't required currently, but

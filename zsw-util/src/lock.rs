@@ -1,14 +1,13 @@
 //! Locks
 
 // Imports
-use parking_lot::MutexGuard;
+use std::ops::{Deref, DerefMut};
 
 /// Lock with an associated guard
-// TODO: Use `lock_api` to make this cleaner
 #[derive(Debug)]
-pub struct Lock<'a, Data, Source> {
+pub struct Lock<'a, Guard, Source> {
 	/// Guard
-	guard: MutexGuard<'a, Data>,
+	guard: Guard,
 
 	/// Source
 	// Note: This is just to ensure caller only passes a
@@ -16,22 +15,10 @@ pub struct Lock<'a, Data, Source> {
 	source: &'a Source,
 }
 
-impl<'a, Data, Source> Lock<'a, Data, Source> {
+impl<'a, Guard, Source> Lock<'a, Guard, Source> {
 	/// Creates a new lock
-	pub fn new(guard: MutexGuard<'a, Data>, source: &'a Source) -> Self {
+	pub fn new(guard: Guard, source: &'a Source) -> Self {
 		Self { guard, source }
-	}
-
-	/// Returns the inner data
-	pub fn get(&self, source: &Source) -> &Data {
-		self.assert_source(source);
-		&self.guard
-	}
-
-	/// Returns the inner data
-	pub fn get_mut(&mut self, source: &Source) -> &mut Data {
-		self.assert_source(source);
-		&mut self.guard
 	}
 
 	/// Asserts that the correct `wgpu` instance was passed
@@ -40,5 +27,27 @@ impl<'a, Data, Source> Lock<'a, Data, Source> {
 			self.source as *const _, source as *const _,
 			"Lock had the wrong source then used"
 		);
+	}
+}
+
+impl<'a, Guard, Source> Lock<'a, Guard, Source>
+where
+	Guard: Deref,
+{
+	/// Returns the inner data
+	pub fn get(&self, source: &Source) -> &Guard::Target {
+		self.assert_source(source);
+		&self.guard
+	}
+}
+
+impl<'a, Guard, Source> Lock<'a, Guard, Source>
+where
+	Guard: DerefMut,
+{
+	/// Returns the inner data
+	pub fn get_mut(&mut self, source: &Source) -> &mut Guard::Target {
+		self.assert_source(source);
+		&mut self.guard
 	}
 }

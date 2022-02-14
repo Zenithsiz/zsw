@@ -31,18 +31,18 @@ impl EventHandler {
 	/// # Locking
 	/// Locks the `zsw_egui::PlatformLock` on `egui`,
 	#[side_effect(MightLock<zsw_egui::PlatformLock<'egui>>)]
-	pub fn handle_event<'egui>(
+	pub async fn handle_event<'window, 'egui>(
 		&mut self,
-		wgpu: &Wgpu,
+		wgpu: &Wgpu<'_>,
 		egui: &'egui Egui,
 		settings_window: &SettingsWindow,
-		event: Event<!>,
+		event: Event<'window, !>,
 		control_flow: &mut EventLoopControlFlow,
 	) {
 		// Update egui
 		// DEADLOCK: Caller ensures we can call it
 		{
-			let mut platform_lock = egui.lock_platform().allow::<MightLock<zsw_egui::PlatformLock>>();
+			let mut platform_lock = egui.lock_platform().await.allow::<MightLock<zsw_egui::PlatformLock>>();
 			egui.handle_event(&mut platform_lock, &event);
 		}
 

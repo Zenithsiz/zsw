@@ -2256,6 +2256,7 @@ name = "zsw-egui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-lock",
  "crossbeam",
  "egui",
  "egui_wgpu_backend",

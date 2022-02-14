@@ -21,6 +21,9 @@ egui_wgpu_backend = "0.16.0"
 egui_winit_platform = "0.13.0"
 epi = "0.16.0"
 
+# Async
+async-lock = "2.4.0"
+
 # Error handling
 anyhow = "1.0.52"
 

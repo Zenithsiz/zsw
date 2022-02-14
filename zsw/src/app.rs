@@ -15,6 +15,7 @@ use {
 	crate::Args,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
+	pollster::FutureExt,
 	std::{iter, num::NonZeroUsize, thread, time::Duration},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -146,8 +147,12 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Run event loop in this thread until we quit
 		// DEADLOCK: `run_return` exits once the user requests it.
 		//           See above
+		// Note: Doesn't make sense to use a runner here, since nothing will call `stop`.
 		event_loop.run_return(|event, _, control_flow| {
-			event_handler.handle_event(&wgpu, &egui, &settings_window, event, control_flow).allow::<MightLock<zsw_egui::PlatformLock>>();
+			event_handler
+				.handle_event(&wgpu, &egui, &settings_window, event, control_flow)
+				.block_on()
+				.allow::<MightLock<zsw_egui::PlatformLock>>();
 		});
 
 		// Note: In release builds, once we get here, we can just exit,

@@ -7,7 +7,10 @@ use {
 	parking_lot::{Condvar, Mutex},
 	std::{
 		future::Future,
-		sync::Arc,
+		sync::{
+			atomic::{self, AtomicBool},
+			Arc,
+		},
 		task,
 		thread::{self, Scope, ScopedJoinHandle},
 	},
@@ -74,6 +77,9 @@ impl<'scope, 'env, T> ThreadSpawner<'scope, 'env, T> {
 pub struct FutureRunner {
 	/// Signal
 	signal: Arc<FutureSignal>,
+
+	/// If we're running
+	running: AtomicBool,
 }
 
 impl FutureRunner {
@@ -82,16 +88,26 @@ impl FutureRunner {
 	pub fn new() -> Self {
 		// Create the waker
 		Self {
-			signal: Arc::new(FutureSignal::new()),
+			signal:  Arc::new(FutureSignal::new()),
+			running: AtomicBool::new(false),
 		}
 	}
 
 	/// Executes the future
+	///
+	/// # Panics
+	/// Panics if called more than once
 	#[allow(clippy::result_unit_err)] // TODO: Use custom enum to say if we were cancelled
 	pub fn run<F>(&self, f: F) -> Result<F::Output, ()>
 	where
 		F: Future,
 	{
+		// 'lock' the running bool
+		assert!(
+			!self.running.swap(true, atomic::Ordering::AcqRel),
+			"Cannot run a future runner more than once"
+		);
+
 		// Pin the future
 		// TODO: Don't allocate?
 		let mut f = Box::pin(f);
@@ -108,6 +124,9 @@ impl FutureRunner {
 				task::Poll::Pending => (),
 			}
 		}
+
+		// Exit the signal if we're still waiting
+		self.signal.exit();
 
 		Err(())
 	}
