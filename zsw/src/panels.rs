@@ -41,10 +41,7 @@ pub struct Panels {
 
 impl Panels {
 	/// Creates the panel
-	pub fn new(
-		device: &wgpu::Device,
-		surface_texture_format: wgpu::TextureFormat,
-	) -> Result<Self, anyhow::Error> {
+	pub fn new(device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat) -> Result<Self, anyhow::Error> {
 		// Create the renderer
 		let renderer = PanelsRenderer::new(device, surface_texture_format).context("Unable to create renderer")?;
 

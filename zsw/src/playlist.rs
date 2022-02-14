@@ -19,6 +19,9 @@ struct Inner {
 
 	/// All images
 	images: HashSet<Arc<PlaylistImage>>,
+
+	/// Current images
+	cur_images: Vec<Arc<PlaylistImage>>,
 }
 
 /// Image playlist
@@ -44,8 +47,9 @@ impl Playlist {
 
 		// Create the empty inner data
 		let inner = Inner {
-			root_path: None,
-			images:    HashSet::new(),
+			root_path:  None,
+			images:     HashSet::new(),
+			cur_images: vec![],
 		};
 
 		Self {
@@ -57,31 +61,29 @@ impl Playlist {
 
 	/// Runs the playlist
 	pub async fn run(&self) -> ! {
-		// All images to send
-		let mut images = vec![];
-
 		loop {
-			// Retrieve the next images and shuffle them
+			// Get the next image to send
 			// DEADLOCK: We ensure we don't block while `inner` is locked
-			{
-				let inner = self.inner.lock().await;
-				images.extend(inner.images.iter().cloned());
-			}
-			images.shuffle(&mut rand::thread_rng());
+			// Note: It's important to not have this in the match expression, as it would
+			//       keep the lock through the whole match.
+			let next = self.inner.lock().await.cur_images.pop();
 
-			// Then try to send each image
-			for image in images.drain(..) {
+			// Then check if we got it
+			match next {
+				// If we got it, send it
 				// Note: This can't return an `Err` because `self` owns a receiver
-				self.img_tx.send(image).await.expect("Image receiver was closed");
+				Some(image) => self.img_tx.send(image).await.expect("Image receiver was closed"),
+
+				// Else get the next batch and shuffle them
+				// DEADLOCK: We ensure we don't block while `inner` is locked
+				None => {
+					let mut inner = self.inner.lock().await;
+					let inner = &mut *inner;
+					inner.cur_images.extend(inner.images.iter().cloned());
+					inner.cur_images.shuffle(&mut rand::thread_rng());
+				},
 			}
 		}
-	}
-
-	/// Clears all existing images
-	pub async fn clear(&self) {
-		// DEADLOCK: We ensure we don't block while `inner` is locked
-		let mut inner = self.inner.lock().await;
-		inner.images.clear();
 	}
 
 	/// Removes an image
@@ -93,17 +95,18 @@ impl Playlist {
 		let _ = inner.images.remove(image);
 	}
 
-	/// Adds all images from a directory.
-	///
-	/// # Errors
-	/// Logs all errors via `log::warn`
-	pub async fn add_dir(&self, root_path: PathBuf) {
+	/// Sets the root path
+	pub async fn set_root_path(&self, root_path: PathBuf) {
 		let mut inner = self.inner.lock().await;
 
-		// Add all paths
+		// Remove all existing paths and add new ones
+		inner.images.clear();
 		for path in util::dir_files_iter(root_path.clone()) {
 			let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
 		}
+		
+		// Remove all current paths too
+		inner.cur_images.clear();
 
 		// Save the root path
 		inner.root_path = Some(root_path);

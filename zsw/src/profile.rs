@@ -94,8 +94,7 @@ pub struct Profile {
 impl Profile {
 	/// Applies a profile
 	pub async fn apply(&self, playlist: &Playlist, panels: &Panels) {
-		playlist.clear().await;
-		playlist.add_dir(self.root_path.clone()).await;
+		playlist.set_root_path(self.root_path.clone()).await;
 		panels.replace_panels(self.panels.iter().copied());
 	}
 }

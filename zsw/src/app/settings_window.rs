@@ -109,7 +109,6 @@ impl SettingsWindow {
 	}
 
 	/// Draws the settings window
-	#[allow(clippy::too_many_lines)] // TODO: Refactor
 	fn draw(
 		&self,
 		inner: &mut Inner,
@@ -137,135 +136,7 @@ impl SettingsWindow {
 
 		// Then render it
 		settings_window.open(&mut inner.open).show(ctx, |ui| {
-			ui.collapsing("Panels", |ui| {
-				// DEADLOCK: We ensure we don't block within the callback.
-				let mut panel_idx = 0;
-				panels
-					.for_each_mut::<_, ()>(|panel| {
-						ui.collapsing(format!("Panel {panel_idx}"), |ui| {
-							ui.add(PanelWidget::new(panel, surface_size));
-						});
-
-						panel_idx += 1;
-					})
-					.allow::<MightBlock>();
-
-				// TODO: Remove, not very useful in it's current state
-				ui.collapsing("Add", |ui| {
-					ui.horizontal(|ui| {
-						ui.label("Geometry");
-						self::draw_rect(ui, &mut inner.new_panel_state.geometry, surface_size);
-					});
-
-					ui.horizontal(|ui| {
-						ui.label("Fade progress");
-						let min = inner.new_panel_state.duration / 2;
-						let max = inner.new_panel_state.duration.saturating_sub(1);
-						egui::Slider::new(&mut inner.new_panel_state.fade_point, min..=max).ui(ui);
-					});
-
-					ui.horizontal(|ui| {
-						ui.label("Max progress");
-						egui::Slider::new(&mut inner.new_panel_state.duration, 0..=10800).ui(ui);
-					});
-
-					if ui.button("Add").clicked() {
-						panels.add_panel(Panel::new(
-							inner.new_panel_state.geometry,
-							inner.new_panel_state.duration,
-							inner.new_panel_state.fade_point,
-						));
-					}
-				});
-			});
-
-			ui.collapsing("Playlist", |ui| {
-				ui.horizontal(|ui| {
-					ui.label("Re-scan directory");
-					if ui.button("📁").clicked() {
-						let file_dialog = native_dialog::FileDialog::new().show_open_single_dir();
-						match file_dialog {
-							Ok(file_dialog) => {
-								if let Some(path) = file_dialog {
-									// Set the root path
-									// TODO: Not block on this?
-									async {
-										playlist.clear().await;
-										playlist.add_dir(path).await;
-									}
-									.block_on();
-
-									// TODO: Reset all existing images and paths loaded from the
-									//       old path distributer, maybe?
-								}
-							},
-							Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
-						}
-					}
-				});
-			});
-
-			ui.collapsing("Profile", |ui| {
-				// DEADLOCK: TODO
-				//           We currently block, but we could always just "find" the profile that was clicked
-				//           and do it outside. Implement that.
-				profiles
-					.for_each::<_, ()>(|path, profile| {
-						ui.horizontal(|ui| {
-							ui.label(path.display().to_string());
-							if ui.button("Apply").clicked() {
-								// Apply the profile
-								profile.apply(playlist, panels).block_on();
-							}
-						});
-					})
-					.allow::<MightBlock>();
-
-				ui.horizontal(|ui| {
-					ui.label("Load");
-					if ui.button("📁").clicked() {
-						let file_dialog = native_dialog::FileDialog::new().show_open_single_file();
-						match file_dialog {
-							Ok(file_dialog) =>
-								if let Some(path) = file_dialog {
-									match profiles.load(path.clone()) {
-										Ok(profile) => log::info!("Successfully loaded profile: {profile:?}"),
-										Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
-									}
-								},
-							Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
-						}
-					}
-				});
-
-				ui.horizontal(|ui| {
-					ui.label("Save As");
-					if ui.button("📁").clicked() {
-						let file_dialog = native_dialog::FileDialog::new().show_save_single_file();
-						match file_dialog {
-							Ok(file_dialog) =>
-								if let Some(path) = file_dialog {
-									let profile = Profile {
-										root_path: match playlist.root_path().block_on() {
-											Some(path) => path,
-											None => {
-												log::warn!("No root path was set");
-												return;
-											},
-										},
-										panels:    panels.panels(),
-									};
-
-									match profiles.save(path.clone(), profile) {
-										Ok(()) => (),
-										Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
-									}
-								},
-							Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
-						}
-					}
-				});
-			});
+			self::draw_settings_window(ui, &mut inner.new_panel_state, surface_size, panels, playlist, profiles);
 		});
 
 		Ok(())
@@ -275,6 +146,176 @@ impl SettingsWindow {
 	pub fn queue_open_click(&self, cursor_pos: Option<PhysicalPosition<f64>>) {
 		self.queued_open_click.store(cursor_pos);
 	}
+}
+
+/// Draws the settings window
+fn draw_settings_window(
+	ui: &mut egui::Ui,
+	new_panel_state: &mut NewPanelState,
+	surface_size: PhysicalSize<u32>,
+	panels: &Panels,
+	playlist: &Playlist,
+	profiles: &Profiles,
+) {
+	// Draw the panels header
+	ui.collapsing("Panels", |ui| {
+		self::draw_panels(ui, new_panel_state, surface_size, panels);
+	});
+	ui.collapsing("Playlist", |ui| {
+		self::draw_playlist(ui, playlist);
+	});
+	ui.collapsing("Profile", |ui| {
+		self::draw_profile(ui, panels, playlist, profiles);
+	});
+}
+
+/// Draws the profile settings
+fn draw_profile(ui: &mut egui::Ui, panels: &Panels, playlist: &Playlist, profiles: &Profiles) {
+	// Get the profile to apply, if any
+	// DEADLOCK: We don't block within it.
+	let mut profile_to_apply = None;
+	profiles
+		.for_each::<_, ()>(|path, profile| {
+			ui.horizontal(|ui| {
+				ui.label(path.display().to_string());
+				if ui.button("Apply").clicked() {
+					profile_to_apply = Some(profile.clone());
+				}
+			});
+		})
+		.allow::<MightBlock>();
+
+	// If we had any, apply it
+	if let Some(profile) = profile_to_apply {
+		profile.apply(playlist, panels).block_on();
+	}
+
+	// Draw the load button
+	ui.horizontal(|ui| {
+		ui.label("Load");
+		if ui.button("📁").clicked() {
+			let file_dialog = native_dialog::FileDialog::new().show_open_single_file();
+			match file_dialog {
+				Ok(file_dialog) =>
+					if let Some(path) = file_dialog {
+						match profiles.load(path.clone()) {
+							Ok(profile) => log::info!("Successfully loaded profile: {profile:?}"),
+							Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
+						}
+					},
+				Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
+			}
+		}
+	});
+
+	// Draw the save-as button
+	ui.horizontal(|ui| {
+		ui.label("Save As");
+		if ui.button("📁").clicked() {
+			let file_dialog = native_dialog::FileDialog::new().show_save_single_file();
+			match file_dialog {
+				Ok(file_dialog) =>
+					if let Some(path) = file_dialog {
+						let profile = Profile {
+							root_path: match playlist.root_path().block_on() {
+								Some(path) => path,
+								None => {
+									log::warn!("No root path was set");
+									return;
+								},
+							},
+							panels:    panels.panels(),
+						};
+
+						match profiles.save(path.clone(), profile) {
+							Ok(()) => (),
+							Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
+						}
+					},
+				Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
+			}
+		}
+	});
+}
+
+/// Draws the playlist settings
+fn draw_playlist(ui: &mut egui::Ui, playlist: &Playlist) {
+	ui.horizontal(|ui| {
+		// Show the current root path
+		ui.label("Root path");
+		ui.add_space(10.0);
+		match playlist.root_path().block_on() {
+			Some(root_path) => ui.label(root_path.display().to_string()),
+			None => ui.label("<None>"),
+		};
+
+		// Then the change button
+		if ui.button("📁").clicked() {
+			// Ask for a file
+			let file_dialog = native_dialog::FileDialog::new().show_open_single_dir();
+			match file_dialog {
+				Ok(file_dialog) => {
+					if let Some(path) = file_dialog {
+						// Set the root path
+						// TODO: Not block on this?
+						playlist.set_root_path(path).block_on();
+
+						// TODO: Maybe reset both panels and loaders?
+					}
+				},
+				Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
+			}
+		}
+	});
+}
+
+/// Draws the panels settings
+fn draw_panels(
+	ui: &mut egui::Ui,
+	new_panel_state: &mut NewPanelState,
+	surface_size: PhysicalSize<u32>,
+	panels: &Panels,
+) {
+	// Draw all panels in their own header
+	// BLOCKING: TODO
+	let mut panel_idx = 0;
+	panels
+		.for_each_mut::<_, ()>(|panel| {
+			ui.collapsing(format!("Panel {panel_idx}"), |ui| {
+				ui.add(PanelWidget::new(panel, surface_size));
+			});
+
+			panel_idx += 1;
+		})
+		.allow::<MightBlock>();
+
+	// Draw the panel adder
+	ui.collapsing("Add", |ui| {
+		ui.horizontal(|ui| {
+			ui.label("Geometry");
+			self::draw_rect(ui, &mut new_panel_state.geometry, surface_size);
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Fade progress");
+			let min = new_panel_state.duration / 2;
+			let max = new_panel_state.duration.saturating_sub(1);
+			egui::Slider::new(&mut new_panel_state.fade_point, min..=max).ui(ui);
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Max progress");
+			egui::Slider::new(&mut new_panel_state.duration, 0..=10800).ui(ui);
+		});
+
+		if ui.button("Add").clicked() {
+			panels.add_panel(Panel::new(
+				new_panel_state.geometry,
+				new_panel_state.duration,
+				new_panel_state.fade_point,
+			));
+		}
+	});
 }
 
 /// New panel state
