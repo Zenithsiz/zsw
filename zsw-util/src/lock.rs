@@ -10,15 +10,15 @@ pub struct Lock<'a, Data, Source> {
 	/// Guard
 	guard: MutexGuard<'a, Data>,
 
-	/// Source pointer
+	/// Source
 	// Note: This is just to ensure caller only passes a
 	//       lock that came from the same instance that locked it.
-	source: *const Source,
+	source: &'a Source,
 }
 
 impl<'a, Data, Source> Lock<'a, Data, Source> {
 	/// Creates a new lock
-	pub fn new(guard: MutexGuard<'a, Data>, source: &Source) -> Self {
+	pub fn new(guard: MutexGuard<'a, Data>, source: &'a Source) -> Self {
 		Self { guard, source }
 	}
 
@@ -36,6 +36,9 @@ impl<'a, Data, Source> Lock<'a, Data, Source> {
 
 	/// Asserts that the correct `wgpu` instance was passed
 	fn assert_source(&self, source: &Source) {
-		assert_eq!(self.source, source as *const _, "Lock had the wrong source then used");
+		assert_eq!(
+			self.source as *const _, source as *const _,
+			"Lock had the wrong source then used"
+		);
 	}
 }

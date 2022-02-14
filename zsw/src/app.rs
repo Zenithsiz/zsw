@@ -126,7 +126,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn("Settings window", || {
 			settings_window_runner
 				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles))
-				.map::<!, _>(WithSideEffect::allow::<MightLock<zsw_wgpu::SurfaceLock>>)
+				.map::<!, _>(WithSideEffect::allow::<MightLock<(zsw_wgpu::SurfaceLock, zsw_egui::PlatformLock)>>)
 				.into_err();
 		})?;
 
@@ -135,14 +135,19 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn("Renderer", || {
 			renderer_runner
 				.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window))
-				.map::<!, _>(WithSideEffect::allow::<MightLock<zsw_wgpu::SurfaceLock>>)
+				.map::<!, _>(
+					WithSideEffect::allow::<
+						MightLock<(zsw_wgpu::SurfaceLock, zsw_egui::RenderPassLock, zsw_egui::PlatformLock)>,
+					>,
+				)
 				.into_err();
 		})?;
 
 		// Run event loop in this thread until we quit
 		// DEADLOCK: `run_return` exits once the user requests it.
+		//           See above
 		event_loop.run_return(|event, _, control_flow| {
-			event_handler.handle_event(&wgpu, &egui, &settings_window, event, control_flow);
+			event_handler.handle_event(&wgpu, &egui, &settings_window, event, control_flow).allow::<MightLock<zsw_egui::PlatformLock>>();
 		});
 
 		// Note: In release builds, once we get here, we can just exit,

@@ -13,7 +13,7 @@ use {
 	zsw_img::ImageLoader,
 	zsw_panels::Panels,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{MightBlock, MightLock},
+	zsw_util::MightLock,
 	zsw_wgpu::Wgpu,
 };
 
@@ -29,14 +29,16 @@ impl Renderer {
 	/// Runs the renderer
 	///
 	/// # Locking
-	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
-	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
-	pub async fn run<'window, 'wgpu>(
+	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`,
+	/// followed by the `zsw_egui::RenderPassLock` on `egui`,
+	/// followed by the `zsw_egui::PlatformLock` on `egui`,
+	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::RenderPassLock<'egui>, zsw_egui::PlatformLock<'egui>)>)]
+	pub async fn run<'window, 'wgpu, 'egui>(
 		&self,
 		window: &Window,
 		wgpu: &'wgpu Wgpu<'window>,
 		panels: &Panels,
-		egui: &Egui,
+		egui: &'egui Egui,
 		image_loader: &ImageLoader,
 		settings_window: &SettingsWindow,
 	) -> ! {
@@ -56,7 +58,7 @@ impl Renderer {
 			// DEADLOCK: Caller ensures we can lock it
 			match Self::render(window, wgpu, panels, egui, settings_window)
 				.await
-				.allow::<MightLock<zsw_wgpu::SurfaceLock>>()
+				.allow::<MightLock<(zsw_wgpu::SurfaceLock, zsw_egui::RenderPassLock, zsw_egui::PlatformLock)>>()
 			{
 				Ok(()) => (),
 				Err(err) => log::warn!("Unable to render: {err:?}"),
@@ -80,13 +82,15 @@ impl Renderer {
 	/// Renders
 	///
 	/// # Locking
-	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
-	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
-	async fn render<'window, 'wgpu>(
+	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`,
+	/// followed by the `zsw_egui::RenderPassLock` on `egui`,
+	/// followed by the `zsw_egui::PlatformLock` on `egui`,
+	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::RenderPassLock<'egui>, zsw_egui::PlatformLock<'egui>)>)]
+	async fn render<'window, 'wgpu, 'egui>(
 		window: &Window,
 		wgpu: &'wgpu Wgpu<'window>,
 		panels: &Panels,
-		egui: &Egui,
+		egui: &'egui Egui,
 		settings_window: &SettingsWindow,
 	) -> Result<(), anyhow::Error> {
 		// Get the egui render results
@@ -117,11 +121,16 @@ impl Renderer {
 			let device = wgpu.device();
 			let queue = wgpu.queue();
 
-			// DEADLOCK: We ensure the callback doesn't block.
-			egui.do_render_pass(|egui_render_pass| {
-				// TODO: Check if it's fine to get the platform here without synchronizing
-				//       with the drawing.
-				egui_render_pass.update_texture(device, queue, &egui.font_image());
+			// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
+			let mut render_pass_lock = egui.lock_render_pass().allow::<MightLock<zsw_egui::RenderPassLock>>();
+			egui.do_render_pass(&mut render_pass_lock, |egui_render_pass| {
+				let font_image = {
+					// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
+					let platform_lock = egui.lock_platform().allow::<MightLock<zsw_egui::PlatformLock>>();
+					egui.font_image(&platform_lock)
+				};
+
+				egui_render_pass.update_texture(device, queue, &font_image);
 				egui_render_pass.update_user_textures(device, queue);
 				egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
 
@@ -130,9 +139,6 @@ impl Renderer {
 					.execute(encoder, surface_view, &paint_jobs, &screen_descriptor, None)
 					.context("Unable to render egui")
 			})
-			.allow::<MightBlock>()?;
-
-			Ok(())
 		})
 	}
 }

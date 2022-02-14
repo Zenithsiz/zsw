@@ -60,7 +60,7 @@ impl<Value, Effects: SideEffect> WithSideEffect<Value, Effects> {
 	/// effects so they may be grep-able.
 	pub fn allow<AllowedEffects>(self) -> Value
 	where
-		AllowedEffects: Eq<AllowedEffects>,
+		AllowedEffects: Eq<Effects>,
 	{
 		self.value
 	}

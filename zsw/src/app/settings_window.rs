@@ -71,12 +71,14 @@ impl SettingsWindow {
 	/// Runs the setting window
 	///
 	/// # Locking
-	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
-	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
-	pub async fn run<'wgpu>(
+	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`,
+	/// followed by the `zsw_egui::PlatformLock` lock on `egui`
+	#[allow(clippy::future_not_send)] // This future will be run on it's own thread
+	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::PlatformLock<'egui>)>)]
+	pub async fn run<'wgpu, 'egui>(
 		&self,
 		wgpu: &'wgpu Wgpu<'_>,
-		egui: &Egui,
+		egui: &'egui Egui,
 		window: &Window,
 		panels: &Panels,
 		playlist: &Playlist,
@@ -99,9 +101,13 @@ impl SettingsWindow {
 			};
 
 			// Draw egui
-			let res = egui.draw(window, |ctx, frame| {
-				self.draw(&mut inner, ctx, frame, surface_size, window, panels, playlist, profiles)
-			});
+			// DEADLOCK: Caller ensures we can lock it
+			let res = {
+				let mut platform_lock = egui.lock_platform().allow::<MightLock<zsw_egui::PlatformLock>>();
+				egui.draw(window, &mut platform_lock, |ctx, frame| {
+					self.draw(&mut inner, ctx, frame, surface_size, window, panels, playlist, profiles)
+				})
+			};
 
 			let paint_jobs = match res {
 				Ok(paint_jobs) => paint_jobs,
@@ -112,7 +118,8 @@ impl SettingsWindow {
 			};
 
 			// Then send the paint jobs
-			// DEADLOCK: TODO
+			// DEADLOCK: We ensure we don't hold any locks while
+			//           sending.
 			self.paint_jobs_tx
 				.send(paint_jobs)
 				.await
@@ -129,6 +136,9 @@ impl SettingsWindow {
 	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
 	pub async fn paint_jobs<'wgpu>(&self, _wgpu: &'wgpu Wgpu<'_>) -> Vec<egui::epaint::ClippedMesh> {
 		// Note: This can't return an `Err` because `self` owns a sender
+		// DEADLOCK: Caller ensures it won't hold a `SurfaceLock`,
+		//           and we ensure the other side of the channel
+		//           can progress.
 		self.paint_jobs_rx.recv().await.expect("Paint jobs sender was closed")
 	}
 

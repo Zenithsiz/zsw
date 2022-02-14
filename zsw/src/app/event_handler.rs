@@ -9,6 +9,8 @@ use {
 		event_loop::ControlFlow as EventLoopControlFlow,
 	},
 	zsw_egui::Egui,
+	zsw_side_effect_macros::side_effect,
+	zsw_util::MightLock,
 	zsw_wgpu::Wgpu,
 };
 
@@ -25,16 +27,24 @@ impl EventHandler {
 	}
 
 	/// Handles an event
-	pub fn handle_event(
+	///
+	/// # Locking
+	/// Locks the `zsw_egui::PlatformLock` on `egui`,
+	#[side_effect(MightLock<zsw_egui::PlatformLock<'egui>>)]
+	pub fn handle_event<'egui>(
 		&mut self,
 		wgpu: &Wgpu,
-		egui: &Egui,
+		egui: &'egui Egui,
 		settings_window: &SettingsWindow,
 		event: Event<!>,
 		control_flow: &mut EventLoopControlFlow,
-	) {
+	) -> () {
 		// Update egui
-		egui.handle_event(&event);
+		// DEADLOCK: Caller ensures we can call it
+		{
+			let mut platform_lock = egui.lock_platform().allow::<MightLock<zsw_egui::PlatformLock>>();
+			egui.handle_event(&mut platform_lock, &event);
+		}
 
 		// Set control for to wait for next event, since we're not doing
 		// anything else on the main thread

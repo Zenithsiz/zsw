@@ -60,7 +60,7 @@ use {
 	},
 	winit::window::Window,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::ParkingLotMutexSe, MightBlock},
+	zsw_util::{extse::ParkingLotMutexSe, MightBlock, MightLock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -82,6 +82,9 @@ pub struct Egui {
 
 	/// Last frame time
 	frame_time: AtomicCell<Option<Duration>>,
+
+	/// Lock source
+	lock_source: LockSource,
 }
 
 impl std::fmt::Debug for Egui {
@@ -91,6 +94,7 @@ impl std::fmt::Debug for Egui {
 			.field("render_pass", &"..")
 			.field("repaint_signal", &"..")
 			.field("frame_time", &self.frame_time)
+			.field("lock_source", &self.lock_source)
 			.finish()
 	}
 }
@@ -121,7 +125,32 @@ impl Egui {
 			render_pass: Mutex::new(render_pass),
 			repaint_signal,
 			frame_time: AtomicCell::new(None),
+			lock_source: LockSource,
 		})
+	}
+
+	/// Creates a platform lock
+	///
+	/// # Blocking
+	/// Will block until any existing platform locks are dropped
+	#[side_effect(MightLock<PlatformLock>)]
+	pub fn lock_platform(&self) -> PlatformLock {
+		// DEADLOCK: Caller is responsible to ensure we don't deadlock
+		//           We don't lock it outside of this method
+		let guard = self.platform.lock_se().allow::<MightBlock>();
+		PlatformLock::new(guard, &self.lock_source)
+	}
+
+	/// Creates a render pas lock
+	///
+	/// # Blocking
+	/// Will block until any existing render pass locks are dropped
+	#[side_effect(MightLock<RenderPassLock>)]
+	pub fn lock_render_pass(&self) -> RenderPassLock {
+		// DEADLOCK: Caller is responsible to ensure we don't deadlock
+		//           We don't lock it outside of this method
+		let guard = self.render_pass.lock_se().allow::<MightBlock>();
+		RenderPassLock::new(guard, &self.lock_source)
 	}
 
 	/// Draws egui
@@ -131,14 +160,11 @@ impl Egui {
 	pub fn draw(
 		&self,
 		window: &Window,
+		platform_lock: &mut PlatformLock,
 		f: impl FnOnce(&egui::CtxRef, &epi::Frame) -> Result<(), anyhow::Error>,
 	) -> Result<Vec<egui::ClippedMesh>, anyhow::Error> {
 		// Start the frame
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		// Note: We must keep the platform locked until the call to retrieve all the paint jobs,
-		//       in order to ensure the main thread can't process events mid-drawing.
-		let mut egui_platform = self.platform.lock_se().allow::<MightBlock>();
+		let egui_platform = platform_lock.get_mut(&self.lock_source);
 		let egui_frame_start = Instant::now();
 		egui_platform.begin_frame();
 
@@ -171,32 +197,37 @@ impl Egui {
 	}
 
 	/// Handles an event
-	pub fn handle_event(&self, event: &winit::event::Event<!>) {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		self.platform.lock_se().allow::<MightBlock>().handle_event(event);
+	pub fn handle_event(&self, platform_lock: &mut PlatformLock, event: &winit::event::Event<!>) {
+		platform_lock.get_mut(&self.lock_source).handle_event(event);
 	}
 
 	/// Returns the font image
-	pub fn font_image(&self) -> Arc<egui::FontImage> {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		self.platform.lock_se().allow::<MightBlock>().context().font_image()
+	pub fn font_image(&self, platform_lock: &PlatformLock) -> Arc<egui::FontImage> {
+		platform_lock.get(&self.lock_source).context().font_image()
 	}
 
 	/// Performs a render pass
-	///
-	/// # Blocking
-	/// `f` must not block.
-	#[side_effect(MightBlock)]
-	pub fn do_render_pass<T>(&self, f: impl FnOnce(&mut egui_wgpu_backend::RenderPass) -> T) -> T {
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
-		//           Caller ensures to not block.
-		let mut render_pass = self.render_pass.lock_se().allow::<MightBlock>();
-		f(&mut *render_pass)
+	pub fn do_render_pass<T>(
+		&self,
+		render_pass_lock: &mut RenderPassLock,
+		f: impl FnOnce(&mut egui_wgpu_backend::RenderPass) -> T,
+	) -> T {
+		let render_pass = render_pass_lock.get_mut(&self.lock_source);
+		f(render_pass)
 	}
 }
+
+/// Source for all locks
+// Note: This is to ensure user can't create the locks themselves
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct LockSource;
+
+/// Platform lock
+pub type PlatformLock<'a> = zsw_util::Lock<'a, egui_winit_platform::Platform, LockSource>;
+
+/// Render pass lock
+pub type RenderPassLock<'a> = zsw_util::Lock<'a, egui_wgpu_backend::RenderPass, LockSource>;
 
 /// Repaint signal
 // Note: We paint egui every frame, so this isn't required currently, but
