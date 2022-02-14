@@ -18,8 +18,7 @@ pub fn side_effect(attr: TokenStream, item: TokenStream) -> TokenStream {
 	func.sig.output = {
 		// Get the `->` and return type
 		let (r_arrow, return_ty) = match func.sig.output {
-			syn::ReturnType::Default =>
-				proc_macro_error::abort!(func.sig.output, "Cannot use an empty output (yet), add `-> ()`"),
+			syn::ReturnType::Default => (syn::parse_quote!(->), syn::parse_quote!(())),
 			syn::ReturnType::Type(r_arrow, ty) => (r_arrow, ty),
 		};
 

@@ -38,7 +38,7 @@ impl EventHandler {
 		settings_window: &SettingsWindow,
 		event: Event<!>,
 		control_flow: &mut EventLoopControlFlow,
-	) -> () {
+	) {
 		// Update egui
 		// DEADLOCK: Caller ensures we can call it
 		{
