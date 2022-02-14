@@ -7,11 +7,10 @@
 // Modules
 mod event_handler;
 mod renderer;
-mod settings_window;
 
 // Imports
 use {
-	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
+	self::{event_handler::EventHandler, renderer::Renderer},
 	crate::Args,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
@@ -32,6 +31,7 @@ use {
 	zsw_panels::Panels,
 	zsw_playlist::Playlist,
 	zsw_profiles::Profiles,
+	zsw_settings_window::SettingsWindow,
 	zsw_util::{FutureRunner, MightLock, Rect, WithSideEffect},
 	zsw_wgpu::Wgpu,
 };

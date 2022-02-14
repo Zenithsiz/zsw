@@ -1,6 +1,17 @@
 [workspace]
 
-members = ["zsw", "zsw-playlist", "zsw-img", "zsw-wgpu", "zsw-egui", "zsw-panels", "zsw-profiles", "zsw-util", "zsw-side-effect-macros"]
+members = [
+  "zsw",
+  "zsw-playlist",
+  "zsw-img",
+  "zsw-wgpu",
+  "zsw-egui",
+  "zsw-panels",
+  "zsw-profiles",
+  "zsw-util",
+  "zsw-settings-window",
+  "zsw-side-effect-macros",
+]
 resolver = "2"
 
 # Compile `image` in release mode, else it's too slow to meaningfully

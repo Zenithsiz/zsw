@@ -2,7 +2,6 @@
 
 // Imports
 use {
-	super::settings_window::SettingsWindow,
 	anyhow::Context,
 	pollster::FutureExt,
 	std::{
@@ -13,6 +12,7 @@ use {
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
 	zsw_panels::Panels,
+	zsw_settings_window::SettingsWindow,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::MightLock,
 	zsw_wgpu::Wgpu,

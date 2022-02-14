@@ -2,13 +2,13 @@
 
 // Imports
 use {
-	super::settings_window::SettingsWindow,
 	winit::{
 		dpi::PhysicalPosition,
 		event::{Event, WindowEvent},
 		event_loop::ControlFlow as EventLoopControlFlow,
 	},
 	zsw_egui::Egui,
+	zsw_settings_window::SettingsWindow,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::MightLock,
 	zsw_wgpu::Wgpu,
