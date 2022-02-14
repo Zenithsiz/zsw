@@ -30,7 +30,7 @@ pub fn side_effect(attr: TokenStream, item: TokenStream) -> TokenStream {
 	};
 
 	// Wrap the body
-	// TODO: Deal with async, unsafe and what not.
+	// TODO: Deal with unsafe (and maybe others)
 	func.block = {
 		let fn_body = func.block;
 
