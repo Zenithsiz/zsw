@@ -12,17 +12,7 @@ mod settings_window;
 // Imports
 use {
 	self::{event_handler::EventHandler, renderer::Renderer, settings_window::SettingsWindow},
-	crate::{
-		util::{self, FutureRunner},
-		Args,
-		Egui,
-		ImageLoader,
-		Panels,
-		Playlist,
-		Profiles,
-		Rect,
-		Wgpu,
-	},
+	crate::{Args, Egui, ImageLoader, Panels, Profiles, Rect, Wgpu},
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	std::{iter, num::NonZeroUsize, thread, time::Duration},
@@ -36,6 +26,8 @@ use {
 		window::{Window, WindowBuilder},
 	},
 	x11::xlib,
+	zsw_playlist::Playlist,
+	zsw_util::FutureRunner,
 };
 
 /// Runs the application
@@ -88,7 +80,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	//       another thread, since we manually join all threads at the end.
 	thread::scope(|s| {
 		// Create the thread spawner
-		let mut thread_spawner = util::ThreadSpawner::new(s);
+		let mut thread_spawner = zsw_util::ThreadSpawner::new(s);
 
 		// Spawn the profile loader if we have any
 		if let Some(path) = &args.profile {

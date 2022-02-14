@@ -11,7 +11,6 @@
 
 // Imports
 use {
-	crate::util::{extse::ParkingLotMutexSe, MightBlock},
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	parking_lot::Mutex,
@@ -20,6 +19,7 @@ use {
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_side_effect_macros::side_effect,
+	zsw_util::{extse::ParkingLotMutexSe, MightBlock},
 };
 
 /// Surface

@@ -9,7 +9,7 @@ mod load;
 // Imports
 use {
 	super::Image,
-	crate::{Playlist, PlaylistImage},
+	zsw_playlist::{Playlist, PlaylistImage},
 };
 
 /// Image loader

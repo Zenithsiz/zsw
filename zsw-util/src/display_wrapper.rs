@@ -4,6 +4,7 @@
 use std::{cell::RefCell, fmt};
 
 /// A display wrapper using `F`
+#[derive(Debug)]
 pub struct DisplayWrapper<F: FnMut(&mut fmt::Formatter) -> fmt::Result>(RefCell<F>);
 
 impl<F: FnMut(&mut fmt::Formatter) -> fmt::Result> DisplayWrapper<F> {

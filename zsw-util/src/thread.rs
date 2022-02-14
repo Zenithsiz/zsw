@@ -1,7 +1,5 @@
 //! Threading utilities
 
-use std::thread;
-
 // Imports
 use {
 	super::{extse::ParkingLotMutexSe, MightBlock},
@@ -11,11 +9,12 @@ use {
 		future::Future,
 		sync::Arc,
 		task,
-		thread::{Scope, ScopedJoinHandle},
+		thread::{self, Scope, ScopedJoinHandle},
 	},
 };
 
 /// Thread spawned
+#[derive(Debug)]
 pub struct ThreadSpawner<'scope, 'env, T> {
 	/// Scope
 	scope: &'scope Scope<'env>,
@@ -71,6 +70,7 @@ impl<'scope, 'env, T> ThreadSpawner<'scope, 'env, T> {
 ///
 /// Adapts a future to run on it's own thread, and be cancellable
 /// when polling.
+#[derive(Debug)]
 pub struct FutureRunner {
 	/// Signal
 	signal: Arc<FutureSignal>,
@@ -78,6 +78,7 @@ pub struct FutureRunner {
 
 impl FutureRunner {
 	/// Creates a new future runner
+	#[must_use]
 	pub fn new() -> Self {
 		// Create the waker
 		Self {
@@ -86,6 +87,7 @@ impl FutureRunner {
 	}
 
 	/// Executes the future
+	#[allow(clippy::result_unit_err)] // TODO: Use custom enum to say if we were cancelled
 	pub fn run<F>(&self, f: F) -> Result<F::Output, ()>
 	where
 		F: Future,
@@ -116,6 +118,12 @@ impl FutureRunner {
 	}
 }
 
+impl Default for FutureRunner {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl Drop for FutureRunner {
 	fn drop(&mut self) {
 		// Stop the future on-drop
@@ -124,6 +132,7 @@ impl Drop for FutureRunner {
 }
 
 /// Signal inner
+#[derive(Debug)]
 struct FutureSignalInner {
 	/// If we should exit
 	should_exit: bool,
@@ -142,6 +151,7 @@ enum FutureSignalStatus {
 }
 
 /// Waker signal for [`FuturesRunner`]
+#[derive(Debug)]
 struct FutureSignal {
 	/// Inner
 	inner: Mutex<FutureSignalInner>,

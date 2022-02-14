@@ -74,10 +74,8 @@ mod egui;
 mod img;
 mod logger;
 mod panels;
-mod playlist;
 mod profile;
 mod rect;
-mod util;
 mod wgpu;
 
 // Exports
@@ -86,7 +84,6 @@ pub use self::{
 	egui::Egui,
 	img::ImageLoader,
 	panels::{Panel, PanelState, PanelStateImages, Panels, PanelsRenderer},
-	playlist::{Playlist, PlaylistImage},
 	profile::{Profile, Profiles},
 	rect::Rect,
 	wgpu::Wgpu,

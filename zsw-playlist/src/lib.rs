@@ -4,7 +4,6 @@
 
 // Imports
 use {
-	crate::util,
 	async_lock::Mutex,
 	rand::prelude::SliceRandom,
 	std::{collections::HashSet, path::PathBuf, sync::Arc},
@@ -102,7 +101,7 @@ impl Playlist {
 
 		// Remove all existing paths and add new ones
 		inner.images.clear();
-		for path in util::dir_files_iter(root_path.clone()) {
+		for path in zsw_util::dir_files_iter(root_path.clone()) {
 			let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
 		}
 

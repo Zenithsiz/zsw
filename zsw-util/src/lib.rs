@@ -1,5 +1,54 @@
 //! Utility
 
+// Features
+#![feature(decl_macro, generator_trait, generators, scoped_threads)]
+// Lints
+#![warn(
+	clippy::pedantic,
+	clippy::nursery,
+	missing_copy_implementations,
+	missing_debug_implementations,
+	noop_method_call,
+	unused_results
+)]
+#![deny(
+	// We want to annotate unsafe inside unsafe fns
+	unsafe_op_in_unsafe_fn,
+	// We muse use `expect` instead
+	clippy::unwrap_used
+)]
+#![allow(
+	// Style
+	clippy::implicit_return,
+	clippy::multiple_inherent_impl,
+	clippy::pattern_type_mismatch,
+	// `match` reads easier than `if / else`
+	clippy::match_bool,
+	clippy::single_match_else,
+	//clippy::single_match,
+	clippy::self_named_module_files,
+	clippy::items_after_statements,
+	clippy::module_name_repetitions,
+	// Performance
+	clippy::suboptimal_flops, // We prefer readability
+	// Some functions might return an error in the future
+	clippy::unnecessary_wraps,
+	// Due to working with windows and rendering, which use `u32` / `f32` liberally
+	// and interchangeably, we can't do much aside from casting and accepting possible
+	// losses, although most will be lossless, since we deal with window sizes and the
+	// such, which will fit within a `f32` losslessly.
+	clippy::cast_precision_loss,
+	clippy::cast_possible_truncation,
+	// We use proper error types when it matters what errors can be returned, else,
+	// such as when using `anyhow`, we just assume the caller won't check *what* error
+	// happened and instead just bubbles it up
+	clippy::missing_errors_doc,
+	// Too many false positives and not too important
+	clippy::missing_const_for_fn,
+	// This is a binary crate, so we don't expose any API
+	rustdoc::private_intra_doc_links,
+)]
+
 // Modules
 mod display_wrapper;
 mod scan_dir;
@@ -20,7 +69,6 @@ use {
 	image::DynamicImage,
 	std::{
 		fs,
-		hash::{Hash, Hasher},
 		path::Path,
 		time::{Duration, Instant},
 	},
@@ -73,14 +121,8 @@ pub fn serialize_json_to_file<T: serde::ser::Serialize>(
 	serde_json::to_writer_pretty(file, value).context("Unable to serialize to file")
 }
 
-/// Hashes a value using `twox_hash`
-pub fn _hash_of<T: ?Sized + Hash>(value: &T) -> u64 {
-	let mut hasher = twox_hash::XxHash64::with_seed(0);
-	value.hash(&mut hasher);
-	hasher.finish()
-}
-
 /// Returns the image format string of an image (for logging)
+#[must_use]
 pub fn image_format(image: &DynamicImage) -> &'static str {
 	match image {
 		DynamicImage::ImageLuma8(_) => "Luma8",

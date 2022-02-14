@@ -16,15 +16,12 @@ pub use self::{
 
 // Imports
 use {
-	crate::{
-		util::{extse::ParkingLotMutexSe, MightBlock},
-		ImageLoader,
-		Wgpu,
-	},
+	crate::{ImageLoader, Wgpu},
 	anyhow::Context,
 	parking_lot::Mutex,
 	winit::dpi::PhysicalSize,
 	zsw_side_effect_macros::side_effect,
+	zsw_util::{extse::ParkingLotMutexSe, MightBlock},
 };
 
 

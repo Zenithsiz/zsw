@@ -24,7 +24,7 @@ pub fn side_effect(attr: TokenStream, item: TokenStream) -> TokenStream {
 		};
 		outer_func.sig.output = syn::ReturnType::Type(
 			r_arrow,
-			syn::parse_quote!(crate::util::WithSideEffect<#return_ty, (#effects)>),
+			syn::parse_quote!(::zsw_util::WithSideEffect<#return_ty, (#effects)>),
 		);
 
 		// Wrap the body
@@ -32,7 +32,7 @@ pub fn side_effect(attr: TokenStream, item: TokenStream) -> TokenStream {
 		let inner_fn_body = func.block;
 		outer_func.block = syn::parse_quote! {{
 			let mut __inner_fn = move || { #inner_fn_body };
-			crate::util::WithSideEffect::new(__inner_fn())
+			::zsw_util::WithSideEffect::new(__inner_fn())
 		}};
 
 		outer_func

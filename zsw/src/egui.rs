@@ -2,10 +2,7 @@
 
 // Imports
 use {
-	crate::{
-		util::{extse::ParkingLotMutexSe, MightBlock},
-		Wgpu,
-	},
+	crate::Wgpu,
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	parking_lot::Mutex,
@@ -15,6 +12,7 @@ use {
 	},
 	winit::window::Window,
 	zsw_side_effect_macros::side_effect,
+	zsw_util::{extse::ParkingLotMutexSe, MightBlock},
 };
 
 

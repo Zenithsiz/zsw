@@ -2,8 +2,9 @@
 
 // Imports
 use {
+	zsw_util::MightBlock,
 	super::settings_window::SettingsWindow,
-	crate::{util::MightBlock, Egui, ImageLoader, Panels, Wgpu},
+	crate::{Egui, ImageLoader, Panels, Wgpu},
 	anyhow::Context,
 	std::{
 		thread,

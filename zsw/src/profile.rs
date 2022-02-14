@@ -2,19 +2,16 @@
 
 // Imports
 use {
-	crate::{
-		util::{self, extse::ParkingLotMutexSe, MightBlock},
-		Panel,
-		Panels,
-		Playlist,
-	},
+	crate::{Panel, Panels},
 	anyhow::Context,
 	parking_lot::Mutex,
 	std::{
 		collections::HashMap,
 		path::{Path, PathBuf},
 	},
+	zsw_playlist::Playlist,
 	zsw_side_effect_macros::side_effect,
+	zsw_util::{extse::ParkingLotMutexSe, MightBlock},
 };
 
 /// Profiles
@@ -36,7 +33,7 @@ impl Profiles {
 	/// Loads a profile
 	pub fn load(&self, path: PathBuf) -> Result<Profile, anyhow::Error> {
 		// Try to load it
-		let profile = util::parse_json_from_file(&path).context("Unable to load profile")?;
+		let profile = zsw_util::parse_json_from_file(&path).context("Unable to load profile")?;
 
 		// Then add it
 		// TODO: Maybe don't clone?
@@ -57,7 +54,7 @@ impl Profiles {
 	/// Adds and saves a profile
 	pub fn save(&self, path: PathBuf, profile: Profile) -> Result<(), anyhow::Error> {
 		// Try to save it
-		util::serialize_json_to_file(&path, &profile).context("Unable to save profile")?;
+		zsw_util::serialize_json_to_file(&path, &profile).context("Unable to save profile")?;
 
 		// Then add it
 		#[allow(clippy::let_underscore_drop)] // We can drop the old profile

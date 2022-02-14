@@ -2,10 +2,10 @@
 
 // Imports
 use {
-	crate::util::DisplayWrapper,
 	anyhow::Context,
 	fern::colors::{Color, ColoredLevelConfig},
 	std::{fmt, fs, panic, thread},
+	zsw_util::DisplayWrapper,
 };
 
 // Time format string
