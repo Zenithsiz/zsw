@@ -4,12 +4,13 @@ use super::settings_window::SettingsWindow;
 
 // Imports
 use {
-	crate::{Egui, Wgpu},
 	winit::{
 		dpi::PhysicalPosition,
 		event::{Event, WindowEvent},
 		event_loop::ControlFlow as EventLoopControlFlow,
 	},
+	zsw_egui::Egui,
+	zsw_wgpu::Wgpu,
 };
 
 /// Event handler

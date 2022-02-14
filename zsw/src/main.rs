@@ -70,21 +70,17 @@
 // Modules
 mod app;
 mod args;
-mod egui;
 mod logger;
 mod panels;
 mod profile;
 mod rect;
-mod wgpu;
 
 // Exports
 pub use self::{
 	args::Args,
-	egui::Egui,
 	panels::{Panel, PanelState, PanelStateImages, Panels, PanelsRenderer},
 	profile::{Profile, Profiles},
 	rect::Rect,
-	wgpu::Wgpu,
 };
 
 // Imports

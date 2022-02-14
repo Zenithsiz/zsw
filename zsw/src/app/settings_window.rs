@@ -6,7 +6,7 @@
 
 // Imports
 use {
-	crate::{Egui, Panel, PanelState, Panels, Profile, Profiles, Rect, Wgpu},
+	crate::{Panel, PanelState, Panels, Profile, Profiles, Rect},
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
 	egui::Widget,
@@ -15,8 +15,10 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
 	},
+	zsw_egui::Egui,
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_util::MightBlock,
+	zsw_wgpu::Wgpu,
 };
 
 /// Inner data

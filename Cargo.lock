@@ -2241,10 +2241,29 @@ dependencies = [
  "wgpu",
  "winit",
  "x11",
+ "zsw-egui",
  "zsw-img",
  "zsw-playlist",
  "zsw-side-effect-macros",
  "zsw-util",
+ "zsw-wgpu",
+]
+
+[[package]]
+name = "zsw-egui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossbeam",
+ "egui",
+ "egui_wgpu_backend",
+ "egui_winit_platform",
+ "epi",
+ "parking_lot",
+ "winit",
+ "zsw-side-effect-macros",
+ "zsw-util",
+ "zsw-wgpu",
 ]
 
 [[package]]
@@ -2289,4 +2308,19 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "zsw-wgpu"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossbeam",
+ "log",
+ "parking_lot",
+ "pollster",
+ "wgpu",
+ "winit",
+ "zsw-side-effect-macros",
+ "zsw-util",
 ]

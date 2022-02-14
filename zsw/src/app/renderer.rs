@@ -3,15 +3,17 @@
 // Imports
 use {
 	super::settings_window::SettingsWindow,
-	crate::{Egui, Panels, Wgpu},
+	crate::Panels,
 	anyhow::Context,
 	std::{
 		thread,
 		time::{Duration, Instant},
 	},
 	winit::window::Window,
+	zsw_egui::Egui,
 	zsw_img::ImageLoader,
 	zsw_util::MightBlock,
+	zsw_wgpu::Wgpu,
 };
 
 /// Renderer

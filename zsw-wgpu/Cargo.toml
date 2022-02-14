@@ -1,0 +1,31 @@
+[package]
+edition = "2021"
+name = "zsw-wgpu"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+# Zsw
+zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
+zsw-util = {path = "../zsw-util"}
+
+# Windowing
+winit = "0.26.1"
+
+# Rendering
+wgpu = {version = "0.12.0", features = ["serde", "replay"]}
+
+# Async
+pollster = "0.2.4"
+
+# Error handling
+anyhow = "1.0.52"
+
+# Logging
+log = "0.4.14"
+
+# Threads
+crossbeam = "0.8.1"
+parking_lot = "0.11.2"

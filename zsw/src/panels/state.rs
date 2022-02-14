@@ -3,11 +3,12 @@
 // Imports
 use {
 	super::PanelImage,
-	crate::{Panel, PanelsRenderer, Wgpu},
+	crate::{Panel, PanelsRenderer},
 	cgmath::{Matrix4, Vector3},
 	std::mem,
 	winit::dpi::PhysicalSize,
 	zsw_img::ImageLoader,
+	zsw_wgpu::Wgpu,
 };
 
 /// Panel state

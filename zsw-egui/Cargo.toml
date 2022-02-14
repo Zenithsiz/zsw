@@ -1,0 +1,29 @@
+[package]
+edition = "2021"
+name = "zsw-egui"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+# Zsw
+zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
+zsw-util = {path = "../zsw-util"}
+zsw-wgpu = {path = "../zsw-wgpu"}
+
+# Windowing
+winit = "0.26.1"
+
+# Gui
+egui = "0.16.1"
+egui_wgpu_backend = "0.16.0"
+egui_winit_platform = "0.13.0"
+epi = "0.16.0"
+
+# Error handling
+anyhow = "1.0.52"
+
+# Threads
+crossbeam = "0.8.1"
+parking_lot = "0.11.2"
