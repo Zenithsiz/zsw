@@ -137,8 +137,13 @@ pub struct Profile {
 
 impl Profile {
 	/// Applies a profile
-	pub async fn apply(&self, playlist: &Playlist, panels: &Panels) {
-		playlist.set_root_path(self.root_path.clone()).await;
+	pub async fn apply<'playlist>(
+		&self,
+		playlist: &'playlist Playlist,
+		panels: &Panels,
+		inner_lock: &mut zsw_playlist::InnerLock<'playlist>,
+	) {
+		playlist.set_root_path(inner_lock, self.root_path.clone()).await;
 		panels.replace_panels(self.panels.iter().copied());
 	}
 }

@@ -93,6 +93,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		let mut thread_spawner = zsw_util::ThreadSpawner::new(s);
 
 		// Spawn the profile loader if we have any
+		// TODO: Move to it's own function
 		if let Some(path) = &args.profile {
 			// Note: We don't care whether we got cancelled or returned successfully
 			thread_spawner.spawn("Profile loader", || {
@@ -101,7 +102,13 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 						match profiles.load(path.clone()) {
 							Ok(profile) => {
 								log::info!("Successfully loaded profile: {profile:?}");
-								profile.apply(&playlist, &panels).await;
+
+								// DEADLOCK: See above
+								let mut inner_lock = playlist
+									.lock_inner()
+									.await
+									.allow::<MightLock<zsw_playlist::InnerLock>>();
+								profile.apply(&playlist, &panels, &mut inner_lock).await;
 							},
 							Err(err) => log::warn!("Unable to load profile: {err:?}"),
 						}
@@ -111,14 +118,22 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		}
 
 		// Spawn the playlist thread
+		// DEADLOCK: See above
 		thread_spawner.spawn("Playlist", || {
-			playlist_runner.run(playlist.run()).into_err();
+			playlist_runner
+				.run(playlist.run())
+				.map::<!, _>(WithSideEffect::allow::<MightLock<zsw_playlist::InnerLock>>)
+				.into_err();
 		})?;
 
 		// Spawn all image loaders
+		// DEADLOCK: See above
 		for (thread_idx, runner) in image_loader_runners.iter().enumerate() {
 			thread_spawner.spawn(format!("Image Loader${thread_idx}"), || {
-				runner.run(image_loader.run(&playlist)).into_err();
+				runner
+					.run(image_loader.run(&playlist))
+					.map::<!, _>(WithSideEffect::allow::<MightLock<zsw_playlist::InnerLock>>)
+					.into_err();
 			})?;
 		}
 
@@ -127,7 +142,11 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn("Settings window", || {
 			settings_window_runner
 				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles))
-				.map::<!, _>(WithSideEffect::allow::<MightLock<(zsw_wgpu::SurfaceLock, zsw_egui::PlatformLock)>>)
+				.map::<!, _>(
+					WithSideEffect::allow::<
+						MightLock<(zsw_wgpu::SurfaceLock, zsw_egui::PlatformLock, zsw_playlist::InnerLock)>,
+					>,
+				)
 				.into_err();
 		})?;
 

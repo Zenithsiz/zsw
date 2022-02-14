@@ -74,14 +74,14 @@ impl SettingsWindow {
 	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`,
 	/// followed by the `zsw_egui::PlatformLock` lock on `egui`
 	#[allow(clippy::future_not_send)] // This future will be run on it's own thread
-	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::PlatformLock<'egui>)>)]
-	pub async fn run<'wgpu, 'egui>(
+	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::PlatformLock<'egui>, zsw_playlist::InnerLock<'playlist>)>)]
+	pub async fn run<'wgpu, 'egui, 'playlist>(
 		&self,
 		wgpu: &'wgpu Wgpu<'_>,
 		egui: &'egui Egui,
 		window: &Window,
 		panels: &Panels,
-		playlist: &Playlist,
+		playlist: &'playlist Playlist,
 		profiles: &Profiles,
 	) -> ! {
 		// Create the inner data
@@ -101,11 +101,28 @@ impl SettingsWindow {
 			};
 
 			// Draw egui
-			// DEADLOCK: Caller ensures we can lock it
 			let res = {
+				// DEADLOCK: Caller ensures we can lock it after the surface lock
 				let mut platform_lock = egui.lock_platform().await.allow::<MightLock<zsw_egui::PlatformLock>>();
+
+				// DEADLOCK: Caller ensures we can lock it after the platform lock
+				let mut playlist_inner_lock = playlist
+					.lock_inner()
+					.await
+					.allow::<MightLock<zsw_playlist::InnerLock>>();
+
 				egui.draw(window, &mut platform_lock, |ctx, frame| {
-					self.draw(&mut inner, ctx, frame, surface_size, window, panels, playlist, profiles)
+					self.draw(
+						&mut inner,
+						ctx,
+						frame,
+						surface_size,
+						window,
+						panels,
+						playlist,
+						profiles,
+						&mut playlist_inner_lock,
+					)
 				})
 			};
 
@@ -143,7 +160,7 @@ impl SettingsWindow {
 	}
 
 	/// Draws the settings window
-	fn draw(
+	fn draw<'playlist>(
 		&self,
 		inner: &mut Inner,
 		ctx: &egui::CtxRef,
@@ -151,8 +168,9 @@ impl SettingsWindow {
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
 		panels: &Panels,
-		playlist: &Playlist,
+		playlist: &'playlist Playlist,
 		profiles: &Profiles,
+		playlist_inner_lock: &mut zsw_playlist::InnerLock<'playlist>,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
@@ -170,7 +188,15 @@ impl SettingsWindow {
 
 		// Then render it
 		settings_window.open(&mut inner.open).show(ctx, |ui| {
-			self::draw_settings_window(ui, &mut inner.new_panel_state, surface_size, panels, playlist, profiles);
+			self::draw_settings_window(
+				ui,
+				&mut inner.new_panel_state,
+				surface_size,
+				panels,
+				playlist,
+				profiles,
+				playlist_inner_lock,
+			);
 		});
 
 		Ok(())
@@ -183,28 +209,35 @@ impl SettingsWindow {
 }
 
 /// Draws the settings window
-fn draw_settings_window(
+fn draw_settings_window<'playlist>(
 	ui: &mut egui::Ui,
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
 	panels: &Panels,
-	playlist: &Playlist,
+	playlist: &'playlist Playlist,
 	profiles: &Profiles,
+	playlist_inner_lock: &mut zsw_playlist::InnerLock<'playlist>,
 ) {
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
 		self::draw_panels(ui, new_panel_state, surface_size, panels);
 	});
 	ui.collapsing("Playlist", |ui| {
-		self::draw_playlist(ui, playlist);
+		self::draw_playlist(ui, playlist, playlist_inner_lock);
 	});
 	ui.collapsing("Profile", |ui| {
-		self::draw_profile(ui, panels, playlist, profiles);
+		self::draw_profile(ui, panels, playlist, profiles, playlist_inner_lock);
 	});
 }
 
 /// Draws the profile settings
-fn draw_profile(ui: &mut egui::Ui, panels: &Panels, playlist: &Playlist, profiles: &Profiles) {
+fn draw_profile<'playlist>(
+	ui: &mut egui::Ui,
+	panels: &Panels,
+	playlist: &'playlist Playlist,
+	profiles: &Profiles,
+	playlist_inner_lock: &mut zsw_playlist::InnerLock<'playlist>,
+) {
 	// Get the profile to apply, if any
 	// DEADLOCK: We don't block within it.
 	let mut profile_to_apply = None;
@@ -221,7 +254,7 @@ fn draw_profile(ui: &mut egui::Ui, panels: &Panels, playlist: &Playlist, profile
 
 	// If we had any, apply it
 	if let Some(profile) = profile_to_apply {
-		profile.apply(playlist, panels).block_on();
+		profile.apply(playlist, panels, playlist_inner_lock).block_on();
 	}
 
 	// Draw the load button
@@ -250,15 +283,17 @@ fn draw_profile(ui: &mut egui::Ui, panels: &Panels, playlist: &Playlist, profile
 			match file_dialog {
 				Ok(file_dialog) =>
 					if let Some(path) = file_dialog {
-						let profile = Profile {
-							root_path: match playlist.root_path().block_on() {
-								Some(path) => path,
-								None => {
-									log::warn!("No root path was set");
-									return;
+						let profile = {
+							Profile {
+								root_path: match playlist.root_path(playlist_inner_lock).block_on() {
+									Some(path) => path,
+									None => {
+										log::warn!("No root path was set");
+										return;
+									},
 								},
-							},
-							panels:    panels.panels(),
+								panels:    panels.panels(),
+							}
 						};
 
 						match profiles.save(path.clone(), profile) {
@@ -273,16 +308,22 @@ fn draw_profile(ui: &mut egui::Ui, panels: &Panels, playlist: &Playlist, profile
 }
 
 /// Draws the playlist settings
-fn draw_playlist(ui: &mut egui::Ui, playlist: &Playlist) {
+fn draw_playlist<'playlist>(
+	ui: &mut egui::Ui,
+	playlist: &'playlist Playlist,
+	playlist_inner_lock: &mut zsw_playlist::InnerLock<'playlist>,
+) {
 	// Draw the root path
 	ui.horizontal(|ui| {
 		// Show the current root path
 		ui.label("Root path");
 		ui.add_space(10.0);
-		match playlist.root_path().block_on() {
-			Some(root_path) => ui.label(root_path.display().to_string()),
-			None => ui.label("<None>"),
-		};
+		{
+			match playlist.root_path(playlist_inner_lock).block_on() {
+				Some(root_path) => ui.label(root_path.display().to_string()),
+				None => ui.label("<None>"),
+			};
+		}
 
 		// Then the change button
 		if ui.button("📁").clicked() {
@@ -291,9 +332,7 @@ fn draw_playlist(ui: &mut egui::Ui, playlist: &Playlist) {
 			match file_dialog {
 				Ok(file_dialog) => {
 					if let Some(path) = file_dialog {
-						// Set the root path
-						// TODO: Not block on this?
-						playlist.set_root_path(path).block_on();
+						playlist.set_root_path(playlist_inner_lock, path).block_on();
 
 						// TODO: Maybe reset both panels and loaders?
 					}
@@ -307,7 +346,7 @@ fn draw_playlist(ui: &mut egui::Ui, playlist: &Playlist) {
 	ui.collapsing("Upcoming", |ui| {
 		egui::ScrollArea::new([true, true]).max_height(500.0).show(ui, |ui| {
 			playlist
-				.peek_next(|image| match image {
+				.peek_next(playlist_inner_lock, |image| match image {
 					PlaylistImage::File(path) => {
 						ui.label(path.display().to_string());
 					},

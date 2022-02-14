@@ -10,6 +10,8 @@ mod load;
 use {
 	super::Image,
 	zsw_playlist::{Playlist, PlaylistImage},
+	zsw_side_effect_macros::side_effect,
+	zsw_util::MightLock,
 };
 
 /// Image loader
@@ -34,9 +36,14 @@ impl ImageLoader {
 	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
+	///
+	/// # Locking
+	/// Locks the `zsw_playlist::InnerLock` lock on `playlist`
+	#[side_effect(MightLock<zsw_playlist::InnerLock<'_>>)]
 	pub async fn run(&self, playlist: &Playlist) -> ! {
 		loop {
-			let image = playlist.next().await;
+			// DEADLOCK: Caller ensures we can lock it
+			let image = playlist.next().await.allow::<MightLock<zsw_playlist::InnerLock>>();
 
 			match &*image {
 				PlaylistImage::File(path) => match load::load_image(path) {
@@ -48,13 +55,20 @@ impl ImageLoader {
 						};
 
 						// Note: This can't return an `Err` because `self` owns a receiver
+						// DEADLOCK: We don't hold any lock while sending
 						self.image_tx.send(image).await.expect("Image receiver was closed");
 					},
 
 					// If we couldn't load, log, remove the path and retry
 					Err(err) => {
 						log::info!("Unable to load {path:?}: {err:?}");
-						playlist.remove_image(&image).await;
+
+						// DEADLOCK: Caller ensures we can lock it
+						let mut inner_lock = playlist
+							.lock_inner()
+							.await
+							.allow::<MightLock<zsw_playlist::InnerLock>>();
+						playlist.remove_image(&mut inner_lock, &image).await;
 					},
 				},
 			}

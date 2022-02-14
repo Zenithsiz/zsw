@@ -2279,6 +2279,8 @@ dependencies = [
  "image",
  "log",
  "zsw-playlist",
+ "zsw-side-effect-macros",
+ "zsw-util",
 ]
 
 [[package]]
@@ -2308,6 +2310,7 @@ dependencies = [
  "async-channel",
  "async-lock",
  "rand",
+ "zsw-side-effect-macros",
  "zsw-util",
 ]
 

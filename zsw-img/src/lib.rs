@@ -1,5 +1,8 @@
 //! Image handling
 
+// Features
+#![feature(never_type)]
+
 // Lints
 #![warn(
 	clippy::pedantic,
