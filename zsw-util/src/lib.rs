@@ -58,6 +58,7 @@
 
 // Modules
 mod display_wrapper;
+mod lock;
 mod rect;
 mod scan_dir;
 mod side_effect;
@@ -66,6 +67,7 @@ mod thread;
 // Exports
 pub use {
 	display_wrapper::DisplayWrapper,
+	lock::Lock,
 	rect::Rect,
 	scan_dir::dir_files_iter,
 	side_effect::{extse, MightBlock, MightLock, SideEffect, WithSideEffect},

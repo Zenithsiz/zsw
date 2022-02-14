@@ -60,7 +60,7 @@
 use {
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
-	parking_lot::{Mutex, MutexGuard},
+	parking_lot::Mutex,
 	pollster::FutureExt,
 	std::marker::PhantomData,
 	wgpu::TextureFormat,
@@ -136,6 +136,9 @@ pub struct Wgpu<'window> {
 	/// Window lifetime
 	// Note: Our surface must outlive the window, so we make sure of it using the `'window` lifetime
 	window_phantom: PhantomData<&'window Window>,
+
+	/// Lock source
+	lock_source: LockSource,
 }
 
 impl<'window> Wgpu<'window> {
@@ -163,6 +166,7 @@ impl<'window> Wgpu<'window> {
 			surface_texture_format,
 			queued_resize: AtomicCell::new(None),
 			window_phantom: PhantomData,
+			lock_source: LockSource,
 		})
 	}
 
@@ -181,13 +185,11 @@ impl<'window> Wgpu<'window> {
 	/// # Blocking
 	/// Will block until any existing surface locks are dropped
 	#[side_effect(MightLock<SurfaceLock>)]
-	pub fn lock_surface(&self) -> SurfaceLock<'window, '_> {
+	pub fn lock_surface(&self) -> SurfaceLock {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		SurfaceLock {
-			guard: self.surface.lock_se().allow::<MightBlock>(),
-			wgpu:  self as *const _,
-		}
+		let guard = self.surface.lock_se().allow::<MightBlock>();
+		SurfaceLock::new(guard, &self.lock_source)
 	}
 
 	/// Returns the current surface's size
@@ -197,7 +199,7 @@ impl<'window> Wgpu<'window> {
 	/// use it on `wgpu` operations that might panic on wrong surface
 	/// sizes.
 	pub fn surface_size(&self, surface_lock: &SurfaceLock) -> PhysicalSize<u32> {
-		surface_lock.get(self).size
+		surface_lock.get(&self.lock_source).size
 	}
 
 	/// Returns the surface texture format
@@ -230,10 +232,10 @@ impl<'window> Wgpu<'window> {
 	// TODO: Remove size from passed parameters
 	pub fn render(
 		&self,
-		surface_lock: &mut SurfaceLock<'window, '_>,
+		surface_lock: &mut SurfaceLock,
 		f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView, PhysicalSize<u32>) -> Result<(), anyhow::Error>,
 	) -> Result<(), anyhow::Error> {
-		let surface = surface_lock.get_mut(self);
+		let surface = surface_lock.get_mut(&self.lock_source);
 
 		// Check for resizes
 		if let Some(size) = self.queued_resize.take() {
@@ -274,37 +276,14 @@ impl<'window> Wgpu<'window> {
 	}
 }
 
+/// Source for all locks
+// Note: This is to ensure user can't create the locks themselves
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct LockSource;
+
 /// Surface lock
-#[derive(Debug)]
-pub struct SurfaceLock<'window, 'a> {
-	/// Guard
-	guard: MutexGuard<'a, Surface>,
-
-	/// `Wgpu` pointer
-	// Note: This is just to ensure caller only passes a
-	//       lock that came from the same instance
-	wgpu: *const Wgpu<'window>,
-}
-
-impl<'window, 'a> SurfaceLock<'window, 'a> {
-	/// Returns the guard after ensuring the correct `wgpu` instance was passed
-	pub fn get(&self, wgpu: &Wgpu<'window>) -> &Surface {
-		self.assert_source(wgpu);
-		&self.guard
-	}
-
-	/// Returns the guard mutable after ensuring the correct `wgpu` instance was passed
-	pub fn get_mut(&mut self, wgpu: &Wgpu<'window>) -> &mut Surface {
-		self.assert_source(wgpu);
-		&mut self.guard
-	}
-
-	/// Asserts that the correct `wgpu` instance was passed
-	fn assert_source(&self, wgpu: &Wgpu<'window>) {
-		assert_eq!(self.wgpu, wgpu, "Wrong `wgpu` instance was passed to method");
-	}
-}
-
+pub type SurfaceLock<'a> = zsw_util::Lock<'a, Surface, LockSource>;
 
 /// Configures the window surface and returns the preferred surface texture format
 fn configure_window_surface(

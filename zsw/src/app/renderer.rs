@@ -30,7 +30,7 @@ impl Renderer {
 	///
 	/// # Locking
 	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
-	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'window, 'wgpu>>)]
+	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
 	pub async fn run<'window, 'wgpu>(
 		&self,
 		window: &Window,
@@ -81,7 +81,7 @@ impl Renderer {
 	///
 	/// # Locking
 	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
-	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'window, 'wgpu>>)]
+	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
 	async fn render<'window, 'wgpu>(
 		window: &Window,
 		wgpu: &'wgpu Wgpu<'window>,
@@ -93,7 +93,7 @@ impl Renderer {
 		// DEADLOCK: We don't hold the `wgpu::SurfaceLock` lock from `wgpu`.
 		//           Caller ensures we can lock it.
 		let paint_jobs = settings_window
-			.paint_jobs()
+			.paint_jobs(wgpu)
 			.await
 			.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
 

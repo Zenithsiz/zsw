@@ -72,10 +72,10 @@ impl SettingsWindow {
 	///
 	/// # Locking
 	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
-	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'_, '_>>)]
-	pub async fn run(
+	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
+	pub async fn run<'wgpu>(
 		&self,
-		wgpu: &Wgpu<'_>,
+		wgpu: &'wgpu Wgpu<'_>,
 		egui: &Egui,
 		window: &Window,
 		panels: &Panels,
@@ -126,8 +126,8 @@ impl SettingsWindow {
 	/// Locks the `zsw_wgpu::SurfaceLock` lock on `wgpu`
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
-	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'_, '_>>)]
-	pub async fn paint_jobs(&self) -> Vec<egui::epaint::ClippedMesh> {
+	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
+	pub async fn paint_jobs<'wgpu>(&self, _wgpu: &'wgpu Wgpu<'_>) -> Vec<egui::epaint::ClippedMesh> {
 		// Note: This can't return an `Err` because `self` owns a sender
 		self.paint_jobs_rx.recv().await.expect("Paint jobs sender was closed")
 	}
