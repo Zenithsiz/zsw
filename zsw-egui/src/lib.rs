@@ -68,13 +68,9 @@ use {
 /// All egui state
 pub struct Egui {
 	/// Platform
-	// DEADLOCK: We ensure this lock can't deadlock by not blocking
-	//           while locked.
 	platform: Mutex<egui_winit_platform::Platform>,
 
 	/// Render pass
-	// DEADLOCK: We ensure this lock can't deadlock by not blocking
-	//           while locked.
 	render_pass: Mutex<egui_wgpu_backend::RenderPass>,
 
 	/// Repaint signal
@@ -187,8 +183,6 @@ impl Egui {
 		f(&egui_platform.context(), &egui_frame).context("Unable to draw")?;
 
 		// Finally end the frame and retrieve the paint jobs
-		// DEADLOCK: We ensure this lock can't deadlock by not blocking
-		//           while locked.
 		let (_output, paint_commands) = egui_platform.end_frame(Some(window));
 		let paint_jobs = egui_platform.context().tessellate(paint_commands);
 		self.frame_time.store(Some(egui_frame_start.elapsed()));
