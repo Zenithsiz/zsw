@@ -73,5 +73,5 @@ native-dialog = "0.6.3"
 
 # Threads
 crossbeam = "0.8.1"
-#parking_lot = {version = "0.11.2", features = ["deadlock_detection"]}
+#parking_lot = {version = "0.12.0", features = ["deadlock_detection"]}
 #rayon = "1.5.1"

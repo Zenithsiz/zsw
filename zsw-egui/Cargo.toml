@@ -29,4 +29,4 @@ anyhow = "1.0.52"
 
 # Threads
 crossbeam = "0.8.1"
-parking_lot = "0.11.2"
+parking_lot = "0.12.0"
