@@ -3,28 +3,31 @@
 // Imports
 use {
 	anyhow::Context,
+	async_lock::Mutex,
 	pollster::FutureExt,
-	std::{
-		thread,
-		time::{Duration, Instant},
-	},
+	std::{thread, time::Duration},
 	winit::window::Window,
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
 	zsw_panels::Panels,
 	zsw_settings_window::SettingsWindow,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::MightLock,
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
 	zsw_wgpu::Wgpu,
 };
 
 /// Renderer
-pub struct Renderer {}
+pub struct Renderer {
+	/// Frame timings
+	frame_timings: Mutex<FrameTimings>,
+}
 
 impl Renderer {
 	/// Creates a new renderer
 	pub fn new() -> Self {
-		Self {}
+		Self {
+			frame_timings: Mutex::new(FrameTimings::new()),
+		}
 	}
 
 	/// Runs the renderer
@@ -49,38 +52,54 @@ impl Renderer {
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
 		loop {
-			let start_instant = Instant::now();
+			let ((update_duration, render_duration), total_duration) = zsw_util::measure!({
+				// Update
+				// DEADLOCK: Caller ensures we can lock it
+				let (_, update_duration) = zsw_util::measure!(Self::update(wgpu, panels, image_loader)
+					.await
+					.allow::<MightLock<zsw_panels::PanelsLock>>()
+					.map_err(|err| log::warn!("Unable to update: {err:?}")));
 
-			// Update
-			match Self::update(wgpu, panels, image_loader)
-				.await
-				.allow::<MightLock<zsw_panels::PanelsLock>>()
-			{
-				Ok(()) => (),
-				Err(err) => log::warn!("Unable to update: {err:?}"),
-			};
+				// Render
+				// DEADLOCK: Caller ensures we can lock it
+				let (_, render_duration) =
+					zsw_util::measure!(Self::render(window, wgpu, panels, egui, settings_window)
+						.await
+						.allow::<MightLock<(
+							zsw_wgpu::SurfaceLock,
+							zsw_panels::PanelsLock,
+							zsw_egui::RenderPassLock,
+							zsw_egui::PlatformLock,
+						)>>()
+						.map_err(|err| log::warn!("Unable to render: {err:?}")));
 
-			// Render
-			// DEADLOCK: Caller ensures we can lock it
-			match Self::render(window, wgpu, panels, egui, settings_window)
+				(update_duration, render_duration)
+			});
+
+			// Update our frame timings
+			// DEADLOCK: We don't hold any locks during locking
+			self.frame_timings
+				.lock_se()
 				.await
-				.allow::<MightLock<(
-					zsw_wgpu::SurfaceLock,
-					zsw_panels::PanelsLock,
-					zsw_egui::RenderPassLock,
-					zsw_egui::PlatformLock,
-				)>>() {
-				Ok(()) => (),
-				Err(err) => log::warn!("Unable to render: {err:?}"),
-			};
+				.allow::<MightBlock>()
+				.add(FrameTiming {
+					update: update_duration,
+					render: render_duration,
+					total:  total_duration,
+				});
 
 			// Then sleep until next frame
 			// TODO: Await while sleeping
-			let frame_duration = start_instant.elapsed();
-			if let Some(duration) = sleep_duration.checked_sub(frame_duration) {
+			if let Some(duration) = sleep_duration.checked_sub(total_duration) {
 				thread::sleep(duration);
 			}
 		}
+	}
+
+	/// Returns all frame timings
+	pub async fn frame_timings(&self) -> [FrameTiming; 60] {
+		// DEADLOCK: We don't hold any locks during locking
+		self.frame_timings.lock_se().await.allow::<MightBlock>().timings
 	}
 
 	/// Updates all panels
@@ -180,4 +199,43 @@ impl Renderer {
 			})
 		})
 	}
+}
+
+/// Frame timings
+pub struct FrameTimings {
+	/// Timings
+	timings: [FrameTiming; 60],
+
+	/// Current index
+	cur_idx: usize,
+}
+
+impl FrameTimings {
+	// Creates
+	fn new() -> Self {
+		Self {
+			timings: [FrameTiming::default(); 60],
+			cur_idx: 0,
+		}
+	}
+
+	/// Adds a new frame timing
+	pub fn add(&mut self, timing: FrameTiming) {
+		self.timings[self.cur_idx] = timing;
+		self.cur_idx = (self.cur_idx + 1) % 60;
+	}
+}
+
+/// Frame timing
+#[derive(Clone, Copy, Default, Debug)]
+pub struct FrameTiming {
+	/// Update
+	pub update: Duration,
+
+	/// Render
+	// TODO: Split into `FrameRenderTiming`
+	pub render: Duration,
+
+	/// Total
+	pub total: Duration,
 }

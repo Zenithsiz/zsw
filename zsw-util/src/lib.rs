@@ -82,6 +82,7 @@ use {
 	image::DynamicImage,
 	std::{
 		fs,
+		future::Future,
 		path::Path,
 		time::{Duration, Instant},
 	},
@@ -91,8 +92,65 @@ use {
 pub fn measure<T>(f: impl FnOnce() -> T) -> (T, Duration) {
 	let start_time = Instant::now();
 	let value = f();
-	let duration = Instant::now().saturating_duration_since(start_time);
+	let duration = start_time.elapsed();
 	(value, duration)
+}
+
+/// Measures how long it took to execute an async function
+pub async fn measure_async<F: Future + Send>(f: F) -> (F::Output, Duration) {
+	let start_time = Instant::now();
+	let value = f.await;
+	let duration = start_time.elapsed();
+	(value, duration)
+}
+
+/// Measures how long it took to execute a fallible async function
+pub async fn try_measure_async<T, E, F: Future<Output = Result<T, E>> + Send>(f: F) -> Result<(T, Duration), E> {
+	let start_time = Instant::now();
+	let value = f.await?;
+	let duration = start_time.elapsed();
+	Ok((value, duration))
+}
+
+/// Measures how long it took to execute a statement
+pub macro measure($value:expr) {{
+	let start_time = ::std::time::Instant::now();
+	match $value {
+		value => {
+			let duration = ::std::time::Instant::elapsed(&start_time);
+			(value, duration)
+		},
+	}
+}}
+
+/// Measures how long it took to execute a fallible statement,
+/// returning a `Result<(T, Duration), Err>`
+pub macro try_measure($value:expr) {{
+	let start_time = ::std::time::Instant::now();
+	match $value {
+		::std::result::Result::Ok(value) => {
+			let duration = ::std::time::Instant::elapsed(&start_time);
+			::std::result::Result::Ok((value, duration))
+		},
+		::std::result::Result::Err(err) => ::std::result::Result::Err(err),
+	}
+}}
+
+/// Helper trait to measure a future
+pub trait MeasureFuture: Future {
+	/// Future type
+	type Fut: Future<Output = (Self::Output, Duration)>;
+
+	/// Measures this future's execution
+	fn measure_fut(self) -> Self::Fut;
+}
+
+impl<F: Future + Send> MeasureFuture for F {
+	type Fut = impl Future<Output = (F::Output, Duration)>;
+
+	fn measure_fut(self) -> Self::Fut {
+		self::measure_async(self)
+	}
 }
 
 pub macro measure_dbg {
