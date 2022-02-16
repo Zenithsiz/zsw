@@ -128,8 +128,8 @@ impl Playlist {
 
 	/// Runs the playlist
 	///
-	/// # Locking
-	/// [`PlaylistLock`]
+	/// # Blocking
+	/// Locks [`PlaylistLock`] on `self`.
 	#[side_effect(MightBlock)]
 	pub async fn run(&self) -> ! {
 		loop {
@@ -195,8 +195,9 @@ impl Playlist {
 
 	/// Retrieves the next image
 	///
-	/// # Locking
-	/// [`PlaylistLock`]
+	/// # Blocking
+	/// Locks [`PlaylistLock`] on `??`
+	// TODO: Replace `Locks` with a barrier on the channel
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
 	#[side_effect(MightBlock)]

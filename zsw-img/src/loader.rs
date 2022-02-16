@@ -37,8 +37,8 @@ impl ImageLoader {
 	///
 	/// Multiple image loaders may run at the same time
 	///
-	/// # Locking
-	/// [`zsw_playlist::PlaylistLock`]
+	/// # Blocking
+	/// Locks [`zsw_playlist::PlaylistLock`] on `playlist`
 	#[side_effect(MightBlock)]
 	pub async fn run(&self, playlist: &Playlist) -> ! {
 		loop {

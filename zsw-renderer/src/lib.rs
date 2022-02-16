@@ -83,12 +83,13 @@ impl Renderer {
 
 	/// Runs the renderer
 	///
-	/// # Locking
-	/// [`zsw_panels::PanelsLock`]
-	/// [`zsw_wgpu::SurfaceLock`]
-	/// - [`zsw_panels::PanelsLock`]
-	/// - [`zsw_egui::RenderPassLock`]
-	///   - [`zsw_egui::PlatformLock`]
+	/// # Blocking
+	/// Lock tree:
+	/// [`zsw_panels::PanelsLock`] on `panels`
+	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
+	/// - [`zsw_panels::PanelsLock`] on `panels`
+	/// - [`zsw_egui::RenderPassLock`] on `egui`
+	///   - [`zsw_egui::PlatformLock`] on `egui`
 	#[side_effect(MightBlock)]
 	pub async fn run<'window, 'wgpu, 'egui, 'panels>(
 		&self,
@@ -150,8 +151,8 @@ impl Renderer {
 
 	/// Updates all panels
 	///
-	/// # Locking
-	/// [`zsw_panels::PanelsLock`]
+	/// # Blocking
+	/// Locks [`zsw_panels::PanelsLock`] on `panels`
 	#[side_effect(MightBlock)]
 	async fn update<'window, 'panels>(
 		wgpu: &Wgpu<'window>,
@@ -167,11 +168,12 @@ impl Renderer {
 
 	/// Renders
 	///
-	/// # Locking
-	/// [`zsw_wgpu::SurfaceLock`]
-	/// - [`zsw_panels::PanelsLock`]
-	/// - [`zsw_egui::RenderPassLock`]
-	///   - [`zsw_egui::PlatformLock`]
+	/// # Blocking
+	/// Lock tree:
+	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
+	/// - [`zsw_panels::PanelsLock`] on `panels`
+	/// - [`zsw_egui::RenderPassLock`] on `egui`
+	///   - [`zsw_egui::PlatformLock`] on `egui`
 	#[side_effect(MightBlock)]
 	async fn render<'window, 'wgpu, 'egui, 'panels>(
 		window: &Window,

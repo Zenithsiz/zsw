@@ -121,12 +121,13 @@ impl SettingsWindow {
 
 	/// Runs the setting window
 	///
-	/// # Locking
-	/// [`zsw_wgpu::SurfaceLock`]
-	/// - [`zsw_egui::PlatformLock`]
-	///   - [`zsw_profiles::ProfilesLock`]
-	///     - [`zsw_playlist::PlaylistLock`]
-	///       - [`zsw_panels::PanelsLock`]
+	/// # Blocking
+	/// Lock tree:
+	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
+	/// - [`zsw_egui::PlatformLock`] on `egui`
+	///   - [`zsw_profiles::ProfilesLock`] on `profiles`
+	///     - [`zsw_playlist::PlaylistLock`] on `playlist`
+	///       - [`zsw_panels::PanelsLock`] on `panels`
 	#[side_effect(MightBlock)]
 	pub async fn run<'wgpu, 'egui, 'playlist, 'panels, 'profiles>(
 		&self,
@@ -205,8 +206,9 @@ impl SettingsWindow {
 
 	/// Retrieves the paint jobs for the next frame
 	///
-	/// # Locking
-	/// [`zsw_wgpu::SurfaceLock`]
+	/// # Blocking
+	/// Locks [`zsw_wgpu::SurfaceLock`] on `wgpu`
+	// TODO: Replace with a barrier
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
 	#[side_effect(MightBlock)]
