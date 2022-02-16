@@ -319,23 +319,14 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
 	profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
 ) {
-	// Get the profile to apply, if any
-	// DEADLOCK: We don't block within it.
-	let mut profile_to_apply = None;
-	profiles
-		.for_each::<_, ()>(profiles_lock, |path, profile| {
-			ui.horizontal(|ui| {
-				ui.label(path.display().to_string());
-				if ui.button("Apply").clicked() {
-					profile_to_apply = Some(profile.clone());
-				}
-			});
-		})
-		.allow::<MightBlock>();
-
-	// If we had any, apply it
-	if let Some(profile) = profile_to_apply {
-		profile.apply(playlist, panels, playlist_lock, panels_lock).block_on();
+	// Draw all profiles
+	for (path, profile) in profiles.profiles(profiles_lock) {
+		ui.horizontal(|ui| {
+			ui.label(path.display().to_string());
+			if ui.button("Apply").clicked() {
+				profile.apply(playlist, panels, playlist_lock, panels_lock).block_on();
+			}
+		});
 	}
 
 	// Draw the load button

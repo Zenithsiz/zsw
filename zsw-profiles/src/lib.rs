@@ -136,6 +136,11 @@ impl Profiles {
 		}
 	}
 
+	/// Returns all profiles by their path
+	pub fn profiles<'a>(&self, profiles_lock: &'a ProfilesLock) -> &'a HashMap<PathBuf, Profile> {
+		profiles_lock.get(&self.lock_source)
+	}
+
 	/// Loads a profile
 	pub fn load(&self, profiles_lock: &mut ProfilesLock, path: PathBuf) -> Result<Profile, anyhow::Error> {
 		// Try to load it
@@ -163,21 +168,6 @@ impl Profiles {
 		let _ = profiles_lock.get_mut(&self.lock_source).insert(path, profile);
 
 		Ok(())
-	}
-
-	/// Iterates over all profiles
-	///
-	/// # Blocking
-	/// Will deadlock if `f` blocks.
-	#[side_effect(MightBlock)]
-	pub fn for_each<T, C: FromIterator<T>>(
-		&self,
-		profiles_lock: &mut ProfilesLock,
-		mut f: impl FnMut(&Path, &Profile) -> T,
-	) -> C {
-		let profiles = profiles_lock.get_mut(&self.lock_source);
-
-		profiles.iter().map(|(path, profile)| f(path, profile)).collect()
 	}
 }
 
