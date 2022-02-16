@@ -52,7 +52,7 @@
 // Imports
 use {
 	anyhow::Context,
-	async_lock::{Mutex, MutexGuard},
+	futures::lock::{Mutex, MutexGuard},
 	crossbeam::atomic::AtomicCell,
 	std::{
 		sync::Arc,

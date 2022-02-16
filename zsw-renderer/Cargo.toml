@@ -23,7 +23,7 @@ winit = "0.26.1"
 egui_wgpu_backend = "0.16.0"
 
 # Async
-async-lock = "2.4.0"
+futures = "0.3.21"
 pollster = "0.2.4"
 
 # Error handling

@@ -13,7 +13,7 @@ zsw-util = {path = "../zsw-util"}
 
 # Async
 async-channel = "1.6.1"
-async-lock = "2.4.0"
+futures = "0.3.21"
 
 # Random
 rand = "0.8.4"

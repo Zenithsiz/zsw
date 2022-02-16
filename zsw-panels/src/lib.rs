@@ -65,7 +65,7 @@ pub use self::{
 // Imports
 use {
 	anyhow::Context,
-	async_lock::{Mutex, MutexGuard},
+	futures::lock::{Mutex, MutexGuard},
 	winit::dpi::PhysicalSize,
 	zsw_img::ImageLoader,
 	zsw_side_effect_macros::side_effect,

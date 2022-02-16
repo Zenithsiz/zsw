@@ -50,7 +50,7 @@
 // Imports
 use {
 	anyhow::Context,
-	async_lock::{Mutex, MutexGuard},
+	futures::lock::{Mutex, MutexGuard},
 	std::{
 		collections::HashMap,
 		path::{Path, PathBuf},

@@ -52,7 +52,7 @@
 // Imports
 use {
 	anyhow::Context,
-	async_lock::Mutex,
+	futures::lock::Mutex,
 	pollster::FutureExt,
 	std::{thread, time::Duration},
 	winit::window::Window,

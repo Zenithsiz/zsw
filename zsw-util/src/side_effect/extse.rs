@@ -56,9 +56,9 @@ impl<T> ParkingLotMutexSe<T> for parking_lot::Mutex<T> {
 	}
 }
 
-/// Side effect wrapper for [`async_lock::Mutex`]
+/// Side effect wrapper for [`futures::lock::Mutex`]
 pub trait AsyncLockMutexSe<T> {
-	type LockSeFuture<'a>: Future<Output = WithSideEffect<async_lock::MutexGuard<'a, T>, MightBlock>>
+	type LockSeFuture<'a>: Future<Output = WithSideEffect<futures::lock::MutexGuard<'a, T>, MightBlock>>
 	where
 		Self: 'a,
 		T: 'a;
@@ -66,11 +66,11 @@ pub trait AsyncLockMutexSe<T> {
 	fn lock_se(&self) -> Self::LockSeFuture<'_>;
 }
 
-impl<T> AsyncLockMutexSe<T> for async_lock::Mutex<T> {
+impl<T> AsyncLockMutexSe<T> for futures::lock::Mutex<T> {
 	type LockSeFuture<'a>
 	where
 		T: 'a,
-	= impl Future<Output = WithSideEffect<async_lock::MutexGuard<'a, T>, MightBlock>> + 'a;
+	= impl Future<Output = WithSideEffect<futures::lock::MutexGuard<'a, T>, MightBlock>> + 'a;
 
 	fn lock_se(&self) -> Self::LockSeFuture<'_> {
 		async {

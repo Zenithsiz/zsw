@@ -18,7 +18,7 @@ winit = "0.26.1"
 wgpu = {version = "0.12.0", features = ["serde", "replay"]}
 
 # Async
-async-lock = "2.4.0"
+futures = "0.3.21"
 pollster = "0.2.4"
 
 # Error handling

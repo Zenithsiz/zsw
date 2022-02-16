@@ -53,7 +53,7 @@
 
 // Imports
 use {
-	async_lock::{Mutex, MutexGuard},
+	futures::lock::{Mutex, MutexGuard},
 	rand::prelude::SliceRandom,
 	std::{collections::HashSet, path::PathBuf, sync::Arc},
 	zsw_side_effect_macros::side_effect,
