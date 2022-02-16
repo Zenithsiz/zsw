@@ -12,6 +12,7 @@ zsw-img = {path = "../zsw-img"}
 zsw-panels = {path = "../zsw-panels"}
 zsw-playlist = {path = "../zsw-playlist"}
 zsw-profiles = {path = "../zsw-profiles"}
+zsw-renderer = {path = "../zsw-renderer"}
 zsw-settings-window = {path = "../zsw-settings-window"}
 zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
 zsw-util = {path = "../zsw-util"}

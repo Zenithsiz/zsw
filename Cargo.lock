@@ -2431,6 +2431,7 @@ dependencies = [
  "zsw-panels",
  "zsw-playlist",
  "zsw-profiles",
+ "zsw-renderer",
  "zsw-settings-window",
  "zsw-side-effect-macros",
  "zsw-util",
@@ -2514,6 +2515,25 @@ dependencies = [
  "zsw-playlist",
  "zsw-side-effect-macros",
  "zsw-util",
+]
+
+[[package]]
+name = "zsw-renderer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-lock",
+ "egui_wgpu_backend",
+ "log",
+ "pollster",
+ "winit",
+ "zsw-egui",
+ "zsw-img",
+ "zsw-panels",
+ "zsw-settings-window",
+ "zsw-side-effect-macros",
+ "zsw-util",
+ "zsw-wgpu",
 ]
 
 [[package]]

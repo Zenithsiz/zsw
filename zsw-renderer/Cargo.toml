@@ -1,0 +1,33 @@
+[package]
+edition = "2021"
+name = "zsw-renderer"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+# Zsw
+zsw-egui = {path = "../zsw-egui"}
+zsw-img = {path = "../zsw-img"}
+zsw-panels = {path = "../zsw-panels"}
+zsw-settings-window = {path = "../zsw-settings-window"}
+zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
+zsw-util = {path = "../zsw-util"}
+zsw-wgpu = {path = "../zsw-wgpu"}
+
+# Windowing
+winit = "0.26.1"
+
+# Gui
+egui_wgpu_backend = "0.16.0"
+
+# Async
+async-lock = "2.4.0"
+pollster = "0.2.4"
+
+# Error handling
+anyhow = "1.0.52"
+
+# Logging
+log = "0.4.14"
