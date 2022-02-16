@@ -109,8 +109,7 @@ impl FutureRunner {
 		);
 
 		// Pin the future
-		// TODO: Don't allocate?
-		let mut f = Box::pin(f);
+		futures::pin_mut!(f);
 
 		// Create the waker
 		let waker = task::Waker::from(Arc::clone(&self.signal));
