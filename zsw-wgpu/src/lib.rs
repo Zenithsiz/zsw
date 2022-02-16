@@ -195,9 +195,8 @@ impl<'window> Wgpu<'window> {
 	/// Returns the current surface's size
 	///
 	/// # Warning
-	/// This surface size might change at any time, so you shouldn't
-	/// use it on `wgpu` operations that might panic on wrong surface
-	/// sizes.
+	/// The surface size might change as soon as the surface lock changes,
+	/// so you should not keep it afterwards for anything `wgpu` related.
 	pub fn surface_size(&self, surface_lock: &SurfaceLock) -> PhysicalSize<u32> {
 		surface_lock.get(&self.lock_source).size
 	}

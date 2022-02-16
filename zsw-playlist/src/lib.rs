@@ -232,7 +232,6 @@ impl Default for Playlist {
 pub struct LockSource;
 
 /// Inner lock
-// TODO: Rename to `PlaylistLock`, maybe?
 pub type PlaylistLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, Inner>, LockSource>;
 
 

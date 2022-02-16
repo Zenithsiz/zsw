@@ -96,8 +96,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Spawn the profile loader if we have any
 		// DEADLOCK: See above
 		//           [`zsw_profiles::ProfilesLock`]
-		//           [`zsw_playlist::PlaylistLock`]
-		//           - [`zsw_panels::PanelsLock`]
+		//           - [`zsw_playlist::PlaylistLock`]
+		//             - [`zsw_panels::PanelsLock`]
 		if let Some(path) = &args.profile {
 			thread_spawner.spawn("Profile loader", || {
 				// Note: We don't care whether we got cancelled or returned successfully

@@ -66,7 +66,6 @@ use {
 #[derive(Debug)]
 pub struct Profiles {
 	/// All profiles by their path
-	// TODO: Make async
 	profiles: Mutex<HashMap<PathBuf, Profile>>,
 
 	/// Lock source
@@ -98,8 +97,8 @@ impl Profiles {
 	///
 	/// # Lock
 	/// [`ProfilesLock`]
-	/// [`zsw_playlist::PlaylistLock`]
-	/// - [`zsw_panels::PanelsLock`]
+	/// - [`zsw_playlist::PlaylistLock`]
+	///   - [`zsw_panels::PanelsLock`]
 	#[side_effect(MightBlock)]
 	pub async fn run_loader_applier<'profiles, 'playlist, 'panels>(
 		&'profiles self,
@@ -107,22 +106,17 @@ impl Profiles {
 		playlist: &'playlist Playlist,
 		panels: &'panels Panels,
 	) {
-		// Try to load the profile
 		// DEADLOCK: Caller ensures we can lock it
-		let res = {
-			let mut profiles_lock = self.lock_profiles().await.allow::<MightBlock>();
-
-			self.load(&mut profiles_lock, path.to_path_buf())
-		};
+		let mut profiles_lock = self.lock_profiles().await.allow::<MightBlock>();
 
 		// Then check if we got it
-		match res {
+		match self.load(&mut profiles_lock, path.to_path_buf()) {
 			// If we did, apply it
-			// DEADLOCK: Caller ensures we can lock both in this order
 			Ok(profile) => {
 				log::info!("Successfully loaded profile: {profile:?}");
 
 				// Lock
+				// DEADLOCK: Caller ensures we can lock them in this order after profiles lock
 				let mut playlist_lock = playlist.lock_playlist().await.allow::<MightBlock>();
 				let mut panels_lock = panels.lock_panels().await.allow::<MightBlock>();
 
@@ -142,18 +136,16 @@ impl Profiles {
 	}
 
 	/// Loads a profile
-	pub fn load(&self, profiles_lock: &mut ProfilesLock, path: PathBuf) -> Result<Profile, anyhow::Error> {
+	pub fn load<'a>(&self, profiles_lock: &'a mut ProfilesLock, path: PathBuf) -> Result<&'a Profile, anyhow::Error> {
 		// Try to load it
 		let profile = zsw_util::parse_json_from_file(&path).context("Unable to load profile")?;
 
 		// Then add it
-		// TODO: Maybe don't clone?
 		let profile = profiles_lock
 			.get_mut(&self.lock_source)
 			.entry(path)
 			.insert_entry(profile)
-			.get()
-			.clone();
+			.into_mut();
 
 		Ok(profile)
 	}
