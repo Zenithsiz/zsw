@@ -228,11 +228,10 @@ impl<'window> Wgpu<'window> {
 	///
 	/// If any resize is queued, it will be executed *before* the frame starts, so the frame will start
 	/// with the new size.
-	// TODO: Remove size from passed parameters
 	pub fn render(
 		&self,
 		surface_lock: &mut SurfaceLock,
-		f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView, PhysicalSize<u32>) -> Result<(), anyhow::Error>,
+		f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView) -> Result<(), anyhow::Error>,
 	) -> Result<(), anyhow::Error> {
 		let surface = surface_lock.get_mut(&self.lock_source);
 
@@ -265,7 +264,7 @@ impl<'window> Wgpu<'window> {
 		let mut encoder = self.device.create_command_encoder(&encoder_descriptor);
 
 		// And render using `f`
-		f(&mut encoder, &surface_texture_view, surface.size).context("Unable to render")?;
+		f(&mut encoder, &surface_texture_view).context("Unable to render")?;
 
 		// Finally submit everything to the queue and present the surface's texture
 		self.queue.submit([encoder.finish()]);

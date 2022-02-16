@@ -192,7 +192,8 @@ impl Renderer {
 		let mut surface_lock = wgpu.lock_surface().await.allow::<MightBlock>();
 
 		// Then render
-		wgpu.render(&mut surface_lock, |encoder, surface_view, surface_size| {
+		let surface_size = wgpu.surface_size(&surface_lock);
+		wgpu.render(&mut surface_lock, |encoder, surface_view| {
 			// Render the panels
 			{
 				// DEADLOCK: Caller ensures we can lock it after the surface
