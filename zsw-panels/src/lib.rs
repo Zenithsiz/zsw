@@ -118,12 +118,13 @@ impl Panels {
 	}
 
 	/// Returns all panels
-	pub fn panels(&self, panels_lock: &PanelsLock) -> Vec<Panel> {
-		panels_lock
-			.get(&self.lock_source)
-			.iter()
-			.map(|panel| panel.panel)
-			.collect()
+	pub fn panels<'a>(&self, panels_lock: &'a PanelsLock) -> &'a [PanelState] {
+		panels_lock.get(&self.lock_source)
+	}
+
+	/// Returns all panels, mutably
+	pub fn panels_mut<'a>(&self, panels_lock: &'a mut PanelsLock) -> &'a mut [PanelState] {
+		panels_lock.get_mut(&self.lock_source)
 	}
 
 	/// Replaces all panels
@@ -147,21 +148,6 @@ impl Panels {
 		}
 
 		Ok(())
-	}
-
-	/// Iterates over all panels mutably.
-	///
-	/// # Blocking
-	/// Will deadlock if `f` blocks.
-	// TODO: Maybe just return a `&mut Vec<_>`
-	#[side_effect(MightBlock)]
-	pub fn for_each_mut<T, C: FromIterator<T>>(
-		&self,
-		panels_lock: &mut PanelsLock,
-		f: impl FnMut(&mut PanelState) -> T,
-	) -> C {
-		let panels = panels_lock.get_mut(&self.lock_source);
-		panels.iter_mut().map(f).collect()
 	}
 
 	/// Renders all panels

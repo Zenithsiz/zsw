@@ -373,7 +373,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 										return;
 									},
 								},
-								panels:    panels.panels(panels_lock),
+								panels:    panels.panels(panels_lock).iter().map(|panel| panel.panel).collect(),
 							}
 						};
 
@@ -446,17 +446,11 @@ fn draw_panels<'panels>(
 	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
 ) {
 	// Draw all panels in their own header
-	// BLOCKING: TODO
-	let mut panel_idx = 0;
-	panels
-		.for_each_mut::<_, ()>(panels_lock, |panel| {
-			ui.collapsing(format!("Panel {panel_idx}"), |ui| {
-				ui.add(PanelWidget::new(panel, surface_size));
-			});
-
-			panel_idx += 1;
-		})
-		.allow::<MightBlock>();
+	for (idx, panel) in panels.panels_mut(panels_lock).iter_mut().enumerate() {
+		ui.collapsing(format!("Panel {idx}"), |ui| {
+			ui.add(PanelWidget::new(panel, surface_size));
+		});
+	}
 
 	// Draw the panel adder
 	ui.collapsing("Add", |ui| {
