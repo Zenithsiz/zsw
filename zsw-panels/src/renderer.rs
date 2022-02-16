@@ -114,7 +114,6 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
-		// DEADLOCK: We ensure we don't block within the callback
 		for panel in panels {
 			// Calculate the matrix for the panel
 			let matrix = panel.matrix(surface_size);

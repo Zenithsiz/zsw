@@ -14,17 +14,16 @@ use {
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	pollster::FutureExt,
-	std::{iter, num::NonZeroUsize, thread, time::Duration},
+	std::{iter, num::NonZeroUsize, thread},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::EventLoop,
 		platform::{
 			run_return::EventLoopExtRunReturn,
-			unix::{WindowBuilderExtUnix, WindowExtUnix, XWindowType},
+			unix::{WindowBuilderExtUnix, XWindowType},
 		},
 		window::{Window, WindowBuilder},
 	},
-	x11::xlib,
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
 	zsw_panels::Panels,
@@ -70,7 +69,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let settings_window = SettingsWindow::new();
 
 	// All runners
-	// Note: They must exit outside of the thread scope because
+	// Note: They must exists outside of the thread scope because
 	//       their `run` can last until the very end of the function
 	let profile_loader_runner = FutureRunner::new();
 	let playlist_runner = FutureRunner::new();
@@ -83,12 +82,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 
 	// Start all threads and then wait in the main thread for events
-	// Note: The outer result of `scope` can't be `Err` due to a panic in
-	//       another thread, since we manually join all threads at the end.
 	// DEADLOCK: We ensure all threads lock each lock in the same order,
 	//           and that we don't lock them.
-	//           All threads ensure they will eventually release any lock
-	//           they obtain.
 	thread::scope(|s| {
 		// Create the thread spawner
 		let mut thread_spawner = zsw_util::ThreadSpawner::new(s);
@@ -172,8 +167,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Note: In release builds, once we get here, we can just exit,
 		//       no need to make the user wait for shutdown code.
-		// TODO: Check if anything needs to run drop code, such as possibly
-		//       saving all profiles or something similar?
 		#[cfg(not(debug_assertions))]
 		std::process::exit(0);
 
@@ -219,13 +212,6 @@ fn create_window() -> Result<(EventLoop<!>, Window), anyhow::Error> {
 		.build(&event_loop)
 		.context("Unable to build window")?;
 
-	// Set the window as always below
-	// Note: Required so it doesn't hide itself if the desktop is clicked on
-	// SAFETY: TODO
-	unsafe {
-		self::set_display_always_below(&window);
-	}
-
 	Ok((event_loop, window))
 }
 
@@ -237,46 +223,4 @@ fn monitor_geometry(monitor: &winit::monitor::MonitorHandle) -> Rect<i32, u32> {
 		pos:  Point2::new(monitor_pos.x, monitor_pos.y),
 		size: Vector2::new(monitor_size.width, monitor_size.height),
 	}
-}
-
-/// Sets the display as always below
-///
-/// # Safety
-/// TODO
-unsafe fn set_display_always_below(window: &Window) {
-	// Get the xlib display and window
-	let display = window.xlib_display().expect("No `X` display found").cast();
-	let window = window.xlib_window().expect("No `X` window found");
-
-	// Flush the existing `XMapRaised`
-	assert_eq!(unsafe { xlib::XFlush(display) }, 1);
-	thread::sleep(Duration::from_millis(100));
-
-	// Unmap the window temporarily
-	assert_eq!(unsafe { xlib::XUnmapWindow(display, window) }, 1);
-	assert_eq!(unsafe { xlib::XFlush(display) }, 1);
-	thread::sleep(Duration::from_millis(100));
-
-	// Add the always below hint to the window manager
-	{
-		let property = unsafe { xlib::XInternAtom(display, b"_NET_WM_STATE\0".as_ptr().cast(), 0) };
-		let value = unsafe { xlib::XInternAtom(display, b"_NET_WM_STATE_BELOW\0".as_ptr().cast(), 0) };
-		let res = unsafe {
-			xlib::XChangeProperty(
-				display,
-				window,
-				property,
-				xlib::XA_ATOM,
-				32,
-				xlib::PropModeAppend,
-				std::ptr::addr_of!(value).cast(),
-				1,
-			)
-		};
-		assert_eq!(res, 1, "Unable to change window property");
-	}
-
-	// Then remap it
-	assert_eq!(unsafe { xlib::XMapRaised(display, window) }, 1);
-	assert_eq!(unsafe { xlib::XFlush(display) }, 1);
 }

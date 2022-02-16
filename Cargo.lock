@@ -2361,16 +2361,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "x11"
-version = "2.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dd0565fa8bfba8c5efe02725b14dff114c866724eff2cfd44d76cea74bcd87a"
-dependencies = [
- "libc",
- "pkg-config",
-]
-
-[[package]]
 name = "x11-dl"
 version = "2.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2425,7 +2415,6 @@ dependencies = [
  "thiserror",
  "wgpu",
  "winit",
- "x11",
  "zsw-egui",
  "zsw-img",
  "zsw-panels",
