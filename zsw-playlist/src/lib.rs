@@ -114,10 +114,10 @@ impl Playlist {
 		}
 	}
 
-	/// Creates an inner lock
+	/// Creates playlist lock
 	///
 	/// # Blocking
-	/// Will block until any existing inner locks are dropped
+	/// Will block until any existing playlist locks are dropped
 	#[side_effect(MightBlock)]
 	pub async fn lock_playlist(&self) -> PlaylistLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
