@@ -68,7 +68,7 @@ use {
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_profiles::{Profile, Profiles},
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{MightBlock, MightLock, Rect},
+	zsw_util::{MightBlock, Rect},
 	zsw_wgpu::Wgpu,
 };
 
@@ -127,7 +127,7 @@ impl SettingsWindow {
 	///   - [`zsw_profiles::ProfilesLock`]
 	///     - [`zsw_playlist::PlaylistLock`]
 	///       - [`zsw_panels::PanelsLock`]
-	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::PlatformLock<'egui>, zsw_profiles::ProfilesLock<'profiles>, zsw_playlist::PlaylistLock<'playlist>, zsw_panels::PanelsLock<'panels>)>)]
+	#[side_effect(MightBlock)]
 	pub async fn run<'wgpu, 'egui, 'playlist, 'panels, 'profiles>(
 		&self,
 		wgpu: &'wgpu Wgpu<'_>,
@@ -141,7 +141,7 @@ impl SettingsWindow {
 		// DEADLOCK: Caller ensures we can lock it
 		// TODO: Check if it's fine to call `wgpu.surface_size`
 		let mut inner = {
-			let surface_lock = wgpu.lock_surface().await.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+			let surface_lock = wgpu.lock_surface().await.allow::<MightBlock>();
 			Inner::new(wgpu.surface_size(&surface_lock))
 		};
 
@@ -149,30 +149,24 @@ impl SettingsWindow {
 			// Get the surface size
 			// DEADLOCK: Caller ensures we can lock it
 			let surface_size = {
-				let surface_lock = wgpu.lock_surface().await.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+				let surface_lock = wgpu.lock_surface().await.allow::<MightBlock>();
 				wgpu.surface_size(&surface_lock)
 			};
 
 			// Draw egui
 			let res = {
 				// DEADLOCK: Caller ensures we can lock it after the surface lock
-				let mut platform_lock = egui.lock_platform().await.allow::<MightLock<zsw_egui::PlatformLock>>();
+				let mut platform_lock = egui.lock_platform().await.allow::<MightBlock>();
 
 
 				// DEADLOCK: Caller ensures we can lock it after the platform lock
-				let mut profiles_lock = profiles
-					.lock_profiles()
-					.await
-					.allow::<MightLock<zsw_profiles::ProfilesLock>>();
+				let mut profiles_lock = profiles.lock_profiles().await.allow::<MightBlock>();
 
 				// DEADLOCK: Caller ensures we can lock it after the profiles lock
-				let mut playlist_lock = playlist
-					.lock_playlist()
-					.await
-					.allow::<MightLock<zsw_playlist::PlaylistLock>>();
+				let mut playlist_lock = playlist.lock_playlist().await.allow::<MightBlock>();
 
 				// DEADLOCK: Caller ensures we can lock it after the panels lock
-				let mut panels_lock = panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
+				let mut panels_lock = panels.lock_panels().await.allow::<MightBlock>();
 
 				egui.draw(window, &mut platform_lock, |ctx, frame| {
 					self.draw(
@@ -215,7 +209,7 @@ impl SettingsWindow {
 	/// [`zsw_wgpu::SurfaceLock`]
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
-	#[side_effect(MightLock<zsw_wgpu::SurfaceLock<'wgpu>>)]
+	#[side_effect(MightBlock)]
 	pub async fn paint_jobs<'wgpu>(&self, _wgpu: &'wgpu Wgpu<'_>) -> Vec<egui::epaint::ClippedMesh> {
 		// Note: This can't return an `Err` because `self` owns a sender
 		// DEADLOCK: Caller ensures it won't hold a `SurfaceLock`,

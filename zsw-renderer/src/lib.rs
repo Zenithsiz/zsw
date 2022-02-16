@@ -61,7 +61,7 @@ use {
 	zsw_panels::Panels,
 	zsw_settings_window::SettingsWindow,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -74,7 +74,8 @@ pub struct Renderer {
 
 impl Renderer {
 	/// Creates a new renderer
-	#[must_use] pub fn new() -> Self {
+	#[must_use]
+	pub fn new() -> Self {
 		Self {
 			frame_timings: Mutex::new(FrameTimings::new()),
 		}
@@ -88,7 +89,7 @@ impl Renderer {
 	/// - [`zsw_panels::PanelsLock`]
 	/// - [`zsw_egui::RenderPassLock`]
 	///   - [`zsw_egui::PlatformLock`]
-	#[side_effect(MightLock<(zsw_panels::PanelsLock<'panels>, zsw_wgpu::SurfaceLock<'wgpu>, zsw_egui::RenderPassLock<'egui>, zsw_egui::PlatformLock<'egui>)>)]
+	#[side_effect(MightBlock)]
 	pub async fn run<'window, 'wgpu, 'egui, 'panels>(
 		&self,
 		window: &Window,
@@ -107,7 +108,7 @@ impl Renderer {
 				// DEADLOCK: Caller ensures we can lock it
 				let (_, update_duration) = zsw_util::measure!(Self::update(wgpu, panels, image_loader)
 					.await
-					.allow::<MightLock<zsw_panels::PanelsLock>>()
+					.allow::<MightBlock>()
 					.map_err(|err| log::warn!("Unable to update: {err:?}")));
 
 				// Render
@@ -115,12 +116,7 @@ impl Renderer {
 				let (_, render_duration) =
 					zsw_util::measure!(Self::render(window, wgpu, panels, egui, settings_window)
 						.await
-						.allow::<MightLock<(
-							zsw_wgpu::SurfaceLock,
-							zsw_panels::PanelsLock,
-							zsw_egui::RenderPassLock,
-							zsw_egui::PlatformLock,
-						)>>()
+						.allow::<MightBlock>()
 						.map_err(|err| log::warn!("Unable to render: {err:?}")));
 
 				(update_duration, render_duration)
@@ -156,14 +152,14 @@ impl Renderer {
 	///
 	/// # Locking
 	/// [`zsw_panels::PanelsLock`]
-	#[side_effect(MightLock<zsw_panels::PanelsLock<'panels>>)]
+	#[side_effect(MightBlock)]
 	async fn update<'window, 'panels>(
 		wgpu: &Wgpu<'window>,
 		panels: &'panels Panels,
 		image_loader: &ImageLoader,
 	) -> Result<(), anyhow::Error> {
 		// DEADLOCK: Caller ensures we can lock it
-		let mut panels_lock = panels.lock_panels().await.allow::<MightLock<zsw_panels::PanelsLock>>();
+		let mut panels_lock = panels.lock_panels().await.allow::<MightBlock>();
 
 		// Updates all panels
 		panels.update_all(&mut panels_lock, wgpu, image_loader)
@@ -176,7 +172,7 @@ impl Renderer {
 	/// - [`zsw_panels::PanelsLock`]
 	/// - [`zsw_egui::RenderPassLock`]
 	///   - [`zsw_egui::PlatformLock`]
-	#[side_effect(MightLock<(zsw_wgpu::SurfaceLock<'wgpu>, zsw_panels::PanelsLock<'panels>, zsw_egui::RenderPassLock<'egui>, zsw_egui::PlatformLock<'egui>)>)]
+	#[side_effect(MightBlock)]
 	async fn render<'window, 'wgpu, 'egui, 'panels>(
 		window: &Window,
 		wgpu: &'wgpu Wgpu<'window>,
@@ -187,14 +183,11 @@ impl Renderer {
 		// Get the egui render results
 		// DEADLOCK: We don't hold the `wgpu::SurfaceLock` lock from `wgpu`.
 		//           Caller ensures we can lock it.
-		let paint_jobs = settings_window
-			.paint_jobs(wgpu)
-			.await
-			.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+		let paint_jobs = settings_window.paint_jobs(wgpu).await.allow::<MightBlock>();
 
 		// Lock the wgpu surface
 		// DEADLOCK: Caller ensures we can lock it
-		let mut surface_lock = wgpu.lock_surface().await.allow::<MightLock<zsw_wgpu::SurfaceLock>>();
+		let mut surface_lock = wgpu.lock_surface().await.allow::<MightBlock>();
 
 		// Then render
 		wgpu.render(&mut surface_lock, |encoder, surface_view, surface_size| {
@@ -202,10 +195,7 @@ impl Renderer {
 			{
 				// DEADLOCK: Caller ensures we can lock it after the surface
 				// TODO: Not block on this
-				let panels_lock = panels
-					.lock_panels()
-					.block_on()
-					.allow::<MightLock<zsw_panels::PanelsLock>>();
+				let panels_lock = panels.lock_panels().block_on().allow::<MightBlock>();
 
 				panels
 					.render(&panels_lock, wgpu.queue(), encoder, surface_view, surface_size)
@@ -223,18 +213,12 @@ impl Renderer {
 
 			// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
 			// TODO: Not block on this
-			let mut render_pass_lock = egui
-				.lock_render_pass()
-				.block_on()
-				.allow::<MightLock<zsw_egui::RenderPassLock>>();
+			let mut render_pass_lock = egui.lock_render_pass().block_on().allow::<MightBlock>();
 			egui.do_render_pass(&mut render_pass_lock, |egui_render_pass| {
 				let font_image = {
 					// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
 					// TODO: Not block on this
-					let platform_lock = egui
-						.lock_platform()
-						.block_on()
-						.allow::<MightLock<zsw_egui::PlatformLock>>();
+					let platform_lock = egui.lock_platform().block_on().allow::<MightBlock>();
 					egui.font_image(&platform_lock)
 				};
 

@@ -72,7 +72,7 @@ pub use {
 	lock::Lock,
 	rect::Rect,
 	scan_dir::dir_files_iter,
-	side_effect::{extse, MightBlock, MightLock, SideEffect, WithSideEffect},
+	side_effect::{extse, MightBlock, SideEffect, WithSideEffect},
 	thread::{FutureRunner, ThreadSpawner},
 };
 

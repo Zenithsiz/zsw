@@ -10,7 +10,7 @@ use {
 	zsw_egui::Egui,
 	zsw_settings_window::SettingsWindow,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::MightLock,
+	zsw_util::MightBlock,
 	zsw_wgpu::Wgpu,
 };
 
@@ -30,7 +30,7 @@ impl EventHandler {
 	///
 	/// # Locking
 	/// [`zsw_egui::PlatformLock`]
-	#[side_effect(MightLock<zsw_egui::PlatformLock<'egui>>)]
+	#[side_effect(MightBlock)]
 	pub async fn handle_event<'window, 'egui>(
 		&mut self,
 		wgpu: &Wgpu<'_>,
@@ -42,7 +42,7 @@ impl EventHandler {
 		// Update egui
 		// DEADLOCK: Caller ensures we can call it
 		{
-			let mut platform_lock = egui.lock_platform().await.allow::<MightLock<zsw_egui::PlatformLock>>();
+			let mut platform_lock = egui.lock_platform().await.allow::<MightBlock>();
 			egui.handle_event(&mut platform_lock, &event);
 		}
 

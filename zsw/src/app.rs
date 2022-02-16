@@ -32,7 +32,7 @@ use {
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::{FutureRunner, MightLock, Rect, WithSideEffect},
+	zsw_util::{FutureRunner, MightBlock, Rect, WithSideEffect},
 	zsw_wgpu::Wgpu,
 };
 
@@ -103,15 +103,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 				// Note: We don't care whether we got cancelled or returned successfully
 				profile_loader_runner
 					.run(profiles.run_loader_applier(path, &playlist, &panels))
-					.map(
-						WithSideEffect::allow::<
-							MightLock<(
-								zsw_profiles::ProfilesLock,
-								zsw_playlist::PlaylistLock,
-								zsw_panels::PanelsLock,
-							)>,
-						>,
-					)
+					.map(WithSideEffect::allow::<MightBlock>)
 					.into_ok_or_err();
 			})?;
 		}
@@ -122,7 +114,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn("Playlist", || {
 			playlist_runner
 				.run(playlist.run())
-				.map::<!, _>(WithSideEffect::allow::<MightLock<zsw_playlist::PlaylistLock>>)
+				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 				.into_err();
 		})?;
 
@@ -133,7 +125,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			thread_spawner.spawn(format!("Image Loader${thread_idx}"), || {
 				runner
 					.run(image_loader.run(&playlist))
-					.map::<!, _>(WithSideEffect::allow::<MightLock<zsw_playlist::PlaylistLock>>)
+					.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 					.into_err();
 			})?;
 		}
@@ -148,17 +140,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn("Settings window", || {
 			settings_window_runner
 				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles))
-				.map::<!, _>(
-					WithSideEffect::allow::<
-						MightLock<(
-							zsw_wgpu::SurfaceLock,
-							zsw_egui::PlatformLock,
-							zsw_profiles::ProfilesLock,
-							zsw_playlist::PlaylistLock,
-							zsw_panels::PanelsLock,
-						)>,
-					>,
-				)
+				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 				.into_err();
 		})?;
 
@@ -172,16 +154,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn("Renderer", || {
 			renderer_runner
 				.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window))
-				.map::<!, _>(
-					WithSideEffect::allow::<
-						MightLock<(
-							zsw_panels::PanelsLock,
-							zsw_wgpu::SurfaceLock,
-							zsw_egui::RenderPassLock,
-							zsw_egui::PlatformLock,
-						)>,
-					>,
-				)
+				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 				.into_err();
 		})?;
 
@@ -194,7 +167,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 			event_handler
 				.handle_event(&wgpu, &egui, &settings_window, event, control_flow)
 				.block_on()
-				.allow::<MightLock<zsw_egui::PlatformLock>>();
+				.allow::<MightBlock>();
 		});
 
 		// Note: In release builds, once we get here, we can just exit,

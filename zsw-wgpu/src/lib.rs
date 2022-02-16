@@ -66,7 +66,7 @@ use {
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 };
 
 /// Surface
@@ -184,7 +184,7 @@ impl<'window> Wgpu<'window> {
 	///
 	/// # Blocking
 	/// Will block until any existing surface locks are dropped
-	#[side_effect(MightLock<SurfaceLock<'_>>)]
+	#[side_effect(MightBlock)]
 	pub async fn lock_surface(&self) -> SurfaceLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method

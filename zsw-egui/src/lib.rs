@@ -60,7 +60,7 @@ use {
 	},
 	winit::window::Window,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -129,7 +129,7 @@ impl Egui {
 	///
 	/// # Blocking
 	/// Will block until any existing platform locks are dropped
-	#[side_effect(MightLock<PlatformLock<'a>>)]
+	#[side_effect(MightBlock)]
 	pub async fn lock_platform<'a>(&'a self) -> PlatformLock<'a> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
@@ -141,7 +141,7 @@ impl Egui {
 	///
 	/// # Blocking
 	/// Will block until any existing render pass locks are dropped
-	#[side_effect(MightLock<RenderPassLock<'a>>)]
+	#[side_effect(MightBlock)]
 	pub async fn lock_render_pass<'a>(&'a self) -> RenderPassLock<'a> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method

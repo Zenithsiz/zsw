@@ -82,12 +82,6 @@ pub struct MightBlock;
 
 impl SideEffect for MightBlock {}
 
-/// Side effect to indicate a function might lock locks `Locks`.
-#[derive(Clone, Copy, Debug)]
-pub struct MightLock<Locks>(PhantomData<Locks>);
-
-impl<Locks> SideEffect for MightLock<Locks> {}
-
 /// Trait to check if two types are equal
 // TODO: Possibly make this sealed?
 pub trait Eq<T> {}

@@ -57,7 +57,7 @@ use {
 	rand::prelude::SliceRandom,
 	std::{collections::HashSet, path::PathBuf, sync::Arc},
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, MightBlock, MightLock},
+	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 };
 
 /// Inner
@@ -118,7 +118,7 @@ impl Playlist {
 	///
 	/// # Blocking
 	/// Will block until any existing inner locks are dropped
-	#[side_effect(MightLock<PlaylistLock<'_>>)]
+	#[side_effect(MightBlock)]
 	pub async fn lock_playlist(&self) -> PlaylistLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
@@ -130,7 +130,7 @@ impl Playlist {
 	///
 	/// # Locking
 	/// [`PlaylistLock`]
-	#[side_effect(MightLock<PlaylistLock<'_>>)]
+	#[side_effect(MightBlock)]
 	pub async fn run(&self) -> ! {
 		loop {
 			// Get the next image to send
@@ -140,7 +140,7 @@ impl Playlist {
 			let next = self
 				.lock_playlist()
 				.await
-				.allow::<MightLock<PlaylistLock>>()
+				.allow::<MightBlock>()
 				.get_mut(&self.lock_source)
 				.cur_images
 				.pop();
@@ -156,7 +156,7 @@ impl Playlist {
 				// Else get the next batch and shuffle them
 				// DEADLOCK: Caller ensures we can lock it.
 				None => {
-					let mut inner = self.lock_playlist().await.allow::<MightLock<PlaylistLock>>();
+					let mut inner = self.lock_playlist().await.allow::<MightBlock>();
 					let inner = inner.get_mut(&self.lock_source);
 					inner.cur_images.extend(inner.images.iter().cloned());
 					inner.cur_images.shuffle(&mut rand::thread_rng());
@@ -199,7 +199,7 @@ impl Playlist {
 	/// [`PlaylistLock`]
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
-	#[side_effect(MightLock<PlaylistLock<'_>>)]
+	#[side_effect(MightBlock)]
 	pub async fn next(&self) -> Arc<PlaylistImage> {
 		// Note: This can't return an `Err` because `self` owns a sender
 		// DEADLOCK: Caller ensures it won't hold an `PlaylistLock`,
