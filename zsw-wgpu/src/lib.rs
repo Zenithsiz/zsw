@@ -59,8 +59,8 @@
 // Imports
 use {
 	anyhow::Context,
-	futures::lock::{Mutex, MutexGuard},
 	crossbeam::atomic::AtomicCell,
+	futures::lock::{Mutex, MutexGuard},
 	pollster::FutureExt,
 	std::marker::PhantomData,
 	wgpu::TextureFormat,

@@ -17,11 +17,10 @@ pub struct Panel {
 	pub fade_point: u64,
 
 	// TODO: make parallax optional with a struct wrapped in `Option`
-	
 	/// Parallax scale, 0.0 .. 1.0
 	#[serde(default = "default_parallax_ratio")]
 	pub parallax_ratio: f32,
-	
+
 	/// Reverse parallax
 	#[serde(default = "default_reverse_parallax")]
 	pub reverse_parallax: bool,

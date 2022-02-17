@@ -56,7 +56,11 @@ pub mod loader;
 pub use loader::ImageLoader;
 
 // Imports
-use {cgmath::Vector2, image::DynamicImage, std::path::PathBuf};
+use {
+	cgmath::Vector2,
+	image::{DynamicImage, GenericImageView},
+	std::path::PathBuf,
+};
 
 /// Loaded image
 #[derive(Debug)]
