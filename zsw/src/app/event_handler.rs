@@ -4,7 +4,7 @@
 use {
 	winit::{
 		dpi::PhysicalPosition,
-		event::{Event, WindowEvent},
+		event::{DeviceEvent, Event, WindowEvent},
 		event_loop::ControlFlow as EventLoopControlFlow,
 	},
 	zsw_egui::Egui,
@@ -54,7 +54,7 @@ impl EventHandler {
 		*control_flow = EventLoopControlFlow::Wait;
 
 		// Then handle the event
-		#[allow(clippy::single_match)] // We might add more in the future
+		#[allow(clippy::collapsible_match)] // We might add more in the future
 		match event {
 			Event::WindowEvent { event, .. } => match event {
 				// If we should be closing, set the control flow to exit
@@ -80,6 +80,22 @@ impl EventHandler {
 				} => settings_window.queue_open_click(self.cursor_pos),
 				_ => (),
 			},
+
+			#[allow(clippy::single_match)] // We might add more in the future
+			Event::DeviceEvent { event, .. } => match event {
+				// Note: We use mouse motion to keep track of the mouse while it's not
+				//       on the desktop window
+				DeviceEvent::MouseMotion {
+					delta: (delta_x, delta_y),
+				} =>
+					if let Some(cursor_pos) = self.cursor_pos.as_mut() {
+						cursor_pos.x += delta_x;
+						cursor_pos.y += delta_y;
+						panels.set_cursor_pos(*cursor_pos);
+					},
+				_ => (),
+			},
+
 			_ => (),
 		}
 	}
