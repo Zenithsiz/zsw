@@ -90,9 +90,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the profile loader if we have any
 		// DEADLOCK: See above
-		//           [`zsw_profiles::ProfilesLock`]
-		//           - [`zsw_playlist::PlaylistLock`]
-		//             - [`zsw_panels::PanelsLock`]
 		if let Some(path) = &args.profile {
 			thread_spawner.spawn("Profile loader", || {
 				// Note: We don't care whether we got cancelled or returned successfully
@@ -105,7 +102,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the playlist thread
 		// DEADLOCK: See above
-		//           [`zsw_playlist::PlaylistLock`]
 		thread_spawner.spawn("Playlist", || {
 			playlist_runner
 				.run(playlist.run())
@@ -115,7 +111,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn all image loaders
 		// DEADLOCK: See above
-		//           [`zsw_playlist::PlaylistLock`]
 		for (thread_idx, runner) in image_loader_runners.iter().enumerate() {
 			thread_spawner.spawn(format!("Image Loader${thread_idx}"), || {
 				runner
@@ -127,11 +122,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the settings window thread
 		// DEADLOCK: See above
-		//           [`zsw_wgpu::SurfaceLock`]
-		//           - [`zsw_egui::PlatformLock`]
-		//             - [`zsw_profiles::ProfilesLock`]
-		//               - [`zsw_playlist::PlaylistLock`]
-		//                 - [`zsw_panels::PanelsLock`]
 		thread_spawner.spawn("Settings window", || {
 			settings_window_runner
 				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles))
@@ -141,14 +131,9 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 		// Spawn the renderer thread
 		// DEADLOCK: See above
-		//           [`zsw_panels::PanelsLock`]
-		//           [`zsw_wgpu::SurfaceLock`]
-		//           - [`zsw_panels::PanelsLock`]
-		//           - [`zsw_egui::RenderPassLock`]
-		//             - [`zsw_egui::PlatformLock`]
 		thread_spawner.spawn("Renderer", || {
 			renderer_runner
-				.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader, &settings_window))
+				.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader))
 				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 				.into_err();
 		})?;
@@ -156,7 +141,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Run event loop in this thread until we quit
 		// DEADLOCK: `run_return` exits once the user requests it.
 		//           See above
-		//           [`zsw_egui::PlatformLock`]
 		// Note: Doesn't make sense to use a runner here, since nothing will call `stop`.
 		event_loop.run_return(|event, _, control_flow| {
 			event_handler

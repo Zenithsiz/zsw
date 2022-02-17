@@ -1,5 +1,7 @@
 //! Side effect macros
 
+// TODO: Absolute paths once we move side effects out of `zsw-util`
+
 // Imports
 use proc_macro::TokenStream;
 
@@ -25,7 +27,7 @@ pub fn side_effect(attr: TokenStream, item: TokenStream) -> TokenStream {
 		// Then wrap them in out side effect
 		syn::ReturnType::Type(
 			r_arrow,
-			syn::parse_quote!(::zsw_util::WithSideEffect<#return_ty, (#effects)>),
+			syn::parse_quote!(zsw_util::WithSideEffect<#return_ty, (#effects)>),
 		)
 	};
 
@@ -40,8 +42,8 @@ pub fn side_effect(attr: TokenStream, item: TokenStream) -> TokenStream {
 			false => syn::parse_quote! { move || { #fn_body } },
 		};
 		let output_expr: syn::Expr = match func.sig.asyncness.is_some() {
-			true => syn::parse_quote! { ::zsw_util::WithSideEffect::new((#wrapped_body)().await) },
-			false => syn::parse_quote! { ::zsw_util::WithSideEffect::new((#wrapped_body)()) },
+			true => syn::parse_quote! { zsw_util::WithSideEffect::new((#wrapped_body)().await) },
+			false => syn::parse_quote! { zsw_util::WithSideEffect::new((#wrapped_body)()) },
 		};
 
 

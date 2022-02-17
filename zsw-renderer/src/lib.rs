@@ -59,7 +59,6 @@ use {
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
 	zsw_panels::Panels,
-	zsw_settings_window::SettingsWindow,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 	zsw_wgpu::Wgpu,
@@ -98,7 +97,6 @@ impl Renderer {
 		panels: &Panels,
 		egui: &'egui Egui,
 		image_loader: &ImageLoader,
-		settings_window: &SettingsWindow,
 	) -> ! {
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -114,11 +112,10 @@ impl Renderer {
 
 				// Render
 				// DEADLOCK: Caller ensures we can lock it
-				let (_, render_duration) =
-					zsw_util::measure!(Self::render(window, wgpu, panels, egui, settings_window)
-						.await
-						.allow::<MightBlock>()
-						.map_err(|err| log::warn!("Unable to render: {err:?}")));
+				let (_, render_duration) = zsw_util::measure!(Self::render(window, wgpu, panels, egui)
+					.await
+					.allow::<MightBlock>()
+					.map_err(|err| log::warn!("Unable to render: {err:?}")));
 
 				(update_duration, render_duration)
 			});
@@ -172,21 +169,17 @@ impl Renderer {
 	/// Lock tree:
 	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
 	/// - [`zsw_panels::PanelsLock`] on `panels`
-	/// - [`zsw_egui::RenderPassLock`] on `egui`
-	///   - [`zsw_egui::PlatformLock`] on `egui`
+	/// - [`zsw_egui::PaintJobsLock`] on `egui`
+	///   - [`zsw_egui::RenderPassLock`] on `egui`
+	///     - [`zsw_egui::PlatformLock`] on `egui`
+	///     
 	#[side_effect(MightBlock)]
 	async fn render<'window, 'wgpu, 'egui, 'panels>(
 		window: &Window,
 		wgpu: &'wgpu Wgpu<'window>,
 		panels: &'panels Panels,
 		egui: &'egui Egui,
-		settings_window: &SettingsWindow,
 	) -> Result<(), anyhow::Error> {
-		// Get the egui render results
-		// DEADLOCK: We don't hold the `wgpu::SurfaceLock` lock from `wgpu`.
-		//           Caller ensures we can lock it.
-		let paint_jobs = settings_window.paint_jobs(wgpu).await.allow::<MightBlock>();
-
 		// Lock the wgpu surface
 		// DEADLOCK: Caller ensures we can lock it
 		let mut surface_lock = wgpu.lock_surface().await.allow::<MightBlock>();
@@ -214,26 +207,38 @@ impl Renderer {
 			let device = wgpu.device();
 			let queue = wgpu.queue();
 
-			// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
+			// Get the egui render results
+			// DEADLOCK: Caller ensures we can lock it.
 			// TODO: Not block on this
-			let mut render_pass_lock = egui.lock_render_pass().block_on().allow::<MightBlock>();
-			egui.do_render_pass(&mut render_pass_lock, |egui_render_pass| {
-				let font_image = {
-					// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
-					// TODO: Not block on this
-					let platform_lock = egui.lock_platform().block_on().allow::<MightBlock>();
-					egui.font_image(&platform_lock)
-				};
+			let paint_jobs_lock = egui.lock_paint_jobs().block_on().allow::<MightBlock>();
+			let paint_jobs = egui.paint_jobs(&paint_jobs_lock);
 
-				egui_render_pass.update_texture(device, queue, &font_image);
-				egui_render_pass.update_user_textures(device, queue);
-				egui_render_pass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
+			// If we have any paint jobs, draw egui
+			if !paint_jobs.is_empty() {
+				// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
+				// TODO: Not block on this
+				let mut render_pass_lock = egui.lock_render_pass().block_on().allow::<MightBlock>();
+				egui.do_render_pass(&mut render_pass_lock, |egui_render_pass| {
+					let font_image = {
+						// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
+						// TODO: Not block on this
+						let platform_lock = egui.lock_platform().block_on().allow::<MightBlock>();
+						egui.font_image(&platform_lock)
+					};
 
-				// Record all render passes.
-				egui_render_pass
-					.execute(encoder, surface_view, &paint_jobs, &screen_descriptor, None)
-					.context("Unable to render egui")
-			})
+					egui_render_pass.update_texture(device, queue, &font_image);
+					egui_render_pass.update_user_textures(device, queue);
+					egui_render_pass.update_buffers(device, queue, paint_jobs, &screen_descriptor);
+
+					// Record all render passes.
+					egui_render_pass
+						.execute(encoder, surface_view, paint_jobs, &screen_descriptor, None)
+						.context("Unable to render egui")
+				})
+				.context("Unable to perform egui render pass")?;
+			}
+
+			Ok(())
 		})
 	}
 }

@@ -96,26 +96,14 @@ impl Inner {
 pub struct SettingsWindow {
 	/// Queued open click
 	queued_open_click: AtomicCell<Option<PhysicalPosition<f64>>>,
-
-	/// Paint jobs sender
-	paint_jobs_tx: async_channel::Sender<Vec<egui::epaint::ClippedMesh>>,
-
-	/// Paint jobs receiver
-	paint_jobs_rx: async_channel::Receiver<Vec<egui::epaint::ClippedMesh>>,
 }
 
 impl SettingsWindow {
 	/// Creates the settings window
 	#[must_use]
 	pub fn new() -> Self {
-		// Note: Making the close channel unbounded is what allows us to not block
-		//       in `Self::stop`.
-		let (paint_jobs_tx, paint_jobs_rx) = async_channel::bounded(1);
-
 		Self {
 			queued_open_click: AtomicCell::new(None),
-			paint_jobs_tx,
-			paint_jobs_rx,
 		}
 	}
 
@@ -124,10 +112,11 @@ impl SettingsWindow {
 	/// # Blocking
 	/// Lock tree:
 	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
-	/// - [`zsw_egui::PlatformLock`] on `egui`
-	///   - [`zsw_profiles::ProfilesLock`] on `profiles`
-	///     - [`zsw_playlist::PlaylistLock`] on `playlist`
-	///       - [`zsw_panels::PanelsLock`] on `panels`
+	/// [`zsw_egui::PlatformLock`] on `egui`
+	/// - [`zsw_profiles::ProfilesLock`] on `profiles`
+	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
+	///     - [`zsw_panels::PanelsLock`] on `panels`
+	/// Blocks until [`Self::paint_jobs`] on `egui` is called.
 	#[side_effect(MightBlock)]
 	pub async fn run<'wgpu, 'egui, 'playlist, 'panels, 'profiles>(
 		&self,
@@ -156,7 +145,7 @@ impl SettingsWindow {
 
 			// Draw egui
 			let res = {
-				// DEADLOCK: Caller ensures we can lock it after the surface lock
+				// DEADLOCK: Caller ensures we can lock it
 				let mut platform_lock = egui.lock_platform().await.allow::<MightBlock>();
 
 
@@ -186,38 +175,12 @@ impl SettingsWindow {
 				})
 			};
 
-			let paint_jobs = match res {
-				Ok(paint_jobs) => paint_jobs,
-				Err(err) => {
-					log::warn!("Unable to draw egui: {err:?}");
-					continue;
-				},
-			};
-
-			// Then send the paint jobs
-			// DEADLOCK: We ensure we don't hold any locks while
-			//           sending.
-			self.paint_jobs_tx
-				.send(paint_jobs)
-				.await
-				.expect("Paint jobs receiver was closed");
+			match res {
+				// DEADLOCK: Caller ensures we can block
+				Ok(paint_jobs) => egui.update_paint_jobs(paint_jobs).await.allow::<MightBlock>(),
+				Err(err) => log::warn!("Unable to draw egui: {err:?}"),
+			}
 		}
-	}
-
-	/// Retrieves the paint jobs for the next frame
-	///
-	/// # Blocking
-	/// Locks [`zsw_wgpu::SurfaceLock`] on `wgpu`
-	// TODO: Replace with a barrier
-	// Note: Doesn't literally lock it, but the other side of the channel
-	//       needs to lock it in order to progress, so it's equivalent
-	#[side_effect(MightBlock)]
-	pub async fn paint_jobs<'wgpu>(&self, _wgpu: &'wgpu Wgpu<'_>) -> Vec<egui::epaint::ClippedMesh> {
-		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: Caller ensures it won't hold a `SurfaceLock`,
-		//           and we ensure the other side of the channel
-		//           can progress.
-		self.paint_jobs_rx.recv().await.expect("Paint jobs sender was closed")
 	}
 
 	/// Draws the settings window

@@ -60,7 +60,7 @@ use {
 	},
 	winit::window::Window,
 	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
+	zsw_util::{extse::AsyncLockMutexSe, FetchUpdateLock, FetchUpdateLockGuard, MightBlock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -78,6 +78,9 @@ pub struct Egui {
 
 	/// Last frame time
 	frame_time: AtomicCell<Option<Duration>>,
+
+	/// Paint jobs
+	paint_jobs: FetchUpdateLock<Vec<egui::ClippedMesh>>,
 
 	/// Lock source
 	lock_source: LockSource,
@@ -121,6 +124,7 @@ impl Egui {
 			render_pass: Mutex::new(render_pass),
 			repaint_signal,
 			frame_time: AtomicCell::new(None),
+			paint_jobs: FetchUpdateLock::new(vec![]),
 			lock_source: LockSource,
 		})
 	}
@@ -149,10 +153,19 @@ impl Egui {
 		RenderPassLock::new(guard, &self.lock_source)
 	}
 
-	/// Draws egui
+	/// Creates a paint jobs lock
 	///
-	/// If called simultaneously from multiple threads,
-	/// frame times may be wrong.
+	/// # Blocking
+	/// Will block until any existing paint jobs locks are dropped
+	#[side_effect(MightBlock)]
+	pub async fn lock_paint_jobs<'a>(&'a self) -> PaintJobsLock<'a> {
+		// DEADLOCK: Caller is responsible to ensure we don't deadlock
+		//           We don't lock it outside of this method
+		let guard = self.paint_jobs.fetch().await.allow::<MightBlock>();
+		PaintJobsLock::new(guard, &self.lock_source)
+	}
+
+	/// Draws egui
 	pub fn draw(
 		&self,
 		window: &Window,
@@ -200,6 +213,24 @@ impl Egui {
 		platform_lock.get(&self.lock_source).context().font_image()
 	}
 
+	/// Returns the current paint jobs
+	pub fn paint_jobs<'a>(&self, paint_jobs_lock: &'a PaintJobsLock) -> &'a [egui::ClippedMesh] {
+		paint_jobs_lock.get(&self.lock_source)
+	}
+
+	/// Updates the paint jobs
+	///
+	/// # Blocking
+	/// Blocks until [`Self::paint_jobs`] is called.
+	#[side_effect(MightBlock)]
+	pub async fn update_paint_jobs(&self, next_paint_jobs: Vec<egui::ClippedMesh>) {
+		// DEADLOCK: Caller ensures we can block
+		self.paint_jobs
+			.update(|paint_jobs| *paint_jobs = next_paint_jobs)
+			.await
+			.allow::<MightBlock>();
+	}
+
 	/// Performs a render pass
 	pub fn do_render_pass<T>(
 		&self,
@@ -222,6 +253,9 @@ pub type PlatformLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, egui_winit_platfor
 
 /// Render pass lock
 pub type RenderPassLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, egui_wgpu_backend::RenderPass>, LockSource>;
+
+/// Paint jobs lock
+pub type PaintJobsLock<'a> = zsw_util::Lock<'a, FetchUpdateLockGuard<'a, Vec<egui::ClippedMesh>>, LockSource>;
 
 /// Repaint signal
 // Note: We paint egui every frame, so this isn't required currently, but
