@@ -2530,6 +2530,7 @@ dependencies = [
  "zsw-panels",
  "zsw-playlist",
  "zsw-profiles",
+ "zsw-renderer",
  "zsw-side-effect-macros",
  "zsw-util",
  "zsw-wgpu",

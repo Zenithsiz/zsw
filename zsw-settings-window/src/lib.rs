@@ -57,7 +57,7 @@
 use {
 	cgmath::{Point2, Vector2},
 	crossbeam::atomic::AtomicCell,
-	egui::Widget,
+	egui::{plot, Widget},
 	pollster::FutureExt,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -67,6 +67,7 @@ use {
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels},
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_profiles::{Profile, Profiles},
+	zsw_renderer::Renderer,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::{MightBlock, Rect},
 	zsw_wgpu::Wgpu,
@@ -126,6 +127,7 @@ impl SettingsWindow {
 		panels: &'panels Panels,
 		playlist: &'playlist Playlist,
 		profiles: &'profiles Profiles,
+		renderer: &Renderer,
 	) -> ! {
 		// Create the inner data
 		// DEADLOCK: Caller ensures we can lock it
@@ -168,6 +170,7 @@ impl SettingsWindow {
 						panels,
 						playlist,
 						profiles,
+						renderer,
 						&mut playlist_lock,
 						&mut panels_lock,
 						&mut profiles_lock,
@@ -194,6 +197,7 @@ impl SettingsWindow {
 		panels: &'panels Panels,
 		playlist: &'playlist Playlist,
 		profiles: &'profiles Profiles,
+		renderer: &Renderer,
 		playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
 		panels_lock: &mut zsw_panels::PanelsLock<'panels>,
 		profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
@@ -221,6 +225,7 @@ impl SettingsWindow {
 				panels,
 				playlist,
 				profiles,
+				renderer,
 				playlist_lock,
 				panels_lock,
 				profiles_lock,
@@ -250,6 +255,7 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 	panels: &'panels Panels,
 	playlist: &'playlist Playlist,
 	profiles: &'profiles Profiles,
+	renderer: &Renderer,
 	playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
 	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
 	profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
@@ -271,6 +277,28 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 			panels_lock,
 			profiles_lock,
 		);
+	});
+
+	ui.collapsing("Frame timings", |ui| {
+		let frame_timings = renderer.frame_timings().block_on();
+
+		let bars = frame_timings
+			.iter()
+			.enumerate()
+			.map(|(idx, frame)| plot::Bar::new(idx as f64, 1000.0 * frame.total.as_secs_f64()))
+			.collect();
+		let bar_chart = plot::BarChart::new(bars).name("Total");
+
+		plot::Plot::new("Frame timings (ms)")
+			.allow_drag(false)
+			.allow_zoom(false)
+			.show_x(false)
+			.show_y(true)
+			.show_background(false)
+			.view_aspect(2.0)
+			.show(ui, |plot_ui| {
+				plot_ui.bar_chart(bar_chart);
+			});
 	});
 }
 

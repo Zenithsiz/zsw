@@ -124,7 +124,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// DEADLOCK: See above
 		thread_spawner.spawn("Settings window", || {
 			settings_window_runner
-				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles))
+				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles, &renderer))
 				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 				.into_err();
 		})?;
