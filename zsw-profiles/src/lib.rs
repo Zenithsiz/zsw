@@ -1,5 +1,10 @@
 //! Profiles
 
+// TODO: Profile "inheritance".
+//       This will likely require having a "current" profile,
+//       so changes made only affect the child profile, and not
+//       the parent?
+
 // Lints
 #![warn(
 	clippy::pedantic,
