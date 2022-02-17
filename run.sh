@@ -3,4 +3,4 @@
 set -e
 
 cargo run -- \
-	-p ~/.wallpaper/profiles/full.json
+	-p profile.json

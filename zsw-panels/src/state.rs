@@ -153,28 +153,25 @@ impl PanelState {
 			PanelStateImages::Empty => (None, None),
 			PanelStateImages::PrimaryOnly { front, .. } => (
 				Some(PanelStateImageDescriptor {
-					image: &front.image,
+					image: front,
 					alpha: 1.0,
 					progress,
-					swap_dir: front.swap_dir,
-					panel_size: self.panel.geometry.size,
+					panel: &self.panel,
 				}),
 				None,
 			),
 			PanelStateImages::Both { front, back } => (
 				Some(PanelStateImageDescriptor {
-					image: &front.image,
+					image: front,
 					alpha: 1.0 - back_alpha,
 					progress,
-					swap_dir: front.swap_dir,
-					panel_size: self.panel.geometry.size,
+					panel: &self.panel,
 				}),
 				Some(PanelStateImageDescriptor {
-					image:      &back.image,
-					alpha:      back_alpha,
-					progress:   back_progress,
-					swap_dir:   back.swap_dir,
-					panel_size: self.panel.geometry.size,
+					image:    back,
+					alpha:    back_alpha,
+					progress: back_progress,
+					panel:    &self.panel,
 				}),
 			),
 		};
@@ -230,7 +227,7 @@ pub struct PanelStateImage {
 #[derive(Clone, Copy, Debug)]
 pub struct PanelStateImageDescriptor<'a> {
 	/// Image
-	image: &'a PanelImage,
+	image: &'a PanelStateImage,
 
 	/// Alpha
 	alpha: f32,
@@ -238,11 +235,8 @@ pub struct PanelStateImageDescriptor<'a> {
 	/// Progress
 	progress: f32,
 
-	/// Swap direction?
-	swap_dir: bool,
-
-	/// Panel size
-	panel_size: Vector2<u32>,
+	/// Panel
+	panel: &'a Panel,
 }
 
 impl<'a> PanelStateImageDescriptor<'a> {
@@ -250,22 +244,46 @@ impl<'a> PanelStateImageDescriptor<'a> {
 	#[must_use]
 	pub fn uvs_matrix(&self) -> Matrix4<f32> {
 		// Provides the correct ratio for the image
-		let ratio_uvs = self.ratio_uvs();
-		let ratio_scalar = Matrix4::from_nonuniform_scale(ratio_uvs.x, ratio_uvs.y, 1.0);
+		let ratio = self.ratio();
+		let ratio_scalar = Matrix4::from_nonuniform_scale(ratio.x, ratio.y, 1.0);
 
 		// Offsets the image due to it's progress
-		let offset_uvs = self.offset_uvs(ratio_uvs);
-		let progress_offset = Matrix4::from_translation(Vector3::new(offset_uvs.x, offset_uvs.y, 0.0));
+		let offset = self.offset(ratio);
+		let progress_offset = Matrix4::from_translation(Vector3::new(offset.x, offset.y, 0.0));
 
-		progress_offset * ratio_scalar
+		// Base matrix
+		let base_matrix = progress_offset * ratio_scalar;
+
+		// Calculate the parallax matrix
+		let parallax_matrix = self.parallax_matrix(ratio);
+
+		// Then add it to our setup
+		parallax_matrix * base_matrix
 	}
 
-	/// Calculates the offset uvs.
+	/// Calculates the parallax matrix
 	///
-	/// These uvs serve to scroll the image depending on our progress.
-	fn offset_uvs(&self, ratio_uvs: Vector2<f32>) -> Vector2<f32> {
+	/// This matrix will add parallax to the existing matrix setup
+	fn parallax_matrix(&self, ratio: Vector2<f32>) -> Matrix4<f32> {
+		// Matrices to move image center to origin, and then back
+		let middle_pos = Vector3::new(ratio.x / 2.0, ratio.y / 2.0, 0.0);
+		let move_origin = Matrix4::from_translation(-middle_pos);
+		let move_back = Matrix4::from_translation(middle_pos);
+
+		// Matrix to scale the image down so we can add later movement
+		let scalar = Matrix4::from_nonuniform_scale(self.panel.parallax_ratio, self.panel.parallax_ratio, 1.0);
+
+		// Center image on origin, scale it, move it by parallax and move it back
+		// TODO: Move parallax by mouse
+		move_back * scalar * move_origin
+	}
+
+	/// Calculates the offset
+	///
+	/// This offset serve to scroll the image depending on our progress.
+	fn offset(&self, ratio_uvs: Vector2<f32>) -> Vector2<f32> {
 		// If we're going backwards, invert progress
-		let progress = match self.swap_dir {
+		let progress = match self.image.swap_dir {
 			true => 1.0 - self.progress,
 			false => self.progress,
 		};
@@ -274,13 +292,23 @@ impl<'a> PanelStateImageDescriptor<'a> {
 		Vector2::new(progress * (1.0 - ratio_uvs.x), progress * (1.0 - ratio_uvs.y))
 	}
 
-	/// Calculates the ratio uvs.
+	/// Calculates the ratio
 	///
-	/// These uvs are multiplied by the base uvs to fix the stretching
+	/// This ratio is multiplied by the base uvs to fix the stretching
 	/// that comes from having a square coordinate system [0.0 .. 1.0] x [0.0 .. 1.0]
-	fn ratio_uvs(&self) -> Vector2<f32> {
-		let image_size = self.image.size().cast().expect("Image size didn't fit into an `i32`");
-		let panel_size = self.panel_size.cast().expect("Panel size didn't fit into an `i32`");
+	fn ratio(&self) -> Vector2<f32> {
+		let image_size = self
+			.image
+			.image
+			.size()
+			.cast()
+			.expect("Image size didn't fit into an `i32`");
+		let panel_size = self
+			.panel
+			.geometry
+			.size
+			.cast()
+			.expect("Panel size didn't fit into an `i32`");
 
 		// Image and panel ratios
 		let image_ratio = Rational32::new(image_size.x, image_size.y);
@@ -309,7 +337,7 @@ impl<'a> PanelStateImageDescriptor<'a> {
 
 	/// Returns the image to render
 	pub fn image(&self) -> &'a PanelImage {
-		self.image
+		&self.image.image
 	}
 }
 
