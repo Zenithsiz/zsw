@@ -8,6 +8,7 @@ use {
 		event_loop::ControlFlow as EventLoopControlFlow,
 	},
 	zsw_egui::Egui,
+	zsw_panels::Panels,
 	zsw_settings_window::SettingsWindow,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::MightBlock,
@@ -30,12 +31,14 @@ impl EventHandler {
 	///
 	/// # Blocking
 	/// Locks [`zsw_egui::PlatformLock`] on `egui`
+	// TODO: Inverse dependencies of `settings_window` and `panels` and let them depend on us
 	#[side_effect(MightBlock)]
 	pub async fn handle_event<'window, 'egui>(
 		&mut self,
 		wgpu: &Wgpu<'_>,
 		egui: &'egui Egui,
 		settings_window: &SettingsWindow,
+		panels: &Panels,
 		event: Event<'window, !>,
 		control_flow: &mut EventLoopControlFlow,
 	) {
@@ -64,7 +67,10 @@ impl EventHandler {
 				WindowEvent::Resized(size) => wgpu.resize(size),
 
 				// On move, update the cursor position
-				WindowEvent::CursorMoved { position, .. } => self.cursor_pos = Some(position),
+				WindowEvent::CursorMoved { position, .. } => {
+					self.cursor_pos = Some(position);
+					panels.set_cursor_pos(position);
+				},
 
 				// If right clicked, queue a click
 				WindowEvent::MouseInput {

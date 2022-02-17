@@ -45,4 +45,5 @@ bytemuck = {version = "1.7.3", features = ["derive"]}
 num-rational = "0.4.0"
 
 # Threads
+crossbeam = "0.8.1"
 parking_lot = {version = "0.12.0", features = ["deadlock_detection"]}

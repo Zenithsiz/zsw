@@ -471,7 +471,6 @@ fn draw_panels<'panels>(
 					new_panel_state.geometry,
 					new_panel_state.duration,
 					new_panel_state.fade_point,
-					1.0, // TODO: Add to new panel state
 				),
 			);
 		}
@@ -549,6 +548,10 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 		ui.horizontal(|ui| {
 			ui.label("Parallax ratio");
 			egui::Slider::new(&mut self.panel.panel.parallax_ratio, 0.0..=1.0).ui(ui);
+		});
+
+		ui.horizontal(|ui| {
+			ui.checkbox(&mut self.panel.panel.reverse_parallax, "Reverse parallax");
 		});
 
 		ui.collapsing("Images", |ui| {

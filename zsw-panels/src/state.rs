@@ -4,7 +4,7 @@
 use {
 	super::PanelImage,
 	crate::{Panel, PanelsRenderer},
-	cgmath::{Matrix4, Vector2, Vector3},
+	cgmath::{Matrix4, Point2, Vector2, Vector3},
 	num_rational::Rational32,
 	std::mem,
 	winit::dpi::PhysicalSize,
@@ -242,7 +242,7 @@ pub struct PanelStateImageDescriptor<'a> {
 impl<'a> PanelStateImageDescriptor<'a> {
 	/// Calculates this image's uvs matrix.
 	#[must_use]
-	pub fn uvs_matrix(&self) -> Matrix4<f32> {
+	pub fn uvs_matrix(&self, cursor_pos: Point2<i32>) -> Matrix4<f32> {
 		// Provides the correct ratio for the image
 		let ratio = self.ratio();
 		let ratio_scalar = Matrix4::from_nonuniform_scale(ratio.x, ratio.y, 1.0);
@@ -255,7 +255,7 @@ impl<'a> PanelStateImageDescriptor<'a> {
 		let base_matrix = progress_offset * ratio_scalar;
 
 		// Calculate the parallax matrix
-		let parallax_matrix = self.parallax_matrix(ratio);
+		let parallax_matrix = self.parallax_matrix(ratio, cursor_pos);
 
 		// Then add it to our setup
 		parallax_matrix * base_matrix
@@ -264,7 +264,7 @@ impl<'a> PanelStateImageDescriptor<'a> {
 	/// Calculates the parallax matrix
 	///
 	/// This matrix will add parallax to the existing matrix setup
-	fn parallax_matrix(&self, ratio: Vector2<f32>) -> Matrix4<f32> {
+	fn parallax_matrix(&self, ratio: Vector2<f32>, cursor_pos: Point2<i32>) -> Matrix4<f32> {
 		// Matrices to move image center to origin, and then back
 		let middle_pos = Vector3::new(ratio.x / 2.0, ratio.y / 2.0, 0.0);
 		let move_origin = Matrix4::from_translation(-middle_pos);
@@ -273,9 +273,43 @@ impl<'a> PanelStateImageDescriptor<'a> {
 		// Matrix to scale the image down so we can add later movement
 		let scalar = Matrix4::from_nonuniform_scale(self.panel.parallax_ratio, self.panel.parallax_ratio, 1.0);
 
+		// Matrix to move image outside of the visible parallax scale
+		let parallax_offset = {
+			let geometry_size = self
+				.panel
+				.geometry
+				.size
+				.cast::<f32>()
+				.expect("Panel geometry size didn't fit into an `f32`");
+
+			// Calculate the offset from center of image
+			let offset = (cursor_pos - self.panel.geometry.center())
+				.cast::<f32>()
+				.expect("Panel cursor offset didn't fit into an `f32`");
+
+			// Normalize it
+			// Note: We normalize it within the ratio rectangle, not the square output
+			let offset = Vector2::new(
+				ratio.x * offset.x / geometry_size.x,
+				ratio.y * offset.y / geometry_size.y,
+			);
+
+			// Then clamp the offset to the edges
+			let offset = Vector2::new(offset.x.clamp(-0.5, 0.5), offset.y.clamp(-0.5, 0.5));
+
+			// Then reverse if we should
+			let offset = match self.panel.reverse_parallax {
+				true => -offset,
+				false => offset,
+			};
+
+			// Then make sure we don't go more than the parallax ratio allows for
+			(1.0 - self.panel.parallax_ratio) * offset
+		};
+		let move_parallax = Matrix4::from_translation(Vector3::new(parallax_offset.x, parallax_offset.y, 0.0));
+
 		// Center image on origin, scale it, move it by parallax and move it back
-		// TODO: Move parallax by mouse
-		move_back * scalar * move_origin
+		move_back * move_parallax * scalar * move_origin
 	}
 
 	/// Calculates the offset

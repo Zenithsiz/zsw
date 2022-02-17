@@ -109,6 +109,15 @@ impl Rect<i32, u32> {
 			self.pos.y.checked_add_unsigned(self.size.y).expect("Overflow"),
 		)
 	}
+
+	/// Returns the center of this rectangle
+	#[must_use]
+	pub fn center(self) -> Point2<i32> {
+		Point2::new(
+			self.pos.x.checked_add_unsigned(self.size.x / 2).expect("Overflow"),
+			self.pos.y.checked_add_unsigned(self.size.y / 2).expect("Overflow"),
+		)
+	}
 }
 
 impl fmt::Display for Rect<i32, u32> {

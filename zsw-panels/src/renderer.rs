@@ -8,7 +8,7 @@ mod vertex;
 pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 
 // Imports
-use {crate::PanelState, wgpu::util::DeviceExt, winit::dpi::PhysicalSize};
+use {crate::PanelState, cgmath::Point2, wgpu::util::DeviceExt, winit::dpi::PhysicalSize};
 
 /// Panels renderer
 ///
@@ -83,6 +83,7 @@ impl PanelsRenderer {
 	pub fn render<'a>(
 		&self,
 		panels: impl IntoIterator<Item = &'a PanelState>,
+		cursor_pos: Point2<i32>,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
 		surface_view: &wgpu::TextureView,
@@ -121,7 +122,7 @@ impl PanelsRenderer {
 			// Then go through all image descriptors to render
 			for descriptor in panel.image_descriptors() {
 				// Update the uniforms
-				let uvs_matrix = descriptor.uvs_matrix();
+				let uvs_matrix = descriptor.uvs_matrix(cursor_pos);
 				let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha());
 				let image = descriptor.image();
 				queue.write_buffer(image.uniforms(), 0, bytemuck::cast_slice(&[uniforms]));

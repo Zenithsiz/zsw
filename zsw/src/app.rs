@@ -160,7 +160,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Note: Doesn't make sense to use a runner here, since nothing will call `stop`.
 		event_loop.run_return(|event, _, control_flow| {
 			event_handler
-				.handle_event(&wgpu, &egui, &settings_window, event, control_flow)
+				.handle_event(&wgpu, &egui, &settings_window, &panels, event, control_flow)
 				.block_on()
 				.allow::<MightBlock>();
 		});
