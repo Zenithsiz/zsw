@@ -4,7 +4,8 @@
 use {
 	super::PanelImage,
 	crate::{Panel, PanelsRenderer},
-	cgmath::{Matrix4, Vector3},
+	cgmath::{Matrix4, Vector2, Vector3},
+	num_rational::Rational32,
 	std::mem,
 	winit::dpi::PhysicalSize,
 	zsw_img::ImageLoader,
@@ -111,11 +112,11 @@ impl PanelState {
 		Ok(())
 	}
 
-	/// Calculates this panel's matrix
+	/// Calculates this panel's position matrix
 	// Note: This matrix simply goes from a geometry in physical units
 	//       onto shader coordinates.
 	#[must_use]
-	pub fn matrix(&self, surface_size: PhysicalSize<u32>) -> Matrix4<f32> {
+	pub fn pos_matrix(&self, surface_size: PhysicalSize<u32>) -> Matrix4<f32> {
 		let x_scale = self.panel.geometry.size[0] as f32 / surface_size.width as f32;
 		let y_scale = self.panel.geometry.size[1] as f32 / surface_size.height as f32;
 
@@ -156,6 +157,7 @@ impl PanelState {
 					alpha: 1.0,
 					progress,
 					swap_dir: front.swap_dir,
+					panel_size: self.panel.geometry.size,
 				}),
 				None,
 			),
@@ -165,17 +167,22 @@ impl PanelState {
 					alpha: 1.0 - back_alpha,
 					progress,
 					swap_dir: front.swap_dir,
+					panel_size: self.panel.geometry.size,
 				}),
 				Some(PanelStateImageDescriptor {
-					image:    &back.image,
-					alpha:    back_alpha,
-					progress: back_progress,
-					swap_dir: back.swap_dir,
+					image:      &back.image,
+					alpha:      back_alpha,
+					progress:   back_progress,
+					swap_dir:   back.swap_dir,
+					panel_size: self.panel.geometry.size,
 				}),
 			),
 		};
 
-		[front, back].into_iter().flatten()
+		[front, back]
+			.into_iter()
+			.flatten()
+			.filter(|descriptor| descriptor.alpha != 0.0)
 	}
 }
 
@@ -223,14 +230,93 @@ pub struct PanelStateImage {
 #[derive(Clone, Copy, Debug)]
 pub struct PanelStateImageDescriptor<'a> {
 	/// Image
-	pub image: &'a PanelImage,
+	image: &'a PanelImage,
 
 	/// Alpha
-	pub alpha: f32,
+	alpha: f32,
 
 	/// Progress
-	pub progress: f32,
+	progress: f32,
 
 	/// Swap direction?
-	pub swap_dir: bool,
+	swap_dir: bool,
+
+	/// Panel size
+	panel_size: Vector2<u32>,
+}
+
+impl<'a> PanelStateImageDescriptor<'a> {
+	/// Calculates this image's uvs matrix.
+	#[must_use]
+	pub fn uvs_matrix(&self) -> Matrix4<f32> {
+		// Provides the correct ratio for the image
+		let ratio_uvs = self.ratio_uvs();
+		let ratio_scalar = Matrix4::from_nonuniform_scale(ratio_uvs.x, ratio_uvs.y, 1.0);
+
+		// Offsets the image due to it's progress
+		let offset_uvs = self.offset_uvs(ratio_uvs);
+		let progress_offset = Matrix4::from_translation(Vector3::new(offset_uvs.x, offset_uvs.y, 0.0));
+
+		progress_offset * ratio_scalar
+	}
+
+	/// Calculates the offset uvs.
+	///
+	/// These uvs serve to scroll the image depending on our progress.
+	fn offset_uvs(&self, ratio_uvs: Vector2<f32>) -> Vector2<f32> {
+		// If we're going backwards, invert progress
+		let progress = match self.swap_dir {
+			true => 1.0 - self.progress,
+			false => self.progress,
+		};
+
+		// Then simply offset until the end
+		Vector2::new(progress * (1.0 - ratio_uvs.x), progress * (1.0 - ratio_uvs.y))
+	}
+
+	/// Calculates the ratio uvs.
+	///
+	/// These uvs are multiplied by the base uvs to fix the stretching
+	/// that comes from having a square coordinate system [0.0 .. 1.0] x [0.0 .. 1.0]
+	fn ratio_uvs(&self) -> Vector2<f32> {
+		let image_size = self.image.size().cast().expect("Image size didn't fit into an `i32`");
+		let panel_size = self.panel_size.cast().expect("Panel size didn't fit into an `i32`");
+
+		// Image and panel ratios
+		let image_ratio = Rational32::new(image_size.x, image_size.y);
+		let panel_ratio = Rational32::new(panel_size.x, panel_size.y);
+
+		// Ratios between the image and panel
+		let width_ratio = Rational32::new(panel_size.x, image_size.x);
+		let height_ratio = Rational32::new(panel_size.y, image_size.y);
+
+		// X-axis ratio, if image scrolls horizontally
+		let x_ratio = self::ratio_as_f32(width_ratio / height_ratio);
+
+		// Y-axis ratio, if image scrolls vertically
+		let y_ratio = self::ratio_as_f32(height_ratio / width_ratio);
+
+		match image_ratio >= panel_ratio {
+			true => Vector2::new(x_ratio, 1.0),
+			false => Vector2::new(1.0, y_ratio),
+		}
+	}
+
+	/// Returns the alpha
+	pub fn alpha(&self) -> f32 {
+		self.alpha
+	}
+
+	/// Returns the image to render
+	pub fn image(&self) -> &'a PanelImage {
+		self.image
+	}
+}
+
+/// Converts a `Ratio<i32>` to `f32`, rounding
+// TODO: Although image and window sizes fit into an `f32`, maybe a
+//       rational of the two wouldn't fit properly when in a num / denom
+//       format, since both may be bigger than `2^24`, check if this is fine.
+fn ratio_as_f32(ratio: Rational32) -> f32 {
+	*ratio.numer() as f32 / *ratio.denom() as f32
 }

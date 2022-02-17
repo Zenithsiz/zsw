@@ -51,10 +51,9 @@
 
 // Modules
 pub mod loader;
-mod uvs;
 
 // Exports
-pub use {loader::ImageLoader, uvs::ImageUvs};
+pub use loader::ImageLoader;
 
 // Imports
 use {cgmath::Vector2, image::DynamicImage, std::path::PathBuf};

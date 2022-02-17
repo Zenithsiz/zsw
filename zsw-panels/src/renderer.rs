@@ -115,30 +115,20 @@ impl PanelsRenderer {
 
 		// And draw each panel
 		for panel in panels {
-			// Calculate the matrix for the panel
-			let matrix = panel.matrix(surface_size);
+			// Calculate the position matrix for the panel
+			let pos_matrix = panel.pos_matrix(surface_size);
 
 			// Then go through all image descriptors to render
 			for descriptor in panel.image_descriptors() {
-				// Skip rendering if alpha is 0
-				if descriptor.alpha == 0.0 {
-					continue;
-				}
-
-				// Then update the uniforms
-				let uvs = descriptor.image.uvs(panel.panel.geometry.size, descriptor.swap_dir);
-				let uniforms = PanelUniforms {
-					matrix:     matrix.into(),
-					uvs_start:  uvs.start(),
-					uvs_offset: uvs.offset(descriptor.progress),
-					alpha:      descriptor.alpha,
-					_pad:       [0.0; 3],
-				};
-				queue.write_buffer(descriptor.image.uniforms(), 0, bytemuck::cast_slice(&[uniforms]));
+				// Update the uniforms
+				let uvs_matrix = descriptor.uvs_matrix();
+				let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha());
+				let image = descriptor.image();
+				queue.write_buffer(image.uniforms(), 0, bytemuck::cast_slice(&[uniforms]));
 
 				// Bind the image and draw
-				render_pass.set_bind_group(0, descriptor.image.uniforms_bind_group(), &[]);
-				render_pass.set_bind_group(1, descriptor.image.image_bind_group(), &[]);
+				render_pass.set_bind_group(0, image.uniforms_bind_group(), &[]);
+				render_pass.set_bind_group(1, image.image_bind_group(), &[]);
 				render_pass.draw_indexed(0..6, 0, 0..1);
 			}
 		}

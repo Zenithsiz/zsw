@@ -8,7 +8,7 @@ use {
 	image::DynamicImage,
 	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
-	zsw_img::{Image, ImageUvs},
+	zsw_img::Image,
 	zsw_wgpu::Wgpu,
 };
 
@@ -109,17 +109,6 @@ impl PanelImage {
 		self.image_path = image.path;
 	}
 
-	/// Returns this image's uvs for a panel size
-	pub fn uvs(&self, panel_size: Vector2<u32>, swap_dir: bool) -> ImageUvs {
-		ImageUvs::new(
-			self.image_size.x as f32,
-			self.image_size.y as f32,
-			panel_size.x as f32,
-			panel_size.y as f32,
-			swap_dir,
-		)
-	}
-
 	/// Returns the uniforms buffer
 	pub fn uniforms(&self) -> &wgpu::Buffer {
 		&self.uniforms
@@ -138,6 +127,11 @@ impl PanelImage {
 	/// Returns the path
 	pub fn image_path(&self) -> &Path {
 		&self.image_path
+	}
+
+	/// Returns the image size
+	pub fn size(&self) -> Vector2<u32> {
+		self.image_size
 	}
 }
 
