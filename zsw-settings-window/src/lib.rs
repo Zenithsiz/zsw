@@ -542,6 +542,29 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 			egui::Slider::new(&mut self.panel.panel.parallax_ratio, 0.0..=1.0).ui(ui);
 		});
 
+		ui.vertical(|ui| {
+			ui.horizontal(|ui| {
+				ui.label("Parallax exp");
+				egui::Slider::new(&mut self.panel.panel.parallax_exp, 0.0..=4.0).ui(ui);
+			});
+
+			ui.collapsing("Graph", |ui| {
+				let it = (0..=100).map(|i| {
+					let x = i as f32 / 100.0;
+					plot::Value::new(x, x.signum() * x.abs().powf(self.panel.panel.parallax_exp))
+				});
+				let line = plot::Line::new(plot::Values::from_values_iter(it));
+
+				plot::Plot::new("Frame timings (ms)")
+					.allow_drag(false)
+					.allow_zoom(false)
+					.show_background(false)
+					.view_aspect(1.0)
+					.show(ui, |plot_ui| plot_ui.line(line));
+			});
+		});
+
+
 		ui.horizontal(|ui| {
 			ui.checkbox(&mut self.panel.panel.reverse_parallax, "Reverse parallax");
 		});

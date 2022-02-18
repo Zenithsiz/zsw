@@ -21,6 +21,10 @@ pub struct Panel {
 	#[serde(default = "default_parallax_ratio")]
 	pub parallax_ratio: f32,
 
+	/// Parallax exponentiation
+	#[serde(default = "default_parallax_exp")]
+	pub parallax_exp: f32,
+
 	/// Reverse parallax
 	#[serde(default = "default_reverse_parallax")]
 	pub reverse_parallax: bool,
@@ -35,6 +39,7 @@ impl Panel {
 			duration,
 			fade_point,
 			parallax_ratio: self::default_parallax_ratio(),
+			parallax_exp: self::default_parallax_exp(),
 			reverse_parallax: self::default_reverse_parallax(),
 		}
 	}
@@ -42,6 +47,10 @@ impl Panel {
 
 fn default_parallax_ratio() -> f32 {
 	1.0
+}
+
+fn default_parallax_exp() -> f32 {
+	2.0
 }
 
 fn default_reverse_parallax() -> bool {

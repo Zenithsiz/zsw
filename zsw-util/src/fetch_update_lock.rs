@@ -196,9 +196,6 @@ where
 		// Check if we still have the function
 		match self.f.take() {
 			// If we do, call it with the waker and return pending,
-
-			// If we do, add ourselves to the wakers and return pending
-			// Note: We also unlock the mutex on returning here
 			Some(f) => {
 				f(ctx.waker());
 				task::Poll::Pending

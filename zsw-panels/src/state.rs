@@ -288,11 +288,16 @@ impl<'a> PanelStateImageDescriptor<'a> {
 				.expect("Panel cursor offset didn't fit into an `f32`");
 
 			// Normalize it
-			// Note: We normalize it within the ratio rectangle, not the square output
+			let offset = Vector2::new(2.0 * offset.x / geometry_size.x, 2.0 * offset.y / geometry_size.y);
+
+			// Sign-exponentiate it to make parallax move less near origin
 			let offset = Vector2::new(
-				ratio.x * offset.x / geometry_size.x,
-				ratio.y * offset.y / geometry_size.y,
+				offset.x.signum() * offset.x.abs().powf(self.panel.parallax_exp),
+				offset.y.signum() * offset.y.abs().powf(self.panel.parallax_exp),
 			);
+
+			// Then stretch it to match the ratio
+			let offset = Vector2::new(ratio.x * offset.x, ratio.y * offset.y);
 
 			// Then clamp the offset to the edges
 			let offset = Vector2::new(offset.x.clamp(-0.5, 0.5), offset.y.clamp(-0.5, 0.5));
