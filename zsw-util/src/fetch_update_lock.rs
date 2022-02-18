@@ -8,6 +8,8 @@ use {
 		Future,
 	},
 	std::{
+		collections::VecDeque,
+		mem,
 		ops::{Deref, DerefMut},
 		pin::Pin,
 		task::{self, Waker},
@@ -17,7 +19,6 @@ use {
 
 /// Inner
 #[derive(Debug)]
-#[doc(hidden)]
 struct Inner<T> {
 	/// Value
 	value: T,
@@ -26,7 +27,7 @@ struct Inner<T> {
 	seen: bool,
 
 	/// All wakers
-	wakers: Vec<Waker>,
+	wakers: VecDeque<Waker>,
 }
 
 /// Fetch-update lock
@@ -44,7 +45,7 @@ impl<T> FetchUpdateLock<T> {
 		let inner = Inner {
 			value,
 			seen: false,
-			wakers: vec![],
+			wakers: VecDeque::new(),
 		};
 		Self {
 			inner: Mutex::new(inner),
@@ -63,10 +64,9 @@ impl<T> FetchUpdateLock<T> {
 		// DEADLOCK: Caller ensures we can lock
 		let mut inner = self.inner.lock_se().await.allow::<MightBlock>();
 
-		// Set that the value was seen and wake up everyone waiting for it
-		// Note: We wake everyone to ensure no one stays waiting forever
+		// Set that the value was seen and wake up someone to update it
 		inner.seen = true;
-		for waker in inner.wakers.drain(..) {
+		if let Some(waker) = inner.wakers.pop_front() {
 			waker.wake();
 		}
 
@@ -80,7 +80,7 @@ impl<T> FetchUpdateLock<T> {
 	/// it is seen.
 	///
 	/// # Blocking
-	/// Waits until the lock is attained and the value is seen.
+	/// Waits until the lock is attained and the value is seen (with the lock unlocked).
 	#[side_effect(MightBlock)]
 	pub async fn update<F, U>(&self, f: F) -> U
 	where
@@ -91,9 +91,20 @@ impl<T> FetchUpdateLock<T> {
 		let mut inner = self.inner.lock_se().await.allow::<MightBlock>();
 
 		// If the value is unseen, wait until it's seen
-		// DEADLOCK: Caller ensures we can lock
+		// Note: Due to spurious wake ups, we loop until
+		//       we're sure the value was seen
 		while !inner.seen {
-			WaitSeenFuture::new(inner).await;
+			// Wait until woken up
+			// DEADLOCK: Caller ensures we can wait.
+			//           We guarantee we unlock while waiting
+			CondVarFuture::new(move |waker| {
+				inner.wakers.push_back(waker.clone());
+				mem::drop(inner);
+			})
+			.await;
+
+			// Then get the lock gain
+			// DEADLOCK: Caller ensures we can wait.
 			inner = self.inner.lock_se().await.allow::<MightBlock>();
 		}
 
@@ -111,6 +122,26 @@ pub struct FetchUpdateLockGuard<'a, T> {
 	guard: MutexGuard<'a, Inner<T>>,
 }
 
+impl<'a, T> FetchUpdateLockGuard<'a, T> {
+	/// Sets this value as seen
+	///
+	/// This is done automatically on the creation of this
+	/// lock, but if you called [`Self::set_unseen`], you may
+	/// then set this value as seen again, so any updaters may
+	/// update without waiting.
+	pub fn set_seen(&mut self) {
+		self.guard.seen = true;
+	}
+
+	/// Sets this value as not seen.
+	///
+	/// Any update waiting on this lock will continue
+	/// to wait once this guard is dropped.
+	pub fn set_unseen(&mut self) {
+		self.guard.seen = false;
+	}
+}
+
 impl<'a, T> Deref for FetchUpdateLockGuard<'a, T> {
 	type Target = T;
 
@@ -125,34 +156,55 @@ impl<'a, T> DerefMut for FetchUpdateLockGuard<'a, T> {
 	}
 }
 
-/// Future for waiting until the value is seen
-// TODO: Move to it's own module as a condvar
-struct WaitSeenFuture<'a, T> {
-	/// Mutex guard
-	guard: Option<MutexGuard<'a, Inner<T>>>,
+/// Condition variable future.
+///
+/// Calls `f` with a waker when polled the first time,
+/// returning [`task::Poll::Pending`]. When polled a
+/// second time, returns [`task::Poll::Ready`].
+///
+/// # Spurious wake ups
+/// It is possible for spurious wake ups to occur,
+/// if the runtime decides to poll a second time
+/// without the waker being woken up.
+///
+/// You should create a new future and await again in this
+/// case. Do *not* use the same future, as it will be exhausted
+/// and return [`task::Poll::Ready`] always, entering a busy loop.
+struct CondVarFuture<F> {
+	/// Waker function
+	f: Option<F>,
 }
 
-impl<'a, T> WaitSeenFuture<'a, T> {
+impl<F> CondVarFuture<F>
+where
+	F: FnOnce(&Waker),
+{
 	/// Creates a new future
-	fn new(guard: MutexGuard<'a, Inner<T>>) -> Self {
-		Self { guard: Some(guard) }
+	fn new(f: F) -> Self {
+		Self { f: Some(f) }
 	}
 }
 
-impl<'a, T> Future for WaitSeenFuture<'a, T> {
+impl<F> Future for CondVarFuture<F>
+where
+	// TODO: Is it fine to require `Unpin` here?
+	F: FnOnce(&Waker) + Unpin,
+{
 	type Output = ();
 
 	fn poll(mut self: Pin<&mut Self>, ctx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
-		// Check if we have the lock
-		match self.guard.take() {
+		// Check if we still have the function
+		match self.f.take() {
+			// If we do, call it with the waker and return pending,
+
 			// If we do, add ourselves to the wakers and return pending
 			// Note: We also unlock the mutex on returning here
-			Some(mut inner) => {
-				inner.wakers.push(ctx.waker().clone());
+			Some(f) => {
+				f(ctx.waker());
 				task::Poll::Pending
 			},
 
-			// Else we've been woken up, so we can return with the mutex locked
+			// Else we've been woken up (possibly spuriously), so return ready
 			None => task::Poll::Ready(()),
 		}
 	}
