@@ -3,12 +3,11 @@
 // Imports
 use {
 	winit::{
-		dpi::PhysicalPosition,
 		event::{DeviceEvent, Event, WindowEvent},
 		event_loop::ControlFlow as EventLoopControlFlow,
 	},
 	zsw_egui::Egui,
-	zsw_panels::Panels,
+	zsw_input::Input,
 	zsw_settings_window::SettingsWindow,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::MightBlock,
@@ -16,15 +15,12 @@ use {
 };
 
 /// Event handler
-pub struct EventHandler {
-	/// Cursor position
-	cursor_pos: Option<PhysicalPosition<f64>>,
-}
+pub struct EventHandler {}
 
 impl EventHandler {
 	/// Creates the event handler
 	pub fn new() -> Self {
-		Self { cursor_pos: None }
+		Self {}
 	}
 
 	/// Handles an event
@@ -38,7 +34,7 @@ impl EventHandler {
 		wgpu: &Wgpu<'_>,
 		egui: &'egui Egui,
 		settings_window: &SettingsWindow,
-		panels: &Panels,
+		input: &Input,
 		event: Event<'window, !>,
 		control_flow: &mut EventLoopControlFlow,
 	) {
@@ -68,8 +64,7 @@ impl EventHandler {
 
 				// On move, update the cursor position
 				WindowEvent::CursorMoved { position, .. } => {
-					self.cursor_pos = Some(position);
-					panels.set_cursor_pos(position);
+					input.update_cursor_pos(position);
 				},
 
 				// If right clicked, queue a click
@@ -77,7 +72,7 @@ impl EventHandler {
 					state: winit::event::ElementState::Pressed,
 					button: winit::event::MouseButton::Right,
 					..
-				} => settings_window.queue_open_click(self.cursor_pos),
+				} => settings_window.queue_open_click(input.cursor_pos()),
 				_ => (),
 			},
 
@@ -88,10 +83,10 @@ impl EventHandler {
 				DeviceEvent::MouseMotion {
 					delta: (delta_x, delta_y),
 				} =>
-					if let Some(cursor_pos) = self.cursor_pos.as_mut() {
+					if let Some(mut cursor_pos) = input.cursor_pos() {
 						cursor_pos.x += delta_x;
 						cursor_pos.y += delta_y;
-						panels.set_cursor_pos(*cursor_pos);
+						input.update_cursor_pos(cursor_pos);
 					},
 				_ => (),
 			},

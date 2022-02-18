@@ -58,6 +58,7 @@ use {
 	winit::window::Window,
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
+	zsw_input::Input,
 	zsw_panels::Panels,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
@@ -93,6 +94,7 @@ impl Renderer {
 	pub async fn run<'window, 'wgpu, 'egui, 'panels>(
 		&self,
 		window: &Window,
+		input: &Input,
 		wgpu: &'wgpu Wgpu<'window>,
 		panels: &Panels,
 		egui: &'egui Egui,
@@ -112,7 +114,7 @@ impl Renderer {
 
 				// Render
 				// DEADLOCK: Caller ensures we can lock it
-				let (_, render_duration) = zsw_util::measure!(Self::render(window, wgpu, panels, egui)
+				let (_, render_duration) = zsw_util::measure!(Self::render(window, input, wgpu, panels, egui)
 					.await
 					.allow::<MightBlock>()
 					.map_err(|err| log::warn!("Unable to render: {err:?}")));
@@ -176,6 +178,7 @@ impl Renderer {
 	#[side_effect(MightBlock)]
 	async fn render<'window, 'wgpu, 'egui, 'panels>(
 		window: &Window,
+		input: &Input,
 		wgpu: &'wgpu Wgpu<'window>,
 		panels: &'panels Panels,
 		egui: &'egui Egui,
@@ -194,7 +197,7 @@ impl Renderer {
 				let panels_lock = panels.lock_panels().block_on().allow::<MightBlock>();
 
 				panels
-					.render(&panels_lock, wgpu.queue(), encoder, surface_view, surface_size)
+					.render(input, &panels_lock, wgpu.queue(), encoder, surface_view, surface_size)
 					.context("Unable to render panels")?;
 			}
 

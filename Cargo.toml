@@ -11,6 +11,7 @@ members = [
   "zsw-util",
   "zsw-settings-window",
   "zsw-renderer",
+  "zsw-input",
   "zsw-side-effect-macros",
 ]
 resolver = "2"

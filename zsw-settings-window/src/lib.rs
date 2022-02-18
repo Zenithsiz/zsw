@@ -236,6 +236,7 @@ impl SettingsWindow {
 	}
 
 	/// Queues an open click
+	// TODO: Maybe move this to input system?
 	pub fn queue_open_click(&self, cursor_pos: Option<PhysicalPosition<f64>>) {
 		self.queued_open_click.store(cursor_pos);
 	}

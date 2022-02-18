@@ -10,6 +10,7 @@ version = "0.1.0"
 # Zsw
 zsw-egui = {path = "../zsw-egui"}
 zsw-img = {path = "../zsw-img"}
+zsw-input = {path = "../zsw-input"}
 zsw-panels = {path = "../zsw-panels"}
 zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
 zsw-util = {path = "../zsw-util"}

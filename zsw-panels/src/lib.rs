@@ -67,10 +67,10 @@ pub use self::{
 use {
 	anyhow::Context,
 	cgmath::Point2,
-	crossbeam::atomic::AtomicCell,
 	futures::lock::{Mutex, MutexGuard},
-	winit::dpi::{PhysicalPosition, PhysicalSize},
+	winit::dpi::PhysicalSize,
 	zsw_img::ImageLoader,
+	zsw_input::Input,
 	zsw_side_effect_macros::side_effect,
 	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 	zsw_wgpu::Wgpu,
@@ -88,10 +88,6 @@ pub struct Panels {
 
 	/// Lock source
 	lock_source: LockSource,
-
-	/// Current cursor position
-	// TODO: Don't store this and instead request elsewhere
-	cursor_pos: AtomicCell<Option<Point2<i32>>>,
 }
 
 impl Panels {
@@ -104,7 +100,6 @@ impl Panels {
 			renderer,
 			panels: Mutex::new(vec![]),
 			lock_source: LockSource,
-			cursor_pos: AtomicCell::new(None),
 		})
 	}
 
@@ -118,16 +113,6 @@ impl Panels {
 		//           We don't lock it outside of this method
 		let guard = self.panels.lock_se().await.allow::<MightBlock>();
 		PanelsLock::new(guard, &self.lock_source)
-	}
-
-	/// Sets the cursor position
-	pub fn set_cursor_pos(&self, cursor_pos: PhysicalPosition<f64>) {
-		// Convert to `i32`
-		// TODO: Check if doing this is fine
-		let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-
-		// Then set it
-		self.cursor_pos.store(Some(cursor_pos));
 	}
 
 	/// Adds a new panel
@@ -171,6 +156,7 @@ impl Panels {
 	/// Renders all panels
 	pub fn render(
 		&self,
+		input: &Input,
 		panels_lock: &PanelsLock,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
@@ -178,16 +164,13 @@ impl Panels {
 		surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
 		let panels = panels_lock.get(&self.lock_source);
+		let cursor_pos = input
+			.cursor_pos()
+			.map_or(Point2::new(0, 0), |pos| Point2::new(pos.x as i32, pos.y as i32));
 
 		// Then render
-		self.renderer.render(
-			panels,
-			self.cursor_pos.load().unwrap_or(Point2::new(0, 0)),
-			queue,
-			encoder,
-			surface_view,
-			surface_size,
-		)
+		self.renderer
+			.render(panels, cursor_pos, queue, encoder, surface_view, surface_size)
 	}
 }
 

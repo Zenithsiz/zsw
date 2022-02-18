@@ -26,6 +26,7 @@ use {
 	},
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
+	zsw_input::Input,
 	zsw_panels::Panels,
 	zsw_playlist::Playlist,
 	zsw_profiles::Profiles,
@@ -67,6 +68,9 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Create the settings window
 	let settings_window = SettingsWindow::new();
+
+	// Create the input
+	let input = Input::new();
 
 	// All runners
 	// Note: They must exists outside of the thread scope because
@@ -133,7 +137,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// DEADLOCK: See above
 		thread_spawner.spawn("Renderer", || {
 			renderer_runner
-				.run(renderer.run(&window, &wgpu, &panels, &egui, &image_loader))
+				.run(renderer.run(&window, &input, &wgpu, &panels, &egui, &image_loader))
 				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 				.into_err();
 		})?;
@@ -144,7 +148,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Note: Doesn't make sense to use a runner here, since nothing will call `stop`.
 		event_loop.run_return(|event, _, control_flow| {
 			event_handler
-				.handle_event(&wgpu, &egui, &settings_window, &panels, event, control_flow)
+				.handle_event(&wgpu, &egui, &settings_window, &input, event, control_flow)
 				.block_on()
 				.allow::<MightBlock>();
 		});

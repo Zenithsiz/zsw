@@ -9,6 +9,7 @@ version = "0.1.0"
 # Zsw
 zsw-egui = {path = "../zsw-egui"}
 zsw-img = {path = "../zsw-img"}
+zsw-input = {path = "../zsw-input"}
 zsw-panels = {path = "../zsw-panels"}
 zsw-playlist = {path = "../zsw-playlist"}
 zsw-profiles = {path = "../zsw-profiles"}
