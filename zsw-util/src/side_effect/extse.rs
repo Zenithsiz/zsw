@@ -67,6 +67,7 @@ pub trait AsyncLockMutexSe<T> {
 }
 
 impl<T> AsyncLockMutexSe<T> for futures::lock::Mutex<T> {
+	#[allow(deprecated_where_clause_location)] // `rust-analyzer` doesn't like it there yet
 	type LockSeFuture<'a>
 	where
 		T: 'a,

@@ -20,7 +20,7 @@ use {
 #[derive(Debug)]
 pub struct ThreadSpawner<'scope, 'env, T> {
 	/// Scope
-	scope: &'scope Scope<'env>,
+	scope: &'scope Scope<'scope, 'env>,
 
 	/// All join handles along with the thread names
 	join_handles: Vec<ScopedJoinHandle<'scope, T>>,
@@ -28,7 +28,7 @@ pub struct ThreadSpawner<'scope, 'env, T> {
 
 impl<'scope, 'env, T> ThreadSpawner<'scope, 'env, T> {
 	/// Creates a new thread spawner
-	pub fn new(scope: &'scope Scope<'env>) -> Self {
+	pub fn new(scope: &'scope Scope<'scope, 'env>) -> Self {
 		Self {
 			scope,
 			join_handles: vec![],
@@ -44,7 +44,7 @@ impl<'scope, 'env, T> ThreadSpawner<'scope, 'env, T> {
 		let name = name.into();
 		let handle = thread::Builder::new()
 			.name(name.clone())
-			.spawn_scoped(self.scope, |_| f())
+			.spawn_scoped(self.scope, f)
 			.with_context(|| format!("Unable to spawn thread {name:?}"))?;
 		self.join_handles.push(handle);
 

@@ -5,6 +5,8 @@
 //       so changes made only affect the child profile, and not
 //       the parent?
 
+// Features
+#![feature(entry_insert)]
 // Lints
 #![warn(
 	clippy::pedantic,
