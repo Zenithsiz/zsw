@@ -2,7 +2,6 @@
 
 // Imports
 use {
-	super::{extse::ParkingLotMutexSe, MightBlock},
 	anyhow::Context,
 	parking_lot::{Condvar, Mutex},
 	std::{
@@ -194,7 +193,7 @@ impl FutureSignal {
 	pub fn wait(&self) -> FutureSignalStatus {
 		// Keep waiting until either `should_poll` or `should_exit` are true
 		// DEADLOCK: We'll be woken up in the waker eventually
-		let mut inner = self.inner.lock_se().allow::<MightBlock>();
+		let mut inner = self.inner.lock();
 		loop {
 			match (inner.should_exit, inner.should_poll) {
 				// If we should exit, regardless if we should poll, return
@@ -217,7 +216,7 @@ impl FutureSignal {
 	pub fn exit(&self) {
 		// Lock, set `should_exit` to `true` and notify
 		// DEADLOCK: `Self::wait` only locks it temporarily without blocking
-		let mut inner = self.inner.lock_se().allow::<MightBlock>();
+		let mut inner = self.inner.lock();
 		inner.should_exit = true;
 		let _ = self.cond_var.notify_one();
 	}
@@ -227,7 +226,7 @@ impl task::Wake for FutureSignal {
 	fn wake(self: std::sync::Arc<Self>) {
 		// Set that we should be polling
 		// DEADLOCK: `Self::wait` only locks it temporarily without blocking
-		let mut inner = self.inner.lock_se().allow::<MightBlock>();
+		let mut inner = self.inner.lock();
 		inner.should_poll = true;
 
 		// Then notify the waiter

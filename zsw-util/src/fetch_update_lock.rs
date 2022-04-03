@@ -2,7 +2,6 @@
 
 // Imports
 use {
-	crate::{self as zsw_util, extse::AsyncLockMutexSe, MightBlock},
 	futures::{
 		lock::{Mutex, MutexGuard},
 		Future,
@@ -14,7 +13,6 @@ use {
 		pin::Pin,
 		task::{self, Waker},
 	},
-	zsw_side_effect_macros::side_effect,
 };
 
 /// Inner
@@ -56,13 +54,12 @@ impl<T> FetchUpdateLock<T> {
 	///
 	/// # Blocking
 	/// Waits until the lock is attained
-	#[side_effect(MightBlock)]
 	pub async fn fetch(&self) -> FetchUpdateLockGuard<'_, T>
 	where
 		T: Send,
 	{
 		// DEADLOCK: Caller ensures we can lock
-		let mut inner = self.inner.lock_se().await.allow::<MightBlock>();
+		let mut inner = self.inner.lock().await;
 
 		// Set that the value was seen and wake up someone to update it
 		inner.seen = true;
@@ -81,14 +78,13 @@ impl<T> FetchUpdateLock<T> {
 	///
 	/// # Blocking
 	/// Waits until the lock is attained and the value is seen (with the lock unlocked).
-	#[side_effect(MightBlock)]
 	pub async fn update<F, U>(&self, f: F) -> U
 	where
 		T: Send,
 		F: FnOnce(&mut T) -> U + Send,
 	{
 		// DEADLOCK: Caller ensures we can lock
-		let mut inner = self.inner.lock_se().await.allow::<MightBlock>();
+		let mut inner = self.inner.lock().await;
 
 		// If the value is unseen, wait until it's seen
 		// Note: Due to spurious wake ups, we loop until
@@ -105,7 +101,7 @@ impl<T> FetchUpdateLock<T> {
 
 			// Then get the lock gain
 			// DEADLOCK: Caller ensures we can wait.
-			inner = self.inner.lock_se().await.allow::<MightBlock>();
+			inner = self.inner.lock().await;
 		}
 
 		// Else update and set the value as not seen

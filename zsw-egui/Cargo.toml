@@ -8,7 +8,6 @@ version = "0.1.0"
 [dependencies]
 
 # Zsw
-zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
 zsw-util = {path = "../zsw-util"}
 zsw-wgpu = {path = "../zsw-wgpu"}
 

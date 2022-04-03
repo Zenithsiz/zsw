@@ -10,8 +10,6 @@ mod load;
 use {
 	super::Image,
 	zsw_playlist::{Playlist, PlaylistImage},
-	zsw_side_effect_macros::side_effect,
-	zsw_util::MightBlock,
 };
 
 /// Image loader
@@ -39,11 +37,10 @@ impl ImageLoader {
 	///
 	/// # Blocking
 	/// Locks [`zsw_playlist::PlaylistLock`] on `playlist`
-	#[side_effect(MightBlock)]
 	pub async fn run(&self, playlist: &Playlist) -> ! {
 		loop {
 			// DEADLOCK: Caller ensures we can lock it
-			let image = playlist.next().await.allow::<MightBlock>();
+			let image = playlist.next().await;
 
 			match &*image {
 				PlaylistImage::File(path) => match load::load_image(path) {
@@ -64,7 +61,7 @@ impl ImageLoader {
 						log::info!("Unable to load {path:?}: {err:?}");
 
 						// DEADLOCK: Caller ensures we can lock it
-						let mut playlist_lock = playlist.lock_playlist().await.allow::<MightBlock>();
+						let mut playlist_lock = playlist.lock_playlist().await;
 						playlist.remove_image(&mut playlist_lock, &image).await;
 					},
 				},

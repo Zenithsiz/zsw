@@ -56,8 +56,6 @@ use {
 	futures::lock::{Mutex, MutexGuard},
 	rand::prelude::SliceRandom,
 	std::{collections::HashSet, path::PathBuf, sync::Arc},
-	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 };
 
 /// Inner
@@ -118,11 +116,10 @@ impl Playlist {
 	///
 	/// # Blocking
 	/// Will block until any existing playlist locks are dropped
-	#[side_effect(MightBlock)]
 	pub async fn lock_playlist(&self) -> PlaylistLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.inner.lock_se().await.allow::<MightBlock>();
+		let guard = self.inner.lock().await;
 		PlaylistLock::new(guard, &self.lock_source)
 	}
 
@@ -130,20 +127,13 @@ impl Playlist {
 	///
 	/// # Blocking
 	/// Locks [`PlaylistLock`] on `self`.
-	#[side_effect(MightBlock)]
 	pub async fn run(&self) -> ! {
 		loop {
 			// Get the next image to send
 			// DEADLOCK: Caller ensures we can lock it
 			// Note: It's important to not have this in the match expression, as it would
 			//       keep the lock through the whole match.
-			let next = self
-				.lock_playlist()
-				.await
-				.allow::<MightBlock>()
-				.get_mut(&self.lock_source)
-				.cur_images
-				.pop();
+			let next = self.lock_playlist().await.get_mut(&self.lock_source).cur_images.pop();
 
 
 			// Then check if we got it
@@ -156,7 +146,7 @@ impl Playlist {
 				// Else get the next batch and shuffle them
 				// DEADLOCK: Caller ensures we can lock it.
 				None => {
-					let mut inner = self.lock_playlist().await.allow::<MightBlock>();
+					let mut inner = self.lock_playlist().await;
 					let inner = inner.get_mut(&self.lock_source);
 					inner.cur_images.extend(inner.images.iter().cloned());
 					inner.cur_images.shuffle(&mut rand::thread_rng());
@@ -200,7 +190,6 @@ impl Playlist {
 	// TODO: Replace `Locks` with a barrier on the channel
 	// Note: Doesn't literally lock it, but the other side of the channel
 	//       needs to lock it in order to progress, so it's equivalent
-	#[side_effect(MightBlock)]
 	pub async fn next(&self) -> Arc<PlaylistImage> {
 		// Note: This can't return an `Err` because `self` owns a sender
 		// DEADLOCK: Caller ensures it won't hold an `PlaylistLock`,

@@ -64,7 +64,6 @@ mod fetch_update_lock;
 mod lock;
 mod rect;
 mod scan_dir;
-mod side_effect;
 mod thread;
 
 // Exports
@@ -74,7 +73,6 @@ pub use {
 	lock::Lock,
 	rect::Rect,
 	scan_dir::dir_files_iter,
-	side_effect::{extse, MightBlock, SideEffect, WithSideEffect},
 	thread::{FutureRunner, ThreadSpawner},
 };
 

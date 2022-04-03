@@ -71,8 +71,6 @@ use {
 	winit::dpi::PhysicalSize,
 	zsw_img::ImageLoader,
 	zsw_input::Input,
-	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 	zsw_wgpu::Wgpu,
 };
 
@@ -107,11 +105,10 @@ impl Panels {
 	///
 	/// # Blocking
 	/// Will block until any existing panels locks are dropped
-	#[side_effect(MightBlock)]
-	pub async fn lock_panels<'a>(&'a self) -> PanelsLock<'a> {
+	pub async fn lock_panels(&self) -> PanelsLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.panels.lock_se().await.allow::<MightBlock>();
+		let guard = self.panels.lock().await;
 		PanelsLock::new(guard, &self.lock_source)
 	}
 

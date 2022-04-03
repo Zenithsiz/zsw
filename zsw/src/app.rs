@@ -32,7 +32,7 @@ use {
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::{FutureRunner, MightBlock, Rect, WithSideEffect},
+	zsw_util::{FutureRunner, Rect},
 	zsw_wgpu::Wgpu,
 };
 
@@ -100,7 +100,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 				// Note: We don't care whether we got cancelled or returned successfully
 				profile_loader_runner
 					.run(profiles.run_loader_applier(path, &playlist, &panels))
-					.map(WithSideEffect::allow::<MightBlock>)
 					.into_ok_or_err();
 			})?;
 		}
@@ -108,20 +107,14 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		// Spawn the playlist thread
 		// DEADLOCK: See above
 		thread_spawner.spawn("Playlist", || {
-			playlist_runner
-				.run(playlist.run())
-				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
-				.into_err();
+			playlist_runner.run(playlist.run()).into_err();
 		})?;
 
 		// Spawn all image loaders
 		// DEADLOCK: See above
 		for (thread_idx, runner) in image_loader_runners.iter().enumerate() {
 			thread_spawner.spawn(format!("Image Loader${thread_idx}"), || {
-				runner
-					.run(image_loader.run(&playlist))
-					.map::<!, _>(WithSideEffect::allow::<MightBlock>)
-					.into_err();
+				runner.run(image_loader.run(&playlist)).into_err();
 			})?;
 		}
 
@@ -130,7 +123,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn("Settings window", || {
 			settings_window_runner
 				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles, &renderer))
-				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 				.into_err();
 		})?;
 
@@ -139,7 +131,6 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		thread_spawner.spawn("Renderer", || {
 			renderer_runner
 				.run(renderer.run(&window, &input, &wgpu, &panels, &egui, &image_loader))
-				.map::<!, _>(WithSideEffect::allow::<MightBlock>)
 				.into_err();
 		})?;
 
@@ -150,8 +141,7 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 		event_loop.run_return(|event, _, control_flow| {
 			event_handler
 				.handle_event(&wgpu, &egui, &settings_window, &input, event, control_flow)
-				.block_on()
-				.allow::<MightBlock>();
+				.block_on();
 		});
 
 		// Note: In release builds, once we get here, we can just exit,

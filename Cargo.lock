@@ -2409,7 +2409,6 @@ dependencies = [
  "zsw-profiles",
  "zsw-renderer",
  "zsw-settings-window",
- "zsw-side-effect-macros",
  "zsw-util",
  "zsw-wgpu",
 ]
@@ -2427,7 +2426,6 @@ dependencies = [
  "futures",
  "parking_lot 0.12.0",
  "winit",
- "zsw-side-effect-macros",
  "zsw-util",
  "zsw-wgpu",
 ]
@@ -2442,7 +2440,6 @@ dependencies = [
  "image",
  "log",
  "zsw-playlist",
- "zsw-side-effect-macros",
  "zsw-util",
 ]
 
@@ -2475,7 +2472,6 @@ dependencies = [
  "winit",
  "zsw-img",
  "zsw-input",
- "zsw-side-effect-macros",
  "zsw-util",
  "zsw-wgpu",
 ]
@@ -2487,7 +2483,6 @@ dependencies = [
  "async-channel",
  "futures",
  "rand",
- "zsw-side-effect-macros",
  "zsw-util",
 ]
 
@@ -2502,7 +2497,6 @@ dependencies = [
  "serde",
  "zsw-panels",
  "zsw-playlist",
- "zsw-side-effect-macros",
  "zsw-util",
 ]
 
@@ -2520,7 +2514,6 @@ dependencies = [
  "zsw-img",
  "zsw-input",
  "zsw-panels",
- "zsw-side-effect-macros",
  "zsw-util",
  "zsw-wgpu",
 ]
@@ -2544,18 +2537,8 @@ dependencies = [
  "zsw-playlist",
  "zsw-profiles",
  "zsw-renderer",
- "zsw-side-effect-macros",
  "zsw-util",
  "zsw-wgpu",
-]
-
-[[package]]
-name = "zsw-side-effect-macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro-error",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -2571,7 +2554,6 @@ dependencies = [
  "parking_lot 0.12.0",
  "serde",
  "serde_json",
- "zsw-side-effect-macros",
 ]
 
 [[package]]
@@ -2586,6 +2568,5 @@ dependencies = [
  "pollster",
  "wgpu",
  "winit",
- "zsw-side-effect-macros",
  "zsw-util",
 ]

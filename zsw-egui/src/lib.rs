@@ -59,8 +59,7 @@ use {
 		time::{Duration, Instant},
 	},
 	winit::window::Window,
-	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, FetchUpdateLock, FetchUpdateLockGuard, MightBlock},
+	zsw_util::{FetchUpdateLock, FetchUpdateLockGuard},
 	zsw_wgpu::Wgpu,
 };
 
@@ -133,11 +132,10 @@ impl Egui {
 	///
 	/// # Blocking
 	/// Will block until any existing platform locks are dropped
-	#[side_effect(MightBlock)]
-	pub async fn lock_platform<'a>(&'a self) -> PlatformLock<'a> {
+	pub async fn lock_platform(&self) -> PlatformLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.platform.lock_se().await.allow::<MightBlock>();
+		let guard = self.platform.lock().await;
 		PlatformLock::new(guard, &self.lock_source)
 	}
 
@@ -145,11 +143,10 @@ impl Egui {
 	///
 	/// # Blocking
 	/// Will block until any existing render pass locks are dropped
-	#[side_effect(MightBlock)]
-	pub async fn lock_render_pass<'a>(&'a self) -> RenderPassLock<'a> {
+	pub async fn lock_render_pass(&self) -> RenderPassLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.render_pass.lock_se().await.allow::<MightBlock>();
+		let guard = self.render_pass.lock().await;
 		RenderPassLock::new(guard, &self.lock_source)
 	}
 
@@ -157,11 +154,10 @@ impl Egui {
 	///
 	/// # Blocking
 	/// Will block until any existing paint jobs locks are dropped
-	#[side_effect(MightBlock)]
-	pub async fn lock_paint_jobs<'a>(&'a self) -> PaintJobsLock<'a> {
+	pub async fn lock_paint_jobs(&self) -> PaintJobsLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.paint_jobs.fetch().await.allow::<MightBlock>();
+		let guard = self.paint_jobs.fetch().await;
 		PaintJobsLock::new(guard, &self.lock_source)
 	}
 
@@ -227,13 +223,9 @@ impl Egui {
 	///
 	/// # Blocking
 	/// Blocks until [`Self::paint_jobs`] is called.
-	#[side_effect(MightBlock)]
 	pub async fn update_paint_jobs(&self, next_paint_jobs: Vec<egui::ClippedMesh>) {
 		// DEADLOCK: Caller ensures we can block
-		self.paint_jobs
-			.update(|paint_jobs| *paint_jobs = next_paint_jobs)
-			.await
-			.allow::<MightBlock>();
+		self.paint_jobs.update(|paint_jobs| *paint_jobs = next_paint_jobs).await;
 	}
 }
 

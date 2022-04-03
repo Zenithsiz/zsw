@@ -1,7 +1,1 @@
-disallowed-methods = [
-  {path = "crossbeam::channel::Receiver::recv", reason = "Might block"},
-  {path = "crossbeam::channel::Sender::send", reason = "Might block"},
-  {path = "crossbeam::channel::Select::select", reason = "Might block"},
-  {path = "lock_api::Mutex::lock", reason = "Might block"}, # Note: Technically should be `parking_lot`'s, but lint doesn't work with type alias
-  {path = "futures::lock::Mutex::lock", reason = "Might block"},
-]
+disallowed-methods = []

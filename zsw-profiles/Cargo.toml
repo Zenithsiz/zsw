@@ -10,7 +10,6 @@ version = "0.1.0"
 # Zsw
 zsw-panels = {path = "../zsw-panels"}
 zsw-playlist = {path = "../zsw-playlist"}
-zsw-side-effect-macros = {path = "../zsw-side-effect-macros"}
 zsw-util = {path = "../zsw-util"}
 
 # Async

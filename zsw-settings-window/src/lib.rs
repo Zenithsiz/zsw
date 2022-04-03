@@ -68,8 +68,7 @@ use {
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_profiles::{Profile, Profiles},
 	zsw_renderer::Renderer,
-	zsw_side_effect_macros::side_effect,
-	zsw_util::{MightBlock, Rect},
+	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
 
@@ -118,7 +117,6 @@ impl SettingsWindow {
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
 	/// Blocks until [`Self::paint_jobs`] on `egui` is called.
-	#[side_effect(MightBlock)]
 	pub async fn run<'wgpu, 'egui, 'playlist, 'panels, 'profiles>(
 		&self,
 		wgpu: &'wgpu Wgpu<'_>,
@@ -133,7 +131,7 @@ impl SettingsWindow {
 		// DEADLOCK: Caller ensures we can lock it
 		// TODO: Check if it's fine to call `wgpu.surface_size`
 		let mut inner = {
-			let surface_lock = wgpu.lock_surface().await.allow::<MightBlock>();
+			let surface_lock = wgpu.lock_surface().await;
 			Inner::new(wgpu.surface_size(&surface_lock))
 		};
 
@@ -141,24 +139,24 @@ impl SettingsWindow {
 			// Get the surface size
 			// DEADLOCK: Caller ensures we can lock it
 			let surface_size = {
-				let surface_lock = wgpu.lock_surface().await.allow::<MightBlock>();
+				let surface_lock = wgpu.lock_surface().await;
 				wgpu.surface_size(&surface_lock)
 			};
 
 			// Draw egui
 			let res = {
 				// DEADLOCK: Caller ensures we can lock it
-				let mut platform_lock = egui.lock_platform().await.allow::<MightBlock>();
+				let mut platform_lock = egui.lock_platform().await;
 
 
 				// DEADLOCK: Caller ensures we can lock it after the platform lock
-				let mut profiles_lock = profiles.lock_profiles().await.allow::<MightBlock>();
+				let mut profiles_lock = profiles.lock_profiles().await;
 
 				// DEADLOCK: Caller ensures we can lock it after the profiles lock
-				let mut playlist_lock = playlist.lock_playlist().await.allow::<MightBlock>();
+				let mut playlist_lock = playlist.lock_playlist().await;
 
 				// DEADLOCK: Caller ensures we can lock it after the panels lock
-				let mut panels_lock = panels.lock_panels().await.allow::<MightBlock>();
+				let mut panels_lock = panels.lock_panels().await;
 
 				egui.draw(window, &mut platform_lock, |ctx, frame| {
 					self.draw(
@@ -180,7 +178,7 @@ impl SettingsWindow {
 
 			match res {
 				// DEADLOCK: Caller ensures we can block
-				Ok(paint_jobs) => egui.update_paint_jobs(paint_jobs).await.allow::<MightBlock>(),
+				Ok(paint_jobs) => egui.update_paint_jobs(paint_jobs).await,
 				Err(err) => log::warn!("Unable to draw egui: {err:?}"),
 			}
 		}

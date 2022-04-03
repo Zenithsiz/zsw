@@ -64,8 +64,6 @@ use {
 	},
 	zsw_panels::{Panel, Panels},
 	zsw_playlist::Playlist,
-	zsw_side_effect_macros::side_effect,
-	zsw_util::{extse::AsyncLockMutexSe, MightBlock},
 };
 
 /// Profiles
@@ -92,11 +90,10 @@ impl Profiles {
 	///
 	/// # Blocking
 	/// Will block until any existing profiles locks are dropped
-	#[side_effect(MightBlock)]
-	pub async fn lock_profiles<'a>(&'a self) -> ProfilesLock<'a> {
+	pub async fn lock_profiles(&self) -> ProfilesLock<'_> {
 		// DEADLOCK: Caller is responsible to ensure we don't deadlock
 		//           We don't lock it outside of this method
-		let guard = self.profiles.lock_se().await.allow::<MightBlock>();
+		let guard = self.profiles.lock().await;
 		ProfilesLock::new(guard, &self.lock_source)
 	}
 
@@ -106,7 +103,6 @@ impl Profiles {
 	/// [`ProfilesLock`]
 	/// - [`zsw_playlist::PlaylistLock`]
 	///   - [`zsw_panels::PanelsLock`]
-	#[side_effect(MightBlock)]
 	pub async fn run_loader_applier<'profiles, 'playlist, 'panels>(
 		&'profiles self,
 		path: &Path,
@@ -114,7 +110,7 @@ impl Profiles {
 		panels: &'panels Panels,
 	) {
 		// DEADLOCK: Caller ensures we can lock it
-		let mut profiles_lock = self.lock_profiles().await.allow::<MightBlock>();
+		let mut profiles_lock = self.lock_profiles().await;
 
 		// Then check if we got it
 		match self.load(&mut profiles_lock, path.to_path_buf()) {
@@ -124,8 +120,8 @@ impl Profiles {
 
 				// Lock
 				// DEADLOCK: Caller ensures we can lock them in this order after profiles lock
-				let mut playlist_lock = playlist.lock_playlist().await.allow::<MightBlock>();
-				let mut panels_lock = panels.lock_panels().await.allow::<MightBlock>();
+				let mut playlist_lock = playlist.lock_playlist().await;
+				let mut panels_lock = panels.lock_panels().await;
 
 				// Then apply
 				profile
