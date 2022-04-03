@@ -217,21 +217,10 @@ impl<'window> Wgpu<'window> {
 		self.queued_resize.store(Some(size));
 	}
 
-	/// Renders a frame using `f`
+	/// Starts rendering a frame.
 	///
-	/// # Callback
-	/// Callback `f` receives the command encoder and the surface texture / size. This allows you to
-	/// start render passes to the surface texture.
-	///
-	/// Once `f` returns, all commands are sent via the `wgpu` queue and the surface is presented.
-	///
-	/// If any resize is queued, it will be executed *before* the frame starts, so the frame will start
-	/// with the new size.
-	pub fn render(
-		&self,
-		surface_lock: &mut SurfaceLock,
-		f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView) -> Result<(), anyhow::Error>,
-	) -> Result<(), anyhow::Error> {
+	/// Returns the encoder and surface view to render onto
+	pub fn start_render(&self, surface_lock: &mut SurfaceLock) -> Result<FrameRender, anyhow::Error> {
 		let surface = surface_lock.get_mut(&self.lock_source);
 
 		// Check for resizes
@@ -260,18 +249,36 @@ impl<'window> Wgpu<'window> {
 		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
 			label: Some("[zsw] Frame render command encoder"),
 		};
-		let mut encoder = self.device.create_command_encoder(&encoder_descriptor);
+		let encoder = self.device.create_command_encoder(&encoder_descriptor);
 
-		// And render using `f`
-		f(&mut encoder, &surface_texture_view).context("Unable to render")?;
+		Ok(FrameRender {
+			encoder,
+			surface_texture,
+			surface_view: surface_texture_view,
+		})
+	}
 
-		// Finally submit everything to the queue and present the surface's texture
-		self.queue.submit([encoder.finish()]);
-		surface_texture.present();
-
-		Ok(())
+	/// Finishes rendering a frame
+	pub fn finish_render(&self, frame: FrameRender) {
+		// Submit everything to the queue and present the surface's texture
+		self.queue.submit([frame.encoder.finish()]);
+		frame.surface_texture.present();
 	}
 }
+
+/// A frame's rendering
+#[derive(Debug)]
+pub struct FrameRender {
+	/// Encoder
+	pub encoder: wgpu::CommandEncoder,
+
+	/// Surface texture
+	pub surface_texture: wgpu::SurfaceTexture,
+
+	/// Surface view
+	pub surface_view: wgpu::TextureView,
+}
+
 
 /// Source for all locks
 // Note: This is to ensure user can't create the locks themselves
