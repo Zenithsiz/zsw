@@ -218,6 +218,11 @@ impl Egui {
 		paint_jobs_lock.get(&self.lock_source)
 	}
 
+	/// Returns the render pass
+	pub fn render_pass<'a>(&self, render_pass_lock: &'a mut RenderPassLock) -> &'a mut egui_wgpu_backend::RenderPass {
+		render_pass_lock.get_mut(&self.lock_source)
+	}
+
 	/// Updates the paint jobs
 	///
 	/// # Blocking
@@ -229,16 +234,6 @@ impl Egui {
 			.update(|paint_jobs| *paint_jobs = next_paint_jobs)
 			.await
 			.allow::<MightBlock>();
-	}
-
-	/// Performs a render pass
-	pub fn do_render_pass<T>(
-		&self,
-		render_pass_lock: &mut RenderPassLock,
-		f: impl FnOnce(&mut egui_wgpu_backend::RenderPass) -> T,
-	) -> T {
-		let render_pass = render_pass_lock.get_mut(&self.lock_source);
-		f(render_pass)
 	}
 }
 

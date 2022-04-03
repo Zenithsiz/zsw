@@ -221,24 +221,23 @@ impl Renderer {
 				// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
 				// TODO: Not block on this
 				let mut render_pass_lock = egui.lock_render_pass().block_on().allow::<MightBlock>();
-				egui.do_render_pass(&mut render_pass_lock, |egui_render_pass| {
-					let font_image = {
-						// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
-						// TODO: Not block on this
-						let platform_lock = egui.lock_platform().block_on().allow::<MightBlock>();
-						egui.font_image(&platform_lock)
-					};
+				let egui_render_pass = egui.render_pass(&mut render_pass_lock);
 
-					egui_render_pass.update_texture(device, queue, &font_image);
-					egui_render_pass.update_user_textures(device, queue);
-					egui_render_pass.update_buffers(device, queue, paint_jobs, &screen_descriptor);
+				let font_image = {
+					// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
+					// TODO: Not block on this
+					let platform_lock = egui.lock_platform().block_on().allow::<MightBlock>();
+					egui.font_image(&platform_lock)
+				};
 
-					// Record all render passes.
-					egui_render_pass
-						.execute(encoder, surface_view, paint_jobs, &screen_descriptor, None)
-						.context("Unable to render egui")
-				})
-				.context("Unable to perform egui render pass")?;
+				egui_render_pass.update_texture(device, queue, &font_image);
+				egui_render_pass.update_user_textures(device, queue);
+				egui_render_pass.update_buffers(device, queue, paint_jobs, &screen_descriptor);
+
+				// Record all render passes.
+				egui_render_pass
+					.execute(encoder, surface_view, paint_jobs, &screen_descriptor, None)
+					.context("Unable to render egui")?;
 			}
 
 			Ok(())
