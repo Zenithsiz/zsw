@@ -43,7 +43,8 @@ pub fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let (mut event_loop, window) = self::create_window()?;
 
 	// Create the wgpu interface
-	let wgpu = Wgpu::new(&window).context("Unable to create renderer")?;
+	// TODO: Execute future inn background and continue initializing
+	let wgpu = Wgpu::new(&window).block_on().context("Unable to create renderer")?;
 
 	// Create the playlist
 	let playlist = Playlist::new();

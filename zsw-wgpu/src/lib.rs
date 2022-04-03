@@ -61,7 +61,6 @@ use {
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	futures::lock::{Mutex, MutexGuard},
-	pollster::FutureExt,
 	std::marker::PhantomData,
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
@@ -143,13 +142,13 @@ pub struct Wgpu<'window> {
 
 impl<'window> Wgpu<'window> {
 	/// Creates the `wgpu` wrapper given the window to create it in.
-	pub fn new(window: &'window Window) -> Result<Self, anyhow::Error> {
+	pub async fn new(window: &'window Window) -> Result<Wgpu<'window>, anyhow::Error> {
 		// Create the surface and adapter
 		// SAFETY: Due to our lifetime, we ensure the window outlives us and thus the surface
-		let (surface, adapter) = unsafe { self::create_surface_and_adapter(window)? };
+		let (surface, adapter) = unsafe { self::create_surface_and_adapter(window).await? };
 
 		// Then create the device and it's queue
-		let (device, queue) = self::create_device(&adapter).block_on()?;
+		let (device, queue) = self::create_device(&adapter).await?;
 
 		// Configure the surface and get the preferred texture format and surface size
 		let (surface_texture_format, surface_size) =
@@ -326,7 +325,7 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 ///
 /// # Safety
 /// The returned surface *must* be dropped before the window.
-unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, wgpu::Adapter), anyhow::Error> {
+async unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, wgpu::Adapter), anyhow::Error> {
 	// Get an instance with any backend
 	let backends = wgpu::Backends::all();
 	log::debug!("Requesting wgpu instance (backends: {backends:?})");
@@ -346,7 +345,7 @@ unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, 
 	log::debug!("Requesting wgpu adapter (options: {adapter_options:#?})");
 	let adapter = instance
 		.request_adapter(&adapter_options)
-		.block_on()
+		.await
 		.context("Unable to request adapter")?;
 
 	Ok((surface, adapter))
