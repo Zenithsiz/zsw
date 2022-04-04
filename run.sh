@@ -2,5 +2,5 @@
 
 set -e
 
-cargo run -- \
+cargo run "$@" -- \
 	-p profile.json
