@@ -10,6 +10,7 @@ mod load;
 use {
 	super::Image,
 	zsw_playlist::{Playlist, PlaylistImage},
+	zsw_util::{ServicesBundle, ServicesContains},
 };
 
 /// Image loader
@@ -37,7 +38,12 @@ impl ImageLoader {
 	///
 	/// # Blocking
 	/// Locks [`zsw_playlist::PlaylistLock`] on `playlist`
-	pub async fn run(&self, playlist: &Playlist) -> ! {
+	pub async fn run<S>(&self, services: &S) -> !
+	where
+		S: ServicesBundle + ServicesContains<Playlist>,
+	{
+		let playlist = services.service::<Playlist>();
+
 		loop {
 			// DEADLOCK: Caller ensures we can lock it
 			let image = playlist.next().await;

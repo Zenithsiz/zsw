@@ -47,6 +47,8 @@
 	clippy::missing_const_for_fn,
 	// This is a binary crate, so we don't expose any API
 	rustdoc::private_intra_doc_links,
+	// This is too prevalent on generic functions, which we don't want to ALWAYS be `Send`
+	clippy::future_not_send,
 )]
 
 // Imports
@@ -59,6 +61,7 @@ use {
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::Panels,
+	zsw_util::{ServicesBundle, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
@@ -87,15 +90,16 @@ impl Renderer {
 	/// - [`zsw_panels::PanelsLock`] on `panels`
 	/// - [`zsw_egui::RenderPassLock`] on `egui`
 	///   - [`zsw_egui::PlatformLock`] on `egui`
-	pub async fn run<'window, 'wgpu, 'egui, 'panels>(
-		&self,
-		window: &Window,
-		input: &Input,
-		wgpu: &'wgpu Wgpu,
-		panels: &Panels,
-		egui: &'egui Egui,
-		image_loader: &ImageLoader,
-	) -> ! {
+	pub async fn run<S>(&self, services: &S) -> !
+	where
+		S: ServicesBundle
+			+ ServicesContains<Wgpu>
+			+ ServicesContains<Egui>
+			+ ServicesContains<Window>
+			+ ServicesContains<Panels>
+			+ ServicesContains<Input>
+			+ ServicesContains<ImageLoader>,
+	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
@@ -103,13 +107,13 @@ impl Renderer {
 			let ((update_duration, render_duration), total_duration) = zsw_util::measure!({
 				// Update
 				// DEADLOCK: Caller ensures we can lock it
-				let (_, update_duration) = zsw_util::measure!(Self::update(wgpu, panels, image_loader)
+				let (_, update_duration) = zsw_util::measure!(Self::update(services)
 					.await
 					.map_err(|err| log::warn!("Unable to update: {err:?}")));
 
 				// Render
 				// DEADLOCK: Caller ensures we can lock it
-				let (_, render_duration) = zsw_util::measure!(Self::render(window, input, wgpu, panels, egui)
+				let (_, render_duration) = zsw_util::measure!(Self::render(services)
 					.await
 					.map_err(|err| log::warn!("Unable to render: {err:?}")));
 
@@ -141,16 +145,19 @@ impl Renderer {
 	///
 	/// # Blocking
 	/// Locks [`zsw_panels::PanelsLock`] on `panels`
-	async fn update<'window, 'panels>(
-		wgpu: &Wgpu,
-		panels: &'panels Panels,
-		image_loader: &ImageLoader,
-	) -> Result<(), anyhow::Error> {
+	async fn update<S>(services: &S) -> Result<(), anyhow::Error>
+	where
+		S: ServicesBundle + ServicesContains<Wgpu> + ServicesContains<Panels> + ServicesContains<ImageLoader>,
+	{
 		// DEADLOCK: Caller ensures we can lock it
-		let mut panels_lock = panels.lock_panels().await;
+		let mut panels_lock = services.service::<Panels>().lock_panels().await;
 
 		// Updates all panels
-		panels.update_all(&mut panels_lock, wgpu, image_loader)
+		services.service::<Panels>().update_all(
+			&mut panels_lock,
+			services.service::<Wgpu>(),
+			services.service::<ImageLoader>(),
+		)
 	}
 
 	/// Renders
@@ -162,13 +169,21 @@ impl Renderer {
 	/// - [`zsw_egui::PaintJobsLock`] on `egui`
 	///   - [`zsw_egui::RenderPassLock`] on `egui`
 	///     - [`zsw_egui::PlatformLock`] on `egui`
-	async fn render<'window, 'wgpu, 'egui, 'panels>(
-		window: &Window,
-		input: &Input,
-		wgpu: &'wgpu Wgpu,
-		panels: &'panels Panels,
-		egui: &'egui Egui,
-	) -> Result<(), anyhow::Error> {
+	async fn render<S>(services: &S) -> Result<(), anyhow::Error>
+	where
+		S: ServicesBundle
+			+ ServicesContains<Wgpu>
+			+ ServicesContains<Egui>
+			+ ServicesContains<Window>
+			+ ServicesContains<Panels>
+			+ ServicesContains<Input>,
+	{
+		let wgpu = services.service::<Wgpu>();
+		let egui = services.service::<Egui>();
+		let window = services.service::<Window>();
+		let panels = services.service::<Panels>();
+		let input = services.service::<Input>();
+
 		// Lock the wgpu surface
 		// DEADLOCK: Caller ensures we can lock it
 		let mut surface_lock = wgpu.lock_surface().await;

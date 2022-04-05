@@ -722,6 +722,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
+name = "duplicate"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a2535fcf1437c9de0d91a3921351c474258abdb6440cd03bb5a7cf0547e7214"
+dependencies = [
+ "heck 0.4.0",
+ "proc-macro-error",
+]
+
+[[package]]
 name = "egui"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3032,6 +3042,7 @@ dependencies = [
  "clap",
  "console-subscriber",
  "crossbeam",
+ "duplicate",
  "egui",
  "egui_wgpu_backend",
  "egui_winit_platform",

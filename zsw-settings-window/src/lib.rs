@@ -47,6 +47,8 @@
 	clippy::missing_const_for_fn,
 	// This is a binary crate, so we don't expose any API
 	rustdoc::private_intra_doc_links,
+	// This is too prevalent on generic functions, which we don't want to ALWAYS be `Send`
+	clippy::future_not_send,
 )]
 // `egui` returns a response on every operation, but we don't use them
 #![allow(unused_results)]
@@ -68,7 +70,7 @@ use {
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_profiles::{Profile, Profiles},
 	zsw_renderer::Renderer,
-	zsw_util::Rect,
+	zsw_util::{Rect, ServicesBundle, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
@@ -117,16 +119,25 @@ impl SettingsWindow {
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
 	/// Blocks until [`Self::paint_jobs`] on `egui` is called.
-	pub async fn run<'wgpu, 'egui, 'playlist, 'panels, 'profiles>(
-		&self,
-		wgpu: &'wgpu Wgpu,
-		egui: &'egui Egui,
-		window: &Window,
-		panels: &'panels Panels,
-		playlist: &'playlist Playlist,
-		profiles: &'profiles Profiles,
-		renderer: &Renderer,
-	) -> ! {
+	pub async fn run<S>(&self, services: &S) -> !
+	where
+		S: ServicesBundle
+			+ ServicesContains<Wgpu>
+			+ ServicesContains<Egui>
+			+ ServicesContains<Window>
+			+ ServicesContains<Panels>
+			+ ServicesContains<Playlist>
+			+ ServicesContains<Profiles>
+			+ ServicesContains<Renderer>,
+	{
+		let wgpu = services.service::<Wgpu>();
+		let egui = services.service::<Egui>();
+		let profiles = services.service::<Profiles>();
+		let playlist = services.service::<Playlist>();
+		let window = services.service::<Window>();
+		let panels = services.service::<Panels>();
+		let renderer = services.service::<Renderer>();
+
 		// Create the inner data
 		// DEADLOCK: Caller ensures we can lock it
 		// TODO: Check if it's fine to call `wgpu.surface_size`

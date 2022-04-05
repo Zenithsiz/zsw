@@ -65,6 +65,8 @@
 	clippy::missing_const_for_fn,
 	// This is a binary crate, so we don't expose any API
 	rustdoc::private_intra_doc_links,
+	// This is too prevalent on generic functions, which we don't want to ALWAYS be `Send`
+	clippy::future_not_send,
 )]
 
 // Modules

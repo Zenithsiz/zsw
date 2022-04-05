@@ -34,14 +34,13 @@ use {
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::Rect,
+	zsw_util::{Rect, ServicesBundle, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
 /// Runs the application
 // TODO: Not arc everything
 #[allow(clippy::too_many_lines)] // TODO: Refactor
-#[allow(clippy::future_not_send)] // We only want this to run in the main thread anyway, we spawn everything else
 pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 	// Build the window
 	let (mut event_loop, window) = self::create_window()?;
@@ -103,10 +102,7 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 			let services = Arc::clone(&services);
 			move |path| {
 				task::Builder::new().name("Profiles loader").spawn(async move {
-					services
-						.profiles
-						.run_loader_applier(&path, &services.playlist, &services.panels)
-						.await;
+					services.profiles.run_loader_applier(&path, &*services).await;
 				})
 			}
 		})
@@ -121,56 +117,26 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 			let services = Arc::clone(&services);
 			task::Builder::new()
 				.name(&format!("Image loader #{idx}"))
-				.spawn(async move { services.image_loader.run(&services.playlist).await })
+				.spawn(async move { services.image_loader.run(&*services).await })
 		})
 		.collect::<Vec<_>>();
 
 	let settings_window_task = task::Builder::new().name("Settings window runner").spawn({
 		let services = Arc::clone(&services);
 		async move {
-			services
-				.settings_window
-				.run(
-					&services.wgpu,
-					&services.egui,
-					&services.window,
-					&services.panels,
-					&services.playlist,
-					&services.profiles,
-					&services.renderer,
-				)
-				.await;
+			services.settings_window.run(&*services).await;
 		}
 	});
 	let renderer_task = task::Builder::new().name("Renderer runner").spawn({
 		let services = Arc::clone(&services);
 		async move {
-			services
-				.renderer
-				.run(
-					&services.window,
-					&services.input,
-					&services.wgpu,
-					&services.panels,
-					&services.egui,
-					&services.image_loader,
-				)
-				.await;
+			services.renderer.run(&*services).await;
 		}
 	});
 
 	// Run the event loop until exit
 	event_loop.run_return(|event, _, control_flow| {
-		event_handler
-			.handle_event(
-				&services.wgpu,
-				&services.egui,
-				&services.settings_window,
-				&services.input,
-				event,
-				control_flow,
-			)
-			.block_on();
+		event_handler.handle_event(&*services, event, control_flow).block_on();
 	});
 
 	// Then join all tasks
@@ -223,6 +189,27 @@ pub struct Services {
 
 	/// Input
 	input: Input,
+}
+
+impl ServicesBundle for Services {}
+
+#[duplicate::duplicate_item(
+	ty                 field;
+	[ Window         ] [ window ];
+	[ Wgpu           ] [ wgpu ];
+	[ Playlist       ] [ playlist ];
+	[ ImageLoader    ] [ image_loader ];
+	[ Panels         ] [ panels ];
+	[ Egui           ] [ egui ];
+	[ Profiles       ] [ profiles ];
+	[ Renderer       ] [ renderer ];
+	[ SettingsWindow ] [ settings_window ];
+	[ Input          ] [ input ];
+  )]
+impl ServicesContains<ty> for Services {
+	fn get(&self) -> &ty {
+		&self.field
+	}
 }
 
 /// Creates the window, as well as the associated event loop

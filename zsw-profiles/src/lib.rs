@@ -52,6 +52,8 @@
 	clippy::missing_const_for_fn,
 	// This is a binary crate, so we don't expose any API
 	rustdoc::private_intra_doc_links,
+	// This is too prevalent on generic functions, which we don't want to ALWAYS be `Send`
+	clippy::future_not_send,
 )]
 
 // Imports
@@ -64,6 +66,7 @@ use {
 	},
 	zsw_panels::{Panel, Panels},
 	zsw_playlist::Playlist,
+	zsw_util::{ServicesBundle, ServicesContains},
 };
 
 /// Profiles
@@ -103,12 +106,13 @@ impl Profiles {
 	/// [`ProfilesLock`]
 	/// - [`zsw_playlist::PlaylistLock`]
 	///   - [`zsw_panels::PanelsLock`]
-	pub async fn run_loader_applier<'profiles, 'playlist, 'panels>(
-		&'profiles self,
-		path: &Path,
-		playlist: &'playlist Playlist,
-		panels: &'panels Panels,
-	) {
+	pub async fn run_loader_applier<S>(&self, path: &Path, services: &S)
+	where
+		S: ServicesBundle + ServicesContains<Playlist> + ServicesContains<Panels>,
+	{
+		let playlist = services.service::<Playlist>();
+		let panels = services.service::<Panels>();
+
 		// DEADLOCK: Caller ensures we can lock it
 		let mut profiles_lock = self.lock_profiles().await;
 

@@ -9,6 +9,7 @@ use {
 	zsw_egui::Egui,
 	zsw_input::Input,
 	zsw_settings_window::SettingsWindow,
+	zsw_util::{ServicesBundle, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
@@ -26,15 +27,19 @@ impl EventHandler {
 	/// # Blocking
 	/// Locks [`zsw_egui::PlatformLock`] on `egui`
 	// TODO: Inverse dependencies of `settings_window` and `panels` and let them depend on us
-	pub async fn handle_event<'window, 'egui>(
-		&mut self,
-		wgpu: &Wgpu,
-		egui: &'egui Egui,
-		settings_window: &SettingsWindow,
-		input: &Input,
-		event: Event<'window, !>,
-		control_flow: &mut EventLoopControlFlow,
-	) {
+	pub async fn handle_event<S>(&mut self, services: &S, event: Event<'_, !>, control_flow: &mut EventLoopControlFlow)
+	where
+		S: ServicesBundle
+			+ ServicesContains<Wgpu>
+			+ ServicesContains<Egui>
+			+ ServicesContains<SettingsWindow>
+			+ ServicesContains<Input>,
+	{
+		let wgpu = services.service::<Wgpu>();
+		let egui = services.service::<Egui>();
+		let settings_window = services.service::<SettingsWindow>();
+		let input = services.service::<Input>();
+
 		// Update egui
 		// DEADLOCK: Caller ensures we can call it
 		{

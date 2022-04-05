@@ -56,6 +56,8 @@
 	clippy::missing_const_for_fn,
 	// This is a binary crate, so we don't expose any API
 	rustdoc::private_intra_doc_links,
+	// This is too prevalent on generic functions, which we don't want to ALWAYS be `Send`
+	clippy::future_not_send,
 )]
 
 // Modules
@@ -64,6 +66,7 @@ mod fetch_update_lock;
 mod lock;
 mod rect;
 mod scan_dir;
+mod service;
 mod thread;
 
 // Exports
@@ -73,6 +76,7 @@ pub use {
 	lock::Lock,
 	rect::Rect,
 	scan_dir::dir_files_iter,
+	service::{ServicesBundle, ServicesContains},
 	thread::ThreadSpawner,
 };
 
