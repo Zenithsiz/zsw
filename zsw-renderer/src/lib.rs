@@ -61,7 +61,7 @@ use {
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::Panels,
-	zsw_util::{ServicesBundle, ServicesContains},
+	zsw_util::ServicesContains,
 	zsw_wgpu::Wgpu,
 };
 
@@ -92,8 +92,7 @@ impl Renderer {
 	///   - [`zsw_egui::PlatformLock`] on `egui`
 	pub async fn run<S>(&self, services: &S) -> !
 	where
-		S: ServicesBundle
-			+ ServicesContains<Wgpu>
+		S: ServicesContains<Wgpu>
 			+ ServicesContains<Egui>
 			+ ServicesContains<Window>
 			+ ServicesContains<Panels>
@@ -147,7 +146,7 @@ impl Renderer {
 	/// Locks [`zsw_panels::PanelsLock`] on `panels`
 	async fn update<S>(services: &S) -> Result<(), anyhow::Error>
 	where
-		S: ServicesBundle + ServicesContains<Wgpu> + ServicesContains<Panels> + ServicesContains<ImageLoader>,
+		S: ServicesContains<Wgpu> + ServicesContains<Panels> + ServicesContains<ImageLoader>,
 	{
 		// DEADLOCK: Caller ensures we can lock it
 		let mut panels_lock = services.service::<Panels>().lock_panels().await;
@@ -171,8 +170,7 @@ impl Renderer {
 	///     - [`zsw_egui::PlatformLock`] on `egui`
 	async fn render<S>(services: &S) -> Result<(), anyhow::Error>
 	where
-		S: ServicesBundle
-			+ ServicesContains<Wgpu>
+		S: ServicesContains<Wgpu>
 			+ ServicesContains<Egui>
 			+ ServicesContains<Window>
 			+ ServicesContains<Panels>

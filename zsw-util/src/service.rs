@@ -12,7 +12,7 @@ pub trait ServicesBundle {
 }
 
 /// Services bundle that contains `Service`
-pub trait ServicesContains<Service> {
+pub trait ServicesContains<Service>: ServicesBundle {
 	/// Retrieve `Service`
 	fn get(&self) -> &Service;
 }

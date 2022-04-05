@@ -70,7 +70,7 @@ use {
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_profiles::{Profile, Profiles},
 	zsw_renderer::Renderer,
-	zsw_util::{Rect, ServicesBundle, ServicesContains},
+	zsw_util::{Rect, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
@@ -121,8 +121,7 @@ impl SettingsWindow {
 	/// Blocks until [`Self::paint_jobs`] on `egui` is called.
 	pub async fn run<S>(&self, services: &S) -> !
 	where
-		S: ServicesBundle
-			+ ServicesContains<Wgpu>
+		S: ServicesContains<Wgpu>
 			+ ServicesContains<Egui>
 			+ ServicesContains<Window>
 			+ ServicesContains<Panels>

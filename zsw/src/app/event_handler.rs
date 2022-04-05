@@ -9,7 +9,7 @@ use {
 	zsw_egui::Egui,
 	zsw_input::Input,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::{ServicesBundle, ServicesContains},
+	zsw_util::ServicesContains,
 	zsw_wgpu::Wgpu,
 };
 
@@ -29,11 +29,7 @@ impl EventHandler {
 	// TODO: Inverse dependencies of `settings_window` and `panels` and let them depend on us
 	pub async fn handle_event<S>(&mut self, services: &S, event: Event<'_, !>, control_flow: &mut EventLoopControlFlow)
 	where
-		S: ServicesBundle
-			+ ServicesContains<Wgpu>
-			+ ServicesContains<Egui>
-			+ ServicesContains<SettingsWindow>
-			+ ServicesContains<Input>,
+		S: ServicesContains<Wgpu> + ServicesContains<Egui> + ServicesContains<SettingsWindow> + ServicesContains<Input>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
