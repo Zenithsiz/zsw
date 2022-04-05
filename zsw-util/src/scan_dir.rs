@@ -13,10 +13,9 @@ use std::{
 /// Ignores all errors reading directories / directory entries, simply logging them.
 pub fn dir_files_iter(path: PathBuf) -> impl Iterator<Item = PathBuf> {
 	// Get the generator
-	let gen = self::dir_files_gen(path);
+	let mut gen = self::dir_files_gen(path);
 
-	// Then convert the it to an iterator
-	let mut gen = Pin::from(gen);
+	// Then convert it to an iterator
 	std::iter::from_fn(move || match gen.as_mut().resume(()) {
 		GeneratorState::Yielded(path) => Some(path),
 		GeneratorState::Complete(()) => None,
@@ -28,7 +27,7 @@ pub fn dir_files_iter(path: PathBuf) -> impl Iterator<Item = PathBuf> {
 /// # Errors
 /// Ignores all errors reading directories / directory entries, simply logging them.
 // TODO: Not return a `Box<dyn Generator>`
-pub fn dir_files_gen(path: PathBuf) -> Box<dyn Generator<Yield = PathBuf, Return = ()> + Send> {
+pub fn dir_files_gen(path: PathBuf) -> Pin<Box<dyn Generator<Yield = PathBuf, Return = ()> + Send>> {
 	let gen = move || {
 		// Try to read the directory
 		let dir = match std::fs::read_dir(&path) {
@@ -64,7 +63,7 @@ pub fn dir_files_gen(path: PathBuf) -> Box<dyn Generator<Yield = PathBuf, Return
 			match file_type.is_dir() {
 				// Recurse on directories
 				true => {
-					let mut gen = Pin::from(self::dir_files_gen(entry_path));
+					let mut gen = self::dir_files_gen(entry_path);
 					loop {
 						match gen.as_mut().resume(()) {
 							GeneratorState::Yielded(path) => yield path,
@@ -79,5 +78,5 @@ pub fn dir_files_gen(path: PathBuf) -> Box<dyn Generator<Yield = PathBuf, Return
 		}
 	};
 
-	Box::new(gen)
+	Box::pin(gen)
 }
