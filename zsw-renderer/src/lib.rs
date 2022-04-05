@@ -51,10 +51,11 @@
 	clippy::future_not_send,
 )]
 
+use tokio::time::Instant;
+
 // Imports
 use {
 	anyhow::Context,
-	futures::lock::Mutex,
 	std::{mem, time::Duration},
 	winit::window::Window,
 	zsw_egui::Egui,
@@ -67,18 +68,14 @@ use {
 
 /// Renderer
 #[derive(Debug)]
-pub struct Renderer {
-	/// Frame timings
-	frame_timings: Mutex<FrameTimings>,
-}
+#[allow(missing_copy_implementations)] // We're a service, we're not supposed to be copy
+pub struct Renderer {}
 
 impl Renderer {
 	/// Creates a new renderer
 	#[must_use]
 	pub fn new() -> Self {
-		Self {
-			frame_timings: Mutex::new(FrameTimings::new()),
-		}
+		Self {}
 	}
 
 	/// Runs the renderer
@@ -103,41 +100,26 @@ impl Renderer {
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
 
 		loop {
-			let ((update_duration, render_duration), total_duration) = zsw_util::measure!({
-				// Update
-				// DEADLOCK: Caller ensures we can lock it
-				let (_, update_duration) = zsw_util::measure!(Self::update(services)
-					.await
-					.map_err(|err| log::warn!("Unable to update: {err:?}")));
+			let start_time = Instant::now();
 
-				// Render
-				// DEADLOCK: Caller ensures we can lock it
-				let (_, render_duration) = zsw_util::measure!(Self::render(services)
-					.await
-					.map_err(|err| log::warn!("Unable to render: {err:?}")));
+			// Update
+			// DEADLOCK: Caller ensures we can lock it
+			if let Err(err) = Self::update(services).await {
+				log::warn!("Unable to update: {err:?}");
+			}
 
-				(update_duration, render_duration)
-			});
-
-			// Update our frame timings
-			// DEADLOCK: We don't hold any locks during locking
-			self.frame_timings.lock().await.add(FrameTiming {
-				update: update_duration,
-				render: render_duration,
-				total:  total_duration,
-			});
+			// Render
+			// DEADLOCK: Caller ensures we can lock it
+			if let Err(err) = Self::render(services).await {
+				log::warn!("Unable to render: {err:?}");
+			};
 
 			// Then sleep until next frame
-			if let Some(duration) = sleep_duration.checked_sub(total_duration) {
+			// TODO: Is it fine to measure time like this? asynchronously
+			if let Some(duration) = sleep_duration.checked_sub(start_time.elapsed()) {
 				tokio::time::sleep(duration).await;
 			}
 		}
-	}
-
-	/// Returns all frame timings
-	pub async fn frame_timings(&self) -> [FrameTiming; 60] {
-		// DEADLOCK: We don't hold any locks during locking
-		self.frame_timings.lock().await.timings
 	}
 
 	/// Updates all panels
@@ -258,44 +240,4 @@ impl Default for Renderer {
 	fn default() -> Self {
 		Self::new()
 	}
-}
-
-/// Frame timings
-#[derive(Clone, Copy, Debug)]
-pub struct FrameTimings {
-	/// Timings
-	timings: [FrameTiming; 60],
-
-	/// Current index
-	cur_idx: usize,
-}
-
-impl FrameTimings {
-	// Creates
-	fn new() -> Self {
-		Self {
-			timings: [FrameTiming::default(); 60],
-			cur_idx: 0,
-		}
-	}
-
-	/// Adds a new frame timing
-	pub fn add(&mut self, timing: FrameTiming) {
-		self.timings[self.cur_idx] = timing;
-		self.cur_idx = (self.cur_idx + 1) % 60;
-	}
-}
-
-/// Frame timing
-#[derive(Clone, Copy, Default, Debug)]
-pub struct FrameTiming {
-	/// Update
-	pub update: Duration,
-
-	/// Render
-	// TODO: Split into `FrameRenderTiming`
-	pub render: Duration,
-
-	/// Total
-	pub total: Duration,
 }

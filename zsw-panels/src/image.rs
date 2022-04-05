@@ -187,9 +187,7 @@ fn create_image_texture(wgpu: &Wgpu, path: &Path, image: DynamicImage) -> (wgpu:
 
 		// Else simply convert to rgba8
 		image => {
-			let old_format = zsw_util::image_format(&image);
-			let (image, duration) = zsw_util::measure(move || image.into_rgba8());
-			log::debug!(target: "zsw::perf", "Took {duration:?} to convert image to rgba (from {old_format})");
+			let image = image.into_rgba8();
 			(DynamicImage::ImageRgba8(image), wgpu::TextureFormat::Rgba8UnormSrgb)
 		},
 	};
