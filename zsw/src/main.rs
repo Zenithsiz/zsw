@@ -76,7 +76,18 @@ mod logger;
 pub use self::args::Args;
 
 // Imports
-use {anyhow::Context, clap::StructOpt};
+use {
+	anyhow::Context,
+	clap::StructOpt,
+	std::{
+		num::NonZeroUsize,
+		sync::{
+			atomic::{self, AtomicUsize},
+			Arc,
+		},
+		thread,
+	},
+};
 
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize logger
@@ -85,9 +96,9 @@ fn main() -> Result<(), anyhow::Error> {
 		Err(err) => eprintln!("Unable to initialize logger: {err:?}"),
 	}
 
-	// Initialize the deadlock detection
-	#[cfg(debug_assertions)]
-	self::deadlock_init();
+	// Initialize the tokio console subscriber if given the feature
+	#[cfg(feature = "tokio-console")]
+	console_subscriber::init();
 
 	// Customize the rayon pool thread
 	// Note: This is used indirectly in `image` by `jpeg-decoder`
@@ -98,7 +109,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 	// Get arguments
 	let args = match Args::try_parse() {
-		Ok(args) => args,
+		Ok(args) => Arc::new(args),
 		Err(err) => {
 			log::warn!("Unable to retrieve arguments: {err:?}");
 			err.exit();
@@ -106,10 +117,23 @@ fn main() -> Result<(), anyhow::Error> {
 	};
 	log::debug!("Arguments: {args:#?}");
 
+	// Create the runtime and enter it
+	let runtime = tokio::runtime::Builder::new_multi_thread()
+	.worker_threads(2 * thread::available_parallelism().map_or(1, NonZeroUsize::get)) // TODO: Adjust?
+	.enable_time()
+    .thread_name_fn(|| {
+       static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+       let id = NEXT_ID.fetch_add(1, atomic::Ordering::AcqRel);
+       format!("tokio-runtime-{}", id)
+    })
+    .build()
+	.context("Unable to create runtime")?;
+	let _runtime_enter = runtime.enter();
+
 	// Run the app and restart if we get an error (up to 5 errors)
 	let mut errors = 0;
 	while errors < 5 {
-		match app::run(&args) {
+		match runtime.block_on(app::run(Arc::clone(&args))) {
 			Ok(()) => {
 				log::info!("Application finished");
 				break;
@@ -123,35 +147,4 @@ fn main() -> Result<(), anyhow::Error> {
 	}
 
 	Ok(())
-}
-
-/// Initializes deadlock detection
-#[cfg(debug_assertions)]
-fn deadlock_init() {
-	// Create a background thread which checks for deadlocks every 10s
-	#[allow(clippy::let_underscore_drop)] // We want to detach the thread
-	let _ = std::thread::Builder::new()
-		.name("Deadlock detection".to_owned())
-		.spawn(move || loop {
-			// Sleep so we aren't continuously checking
-			std::thread::sleep(std::time::Duration::from_secs(10));
-
-			// Then check if we have any and continue if we don't
-			log::debug!("Checking for deadlocks");
-			let deadlocks = parking_lot::deadlock::check_deadlock();
-			if deadlocks.is_empty() {
-				log::debug!("Found no deadlocks");
-				continue;
-			}
-
-			// If we do, log them
-			log::warn!("Detected {} deadlocks", deadlocks.len());
-			for (idx, threads) in deadlocks.iter().enumerate() {
-				log::warn!("Deadlock #{idx}");
-				for thread in threads {
-					log::warn!("\tThread Id {:#?}", thread.thread_id());
-					log::warn!("\tBacktrace: {:#?}", thread.backtrace());
-				}
-			}
-		});
 }

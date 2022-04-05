@@ -28,7 +28,7 @@ impl EventHandler {
 	// TODO: Inverse dependencies of `settings_window` and `panels` and let them depend on us
 	pub async fn handle_event<'window, 'egui>(
 		&mut self,
-		wgpu: &Wgpu<'_>,
+		wgpu: &Wgpu,
 		egui: &'egui Egui,
 		settings_window: &SettingsWindow,
 		input: &Input,

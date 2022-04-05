@@ -13,8 +13,10 @@ use {
 	crate::Args,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
+	futures::future::OptionFuture,
 	pollster::FutureExt,
-	std::{iter, num::NonZeroUsize, thread},
+	std::{num::NonZeroUsize, sync::Arc, thread},
+	tokio::task,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::EventLoop,
@@ -32,135 +34,145 @@ use {
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::{FutureRunner, Rect},
+	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
 
 /// Runs the application
+// TODO: Not arc everything
 #[allow(clippy::too_many_lines)] // TODO: Refactor
-pub fn run(args: &Args) -> Result<(), anyhow::Error> {
+#[allow(clippy::future_not_send)] // We only want this to run in the main thread anyway, we spawn everything else
+pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 	// Build the window
 	let (mut event_loop, window) = self::create_window()?;
+	let window = Arc::new(window);
 
 	// Create the wgpu interface
 	// TODO: Execute future inn background and continue initializing
-	let wgpu = Wgpu::new(&window).block_on().context("Unable to create renderer")?;
+	let wgpu = Wgpu::new(Arc::clone(&window))
+		.await
+		.context("Unable to create renderer")?;
+	let wgpu = Arc::new(wgpu);
 
 	// Create the playlist
 	let playlist = Playlist::new();
+	let playlist = Arc::new(playlist);
 
 	// Create the image loader
 	let image_loader = ImageLoader::new();
+	let image_loader = Arc::new(image_loader);
 
 	// Create the panels
 	let panels = Panels::new(wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
+	let panels = Arc::new(panels);
 
 	// Create egui
 	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
+	let egui = Arc::new(egui);
 
 	// Create the profiles
 	let profiles = Profiles::new().context("Unable to load profiles")?;
+	let profiles = Arc::new(profiles);
 
 	// Create the event handler
 	let mut event_handler = EventHandler::new();
 
 	// Create the renderer
 	let renderer = Renderer::new();
+	let renderer = Arc::new(renderer);
 
 	// Create the settings window
 	let settings_window = SettingsWindow::new();
+	let settings_window = Arc::new(settings_window);
 
 	// Create the input
 	let input = Input::new();
+	let input = Arc::new(input);
 
-	// All runners
-	// Note: They must exists outside of the thread scope because
-	//       their `run` can last until the very end of the function
-	let profile_loader_runner = FutureRunner::new();
-	let playlist_runner = FutureRunner::new();
-	let image_loader_threads = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-	let image_loader_runners = iter::repeat_with(FutureRunner::new)
-		.take(image_loader_threads)
+	// TODO: Bundle all of these onto a single struct to pass onto the runners,
+	//       via some generic
+
+	// Then add all futures
+	let profiles_loader_task: OptionFuture<_> = args
+		.profile
+		.clone()
+		.map({
+			let profiles = Arc::clone(&profiles);
+			let playlist = Arc::clone(&playlist);
+			let panels = Arc::clone(&panels);
+			move |path| {
+				task::Builder::new()
+					.name("Profiles loader")
+					.spawn(async move { profiles.run_loader_applier(&path, &playlist, &panels).await })
+			}
+		})
+		.into();
+	let playlist_task = task::Builder::new().name("Playlist runner").spawn({
+		let playlist = Arc::clone(&playlist);
+		async move { playlist.run().await }
+	});
+	let image_loader_tasks = thread::available_parallelism().map_or(1, NonZeroUsize::get);
+	let image_loader_tasks = (0..image_loader_tasks)
+		.map(|idx| {
+			let image_loader = Arc::clone(&image_loader);
+			let playlist = Arc::clone(&playlist);
+			task::Builder::new()
+				.name(&format!("Image loader #{idx}"))
+				.spawn(async move { image_loader.run(&playlist).await })
+		})
 		.collect::<Vec<_>>();
-	let settings_window_runner = FutureRunner::new();
-	let renderer_runner = FutureRunner::new();
 
-
-	// Start all threads and then wait in the main thread for events
-	// DEADLOCK: We ensure all threads lock each lock in the same order,
-	//           and that we don't lock them.
-	thread::scope(|s| {
-		// Create the thread spawner
-		let mut thread_spawner = zsw_util::ThreadSpawner::new(s);
-
-		// Spawn the profile loader if we have any
-		// DEADLOCK: See above
-		if let Some(path) = &args.profile {
-			thread_spawner.spawn("Profile loader", || {
-				// Note: We don't care whether we got cancelled or returned successfully
-				profile_loader_runner
-					.run(profiles.run_loader_applier(path, &playlist, &panels))
-					.into_ok_or_err();
-			})?;
+	let settings_window_task = task::Builder::new().name("Settings window runner").spawn({
+		let settings_window = Arc::clone(&settings_window);
+		let wgpu = Arc::clone(&wgpu);
+		let egui = Arc::clone(&egui);
+		let window = Arc::clone(&window);
+		let profiles = Arc::clone(&profiles);
+		let playlist = Arc::clone(&playlist);
+		let panels = Arc::clone(&panels);
+		let renderer = Arc::clone(&renderer);
+		async move {
+			settings_window
+				.run(&wgpu, &egui, &window, &panels, &playlist, &profiles, &renderer)
+				.await;
 		}
-
-		// Spawn the playlist thread
-		// DEADLOCK: See above
-		thread_spawner.spawn("Playlist", || {
-			playlist_runner.run(playlist.run()).into_err();
-		})?;
-
-		// Spawn all image loaders
-		// DEADLOCK: See above
-		for (thread_idx, runner) in image_loader_runners.iter().enumerate() {
-			thread_spawner.spawn(format!("Image Loader${thread_idx}"), || {
-				runner.run(image_loader.run(&playlist)).into_err();
-			})?;
+	});
+	let renderer_task = task::Builder::new().name("Renderer runner").spawn({
+		let wgpu = Arc::clone(&wgpu);
+		let egui = Arc::clone(&egui);
+		let window = Arc::clone(&window);
+		let panels = Arc::clone(&panels);
+		let renderer = Arc::clone(&renderer);
+		let input = Arc::clone(&input);
+		async move {
+			renderer
+				.run(&window, &input, &wgpu, &panels, &egui, &image_loader)
+				.await;
 		}
+	});
 
-		// Spawn the settings window thread
-		// DEADLOCK: See above
-		thread_spawner.spawn("Settings window", || {
-			settings_window_runner
-				.run(settings_window.run(&wgpu, &egui, &window, &panels, &playlist, &profiles, &renderer))
-				.into_err();
-		})?;
+	// Run the event loop until exit
+	event_loop.run_return(|event, _, control_flow| {
+		event_handler
+			.handle_event(&wgpu, &egui, &settings_window, &input, event, control_flow)
+			.block_on();
+	});
 
-		// Spawn the renderer thread
-		// DEADLOCK: See above
-		thread_spawner.spawn("Renderer", || {
-			renderer_runner
-				.run(renderer.run(&window, &input, &wgpu, &panels, &egui, &image_loader))
-				.into_err();
-		})?;
+	// Then join all tasks
+	let _ = profiles_loader_task
+		.await
+		.transpose()
+		.context("Unable to await for profiles loader runner")?;
+	playlist_task.await.context("Unable to await for playlist runner")?;
+	for task in image_loader_tasks {
+		task.await.context("Unable to wait for image loader runner")?;
+	}
+	settings_window_task
+		.await
+		.context("Unable to await for settings window runner")?;
+	renderer_task.await.context("Unable to await for renderer runner")?;
 
-		// Run event loop in this thread until we quit
-		// DEADLOCK: `run_return` exits once the user requests it.
-		//           See above
-		// Note: Doesn't make sense to use a runner here, since nothing will call `stop`.
-		event_loop.run_return(|event, _, control_flow| {
-			event_handler
-				.handle_event(&wgpu, &egui, &settings_window, &input, event, control_flow)
-				.block_on();
-		});
-
-		// Note: In release builds, once we get here, we can just exit,
-		//       no need to make the user wait for shutdown code.
-		#[cfg(not(debug_assertions))]
-		std::process::exit(0);
-
-		// Stop all runners at the end
-		// Note: Order doesn't matter, as they don't block
-		playlist_runner.stop();
-		image_loader_runners.iter().for_each(FutureRunner::stop);
-		settings_window_runner.stop();
-		renderer_runner.stop();
-
-		// Then join all threads
-		thread_spawner.join_all().context("Unable to join all threads")?;
-
-		Ok(())
-	})
+	Ok(())
 }
 
 /// Creates the window, as well as the associated event loop

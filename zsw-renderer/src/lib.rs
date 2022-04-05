@@ -53,7 +53,7 @@
 use {
 	anyhow::Context,
 	futures::lock::Mutex,
-	std::{mem, thread, time::Duration},
+	std::{mem, time::Duration},
 	winit::window::Window,
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
@@ -91,7 +91,7 @@ impl Renderer {
 		&self,
 		window: &Window,
 		input: &Input,
-		wgpu: &'wgpu Wgpu<'window>,
+		wgpu: &'wgpu Wgpu,
 		panels: &Panels,
 		egui: &'egui Egui,
 		image_loader: &ImageLoader,
@@ -125,9 +125,8 @@ impl Renderer {
 			});
 
 			// Then sleep until next frame
-			// TODO: Await while sleeping
 			if let Some(duration) = sleep_duration.checked_sub(total_duration) {
-				thread::sleep(duration);
+				tokio::time::sleep(duration).await;
 			}
 		}
 	}
@@ -143,7 +142,7 @@ impl Renderer {
 	/// # Blocking
 	/// Locks [`zsw_panels::PanelsLock`] on `panels`
 	async fn update<'window, 'panels>(
-		wgpu: &Wgpu<'window>,
+		wgpu: &Wgpu,
 		panels: &'panels Panels,
 		image_loader: &ImageLoader,
 	) -> Result<(), anyhow::Error> {
@@ -166,7 +165,7 @@ impl Renderer {
 	async fn render<'window, 'wgpu, 'egui, 'panels>(
 		window: &Window,
 		input: &Input,
-		wgpu: &'wgpu Wgpu<'window>,
+		wgpu: &'wgpu Wgpu,
 		panels: &'panels Panels,
 		egui: &'egui Egui,
 	) -> Result<(), anyhow::Error> {

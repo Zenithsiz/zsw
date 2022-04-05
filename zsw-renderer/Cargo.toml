@@ -24,6 +24,7 @@ egui_wgpu_backend = "0.16.0"
 # Async
 futures = "0.3.21"
 pollster = "0.2.4"
+tokio = "1.17.0"
 
 # Error handling
 anyhow = "1.0.52"

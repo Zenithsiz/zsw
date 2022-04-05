@@ -119,7 +119,7 @@ impl SettingsWindow {
 	/// Blocks until [`Self::paint_jobs`] on `egui` is called.
 	pub async fn run<'wgpu, 'egui, 'playlist, 'panels, 'profiles>(
 		&self,
-		wgpu: &'wgpu Wgpu<'_>,
+		wgpu: &'wgpu Wgpu,
 		egui: &'egui Egui,
 		window: &Window,
 		panels: &'panels Panels,

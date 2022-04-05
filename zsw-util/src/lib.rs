@@ -61,7 +61,6 @@
 // Modules
 mod display_wrapper;
 mod fetch_update_lock;
-mod future;
 mod lock;
 mod rect;
 mod scan_dir;
@@ -71,7 +70,6 @@ mod thread;
 pub use {
 	display_wrapper::DisplayWrapper,
 	fetch_update_lock::{FetchUpdateLock, FetchUpdateLockGuard},
-	future::FutureRunner,
 	lock::Lock,
 	rect::Rect,
 	scan_dir::dir_files_iter,

@@ -61,7 +61,7 @@ use {
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
 	futures::lock::{Mutex, MutexGuard},
-	std::marker::PhantomData,
+	std::sync::Arc,
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
 };
@@ -92,7 +92,7 @@ pub struct Surface {
 //       seems to not result in any panics, but it might be worth checking, especially if we
 //       ever need to "restart" `wgpu` in any scenario without restarting the application.
 #[derive(Debug)]
-pub struct Wgpu<'window> {
+pub struct Wgpu {
 	/// Device
 	// TODO: There exists a `Device::poll` method, but I'm not sure if we should
 	//       have to call that? Seems to be used for async, but we don't use any
@@ -130,27 +130,27 @@ pub struct Wgpu<'window> {
 	//          without showing the user at least 1 frame of the resized surface.
 	queued_resize: AtomicCell<Option<PhysicalSize<u32>>>,
 
-	/// Window lifetime
-	// Note: Our surface must outlive the window, so we make sure of it using the `'window` lifetime
-	window_phantom: PhantomData<&'window Window>,
+	/// Window
+	// Note: Our surface must outlive the window, so we make sure of it by arcing it
+	_window: Arc<Window>,
 
 	/// Lock source
 	lock_source: LockSource,
 }
 
-impl<'window> Wgpu<'window> {
+impl Wgpu {
 	/// Creates the `wgpu` wrapper given the window to create it in.
-	pub async fn new(window: &'window Window) -> Result<Wgpu<'window>, anyhow::Error> {
+	pub async fn new(window: Arc<Window>) -> Result<Self, anyhow::Error> {
 		// Create the surface and adapter
-		// SAFETY: Due to our lifetime, we ensure the window outlives us and thus the surface
-		let (surface, adapter) = unsafe { self::create_surface_and_adapter(window).await? };
+		// SAFETY: Due to the window being arced, and we storing it, we ensure the window outlives us and thus the surface
+		let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
 
 		// Then create the device and it's queue
 		let (device, queue) = self::create_device(&adapter).await?;
 
 		// Configure the surface and get the preferred texture format and surface size
 		let (surface_texture_format, surface_size) =
-			self::configure_window_surface(window, &surface, &adapter, &device)?;
+			self::configure_window_surface(&window, &surface, &adapter, &device)?;
 
 		log::info!("Successfully initialized");
 		Ok(Self {
@@ -162,7 +162,7 @@ impl<'window> Wgpu<'window> {
 			queue,
 			surface_texture_format,
 			queued_resize: AtomicCell::new(None),
-			window_phantom: PhantomData,
+			_window: window,
 			lock_source: LockSource,
 		})
 	}

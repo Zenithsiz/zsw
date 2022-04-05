@@ -7,7 +7,6 @@ use {
 		Future,
 	},
 	std::{
-		collections::VecDeque,
 		mem,
 		ops::{Deref, DerefMut},
 		pin::Pin,
@@ -24,8 +23,8 @@ struct Inner<T> {
 	/// If this value has been seen
 	seen: bool,
 
-	/// All wakers
-	wakers: VecDeque<Waker>,
+	/// Waker
+	waker: Option<Waker>,
 }
 
 /// Fetch-update lock
@@ -43,7 +42,7 @@ impl<T> FetchUpdateLock<T> {
 		let inner = Inner {
 			value,
 			seen: false,
-			wakers: VecDeque::new(),
+			waker: None,
 		};
 		Self {
 			inner: Mutex::new(inner),
@@ -63,7 +62,7 @@ impl<T> FetchUpdateLock<T> {
 
 		// Set that the value was seen and wake up someone to update it
 		inner.seen = true;
-		if let Some(waker) = inner.wakers.pop_front() {
+		if let Some(waker) = inner.waker.take() {
 			waker.wake();
 		}
 
@@ -94,7 +93,7 @@ impl<T> FetchUpdateLock<T> {
 			// DEADLOCK: Caller ensures we can wait.
 			//           We guarantee we unlock while waiting
 			CondVarFuture::new(move |waker| {
-				inner.wakers.push_back(waker.clone());
+				inner.waker = Some(waker.clone());
 				mem::drop(inner);
 			})
 			.await;
