@@ -157,6 +157,7 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 }
 
 /// All services
+// TODO: Make a macro for service runners to not have to bound everything and then get all the services they need
 #[derive(Debug)]
 pub struct Services {
 	/// Window
