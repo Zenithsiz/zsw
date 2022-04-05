@@ -18,7 +18,8 @@
 	generator_trait,
 	scoped_threads,
 	derive_default_enum,
-	mixed_integer_ops
+	mixed_integer_ops,
+	associated_type_bounds
 )]
 // Lints
 #![warn(

@@ -13,7 +13,7 @@ use {
 	crate::Args,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
-	futures::future::OptionFuture,
+	futures::Future,
 	pollster::FutureExt,
 	std::{num::NonZeroUsize, sync::Arc, thread},
 	tokio::task,
@@ -39,11 +39,77 @@ use {
 };
 
 /// Runs the application
-// TODO: Not arc everything
-#[allow(clippy::too_many_lines)] // TODO: Refactor
 pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
+	// Create all services
+	let (mut event_loop, services) = self::create_services().await?;
+
+	// Create the event handler
+	let mut event_handler = EventHandler::new();
+
+	// Spawn all futures
+	let join_handle = self::spawn_services(&args, &services);
+
+	// Run the event loop until exit
+	event_loop.run_return(|event, _, control_flow| {
+		event_handler.handle_event(&*services, event, control_flow).block_on();
+	});
+
+	// Then join all tasks
+	join_handle.await.context("Unable to join all tasks")?;
+
+	Ok(())
+}
+
+/// Spawns all services and returns a future to join them all
+fn spawn_services(args: &Args, services: &Arc<Services>) -> impl Future<Output = Result<(), anyhow::Error>> {
+	let profiles_loader_task = args.profile.clone().map(move |path| {
+		self::spawn_service_runner!(
+			services,
+			"Profiles loader",
+			services.profiles.run_loader_applier(&path, &*services)
+		)
+	});
+	let playlist_task = self::spawn_service_runner!(services, "Playlist runner", services.playlist.run());
+	let image_loader_tasks = thread::available_parallelism().map_or(1, NonZeroUsize::get);
+	let image_loader_tasks = (0..image_loader_tasks)
+		.map(|idx| self::spawn_service_runner!(services, "Image loader #{idx}", services.image_loader.run(&*services)))
+		.collect::<Vec<_>>();
+
+	let settings_window_task = self::spawn_service_runner!(
+		services,
+		"Settings window runner",
+		services.settings_window.run(&*services)
+	);
+	let renderer_task = self::spawn_service_runner!(services, "Renderer", services.renderer.run(&*services));
+
+	async move {
+		if let Some(task) = profiles_loader_task {
+			task.await.context("Unable to await for profiles loader runner")?;
+		}
+
+		playlist_task.await.context("Unable to await for playlist runner")?;
+		for task in image_loader_tasks {
+			task.await.context("Unable to wait for image loader runner")?;
+		}
+		settings_window_task
+			.await
+			.context("Unable to await for settings window runner")?;
+		renderer_task.await.context("Unable to await for renderer runner")?;
+		Ok(())
+	}
+}
+
+macro spawn_service_runner($services:ident, $name:expr, $runner:expr) {{
+	task::Builder::new().name(&format!($name)).spawn({
+		let $services = Arc::clone(&$services);
+		async move { $runner.await }
+	})
+}}
+
+/// Creates all services
+async fn create_services() -> Result<(EventLoop<!>, Arc<Services>), anyhow::Error> {
 	// Build the window
-	let (mut event_loop, window) = self::create_window()?;
+	let (event_loop, window) = self::create_window()?;
 	let window = Arc::new(window);
 
 	// Create the wgpu interface
@@ -67,9 +133,6 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 	// Create the profiles
 	let profiles = Profiles::new().context("Unable to load profiles")?;
 
-	// Create the event handler
-	let mut event_handler = EventHandler::new();
-
 	// Create the renderer
 	let renderer = Renderer::new();
 
@@ -80,7 +143,6 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 	let input = Input::new();
 
 	// Bundle all services
-	// TODO: Pass this to all service runners
 	let services = Arc::new(Services {
 		window,
 		wgpu,
@@ -94,66 +156,7 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 		input,
 	});
 
-	// Then add all futures
-	let profiles_loader_task: OptionFuture<_> = args
-		.profile
-		.clone()
-		.map({
-			let services = Arc::clone(&services);
-			move |path| {
-				task::Builder::new().name("Profiles loader").spawn(async move {
-					services.profiles.run_loader_applier(&path, &*services).await;
-				})
-			}
-		})
-		.into();
-	let playlist_task = task::Builder::new().name("Playlist runner").spawn({
-		let services = Arc::clone(&services);
-		async move { services.playlist.run().await }
-	});
-	let image_loader_tasks = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-	let image_loader_tasks = (0..image_loader_tasks)
-		.map(|idx| {
-			let services = Arc::clone(&services);
-			task::Builder::new()
-				.name(&format!("Image loader #{idx}"))
-				.spawn(async move { services.image_loader.run(&*services).await })
-		})
-		.collect::<Vec<_>>();
-
-	let settings_window_task = task::Builder::new().name("Settings window runner").spawn({
-		let services = Arc::clone(&services);
-		async move {
-			services.settings_window.run(&*services).await;
-		}
-	});
-	let renderer_task = task::Builder::new().name("Renderer runner").spawn({
-		let services = Arc::clone(&services);
-		async move {
-			services.renderer.run(&*services).await;
-		}
-	});
-
-	// Run the event loop until exit
-	event_loop.run_return(|event, _, control_flow| {
-		event_handler.handle_event(&*services, event, control_flow).block_on();
-	});
-
-	// Then join all tasks
-	let _ = profiles_loader_task
-		.await
-		.transpose()
-		.context("Unable to await for profiles loader runner")?;
-	playlist_task.await.context("Unable to await for playlist runner")?;
-	for task in image_loader_tasks {
-		task.await.context("Unable to wait for image loader runner")?;
-	}
-	settings_window_task
-		.await
-		.context("Unable to await for settings window runner")?;
-	renderer_task.await.context("Unable to await for renderer runner")?;
-
-	Ok(())
+	Ok((event_loop, services))
 }
 
 /// All services
