@@ -58,8 +58,8 @@
 // Imports
 use {
 	cgmath::{Point2, Vector2},
-	crossbeam::atomic::AtomicCell,
 	egui::{plot, Widget},
+	futures::lock::Mutex,
 	pollster::FutureExt,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -80,14 +80,18 @@ struct Inner {
 
 	/// New panel state
 	new_panel_state: NewPanelState,
+
+	/// Queued open click
+	queued_open_click: Option<PhysicalPosition<f64>>,
 }
 
 impl Inner {
 	/// Creates the inner data
 	pub fn new(surface_size: PhysicalSize<u32>) -> Self {
 		Self {
-			open:            false,
-			new_panel_state: NewPanelState::new(surface_size),
+			open:              false,
+			new_panel_state:   NewPanelState::new(surface_size),
+			queued_open_click: None,
 		}
 	}
 }
@@ -95,16 +99,22 @@ impl Inner {
 /// Settings window
 #[derive(Debug)]
 pub struct SettingsWindow {
-	/// Queued open click
-	queued_open_click: AtomicCell<Option<PhysicalPosition<f64>>>,
+	/// Inner
+	inner: Mutex<Inner>,
 }
 
 impl SettingsWindow {
 	/// Creates the settings window
 	#[must_use]
-	pub fn new() -> Self {
+	pub fn new(window: &Window) -> Self {
+		// Create the inner data
+		// TODO: Check if it's fine to use the window size here instead of the
+		//       wgpu surface size
+		let window_size = window.inner_size();
+		let inner = Inner::new(window_size);
+
 		Self {
-			queued_open_click: AtomicCell::new(None),
+			inner: Mutex::new(inner),
 		}
 	}
 
@@ -134,13 +144,6 @@ impl SettingsWindow {
 		let window = services.service::<Window>();
 		let panels = services.service::<Panels>();
 
-		// Create the inner data
-		// DEADLOCK: Caller ensures we can lock it
-		// TODO: Check if it's fine to call `wgpu.surface_size`
-		let mut inner = {
-			let surface_lock = wgpu.lock_surface().await;
-			Inner::new(wgpu.surface_size(&surface_lock))
-		};
 
 		loop {
 			// Get the surface size
@@ -165,8 +168,11 @@ impl SettingsWindow {
 				// DEADLOCK: Caller ensures we can lock it after the panels lock
 				let mut panels_lock = panels.lock_panels().await;
 
+				// TODO: Check locking of this
+				let mut inner = self.inner.lock().await;
+
 				egui.draw(window, &mut platform_lock, |ctx, frame| {
-					self.draw(
+					Self::draw(
 						&mut inner,
 						ctx,
 						frame,
@@ -192,7 +198,6 @@ impl SettingsWindow {
 
 	/// Draws the settings window
 	fn draw<'playlist, 'panels, 'profiles>(
-		&self,
 		inner: &mut Inner,
 		ctx: &egui::CtxRef,
 		_frame: &epi::Frame,
@@ -209,7 +214,7 @@ impl SettingsWindow {
 		let mut settings_window = egui::Window::new("Settings");
 
 		// If we have any queued click, summon the window there
-		if let Some(cursor_pos) = self.queued_open_click.take() {
+		if let Some(cursor_pos) = inner.queued_open_click.take() {
 			// Adjust cursor pos to account for the scale factor
 			let scale_factor = window.scale_factor();
 			let cursor_pos = cursor_pos.to_logical(scale_factor);
@@ -239,14 +244,13 @@ impl SettingsWindow {
 
 	/// Queues an open click
 	// TODO: Maybe move this to input system?
-	pub fn queue_open_click(&self, cursor_pos: Option<PhysicalPosition<f64>>) {
-		self.queued_open_click.store(cursor_pos);
+	pub async fn queue_open_click(&self, cursor_pos: Option<PhysicalPosition<f64>>) {
+		self.inner.lock().await.queued_open_click = cursor_pos;
 	}
-}
 
-impl Default for SettingsWindow {
-	fn default() -> Self {
-		Self::new()
+	/// Returns if the window is open
+	pub async fn is_open(&self) -> bool {
+		self.inner.lock().await.open
 	}
 }
 

@@ -137,7 +137,7 @@ async fn create_services() -> Result<(EventLoop<!>, Arc<Services>), anyhow::Erro
 	let renderer = Renderer::new();
 
 	// Create the settings window
-	let settings_window = SettingsWindow::new();
+	let settings_window = SettingsWindow::new(&window);
 
 	// Create the input
 	let input = Input::new();
