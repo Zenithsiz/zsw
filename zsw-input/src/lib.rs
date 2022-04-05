@@ -4,6 +4,7 @@
 use {crossbeam::atomic::AtomicCell, winit::dpi::PhysicalPosition};
 
 /// Input
+#[derive(Debug)]
 pub struct Input {
 	/// Current cursor position
 	cursor_pos: AtomicCell<Option<PhysicalPosition<f64>>>,

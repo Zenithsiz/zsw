@@ -52,101 +52,109 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 	let wgpu = Wgpu::new(Arc::clone(&window))
 		.await
 		.context("Unable to create renderer")?;
-	let wgpu = Arc::new(wgpu);
 
 	// Create the playlist
 	let playlist = Playlist::new();
-	let playlist = Arc::new(playlist);
 
 	// Create the image loader
 	let image_loader = ImageLoader::new();
-	let image_loader = Arc::new(image_loader);
 
 	// Create the panels
 	let panels = Panels::new(wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
-	let panels = Arc::new(panels);
 
 	// Create egui
 	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
-	let egui = Arc::new(egui);
 
 	// Create the profiles
 	let profiles = Profiles::new().context("Unable to load profiles")?;
-	let profiles = Arc::new(profiles);
 
 	// Create the event handler
 	let mut event_handler = EventHandler::new();
 
 	// Create the renderer
 	let renderer = Renderer::new();
-	let renderer = Arc::new(renderer);
 
 	// Create the settings window
 	let settings_window = SettingsWindow::new();
-	let settings_window = Arc::new(settings_window);
 
 	// Create the input
 	let input = Input::new();
-	let input = Arc::new(input);
 
-	// TODO: Bundle all of these onto a single struct to pass onto the runners,
-	//       via some generic
+	// Bundle all services
+	// TODO: Pass this to all service runners
+	let services = Arc::new(Services {
+		window,
+		wgpu,
+		playlist,
+		image_loader,
+		panels,
+		egui,
+		profiles,
+		renderer,
+		settings_window,
+		input,
+	});
 
 	// Then add all futures
 	let profiles_loader_task: OptionFuture<_> = args
 		.profile
 		.clone()
 		.map({
-			let profiles = Arc::clone(&profiles);
-			let playlist = Arc::clone(&playlist);
-			let panels = Arc::clone(&panels);
+			let services = Arc::clone(&services);
 			move |path| {
-				task::Builder::new()
-					.name("Profiles loader")
-					.spawn(async move { profiles.run_loader_applier(&path, &playlist, &panels).await })
+				task::Builder::new().name("Profiles loader").spawn(async move {
+					services
+						.profiles
+						.run_loader_applier(&path, &services.playlist, &services.panels)
+						.await;
+				})
 			}
 		})
 		.into();
 	let playlist_task = task::Builder::new().name("Playlist runner").spawn({
-		let playlist = Arc::clone(&playlist);
-		async move { playlist.run().await }
+		let services = Arc::clone(&services);
+		async move { services.playlist.run().await }
 	});
 	let image_loader_tasks = thread::available_parallelism().map_or(1, NonZeroUsize::get);
 	let image_loader_tasks = (0..image_loader_tasks)
 		.map(|idx| {
-			let image_loader = Arc::clone(&image_loader);
-			let playlist = Arc::clone(&playlist);
+			let services = Arc::clone(&services);
 			task::Builder::new()
 				.name(&format!("Image loader #{idx}"))
-				.spawn(async move { image_loader.run(&playlist).await })
+				.spawn(async move { services.image_loader.run(&services.playlist).await })
 		})
 		.collect::<Vec<_>>();
 
 	let settings_window_task = task::Builder::new().name("Settings window runner").spawn({
-		let settings_window = Arc::clone(&settings_window);
-		let wgpu = Arc::clone(&wgpu);
-		let egui = Arc::clone(&egui);
-		let window = Arc::clone(&window);
-		let profiles = Arc::clone(&profiles);
-		let playlist = Arc::clone(&playlist);
-		let panels = Arc::clone(&panels);
-		let renderer = Arc::clone(&renderer);
+		let services = Arc::clone(&services);
 		async move {
-			settings_window
-				.run(&wgpu, &egui, &window, &panels, &playlist, &profiles, &renderer)
+			services
+				.settings_window
+				.run(
+					&services.wgpu,
+					&services.egui,
+					&services.window,
+					&services.panels,
+					&services.playlist,
+					&services.profiles,
+					&services.renderer,
+				)
 				.await;
 		}
 	});
 	let renderer_task = task::Builder::new().name("Renderer runner").spawn({
-		let wgpu = Arc::clone(&wgpu);
-		let egui = Arc::clone(&egui);
-		let window = Arc::clone(&window);
-		let panels = Arc::clone(&panels);
-		let renderer = Arc::clone(&renderer);
-		let input = Arc::clone(&input);
+		let services = Arc::clone(&services);
 		async move {
-			renderer
-				.run(&window, &input, &wgpu, &panels, &egui, &image_loader)
+			services
+				.renderer
+				.run(
+					&services.window,
+					&services.input,
+					&services.wgpu,
+					&services.panels,
+					&services.egui,
+					&services.image_loader,
+				)
 				.await;
 		}
 	});
@@ -154,7 +162,14 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 	// Run the event loop until exit
 	event_loop.run_return(|event, _, control_flow| {
 		event_handler
-			.handle_event(&wgpu, &egui, &settings_window, &input, event, control_flow)
+			.handle_event(
+				&services.wgpu,
+				&services.egui,
+				&services.settings_window,
+				&services.input,
+				event,
+				control_flow,
+			)
 			.block_on();
 	});
 
@@ -173,6 +188,41 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 	renderer_task.await.context("Unable to await for renderer runner")?;
 
 	Ok(())
+}
+
+/// All services
+#[derive(Debug)]
+pub struct Services {
+	/// Window
+	// TODO: Not make an arc
+	window: Arc<Window>,
+
+	/// Wgpu
+	wgpu: Wgpu,
+
+	/// Playlist
+	playlist: Playlist,
+
+	/// Image loader
+	image_loader: ImageLoader,
+
+	/// Panels
+	panels: Panels,
+
+	/// Egui
+	egui: Egui,
+
+	/// Profiles
+	profiles: Profiles,
+
+	/// Renderer
+	renderer: Renderer,
+
+	/// Settings window
+	settings_window: SettingsWindow,
+
+	/// Input
+	input: Input,
 }
 
 /// Creates the window, as well as the associated event loop
