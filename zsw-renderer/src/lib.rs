@@ -62,7 +62,7 @@ use {
 	zsw_input::Input,
 	zsw_panels::{Panels, PanelsResource},
 	zsw_util::{ResourcesLock, ServicesContains},
-	zsw_wgpu::Wgpu,
+	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
 /// Renderer
@@ -94,7 +94,7 @@ impl Renderer {
 			+ ServicesContains<Panels>
 			+ ServicesContains<Input>
 			+ ServicesContains<ImageLoader>,
-		R: ResourcesLock<PanelsResource>,
+		R: ResourcesLock<PanelsResource> + ResourcesLock<WgpuSurfaceResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -158,7 +158,7 @@ impl Renderer {
 			+ ServicesContains<Window>
 			+ ServicesContains<Panels>
 			+ ServicesContains<Input>,
-		R: ResourcesLock<PanelsResource>,
+		R: ResourcesLock<PanelsResource> + ResourcesLock<WgpuSurfaceResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -168,11 +168,13 @@ impl Renderer {
 
 		// Lock the wgpu surface
 		// DEADLOCK: Caller ensures we can lock it
-		let mut surface_lock = wgpu.lock_surface().await;
+		let mut surface_resource = resources.resource::<WgpuSurfaceResource>().await;
 
 		// Then render
-		let surface_size = wgpu.surface_size(&surface_lock);
-		let mut frame = wgpu.start_render(&mut surface_lock).context("Unable to start render")?;
+		let surface_size = wgpu.surface_size(&surface_resource);
+		let mut frame = wgpu
+			.start_render(&mut surface_resource)
+			.context("Unable to start render")?;
 
 		// Render the panels
 		{

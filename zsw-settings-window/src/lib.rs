@@ -70,7 +70,7 @@ use {
 	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
 	zsw_profiles::{Profile, Profiles, ProfilesResource},
 	zsw_util::{Rect, ResourcesLock, ServicesContains},
-	zsw_wgpu::Wgpu,
+	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
 /// Inner data
@@ -136,7 +136,10 @@ impl SettingsWindow {
 			+ ServicesContains<Panels>
 			+ ServicesContains<Playlist>
 			+ ServicesContains<Profiles>,
-		R: ResourcesLock<PanelsResource> + ResourcesLock<PlaylistResource> + ResourcesLock<ProfilesResource>,
+		R: ResourcesLock<PanelsResource>
+			+ ResourcesLock<PlaylistResource>
+			+ ResourcesLock<ProfilesResource>
+			+ ResourcesLock<WgpuSurfaceResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -150,7 +153,7 @@ impl SettingsWindow {
 			// Get the surface size
 			// DEADLOCK: Caller ensures we can lock it
 			let surface_size = {
-				let surface_lock = wgpu.lock_surface().await;
+				let surface_lock = resources.resource::<WgpuSurfaceResource>().await;
 				wgpu.surface_size(&surface_lock)
 			};
 

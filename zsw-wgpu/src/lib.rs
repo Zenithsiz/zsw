@@ -62,32 +62,10 @@
 use {
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
-	futures::lock::{Mutex, MutexGuard},
 	std::sync::Arc,
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
 };
-
-/// Surface
-// Note: Exists so we may lock both the surface and size behind
-//       the same mutex, to ensure resizes are atomic in regards
-//       to code using the surface.
-//       See the note on the surface size on why this is important.
-#[derive(Debug)]
-pub struct Surface {
-	/// Surface
-	surface: wgpu::Surface,
-
-	/// Surface size
-	// Note: We keep the size ourselves instead of using the inner
-	//       window size because the window resizes asynchronously
-	//       from us, so it's possible for the window sizes to be
-	//       wrong relative to the surface size.
-	//       Wgpu validation code can panic if the size we give it
-	//       is invalid (for example, during scissoring), so we *must*
-	//       ensure this size is the surface's actual size.
-	size: PhysicalSize<u32>,
-}
 
 /// Wgpu interface
 // TODO: Figure out if drop order matters here. Dropping the surface after the device/queue
@@ -108,14 +86,6 @@ pub struct Wgpu {
 	/// Queue
 	queue: wgpu::Queue,
 
-	/// Surface
-	// Note: Behind a mutex because, once we get the surface texture, calling most other
-	//       methods, such as `configure` will cause `wgpu` to panic due to the texture
-	//       being active.
-	//       For this reason we lock the surface while rendering to ensure no changes happen
-	//       and no panics can occur.
-	surface: Mutex<Surface>,
-
 	/// Surface texture format
 	///
 	/// Used on each resize, so we configure the surface with the same texture format each time.
@@ -135,14 +105,12 @@ pub struct Wgpu {
 	/// Window
 	// Note: Our surface must outlive the window, so we make sure of it by arcing it
 	_window: Arc<Window>,
-
-	/// Lock source
-	lock_source: LockSource,
 }
 
+#[allow(clippy::unused_self)] // For accessing resources, we should require the service
 impl Wgpu {
-	/// Creates the `wgpu` wrapper given the window to create it in.
-	pub async fn new(window: Arc<Window>) -> Result<Self, anyhow::Error> {
+	/// Creates the `wgpu` wrapper given the window to create it in, alongside the resource
+	pub async fn new(window: Arc<Window>) -> Result<(Self, WgpuSurfaceResource), anyhow::Error> {
 		// Create the surface and adapter
 		// SAFETY: Due to the window being arced, and we storing it, we ensure the window outlives us and thus the surface
 		let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
@@ -155,18 +123,24 @@ impl Wgpu {
 			self::configure_window_surface(&window, &surface, &adapter, &device)?;
 
 		log::info!("Successfully initialized");
-		Ok(Self {
-			surface: Mutex::new(Surface {
-				surface,
-				size: surface_size,
-			}),
+
+		// Create the service
+		let service = Self {
 			device,
 			queue,
 			surface_texture_format,
 			queued_resize: AtomicCell::new(None),
 			_window: window,
-			lock_source: LockSource,
-		})
+		};
+
+		// Create the surface resource
+		let surface_resource = WgpuSurfaceResource {
+			surface,
+			size: surface_size,
+		};
+
+
+		Ok((service, surface_resource))
 	}
 
 	/// Returns the wgpu device
@@ -179,24 +153,13 @@ impl Wgpu {
 		&self.queue
 	}
 
-	/// Creates a surface lock
-	///
-	/// # Blocking
-	/// Will block until any existing surface locks are dropped
-	pub async fn lock_surface(&self) -> SurfaceLock<'_> {
-		// DEADLOCK: Caller is responsible to ensure we don't deadlock
-		//           We don't lock it outside of this method
-		let guard = self.surface.lock().await;
-		SurfaceLock::new(guard, &self.lock_source)
-	}
-
 	/// Returns the current surface's size
 	///
 	/// # Warning
 	/// The surface size might change as soon as the surface lock changes,
 	/// so you should not keep it afterwards for anything `wgpu` related.
-	pub fn surface_size(&self, surface_lock: &SurfaceLock) -> PhysicalSize<u32> {
-		surface_lock.get(&self.lock_source).size
+	pub fn surface_size(&self, surface_resource: &WgpuSurfaceResource) -> PhysicalSize<u32> {
+		surface_resource.size
 	}
 
 	/// Returns the surface texture format
@@ -219,22 +182,20 @@ impl Wgpu {
 	/// Starts rendering a frame.
 	///
 	/// Returns the encoder and surface view to render onto
-	pub fn start_render(&self, surface_lock: &mut SurfaceLock) -> Result<FrameRender, anyhow::Error> {
-		let surface = surface_lock.get_mut(&self.lock_source);
-
+	pub fn start_render(&self, surface_resource: &mut WgpuSurfaceResource) -> Result<FrameRender, anyhow::Error> {
 		// Check for resizes
 		if let Some(size) = self.queued_resize.take() {
 			log::info!("Resizing to {size:?}");
 			if size.width > 0 && size.height > 0 {
 				// Update our surface
 				let config = self::window_surface_configuration(self.surface_texture_format, size);
-				surface.surface.configure(&self.device, &config);
-				surface.size = size;
+				surface_resource.surface.configure(&self.device, &config);
+				surface_resource.size = size;
 			}
 		}
 
 		// And then get the surface texture
-		let surface_texture = surface
+		let surface_texture = surface_resource
 			.surface
 			.get_current_texture()
 			.context("Unable to retrieve current texture")?;
@@ -277,16 +238,6 @@ pub struct FrameRender {
 	/// Surface view
 	pub surface_view: wgpu::TextureView,
 }
-
-
-/// Source for all locks
-// Note: This is to ensure user can't create the locks themselves
-#[derive(Clone, Copy, Debug)]
-#[non_exhaustive]
-pub struct LockSource;
-
-/// Surface lock
-pub type SurfaceLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, Surface>, LockSource>;
 
 /// Configures the window surface and returns the preferred surface texture format
 fn configure_window_surface(
@@ -355,6 +306,28 @@ async unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Sur
 		.context("Unable to request adapter")?;
 
 	Ok((surface, adapter))
+}
+
+/// Surface resource
+// Note: A resource because, once we get the surface texture, calling most other
+//       methods, such as `configure` will cause `wgpu` to panic due to the texture
+//       being active.
+//       For this reason we lock the surface while rendering to ensure no changes happen
+//       and no panics can occur.
+#[derive(Debug)]
+pub struct WgpuSurfaceResource {
+	/// Surface
+	surface: wgpu::Surface,
+
+	/// Surface size
+	// Note: We keep the size ourselves instead of using the inner
+	//       window size because the window resizes asynchronously
+	//       from us, so it's possible for the window sizes to be
+	//       wrong relative to the surface size.
+	//       Wgpu validation code can panic if the size we give it
+	//       is invalid (for example, during scissoring), so we *must*
+	//       ensure this size is the surface's actual size.
+	size: PhysicalSize<u32>,
 }
 
 /// Returns the window surface configuration

@@ -72,7 +72,7 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services, Resources), anyhow::Error> {
 	// Create the wgpu service
 	// TODO: Execute future in background and continue initializing
-	let wgpu = Wgpu::new(Arc::clone(&window))
+	let (wgpu, wgpu_surface_resource) = Wgpu::new(Arc::clone(&window))
 		.await
 		.context("Unable to create renderer")?;
 
@@ -117,9 +117,10 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 
 	// Bundle the resources
 	let resources = Resources {
-		panels:   Mutex::new(panels_resource),
-		playlist: Mutex::new(playlist_resource),
-		profiles: Mutex::new(profiles_resource),
+		panels:       Mutex::new(panels_resource),
+		playlist:     Mutex::new(playlist_resource),
+		profiles:     Mutex::new(profiles_resource),
+		wgpu_surface: Mutex::new(wgpu_surface_resource),
 	};
 
 	Ok((services, resources))
