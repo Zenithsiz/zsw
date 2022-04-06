@@ -4,16 +4,10 @@
 use {
 	crate::Args,
 	anyhow::Context,
-	cgmath::{Point2, Vector2},
 	futures::Future,
 	std::{num::NonZeroUsize, sync::Arc, thread},
 	tokio::task,
-	winit::{
-		dpi::{PhysicalPosition, PhysicalSize},
-		event_loop::EventLoop,
-		platform::unix::{WindowBuilderExtUnix, XWindowType},
-		window::{Window, WindowBuilder},
-	},
+	winit::window::Window,
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
 	zsw_input::Input,
@@ -22,7 +16,7 @@ use {
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::{Rect, ServicesBundle, ServicesContains},
+	zsw_util::{ServicesBundle, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
@@ -65,12 +59,8 @@ pub struct Services {
 
 impl Services {
 	/// Creates all services
-	pub async fn new() -> Result<(EventLoop<!>, Arc<Self>), anyhow::Error> {
-		// Build the window
-		let (event_loop, window) = self::create_window()?;
-		let window = Arc::new(window);
-
-		// Create the wgpu interface
+	pub async fn new(window: Arc<Window>) -> Result<Self, anyhow::Error> {
+		// Create the wgpu service
 		// TODO: Execute future inn background and continue initializing
 		let wgpu = Wgpu::new(Arc::clone(&window))
 			.await
@@ -100,8 +90,7 @@ impl Services {
 		// Create the input
 		let input = Input::new();
 
-		// Bundle all services
-		let services = Arc::new(Self {
+		Ok(Self {
 			window,
 			wgpu,
 			playlist,
@@ -112,9 +101,7 @@ impl Services {
 			renderer,
 			settings_window,
 			input,
-		});
-
-		Ok((event_loop, services))
+		})
 	}
 
 	/// Spawns all services and returns a future to join them all
@@ -187,44 +174,3 @@ macro spawn_service_runner($services:ident => $services_cloned:ident, $name:expr
 		async move { $runner.await }
 	})
 }}
-
-/// Creates the window, as well as the associated event loop
-fn create_window() -> Result<(EventLoop<!>, Window), anyhow::Error> {
-	// Build the window
-	let event_loop = EventLoop::with_user_event();
-
-	// Find the window geometry
-	// Note: We just merge all monitors' geometry.
-	let window_geometry = event_loop
-		.available_monitors()
-		.map(|monitor| self::monitor_geometry(&monitor))
-		.reduce(Rect::merge)
-		.context("No monitors found")?;
-
-	log::debug!("Creating window (geometry: {:?})", window_geometry);
-	let window = WindowBuilder::new()
-		.with_position(PhysicalPosition {
-			x: window_geometry.pos[0],
-			y: window_geometry.pos[1],
-		})
-		.with_inner_size(PhysicalSize {
-			width:  window_geometry.size[0],
-			height: window_geometry.size[1],
-		})
-		.with_decorations(false)
-		.with_x11_window_type(vec![XWindowType::Desktop])
-		.build(&event_loop)
-		.context("Unable to build window")?;
-
-	Ok((event_loop, window))
-}
-
-/// Returns a monitor's geometry
-fn monitor_geometry(monitor: &winit::monitor::MonitorHandle) -> Rect<i32, u32> {
-	let monitor_pos = monitor.position();
-	let monitor_size = monitor.size();
-	Rect {
-		pos:  Point2::new(monitor_pos.x, monitor_pos.y),
-		size: Vector2::new(monitor_size.width, monitor_size.height),
-	}
-}
