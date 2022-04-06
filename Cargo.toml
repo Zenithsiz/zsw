@@ -15,9 +15,13 @@ members = [
 ]
 resolver = "2"
 
-# Compile `image` in release mode, else it's too slow to meaningfully
-# test other features
+# Compile `image` (and some it's dependencies, which actually load images) in release mode,
+# else it's too slow to meaningfully test other features
 [profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.jpeg-decoder]
 opt-level = 3
 
 # Add debug to release for profiling
