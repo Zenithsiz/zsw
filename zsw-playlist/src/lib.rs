@@ -55,27 +55,13 @@
 
 // Imports
 use {
-	futures::lock::{Mutex, MutexGuard},
 	rand::prelude::SliceRandom,
 	std::{collections::HashSet, path::PathBuf, sync::Arc},
+	zsw_util::ResourcesLock,
 };
 
-/// Inner
-#[doc(hidden)]
-#[derive(Clone, Debug)]
-pub struct Inner {
-	/// Root path
-	// TODO: Use this properly
-	root_path: Option<PathBuf>,
-
-	/// All images
-	images: HashSet<Arc<PlaylistImage>>,
-
-	/// Current images
-	cur_images: Vec<Arc<PlaylistImage>>,
-}
-
 /// Image playlist
+// TODO: Rename to `PlaylistService`
 #[derive(Debug)]
 pub struct Playlist {
 	/// Image sender
@@ -83,60 +69,43 @@ pub struct Playlist {
 
 	/// Image receiver
 	img_rx: async_channel::Receiver<Arc<PlaylistImage>>,
-
-	/// Inner
-	inner: Mutex<Inner>,
-
-	/// Lock source
-	lock_source: LockSource,
 }
 
 impl Playlist {
-	/// Creates a new, empty, playlist
+	/// Creates a new, empty, playlist, alongside all resources
 	#[must_use]
-	pub fn new() -> Self {
+	pub fn new() -> (Self, PlaylistResource) {
 		// Note: Making the close channel unbounded is what allows us to not block
 		//       in `Self::stop`.
 		let (img_tx, img_rx) = async_channel::bounded(1);
 
-		// Create the empty inner data
-		let inner = Inner {
+		// Create the service
+		let service = Self { img_tx, img_rx };
+
+		// Create the resource
+		let resource = PlaylistResource {
 			root_path:  None,
 			images:     HashSet::new(),
 			cur_images: vec![],
 		};
 
-		Self {
-			img_tx,
-			img_rx,
-			inner: Mutex::new(inner),
-			lock_source: LockSource,
-		}
-	}
-
-	/// Creates playlist lock
-	///
-	/// # Blocking
-	/// Will block until any existing playlist locks are dropped
-	pub async fn lock_playlist(&self) -> PlaylistLock<'_> {
-		// DEADLOCK: Caller is responsible to ensure we don't deadlock
-		//           We don't lock it outside of this method
-		let guard = self.inner.lock().await;
-		PlaylistLock::new(guard, &self.lock_source)
+		(service, resource)
 	}
 
 	/// Runs the playlist
 	///
 	/// # Blocking
 	/// Locks [`PlaylistLock`] on `self`.
-	pub async fn run(&self) -> ! {
+	pub async fn run<R>(&self, resources: &R) -> !
+	where
+		R: ResourcesLock<PlaylistResource>,
+	{
 		loop {
 			// Get the next image to send
 			// DEADLOCK: Caller ensures we can lock it
 			// Note: It's important to not have this in the match expression, as it would
 			//       keep the lock through the whole match.
-			let next = self.lock_playlist().await.get_mut(&self.lock_source).cur_images.pop();
-
+			let next = resources.resource::<PlaylistResource>().await.cur_images.pop();
 
 			// Then check if we got it
 			match next {
@@ -148,41 +117,39 @@ impl Playlist {
 				// Else get the next batch and shuffle them
 				// DEADLOCK: Caller ensures we can lock it.
 				None => {
-					let mut inner = self.lock_playlist().await;
-					let inner = inner.get_mut(&self.lock_source);
-					inner.cur_images.extend(inner.images.iter().cloned());
-					inner.cur_images.shuffle(&mut rand::thread_rng());
+					let mut resource = resources.resource::<PlaylistResource>().await;
+					let resource = &mut *resource;
+					resource.cur_images.extend(resource.images.iter().cloned());
+					resource.cur_images.shuffle(&mut rand::thread_rng());
 				},
 			}
 		}
 	}
 
 	/// Removes an image
-	pub async fn remove_image<'a>(&'a self, playlist_lock: &mut PlaylistLock<'a>, image: &PlaylistImage) {
+	pub async fn remove_image<'a>(&'a self, resource: &mut PlaylistResource, image: &PlaylistImage) {
 		// Note: We don't care if the image actually existed or not
-		let _ = playlist_lock.get_mut(&self.lock_source).images.remove(image);
+		let _ = resource.images.remove(image);
 	}
 
 	/// Sets the root path
-	pub async fn set_root_path<'a>(&'a self, playlist_lock: &mut PlaylistLock<'a>, root_path: PathBuf) {
-		let inner = playlist_lock.get_mut(&self.lock_source);
-
+	pub async fn set_root_path<'a>(&'a self, resource: &mut PlaylistResource, root_path: PathBuf) {
 		// Remove all existing paths and add new ones
-		inner.images.clear();
+		resource.images.clear();
 		for path in zsw_util::dir_files_iter(root_path.clone()) {
-			let _ = inner.images.insert(Arc::new(PlaylistImage::File(path)));
+			let _ = resource.images.insert(Arc::new(PlaylistImage::File(path)));
 		}
 
 		// Remove all current paths too
-		inner.cur_images.clear();
+		resource.cur_images.clear();
 
 		// Save the root path
-		inner.root_path = Some(root_path);
+		resource.root_path = Some(root_path);
 	}
 
 	/// Returns the root path
-	pub async fn root_path<'a>(&'a self, playlist_lock: &PlaylistLock<'a>) -> Option<PathBuf> {
-		playlist_lock.get(&self.lock_source).root_path.clone()
+	pub async fn root_path<'a>(&'a self, resource: &'a PlaylistResource) -> Option<PathBuf> {
+		resource.root_path.clone()
 	}
 
 	/// Retrieves the next image
@@ -201,30 +168,27 @@ impl Playlist {
 	}
 
 	/// Peeks the next images
-	pub async fn peek_next(&self, playlist_lock: &PlaylistLock<'_>, mut f: impl FnMut(&PlaylistImage) + Send) {
-		let inner = playlist_lock.get(&self.lock_source);
-
-		for image in inner.cur_images.iter().rev() {
+	pub async fn peek_next(&self, resource: &PlaylistResource, mut f: impl FnMut(&PlaylistImage) + Send) {
+		for image in resource.cur_images.iter().rev() {
 			f(image);
 		}
 	}
 }
 
-impl Default for Playlist {
-	fn default() -> Self {
-		Self::new()
-	}
+/// Playlist resource
+#[doc(hidden)]
+#[derive(Clone, Debug)]
+pub struct PlaylistResource {
+	/// Root path
+	// TODO: Use this properly
+	root_path: Option<PathBuf>,
+
+	/// All images
+	images: HashSet<Arc<PlaylistImage>>,
+
+	/// Current images
+	cur_images: Vec<Arc<PlaylistImage>>,
 }
-
-/// Source for all locks
-// Note: This is to ensure user can't create the locks themselves
-#[derive(Clone, Copy, Debug)]
-#[non_exhaustive]
-pub struct LockSource;
-
-/// Inner lock
-pub type PlaylistLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, Inner>, LockSource>;
-
 
 /// A playlist image
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]

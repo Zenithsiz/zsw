@@ -4,6 +4,7 @@
 use {
 	futures::lock::{Mutex, MutexLockFuture},
 	zsw_panels::PanelsResource,
+	zsw_playlist::PlaylistResource,
 	zsw_util::{ResourcesBundle, ResourcesLock},
 };
 
@@ -11,12 +12,20 @@ use {
 pub struct Resources {
 	/// Panels
 	pub panels: Mutex<PanelsResource>,
+
+	/// Playlist
+	pub playlist: Mutex<PlaylistResource>,
 }
 
 impl ResourcesBundle for Resources {}
 
-impl ResourcesLock<PanelsResource> for Resources {
-	fn lock(&self) -> MutexLockFuture<PanelsResource> {
-		self.panels.lock()
+#[duplicate::duplicate_item(
+	ty                 field;
+	[ PanelsResource   ] [ panels ];
+	[ PlaylistResource ] [ playlist ];
+)]
+impl ResourcesLock<ty> for Resources {
+	fn lock(&self) -> MutexLockFuture<ty> {
+		self.field.lock()
 	}
 }

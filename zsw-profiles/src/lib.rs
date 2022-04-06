@@ -65,7 +65,7 @@ use {
 		path::{Path, PathBuf},
 	},
 	zsw_panels::{Panel, Panels, PanelsResource},
-	zsw_playlist::Playlist,
+	zsw_playlist::{Playlist, PlaylistResource},
 	zsw_util::{ResourcesLock, ServicesContains},
 };
 
@@ -109,7 +109,7 @@ impl Profiles {
 	pub async fn run_loader_applier<S, R>(&self, path: &Path, services: &S, resources: &R)
 	where
 		S: ServicesContains<Playlist> + ServicesContains<Panels>,
-		R: ResourcesLock<PanelsResource>,
+		R: ResourcesLock<PanelsResource> + ResourcesLock<PlaylistResource>,
 	{
 		let playlist = services.service::<Playlist>();
 		let panels = services.service::<Panels>();
@@ -125,12 +125,12 @@ impl Profiles {
 
 				// Lock
 				// DEADLOCK: Caller ensures we can lock them in this order after profiles lock
-				let mut playlist_lock = playlist.lock_playlist().await;
+				let mut playlist_resource = resources.resource::<PlaylistResource>().await;
 				let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 				// Then apply
 				profile
-					.apply(playlist, panels, &mut playlist_lock, &mut panels_resource)
+					.apply(playlist, panels, &mut playlist_resource, &mut panels_resource)
 					.await;
 			},
 
@@ -189,10 +189,10 @@ impl Profile {
 		&self,
 		playlist: &'playlist Playlist,
 		panels: &'panels Panels,
-		playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
-		panels_resource: &'panels mut PanelsResource,
+		playlist_resource: &mut PlaylistResource,
+		panels_resource: &mut PanelsResource,
 	) {
-		playlist.set_root_path(playlist_lock, self.root_path.clone()).await;
+		playlist.set_root_path(playlist_resource, self.root_path.clone()).await;
 		panels.replace_panels(panels_resource, self.panels.iter().copied());
 	}
 }

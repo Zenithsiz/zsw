@@ -9,8 +9,8 @@ mod load;
 // Imports
 use {
 	super::Image,
-	zsw_playlist::{Playlist, PlaylistImage},
-	zsw_util::ServicesContains,
+	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
+	zsw_util::{ResourcesLock, ServicesContains},
 };
 
 /// Image loader
@@ -38,9 +38,10 @@ impl ImageLoader {
 	///
 	/// # Blocking
 	/// Locks [`zsw_playlist::PlaylistLock`] on `playlist`
-	pub async fn run<S>(&self, services: &S) -> !
+	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
 	where
 		S: ServicesContains<Playlist>,
+		R: ResourcesLock<PlaylistResource>,
 	{
 		let playlist = services.service::<Playlist>();
 
@@ -67,8 +68,8 @@ impl ImageLoader {
 						log::info!("Unable to load {path:?}: {err:?}");
 
 						// DEADLOCK: Caller ensures we can lock it
-						let mut playlist_lock = playlist.lock_playlist().await;
-						playlist.remove_image(&mut playlist_lock, &image).await;
+						let mut playlist_resource = resources.resource::<PlaylistResource>().await;
+						playlist.remove_image(&mut playlist_resource, &image).await;
 					},
 				},
 			}

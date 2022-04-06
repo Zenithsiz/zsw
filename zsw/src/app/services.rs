@@ -67,7 +67,7 @@ impl ServicesBundle for Services {}
 	[ Renderer       ] [ renderer ];
 	[ SettingsWindow ] [ settings_window ];
 	[ Input          ] [ input ];
-  )]
+)]
 impl ServicesContains<ty> for Services {
 	fn get(&self) -> &ty {
 		&self.field

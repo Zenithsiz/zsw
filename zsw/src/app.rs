@@ -77,7 +77,7 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 		.context("Unable to create renderer")?;
 
 	// Create the playlist
-	let playlist = Playlist::new();
+	let (playlist, playlist_resource) = Playlist::new();
 
 	// Create the image loader
 	let image_loader = ImageLoader::new();
@@ -117,7 +117,8 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 
 	// Bundle the resources
 	let resources = Resources {
-		panels: Mutex::new(panels_resource),
+		panels:   Mutex::new(panels_resource),
+		playlist: Mutex::new(playlist_resource),
 	};
 
 	Ok((services, resources))
@@ -147,11 +148,12 @@ pub fn spawn_services(
 			services.profiles.run_loader_applier(&path, &*services, &*resources)
 		)
 	});
-	let playlist_task = spawn_service_runner!([services] "Playlist runner" => services.playlist.run());
+	let playlist_task =
+		spawn_service_runner!([services, resources] "Playlist runner" => services.playlist.run(&*resources));
 	let image_loader_tasks = (0..self::image_loader_tasks())
 		.map(|idx| {
 			spawn_service_runner!(
-				[services] &format!("Image loader #{idx}") => services.image_loader.run(&*services)
+				[services, resources] &format!("Image loader #{idx}") => services.image_loader.run(&*services, &*resources)
 			)
 		})
 		.collect::<Vec<_>>();
