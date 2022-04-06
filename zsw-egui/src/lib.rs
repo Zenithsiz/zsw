@@ -55,7 +55,6 @@
 use {
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
-	futures::lock::{Mutex, MutexGuard},
 	std::{
 		sync::Arc,
 		time::{Duration, Instant},
@@ -67,13 +66,8 @@ use {
 
 
 /// All egui state
+#[derive(Debug)]
 pub struct Egui {
-	/// Platform
-	platform: Mutex<egui_winit_platform::Platform>,
-
-	/// Render pass
-	render_pass: Mutex<egui_wgpu_backend::RenderPass>,
-
 	/// Repaint signal
 	repaint_signal: Arc<RepaintSignal>,
 
@@ -81,27 +75,20 @@ pub struct Egui {
 	frame_time: AtomicCell<Option<Duration>>,
 
 	/// Paint jobs
+	// TODO: Replace with resource with an inner fetch-update "thing"
 	paint_jobs: FetchUpdateLock<Vec<egui::ClippedMesh>>,
 
 	/// Lock source
 	lock_source: LockSource,
 }
 
-impl std::fmt::Debug for Egui {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Egui")
-			.field("platform", &"..")
-			.field("render_pass", &"..")
-			.field("repaint_signal", &"..")
-			.field("frame_time", &self.frame_time)
-			.field("lock_source", &self.lock_source)
-			.finish()
-	}
-}
-
+#[allow(clippy::unused_self)] // For accessing resources, we should require the service
 impl Egui {
 	/// Creates the egui state
-	pub fn new(window: &Window, wgpu: &Wgpu) -> Result<Self, anyhow::Error> {
+	pub fn new(
+		window: &Window,
+		wgpu: &Wgpu,
+	) -> Result<(Self, EguiPlatformResource, EguiRenderPassResource), anyhow::Error> {
 		// Create the egui platform
 		// TODO: Check if it's fine to use the window size here instead of the
 		//       wgpu surface size
@@ -120,36 +107,20 @@ impl Egui {
 		// Create the egui repaint signal
 		let repaint_signal = Arc::new(RepaintSignal);
 
-		Ok(Self {
-			platform: Mutex::new(platform),
-			render_pass: Mutex::new(render_pass),
+		// Create the service
+		let service = Self {
 			repaint_signal,
 			frame_time: AtomicCell::new(None),
 			paint_jobs: FetchUpdateLock::new(vec![]),
 			lock_source: LockSource,
-		})
-	}
+		};
 
-	/// Creates a platform lock
-	///
-	/// # Blocking
-	/// Will block until any existing platform locks are dropped
-	pub async fn lock_platform(&self) -> PlatformLock<'_> {
-		// DEADLOCK: Caller is responsible to ensure we don't deadlock
-		//           We don't lock it outside of this method
-		let guard = self.platform.lock().await;
-		PlatformLock::new(guard, &self.lock_source)
-	}
+		// Create the resources
+		let platform_resource = EguiPlatformResource { platform };
+		let render_pass_resource = EguiRenderPassResource { render_pass };
 
-	/// Creates a render pass lock
-	///
-	/// # Blocking
-	/// Will block until any existing render pass locks are dropped
-	pub async fn lock_render_pass(&self) -> RenderPassLock<'_> {
-		// DEADLOCK: Caller is responsible to ensure we don't deadlock
-		//           We don't lock it outside of this method
-		let guard = self.render_pass.lock().await;
-		RenderPassLock::new(guard, &self.lock_source)
+
+		Ok((service, platform_resource, render_pass_resource))
 	}
 
 	/// Creates a paint jobs lock
@@ -167,13 +138,12 @@ impl Egui {
 	pub fn draw(
 		&self,
 		window: &Window,
-		platform_lock: &mut PlatformLock,
+		platform_resource: &mut EguiPlatformResource,
 		f: impl FnOnce(&egui::CtxRef, &epi::Frame) -> Result<(), anyhow::Error>,
 	) -> Result<Vec<egui::ClippedMesh>, anyhow::Error> {
 		// Start the frame
-		let egui_platform = platform_lock.get_mut(&self.lock_source);
 		let egui_frame_start = Instant::now();
-		egui_platform.begin_frame();
+		platform_resource.platform.begin_frame();
 
 		// Create the frame
 		let app_output = epi::backend::AppOutput::default();
@@ -191,24 +161,24 @@ impl Egui {
 		});
 
 		// Then draw using it
-		f(&egui_platform.context(), &egui_frame).context("Unable to draw")?;
+		f(&platform_resource.platform.context(), &egui_frame).context("Unable to draw")?;
 
 		// Finally end the frame and retrieve the paint jobs
-		let (_output, paint_commands) = egui_platform.end_frame(Some(window));
-		let paint_jobs = egui_platform.context().tessellate(paint_commands);
+		let (_output, paint_commands) = platform_resource.platform.end_frame(Some(window));
+		let paint_jobs = platform_resource.platform.context().tessellate(paint_commands);
 		self.frame_time.store(Some(egui_frame_start.elapsed()));
 
 		Ok(paint_jobs)
 	}
 
 	/// Handles an event
-	pub fn handle_event(&self, platform_lock: &mut PlatformLock, event: &winit::event::Event<!>) {
-		platform_lock.get_mut(&self.lock_source).handle_event(event);
+	pub fn handle_event(&self, platform_resource: &mut EguiPlatformResource, event: &winit::event::Event<!>) {
+		platform_resource.platform.handle_event(event);
 	}
 
 	/// Returns the font image
-	pub fn font_image(&self, platform_lock: &PlatformLock) -> Arc<egui::FontImage> {
-		platform_lock.get(&self.lock_source).context().font_image()
+	pub fn font_image(&self, platform_resource: &EguiPlatformResource) -> Arc<egui::FontImage> {
+		platform_resource.platform.context().font_image()
 	}
 
 	/// Returns the current paint jobs
@@ -217,8 +187,11 @@ impl Egui {
 	}
 
 	/// Returns the render pass
-	pub fn render_pass<'a>(&self, render_pass_lock: &'a mut RenderPassLock) -> &'a mut egui_wgpu_backend::RenderPass {
-		render_pass_lock.get_mut(&self.lock_source)
+	pub fn render_pass<'a>(
+		&self,
+		render_pass_resource: &'a mut EguiRenderPassResource,
+	) -> &'a mut egui_wgpu_backend::RenderPass {
+		&mut render_pass_resource.render_pass
 	}
 
 	/// Updates the paint jobs
@@ -237,14 +210,33 @@ impl Egui {
 #[non_exhaustive]
 pub struct LockSource;
 
-/// Platform lock
-pub type PlatformLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, egui_winit_platform::Platform>, LockSource>;
-
-/// Render pass lock
-pub type RenderPassLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, egui_wgpu_backend::RenderPass>, LockSource>;
-
 /// Paint jobs lock
 pub type PaintJobsLock<'a> = zsw_util::Lock<'a, FetchUpdateLockGuard<'a, Vec<egui::ClippedMesh>>, LockSource>;
+
+/// Platform resource
+pub struct EguiPlatformResource {
+	/// Platform
+	platform: egui_winit_platform::Platform,
+}
+
+impl std::fmt::Debug for EguiPlatformResource {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("EguiPlatformResource").field("platform", &"..").finish()
+	}
+}
+
+/// Render pass resource
+pub struct EguiRenderPassResource {
+	render_pass: egui_wgpu_backend::RenderPass,
+}
+
+impl std::fmt::Debug for EguiRenderPassResource {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("EguiRenderPassResource")
+			.field("render_pass", &"..")
+			.finish()
+	}
+}
 
 /// Repaint signal
 // Note: We paint egui every frame, so this isn't required currently, but

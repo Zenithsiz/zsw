@@ -57,7 +57,7 @@ use {
 	std::{mem, time::Duration},
 	tokio::time::Instant,
 	winit::window::Window,
-	zsw_egui::Egui,
+	zsw_egui::{Egui, EguiPlatformResource, EguiRenderPassResource},
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::{Panels, PanelsResource},
@@ -94,7 +94,10 @@ impl Renderer {
 			+ ServicesContains<Panels>
 			+ ServicesContains<Input>
 			+ ServicesContains<ImageLoader>,
-		R: ResourcesLock<PanelsResource> + ResourcesLock<WgpuSurfaceResource>,
+		R: ResourcesLock<PanelsResource>
+			+ ResourcesLock<WgpuSurfaceResource>
+			+ ResourcesLock<EguiPlatformResource>
+			+ ResourcesLock<EguiRenderPassResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -158,7 +161,10 @@ impl Renderer {
 			+ ServicesContains<Window>
 			+ ServicesContains<Panels>
 			+ ServicesContains<Input>,
-		R: ResourcesLock<PanelsResource> + ResourcesLock<WgpuSurfaceResource>,
+		R: ResourcesLock<PanelsResource>
+			+ ResourcesLock<WgpuSurfaceResource>
+			+ ResourcesLock<EguiPlatformResource>
+			+ ResourcesLock<EguiRenderPassResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -208,13 +214,13 @@ impl Renderer {
 		// If we have any paint jobs, draw egui
 		if !paint_jobs.is_empty() {
 			// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
-			let mut render_pass_lock = egui.lock_render_pass().await;
-			let egui_render_pass = egui.render_pass(&mut render_pass_lock);
+			let mut render_pass_resource = resources.resource::<EguiRenderPassResource>().await;
+			let egui_render_pass = egui.render_pass(&mut render_pass_resource);
 
 			let font_image = {
 				// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
-				let platform_lock = egui.lock_platform().await;
-				egui.font_image(&platform_lock)
+				let platform_resource = resources.resource::<EguiPlatformResource>().await;
+				egui.font_image(&platform_resource)
 			};
 
 			egui_render_pass.update_texture(wgpu.device(), wgpu.queue(), &font_image);

@@ -6,10 +6,10 @@ use {
 		event::{DeviceEvent, Event, WindowEvent},
 		event_loop::ControlFlow as EventLoopControlFlow,
 	},
-	zsw_egui::Egui,
+	zsw_egui::{Egui, EguiPlatformResource},
 	zsw_input::Input,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::ServicesContains,
+	zsw_util::{ResourcesLock, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
@@ -27,9 +27,15 @@ impl EventHandler {
 	/// # Blocking
 	/// Locks [`zsw_egui::PlatformLock`] on `egui`
 	// TODO: Inverse dependencies of `settings_window` and `panels` and let them depend on us
-	pub async fn handle_event<S>(&mut self, services: &S, event: Event<'_, !>, control_flow: &mut EventLoopControlFlow)
-	where
+	pub async fn handle_event<S, R>(
+		&mut self,
+		services: &S,
+		resources: &R,
+		event: Event<'_, !>,
+		control_flow: &mut EventLoopControlFlow,
+	) where
 		S: ServicesContains<Wgpu> + ServicesContains<Egui> + ServicesContains<SettingsWindow> + ServicesContains<Input>,
+		R: ResourcesLock<EguiPlatformResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -42,8 +48,8 @@ impl EventHandler {
 		// Then update egui, if we should
 		// DEADLOCK: Caller ensures we can call it
 		if event_status.update_egui {
-			let mut platform_lock = egui.lock_platform().await;
-			egui.handle_event(&mut platform_lock, &event);
+			let mut egui_platform_resource = resources.resource::<EguiPlatformResource>().await;
+			egui.handle_event(&mut egui_platform_resource, &event);
 		}
 
 		// Then set the control flow

@@ -59,7 +59,9 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 
 	// Run the event loop until exit
 	event_loop.run_return(|event, _, control_flow| {
-		event_handler.handle_event(&*services, event, control_flow).block_on();
+		event_handler
+			.handle_event(&*services, &*resources, event, control_flow)
+			.block_on();
 	});
 
 	// Then join all tasks
@@ -87,7 +89,8 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 		Panels::new(wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
 
 	// Create egui
-	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
+	let (egui, egui_platform_resource, egui_render_pass_resource) =
+		Egui::new(&window, &wgpu).context("Unable to create egui state")?;
 
 	// Create the profiles
 	let (profiles, profiles_resource) = Profiles::new();
@@ -117,10 +120,12 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 
 	// Bundle the resources
 	let resources = Resources {
-		panels:       Mutex::new(panels_resource),
-		playlist:     Mutex::new(playlist_resource),
-		profiles:     Mutex::new(profiles_resource),
-		wgpu_surface: Mutex::new(wgpu_surface_resource),
+		panels:           Mutex::new(panels_resource),
+		playlist:         Mutex::new(playlist_resource),
+		profiles:         Mutex::new(profiles_resource),
+		wgpu_surface:     Mutex::new(wgpu_surface_resource),
+		egui_platform:    Mutex::new(egui_platform_resource),
+		egui_render_pass: Mutex::new(egui_render_pass_resource),
 	};
 
 	Ok((services, resources))

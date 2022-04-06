@@ -65,7 +65,7 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
 	},
-	zsw_egui::Egui,
+	zsw_egui::{Egui, EguiPlatformResource},
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
 	zsw_profiles::{Profile, Profiles, ProfilesResource},
@@ -139,7 +139,8 @@ impl SettingsWindow {
 		R: ResourcesLock<PanelsResource>
 			+ ResourcesLock<PlaylistResource>
 			+ ResourcesLock<ProfilesResource>
-			+ ResourcesLock<WgpuSurfaceResource>,
+			+ ResourcesLock<WgpuSurfaceResource>
+			+ ResourcesLock<EguiPlatformResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -153,15 +154,14 @@ impl SettingsWindow {
 			// Get the surface size
 			// DEADLOCK: Caller ensures we can lock it
 			let surface_size = {
-				let surface_lock = resources.resource::<WgpuSurfaceResource>().await;
-				wgpu.surface_size(&surface_lock)
+				let wgpu_surface_resource = resources.resource::<WgpuSurfaceResource>().await;
+				wgpu.surface_size(&wgpu_surface_resource)
 			};
 
 			// Draw egui
 			let res = {
 				// DEADLOCK: Caller ensures we can lock it
-				let mut platform_lock = egui.lock_platform().await;
-
+				let mut egui_platform_resource = resources.resource::<EguiPlatformResource>().await;
 
 				// DEADLOCK: Caller ensures we can lock it after the platform lock
 				let mut profiles_resource = resources.resource::<ProfilesResource>().await;
@@ -175,7 +175,7 @@ impl SettingsWindow {
 				// TODO: Check locking of this
 				let mut inner = self.inner.lock().await;
 
-				egui.draw(window, &mut platform_lock, |ctx, frame| {
+				egui.draw(window, &mut egui_platform_resource, |ctx, frame| {
 					Self::draw(
 						&mut inner,
 						ctx,
