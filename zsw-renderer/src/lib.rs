@@ -61,7 +61,7 @@ use {
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::{Panels, PanelsResource},
-	zsw_util::{ResourcesLock, ServicesContains},
+	zsw_util::{Resources, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
@@ -88,17 +88,17 @@ impl Renderer {
 	///   - [`zsw_egui::PlatformLock`] on `egui`
 	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
 	where
-		S: ServicesContains<Wgpu>
-			+ ServicesContains<Egui>
-			+ ServicesContains<Window>
-			+ ServicesContains<Panels>
-			+ ServicesContains<Input>
-			+ ServicesContains<ImageLoader>,
-		R: ResourcesLock<PanelsResource>
-			+ ResourcesLock<WgpuSurfaceResource>
-			+ ResourcesLock<EguiPlatformResource>
-			+ ResourcesLock<EguiRenderPassResource>
-			+ ResourcesLock<EguiPaintJobsResource>,
+		S: Services<Wgpu>
+			+ Services<Egui>
+			+ Services<Window>
+			+ Services<Panels>
+			+ Services<Input>
+			+ Services<ImageLoader>,
+		R: Resources<PanelsResource>
+			+ Resources<WgpuSurfaceResource>
+			+ Resources<EguiPlatformResource>
+			+ Resources<EguiRenderPassResource>
+			+ Resources<EguiPaintJobsResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -132,8 +132,8 @@ impl Renderer {
 	/// Locks [`zsw_panels::PanelsLock`] on `panels`
 	async fn update<S, R>(services: &S, resources: &R) -> Result<(), anyhow::Error>
 	where
-		S: ServicesContains<Wgpu> + ServicesContains<Panels> + ServicesContains<ImageLoader>,
-		R: ResourcesLock<PanelsResource>,
+		S: Services<Wgpu> + Services<Panels> + Services<ImageLoader>,
+		R: Resources<PanelsResource>,
 	{
 		// DEADLOCK: Caller ensures we can lock it
 		let mut panels_resource = resources.resource::<PanelsResource>().await;
@@ -157,16 +157,12 @@ impl Renderer {
 	///     - [`zsw_egui::PlatformLock`] on `egui`
 	async fn render<S, R>(services: &S, resources: &R) -> Result<(), anyhow::Error>
 	where
-		S: ServicesContains<Wgpu>
-			+ ServicesContains<Egui>
-			+ ServicesContains<Window>
-			+ ServicesContains<Panels>
-			+ ServicesContains<Input>,
-		R: ResourcesLock<PanelsResource>
-			+ ResourcesLock<WgpuSurfaceResource>
-			+ ResourcesLock<EguiPlatformResource>
-			+ ResourcesLock<EguiRenderPassResource>
-			+ ResourcesLock<EguiPaintJobsResource>,
+		S: Services<Wgpu> + Services<Egui> + Services<Window> + Services<Panels> + Services<Input>,
+		R: Resources<PanelsResource>
+			+ Resources<WgpuSurfaceResource>
+			+ Resources<EguiPlatformResource>
+			+ Resources<EguiRenderPassResource>
+			+ Resources<EguiPaintJobsResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();

@@ -9,7 +9,7 @@ use {
 	zsw_egui::{Egui, EguiPlatformResource},
 	zsw_input::Input,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::{ResourcesLock, ServicesContains},
+	zsw_util::{Resources, Services},
 	zsw_wgpu::Wgpu,
 };
 
@@ -34,8 +34,8 @@ impl EventHandler {
 		event: Event<'_, !>,
 		control_flow: &mut EventLoopControlFlow,
 	) where
-		S: ServicesContains<Wgpu> + ServicesContains<Egui> + ServicesContains<SettingsWindow> + ServicesContains<Input>,
-		R: ResourcesLock<EguiPlatformResource>,
+		S: Services<Wgpu> + Services<Egui> + Services<SettingsWindow> + Services<Input>,
+		R: Resources<EguiPlatformResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();

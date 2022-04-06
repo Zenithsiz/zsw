@@ -57,7 +57,7 @@
 use {
 	rand::prelude::SliceRandom,
 	std::{collections::HashSet, path::PathBuf, sync::Arc},
-	zsw_util::ResourcesLock,
+	zsw_util::Resources,
 };
 
 /// Image playlist
@@ -98,7 +98,7 @@ impl Playlist {
 	/// Locks [`PlaylistLock`] on `self`.
 	pub async fn run<R>(&self, resources: &R) -> !
 	where
-		R: ResourcesLock<PlaylistResource>,
+		R: Resources<PlaylistResource>,
 	{
 		loop {
 			// Get the next image to send

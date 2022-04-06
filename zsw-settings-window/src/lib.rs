@@ -70,7 +70,7 @@ use {
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
 	zsw_profiles::{Profile, Profiles, ProfilesResource},
-	zsw_util::{CondvarFuture, Rect, ResourcesLock, ServicesContains},
+	zsw_util::{CondvarFuture, Rect, Resources, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
@@ -131,18 +131,18 @@ impl SettingsWindow {
 	/// Blocks until [`Self::paint_jobs`] on `egui` is called.
 	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
 	where
-		S: ServicesContains<Wgpu>
-			+ ServicesContains<Egui>
-			+ ServicesContains<Window>
-			+ ServicesContains<Panels>
-			+ ServicesContains<Playlist>
-			+ ServicesContains<Profiles>,
-		R: ResourcesLock<PanelsResource>
-			+ ResourcesLock<PlaylistResource>
-			+ ResourcesLock<ProfilesResource>
-			+ ResourcesLock<WgpuSurfaceResource>
-			+ ResourcesLock<EguiPlatformResource>
-			+ ResourcesLock<EguiPaintJobsResource>,
+		S: Services<Wgpu>
+			+ Services<Egui>
+			+ Services<Window>
+			+ Services<Panels>
+			+ Services<Playlist>
+			+ Services<Profiles>,
+		R: Resources<PanelsResource>
+			+ Resources<PlaylistResource>
+			+ Resources<ProfilesResource>
+			+ Resources<WgpuSurfaceResource>
+			+ Resources<EguiPlatformResource>
+			+ Resources<EguiPaintJobsResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();

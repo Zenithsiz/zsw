@@ -78,9 +78,9 @@ pub use {
 	fetch_update::FetchUpdate,
 	lock::Lock,
 	rect::Rect,
-	resource::{ResourcesBundle, ResourcesLock},
+	resource::{Resources, ResourcesBundle},
 	scan_dir::dir_files_iter,
-	service::{ServicesBundle, ServicesContains},
+	service::{Services, ServicesBundle},
 	thread::ThreadSpawner,
 };
 

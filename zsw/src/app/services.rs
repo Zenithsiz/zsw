@@ -12,7 +12,7 @@ use {
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
-	zsw_util::{ServicesBundle, ServicesContains},
+	zsw_util::ServicesBundle,
 	zsw_wgpu::Wgpu,
 };
 
@@ -68,7 +68,7 @@ impl ServicesBundle for Services {}
 	[ SettingsWindow ] [ settings_window ];
 	[ Input          ] [ input ];
 )]
-impl ServicesContains<ty> for Services {
+impl zsw_util::Services<ty> for Services {
 	fn get(&self) -> &ty {
 		&self.field
 	}

@@ -9,7 +9,7 @@ use {
 	zsw_panels::PanelsResource,
 	zsw_playlist::PlaylistResource,
 	zsw_profiles::ProfilesResource,
-	zsw_util::{ResourcesBundle, ResourcesLock},
+	zsw_util::ResourcesBundle,
 	zsw_wgpu::WgpuSurfaceResource,
 };
 
@@ -49,7 +49,7 @@ impl ResourcesBundle for Resources {}
 	[ EguiRenderPassResource ] [ egui_render_pass ];
 	[ EguiPaintJobsResource  ] [ egui_paint_jobs ];
 )]
-impl ResourcesLock<ty> for Resources {
+impl zsw_util::Resources<ty> for Resources {
 	fn lock(&self) -> MutexLockFuture<ty> {
 		self.field.lock()
 	}

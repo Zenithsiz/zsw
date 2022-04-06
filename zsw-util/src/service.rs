@@ -5,14 +5,14 @@ pub trait ServicesBundle {
 	/// Retrieves the service `Service`
 	fn service<Service>(&self) -> &Service
 	where
-		Self: self::ServicesContains<Service>,
+		Self: self::Services<Service>,
 	{
 		self.get()
 	}
 }
 
 /// Services bundle that contains `Service`
-pub trait ServicesContains<Service>: ServicesBundle {
+pub trait Services<Service>: ServicesBundle {
 	/// Retrieve `Service`
 	fn get(&self) -> &Service;
 }

@@ -65,7 +65,7 @@ use {
 	},
 	zsw_panels::{Panel, Panels, PanelsResource},
 	zsw_playlist::{Playlist, PlaylistResource},
-	zsw_util::{ResourcesLock, ServicesContains},
+	zsw_util::{Resources, Services},
 };
 
 /// Profiles
@@ -92,8 +92,8 @@ impl Profiles {
 	///   - [`zsw_panels::PanelsLock`]
 	pub async fn run_loader_applier<S, R>(&self, path: &Path, services: &S, resources: &R)
 	where
-		S: ServicesContains<Playlist> + ServicesContains<Panels>,
-		R: ResourcesLock<PanelsResource> + ResourcesLock<PlaylistResource> + ResourcesLock<ProfilesResource>,
+		S: Services<Playlist> + Services<Panels>,
+		R: Resources<PanelsResource> + Resources<PlaylistResource> + Resources<ProfilesResource>,
 	{
 		let playlist = services.service::<Playlist>();
 		let panels = services.service::<Panels>();
