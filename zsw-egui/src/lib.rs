@@ -1,7 +1,7 @@
 //! Egui
 
 // Features
-#![feature(never_type)]
+#![feature(never_type, let_chains)]
 // Lints
 #![warn(
 	clippy::pedantic,
@@ -57,16 +57,16 @@ use {
 	crossbeam::atomic::AtomicCell,
 	std::{
 		sync::Arc,
+		task::Waker,
 		time::{Duration, Instant},
 	},
 	winit::window::Window,
-	zsw_util::{FetchUpdateLock, FetchUpdateLockGuard},
+	zsw_util::FetchUpdate,
 	zsw_wgpu::Wgpu,
 };
 
 
 /// All egui state
-#[derive(Debug)]
 pub struct Egui {
 	/// Repaint signal
 	repaint_signal: Arc<RepaintSignal>,
@@ -74,12 +74,18 @@ pub struct Egui {
 	/// Last frame time
 	frame_time: AtomicCell<Option<Duration>>,
 
-	/// Paint jobs
-	// TODO: Replace with resource with an inner fetch-update "thing"
-	paint_jobs: FetchUpdateLock<Vec<egui::ClippedMesh>>,
+	/// Paint jobs waker
+	paint_jobs_waker: AtomicCell<Option<Waker>>,
+}
 
-	/// Lock source
-	lock_source: LockSource,
+impl std::fmt::Debug for Egui {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Egui")
+			.field("repaint_signal", &self.repaint_signal)
+			.field("frame_time", &self.frame_time)
+			.field("paint_jobs_waker", &"..")
+			.finish()
+	}
 }
 
 #[allow(clippy::unused_self)] // For accessing resources, we should require the service
@@ -88,7 +94,15 @@ impl Egui {
 	pub fn new(
 		window: &Window,
 		wgpu: &Wgpu,
-	) -> Result<(Self, EguiPlatformResource, EguiRenderPassResource), anyhow::Error> {
+	) -> Result<
+		(
+			Self,
+			EguiPlatformResource,
+			EguiRenderPassResource,
+			EguiPaintJobsResource,
+		),
+		anyhow::Error,
+	> {
 		// Create the egui platform
 		// TODO: Check if it's fine to use the window size here instead of the
 		//       wgpu surface size
@@ -111,27 +125,18 @@ impl Egui {
 		let service = Self {
 			repaint_signal,
 			frame_time: AtomicCell::new(None),
-			paint_jobs: FetchUpdateLock::new(vec![]),
-			lock_source: LockSource,
+			paint_jobs_waker: AtomicCell::new(None),
 		};
 
 		// Create the resources
 		let platform_resource = EguiPlatformResource { platform };
 		let render_pass_resource = EguiRenderPassResource { render_pass };
+		let paint_jobs_resource = EguiPaintJobsResource {
+			paint_jobs: FetchUpdate::new(vec![]),
+		};
 
 
-		Ok((service, platform_resource, render_pass_resource))
-	}
-
-	/// Creates a paint jobs lock
-	///
-	/// # Blocking
-	/// Will block until any existing paint jobs locks are dropped
-	pub async fn lock_paint_jobs(&self) -> PaintJobsLock<'_> {
-		// DEADLOCK: Caller is responsible to ensure we don't deadlock
-		//           We don't lock it outside of this method
-		let guard = self.paint_jobs.fetch().await;
-		PaintJobsLock::new(guard, &self.lock_source)
+		Ok((service, platform_resource, render_pass_resource, paint_jobs_resource))
 	}
 
 	/// Draws egui
@@ -182,8 +187,16 @@ impl Egui {
 	}
 
 	/// Returns the current paint jobs
-	pub fn paint_jobs<'a>(&self, paint_jobs_lock: &'a PaintJobsLock) -> &'a [egui::ClippedMesh] {
-		paint_jobs_lock.get(&self.lock_source)
+	pub fn paint_jobs<'a>(&self, paint_jobs_resource: &'a mut EguiPaintJobsResource) -> &'a [egui::ClippedMesh] {
+		// Get the paint jobs
+		let paint_jobs = paint_jobs_resource.paint_jobs.fetch();
+
+		// If we have a waker, wake them
+		if let Some(waker) = self.paint_jobs_waker.take() {
+			waker.wake();
+		}
+
+		paint_jobs
 	}
 
 	/// Returns the render pass
@@ -196,22 +209,26 @@ impl Egui {
 
 	/// Updates the paint jobs
 	///
-	/// # Blocking
-	/// Blocks until [`Self::paint_jobs`] is called.
-	pub async fn update_paint_jobs(&self, next_paint_jobs: Vec<egui::ClippedMesh>) {
-		// DEADLOCK: Caller ensures we can block
-		self.paint_jobs.update(|paint_jobs| *paint_jobs = next_paint_jobs).await;
+	/// Returns `Err` if they haven't been fetched yet
+	pub async fn update_paint_jobs(
+		&self,
+		paint_jobs_resource: &mut EguiPaintJobsResource,
+		paint_jobs: Vec<egui::ClippedMesh>,
+	) -> Result<(), Vec<egui::ClippedMesh>> {
+		paint_jobs_resource.paint_jobs.update(paint_jobs)
+	}
+
+	/// Registers a waker to be woken up by the paint jobs being fetched
+	pub fn set_paint_jobs_waker(&self, paint_jobs_resource: &EguiPaintJobsResource, waker: Waker) {
+		// Set the waker
+		self.paint_jobs_waker.store(Some(waker));
+
+		// If the paint jobs were fetched in the meantime without waking, wake up
+		if paint_jobs_resource.paint_jobs.is_seen() && let Some(waker) = self.paint_jobs_waker.take() {
+			waker.wake();
+		}
 	}
 }
-
-/// Source for all locks
-// Note: This is to ensure user can't create the locks themselves
-#[derive(Clone, Copy, Debug)]
-#[non_exhaustive]
-pub struct LockSource;
-
-/// Paint jobs lock
-pub type PaintJobsLock<'a> = zsw_util::Lock<'a, FetchUpdateLockGuard<'a, Vec<egui::ClippedMesh>>, LockSource>;
 
 /// Platform resource
 pub struct EguiPlatformResource {
@@ -236,6 +253,12 @@ impl std::fmt::Debug for EguiRenderPassResource {
 			.field("render_pass", &"..")
 			.finish()
 	}
+}
+
+/// Paint jobs resource
+#[derive(Debug)]
+pub struct EguiPaintJobsResource {
+	paint_jobs: FetchUpdate<Vec<egui::ClippedMesh>>,
 }
 
 /// Repaint signal

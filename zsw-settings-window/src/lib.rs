@@ -61,15 +61,16 @@ use {
 	egui::{plot, Widget},
 	futures::lock::Mutex,
 	pollster::FutureExt,
+	std::mem,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
 	},
-	zsw_egui::{Egui, EguiPlatformResource},
+	zsw_egui::{Egui, EguiPaintJobsResource, EguiPlatformResource},
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
 	zsw_profiles::{Profile, Profiles, ProfilesResource},
-	zsw_util::{Rect, ResourcesLock, ServicesContains},
+	zsw_util::{CondvarFuture, Rect, ResourcesLock, ServicesContains},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
@@ -140,7 +141,8 @@ impl SettingsWindow {
 			+ ResourcesLock<PlaylistResource>
 			+ ResourcesLock<ProfilesResource>
 			+ ResourcesLock<WgpuSurfaceResource>
-			+ ResourcesLock<EguiPlatformResource>,
+			+ ResourcesLock<EguiPlatformResource>
+			+ ResourcesLock<EguiPaintJobsResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -193,8 +195,25 @@ impl SettingsWindow {
 			};
 
 			match res {
-				// DEADLOCK: Caller ensures we can block
-				Ok(paint_jobs) => egui.update_paint_jobs(paint_jobs).await,
+				// If we got the paint jobs, try to update
+				Ok(mut paint_jobs) => loop {
+					let mut paint_jobs_resource = resources.resource::<EguiPaintJobsResource>().await;
+					match egui.update_paint_jobs(&mut paint_jobs_resource, paint_jobs).await {
+						Ok(()) => break,
+						// If we didn't get it, register a waker and wait
+						Err(old_paint_jobs) => {
+							// Drop the resource and wait until woken
+							CondvarFuture::new(|waker| {
+								egui.set_paint_jobs_waker(&paint_jobs_resource, waker.clone());
+								mem::drop(paint_jobs_resource);
+							})
+							.await;
+
+							// Then try again
+							paint_jobs = old_paint_jobs;
+						},
+					}
+				},
 				Err(err) => log::warn!("Unable to draw egui: {err:?}"),
 			}
 		}

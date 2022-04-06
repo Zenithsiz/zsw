@@ -57,7 +57,7 @@ use {
 	std::{mem, time::Duration},
 	tokio::time::Instant,
 	winit::window::Window,
-	zsw_egui::{Egui, EguiPlatformResource, EguiRenderPassResource},
+	zsw_egui::{Egui, EguiPaintJobsResource, EguiPlatformResource, EguiRenderPassResource},
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::{Panels, PanelsResource},
@@ -97,7 +97,8 @@ impl Renderer {
 		R: ResourcesLock<PanelsResource>
 			+ ResourcesLock<WgpuSurfaceResource>
 			+ ResourcesLock<EguiPlatformResource>
-			+ ResourcesLock<EguiRenderPassResource>,
+			+ ResourcesLock<EguiRenderPassResource>
+			+ ResourcesLock<EguiPaintJobsResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -164,7 +165,8 @@ impl Renderer {
 		R: ResourcesLock<PanelsResource>
 			+ ResourcesLock<WgpuSurfaceResource>
 			+ ResourcesLock<EguiPlatformResource>
-			+ ResourcesLock<EguiRenderPassResource>,
+			+ ResourcesLock<EguiRenderPassResource>
+			+ ResourcesLock<EguiPaintJobsResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -208,11 +210,11 @@ impl Renderer {
 
 		// Get the egui render results
 		// DEADLOCK: Caller ensures we can lock it.
-		let paint_jobs_lock = egui.lock_paint_jobs().await;
-		let paint_jobs = egui.paint_jobs(&paint_jobs_lock);
+		let mut egui_paint_jobs_resource = resources.resource::<EguiPaintJobsResource>().await;
+		let egui_paint_jobs = egui.paint_jobs(&mut egui_paint_jobs_resource);
 
 		// If we have any paint jobs, draw egui
-		if !paint_jobs.is_empty() {
+		if !egui_paint_jobs.is_empty() {
 			// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
 			let mut render_pass_resource = resources.resource::<EguiRenderPassResource>().await;
 			let egui_render_pass = egui.render_pass(&mut render_pass_resource);
@@ -225,21 +227,21 @@ impl Renderer {
 
 			egui_render_pass.update_texture(wgpu.device(), wgpu.queue(), &font_image);
 			egui_render_pass.update_user_textures(wgpu.device(), wgpu.queue());
-			egui_render_pass.update_buffers(wgpu.device(), wgpu.queue(), paint_jobs, &screen_descriptor);
+			egui_render_pass.update_buffers(wgpu.device(), wgpu.queue(), egui_paint_jobs, &screen_descriptor);
 
 			// Record all render passes.
 			egui_render_pass
 				.execute(
 					&mut frame.encoder,
 					&frame.surface_view,
-					paint_jobs,
+					egui_paint_jobs,
 					&screen_descriptor,
 					None,
 				)
 				.context("Unable to render egui")?;
 		}
 
-		mem::drop(paint_jobs_lock);
+		mem::drop(egui_paint_jobs_resource);
 		wgpu.finish_render(frame);
 
 		Ok(())

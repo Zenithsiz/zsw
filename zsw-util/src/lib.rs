@@ -61,8 +61,9 @@
 )]
 
 // Modules
+mod condvar_future;
 mod display_wrapper;
-mod fetch_update_lock;
+mod fetch_update;
 mod lock;
 mod rect;
 mod resource;
@@ -72,8 +73,9 @@ mod thread;
 
 // Exports
 pub use {
+	condvar_future::CondvarFuture,
 	display_wrapper::DisplayWrapper,
-	fetch_update_lock::{FetchUpdateLock, FetchUpdateLockGuard},
+	fetch_update::FetchUpdate,
 	lock::Lock,
 	rect::Rect,
 	resource::{ResourcesBundle, ResourcesLock},
