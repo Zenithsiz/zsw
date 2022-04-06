@@ -107,32 +107,38 @@ impl Services {
 	/// Spawns all services and returns a future to join them all
 	// TODO: Hide future behind a `JoinHandle` type.
 	pub fn spawn(self: &Arc<Self>, args: &Args) -> impl Future<Output = Result<(), anyhow::Error>> {
+		/// Macro to help spawn a service runner
+		macro spawn_service_runner($services:ident => $services_cloned:ident, $name:expr, $runner:expr) {
+			task::Builder::new().name($name).spawn({
+				let $services_cloned = Arc::clone(&$services);
+				async move { $runner.await }
+			})
+		}
+
 		// Spawn all
 		let profiles_loader_task = args.profile.clone().map(move |path| {
-			self::spawn_service_runner!(
+			spawn_service_runner!(
 				self => services,
 				"Profiles loader",
 				services.profiles.run_loader_applier(&path, &*services)
 			)
 		});
-		let playlist_task = self::spawn_service_runner!(self => services, "Playlist runner", services.playlist.run());
-		let image_loader_tasks = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-		let image_loader_tasks = (0..image_loader_tasks)
+		let playlist_task = spawn_service_runner!(self => services, "Playlist runner", services.playlist.run());
+		let image_loader_tasks = (0..self::image_loader_tasks())
 			.map(
-				|idx| self::spawn_service_runner!(self => services, "Image loader #{idx}", services.image_loader.run(&*services)),
+				|idx| spawn_service_runner!(self => services, &format!("Image loader #{idx}"), services.image_loader.run(&*services)),
 			)
 			.collect::<Vec<_>>();
 
-		let settings_window_task = self::spawn_service_runner!(self => services, "Settings window runner", services.settings_window.run(&*services));
-		let renderer_task =
-			self::spawn_service_runner!(self => services, "Renderer", services.renderer.run(&*services));
+		let settings_window_task =
+			spawn_service_runner!(self => services, "Settings window runner", services.settings_window.run(&*services));
+		let renderer_task = spawn_service_runner!(self => services, "Renderer", services.renderer.run(&*services));
 
 		// Then create the join future
 		async move {
 			if let Some(task) = profiles_loader_task {
 				task.await.context("Unable to await for profiles loader runner")?;
 			}
-
 			playlist_task.await.context("Unable to await for playlist runner")?;
 			for task in image_loader_tasks {
 				task.await.context("Unable to wait for image loader runner")?;
@@ -144,6 +150,11 @@ impl Services {
 			Ok(())
 		}
 	}
+}
+
+/// Returns the number of tasks to use for the image loader runners
+fn image_loader_tasks() -> usize {
+	thread::available_parallelism().map_or(1, NonZeroUsize::get)
 }
 
 impl ServicesBundle for Services {}
@@ -166,11 +177,3 @@ impl ServicesContains<ty> for Services {
 		&self.field
 	}
 }
-
-
-macro spawn_service_runner($services:ident => $services_cloned:ident, $name:expr, $runner:expr) {{
-	task::Builder::new().name(&format!($name)).spawn({
-		let $services_cloned = Arc::clone(&$services);
-		async move { $runner.await }
-	})
-}}
