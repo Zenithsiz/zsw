@@ -68,7 +68,7 @@ use {
 	zsw_egui::Egui,
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
-	zsw_profiles::{Profile, Profiles},
+	zsw_profiles::{Profile, Profiles, ProfilesResource},
 	zsw_util::{Rect, ResourcesLock, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
@@ -136,7 +136,7 @@ impl SettingsWindow {
 			+ ServicesContains<Panels>
 			+ ServicesContains<Playlist>
 			+ ServicesContains<Profiles>,
-		R: ResourcesLock<PanelsResource> + ResourcesLock<PlaylistResource>,
+		R: ResourcesLock<PanelsResource> + ResourcesLock<PlaylistResource> + ResourcesLock<ProfilesResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -161,7 +161,7 @@ impl SettingsWindow {
 
 
 				// DEADLOCK: Caller ensures we can lock it after the platform lock
-				let mut profiles_lock = profiles.lock_profiles().await;
+				let mut profiles_resource = resources.resource::<ProfilesResource>().await;
 
 				// DEADLOCK: Caller ensures we can lock it after the profiles lock
 				let mut playlist_resource = resources.resource::<PlaylistResource>().await;
@@ -184,7 +184,7 @@ impl SettingsWindow {
 						profiles,
 						&mut playlist_resource,
 						&mut panels_resource,
-						&mut profiles_lock,
+						&mut profiles_resource,
 					)
 				})
 			};
@@ -209,7 +209,7 @@ impl SettingsWindow {
 		profiles: &'profiles Profiles,
 		playlist_resource: &mut PlaylistResource,
 		panels_resource: &mut PanelsResource,
-		profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
+		profiles_resource: &mut ProfilesResource,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
@@ -236,7 +236,7 @@ impl SettingsWindow {
 				profiles,
 				playlist_resource,
 				panels_resource,
-				profiles_lock,
+				profiles_resource,
 			);
 		});
 
@@ -265,7 +265,7 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 	profiles: &'profiles Profiles,
 	playlist_resource: &mut PlaylistResource,
 	panels_resource: &mut PanelsResource,
-	profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
+	profiles_resource: &mut ProfilesResource,
 ) {
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
@@ -282,7 +282,7 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 			profiles,
 			playlist_resource,
 			panels_resource,
-			profiles_lock,
+			profiles_resource,
 		);
 	});
 }
@@ -295,10 +295,10 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 	profiles: &'profiles Profiles,
 	playlist_resource: &mut PlaylistResource,
 	panels_resource: &mut PanelsResource,
-	profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
+	profiles_resource: &mut ProfilesResource,
 ) {
 	// Draw all profiles
-	for (path, profile) in profiles.profiles(profiles_lock) {
+	for (path, profile) in profiles.profiles(profiles_resource) {
 		ui.horizontal(|ui| {
 			ui.label(path.display().to_string());
 			if ui.button("Apply").clicked() {
@@ -317,7 +317,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 			match file_dialog {
 				Ok(file_dialog) =>
 					if let Some(path) = file_dialog {
-						match profiles.load(profiles_lock, path.clone()) {
+						match profiles.load(profiles_resource, path.clone()) {
 							Ok(profile) => log::info!("Successfully loaded profile: {profile:?}"),
 							Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
 						}
@@ -348,7 +348,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 							}
 						};
 
-						match profiles.save(profiles_lock, path.clone(), profile) {
+						match profiles.save(profiles_resource, path.clone(), profile) {
 							Ok(()) => (),
 							Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
 						}

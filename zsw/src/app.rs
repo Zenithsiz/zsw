@@ -90,7 +90,7 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 	let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
 
 	// Create the profiles
-	let profiles = Profiles::new().context("Unable to load profiles")?;
+	let (profiles, profiles_resource) = Profiles::new();
 
 	// Create the renderer
 	let renderer = Renderer::new();
@@ -119,6 +119,7 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 	let resources = Resources {
 		panels:   Mutex::new(panels_resource),
 		playlist: Mutex::new(playlist_resource),
+		profiles: Mutex::new(profiles_resource),
 	};
 
 	Ok((services, resources))

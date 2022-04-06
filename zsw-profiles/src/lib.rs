@@ -59,7 +59,6 @@
 // Imports
 use {
 	anyhow::Context,
-	futures::lock::{Mutex, MutexGuard},
 	std::{
 		collections::HashMap,
 		path::{Path, PathBuf},
@@ -72,32 +71,17 @@ use {
 /// Profiles
 // TODO: Recently loaded profiles
 #[derive(Debug)]
-pub struct Profiles {
-	/// All profiles by their path
-	profiles: Mutex<HashMap<PathBuf, Profile>>,
+#[allow(missing_copy_implementations)] // It might not be `Copy` in the future
+pub struct Profiles {}
 
-	/// Lock source
-	lock_source: LockSource,
-}
-
+#[allow(clippy::unused_self)] // For accessing resources, we should require the service
 impl Profiles {
-	/// Creates a new profiles
-	pub fn new() -> Result<Self, anyhow::Error> {
-		Ok(Self {
-			profiles:    Mutex::new(HashMap::new()),
-			lock_source: LockSource,
+	/// Creates a new profiles, alongside the resources
+	#[must_use]
+	pub fn new() -> (Self, ProfilesResource) {
+		(Self {}, ProfilesResource {
+			profiles: HashMap::new(),
 		})
-	}
-
-	/// Creates a profiles lock
-	///
-	/// # Blocking
-	/// Will block until any existing profiles locks are dropped
-	pub async fn lock_profiles(&self) -> ProfilesLock<'_> {
-		// DEADLOCK: Caller is responsible to ensure we don't deadlock
-		//           We don't lock it outside of this method
-		let guard = self.profiles.lock().await;
-		ProfilesLock::new(guard, &self.lock_source)
 	}
 
 	/// Runs the initial profile loader and applier
@@ -109,16 +93,16 @@ impl Profiles {
 	pub async fn run_loader_applier<S, R>(&self, path: &Path, services: &S, resources: &R)
 	where
 		S: ServicesContains<Playlist> + ServicesContains<Panels>,
-		R: ResourcesLock<PanelsResource> + ResourcesLock<PlaylistResource>,
+		R: ResourcesLock<PanelsResource> + ResourcesLock<PlaylistResource> + ResourcesLock<ProfilesResource>,
 	{
 		let playlist = services.service::<Playlist>();
 		let panels = services.service::<Panels>();
 
 		// DEADLOCK: Caller ensures we can lock it
-		let mut profiles_lock = self.lock_profiles().await;
+		let mut resource = resources.resource::<ProfilesResource>().await;
 
 		// Then check if we got it
-		match self.load(&mut profiles_lock, path.to_path_buf()) {
+		match self.load(&mut resource, path.to_path_buf()) {
 			// If we did, apply it
 			Ok(profile) => {
 				log::info!("Successfully loaded profile: {profile:?}");
@@ -139,33 +123,30 @@ impl Profiles {
 	}
 
 	/// Returns all profiles by their path
-	pub fn profiles<'a>(&self, profiles_lock: &'a ProfilesLock) -> &'a HashMap<PathBuf, Profile> {
-		profiles_lock.get(&self.lock_source)
+	#[must_use]
+	pub fn profiles<'a>(&self, resource: &'a ProfilesResource) -> &'a HashMap<PathBuf, Profile> {
+		&resource.profiles
 	}
 
 	/// Loads a profile
-	pub fn load<'a>(&self, profiles_lock: &'a mut ProfilesLock, path: PathBuf) -> Result<&'a Profile, anyhow::Error> {
+	pub fn load<'a>(&self, resource: &'a mut ProfilesResource, path: PathBuf) -> Result<&'a Profile, anyhow::Error> {
 		// Try to load it
 		let profile = zsw_util::parse_json_from_file(&path).context("Unable to load profile")?;
 
 		// Then add it
-		let profile = profiles_lock
-			.get_mut(&self.lock_source)
-			.entry(path)
-			.insert_entry(profile)
-			.into_mut();
+		let profile = resource.profiles.entry(path).insert_entry(profile).into_mut();
 
 		Ok(profile)
 	}
 
 	/// Adds and saves a profile
-	pub fn save(&self, profiles_lock: &mut ProfilesLock, path: PathBuf, profile: Profile) -> Result<(), anyhow::Error> {
+	pub fn save(&self, resource: &mut ProfilesResource, path: PathBuf, profile: Profile) -> Result<(), anyhow::Error> {
 		// Try to save it
 		zsw_util::serialize_json_to_file(&path, &profile).context("Unable to save profile")?;
 
 		// Then add it
 		#[allow(clippy::let_underscore_drop)] // We can drop the old profile
-		let _ = profiles_lock.get_mut(&self.lock_source).insert(path, profile);
+		let _ = resource.profiles.insert(path, profile);
 
 		Ok(())
 	}
@@ -197,11 +178,9 @@ impl Profile {
 	}
 }
 
-/// Source for all locks
-// Note: This is to ensure user can't create the locks themselves
-#[derive(Clone, Copy, Debug)]
-#[non_exhaustive]
-pub struct LockSource;
-
-/// Profiles lock
-pub type ProfilesLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, HashMap<PathBuf, Profile>>, LockSource>;
+/// Profiles resource
+#[derive(Debug)]
+pub struct ProfilesResource {
+	/// All profiles by their path
+	profiles: HashMap<PathBuf, Profile>,
+}
