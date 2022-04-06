@@ -2,11 +2,7 @@
 
 // Imports
 use {
-	crate::Args,
-	anyhow::Context,
-	futures::Future,
-	std::{num::NonZeroUsize, sync::Arc, thread},
-	tokio::task,
+	std::sync::Arc,
 	winit::window::Window,
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
@@ -27,134 +23,34 @@ use {
 pub struct Services {
 	/// Window
 	// TODO: Not make an arc
-	window: Arc<Window>,
+	pub window: Arc<Window>,
 
 	/// Wgpu
-	wgpu: Wgpu,
+	pub wgpu: Wgpu,
 
 	/// Playlist
-	playlist: Playlist,
+	pub playlist: Playlist,
 
 	/// Image loader
-	image_loader: ImageLoader,
+	pub image_loader: ImageLoader,
 
 	/// Panels
-	panels: Panels,
+	pub panels: Panels,
 
 	/// Egui
-	egui: Egui,
+	pub egui: Egui,
 
 	/// Profiles
-	profiles: Profiles,
+	pub profiles: Profiles,
 
 	/// Renderer
-	renderer: Renderer,
+	pub renderer: Renderer,
 
 	/// Settings window
-	settings_window: SettingsWindow,
+	pub settings_window: SettingsWindow,
 
 	/// Input
-	input: Input,
-}
-
-impl Services {
-	/// Creates all services
-	pub async fn new(window: Arc<Window>) -> Result<Self, anyhow::Error> {
-		// Create the wgpu service
-		// TODO: Execute future inn background and continue initializing
-		let wgpu = Wgpu::new(Arc::clone(&window))
-			.await
-			.context("Unable to create renderer")?;
-
-		// Create the playlist
-		let playlist = Playlist::new();
-
-		// Create the image loader
-		let image_loader = ImageLoader::new();
-
-		// Create the panels
-		let panels = Panels::new(wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
-
-		// Create egui
-		let egui = Egui::new(&window, &wgpu).context("Unable to create egui state")?;
-
-		// Create the profiles
-		let profiles = Profiles::new().context("Unable to load profiles")?;
-
-		// Create the renderer
-		let renderer = Renderer::new();
-
-		// Create the settings window
-		let settings_window = SettingsWindow::new(&window);
-
-		// Create the input
-		let input = Input::new();
-
-		Ok(Self {
-			window,
-			wgpu,
-			playlist,
-			image_loader,
-			panels,
-			egui,
-			profiles,
-			renderer,
-			settings_window,
-			input,
-		})
-	}
-
-	/// Spawns all services and returns a future to join them all
-	// TODO: Hide future behind a `JoinHandle` type.
-	pub fn spawn(self: &Arc<Self>, args: &Args) -> impl Future<Output = Result<(), anyhow::Error>> {
-		/// Macro to help spawn a service runner
-		macro spawn_service_runner($services:ident => $services_cloned:ident, $name:expr, $runner:expr) {
-			task::Builder::new().name($name).spawn({
-				let $services_cloned = Arc::clone(&$services);
-				async move { $runner.await }
-			})
-		}
-
-		// Spawn all
-		let profiles_loader_task = args.profile.clone().map(move |path| {
-			spawn_service_runner!(
-				self => services,
-				"Profiles loader",
-				services.profiles.run_loader_applier(&path, &*services)
-			)
-		});
-		let playlist_task = spawn_service_runner!(self => services, "Playlist runner", services.playlist.run());
-		let image_loader_tasks = (0..self::image_loader_tasks())
-			.map(
-				|idx| spawn_service_runner!(self => services, &format!("Image loader #{idx}"), services.image_loader.run(&*services)),
-			)
-			.collect::<Vec<_>>();
-
-		let settings_window_task =
-			spawn_service_runner!(self => services, "Settings window runner", services.settings_window.run(&*services));
-		let renderer_task = spawn_service_runner!(self => services, "Renderer", services.renderer.run(&*services));
-
-		// Then create the join future
-		async move {
-			if let Some(task) = profiles_loader_task {
-				task.await.context("Unable to await for profiles loader runner")?;
-			}
-			playlist_task.await.context("Unable to await for playlist runner")?;
-			for task in image_loader_tasks {
-				task.await.context("Unable to wait for image loader runner")?;
-			}
-			settings_window_task
-				.await
-				.context("Unable to await for settings window runner")?;
-			renderer_task.await.context("Unable to await for renderer runner")?;
-			Ok(())
-		}
-	}
-}
-
-/// Returns the number of tasks to use for the image loader runners
-fn image_loader_tasks() -> usize {
-	thread::available_parallelism().map_or(1, NonZeroUsize::get)
+	pub input: Input,
 }
 
 impl ServicesBundle for Services {}

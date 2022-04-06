@@ -69,7 +69,6 @@ pub use self::{
 use {
 	anyhow::Context,
 	cgmath::Point2,
-	futures::lock::{Mutex, MutexGuard},
 	winit::dpi::PhysicalSize,
 	zsw_img::ImageLoader,
 	zsw_input::Input,
@@ -77,73 +76,61 @@ use {
 };
 
 
-/// Panels
+/// Panels service
+// TODO: Rename to `PanelsService`
 #[derive(Debug)]
 pub struct Panels {
 	/// Panels renderer
 	renderer: PanelsRenderer,
-
-	/// All panels with their state
-	panels: Mutex<Vec<PanelState>>,
-
-	/// Lock source
-	lock_source: LockSource,
 }
 
+#[allow(clippy::unused_self)] // For accessing resources, we should require the service
 impl Panels {
-	/// Creates the panel
-	pub fn new(device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat) -> Result<Self, anyhow::Error> {
+	/// Creates the panel, alongside it's resources
+	pub fn new(
+		device: &wgpu::Device,
+		surface_texture_format: wgpu::TextureFormat,
+	) -> Result<(Self, PanelsResource), anyhow::Error> {
 		// Create the renderer
 		let renderer = PanelsRenderer::new(device, surface_texture_format).context("Unable to create renderer")?;
 
-		Ok(Self {
-			renderer,
-			panels: Mutex::new(vec![]),
-			lock_source: LockSource,
-		})
-	}
+		// Create the service
+		let service = Self { renderer };
 
-	/// Creates a panels lock
-	///
-	/// # Blocking
-	/// Will block until any existing panels locks are dropped
-	pub async fn lock_panels(&self) -> PanelsLock<'_> {
-		// DEADLOCK: Caller is responsible to ensure we don't deadlock
-		//           We don't lock it outside of this method
-		let guard = self.panels.lock().await;
-		PanelsLock::new(guard, &self.lock_source)
+		// Create our resource
+		let resource = PanelsResource { panels: vec![] };
+
+		Ok((service, resource))
 	}
 
 	/// Adds a new panel
-	pub fn add_panel(&self, panels_lock: &mut PanelsLock, panel: Panel) {
-		panels_lock.get_mut(&self.lock_source).push(PanelState::new(panel));
+	pub fn add_panel(&self, resource: &mut PanelsResource, panel: Panel) {
+		resource.panels.push(PanelState::new(panel));
 	}
 
 	/// Returns all panels
-	pub fn panels<'a>(&self, panels_lock: &'a PanelsLock) -> &'a [PanelState] {
-		panels_lock.get(&self.lock_source)
+	pub fn panels<'a>(&self, resource: &'a PanelsResource) -> &'a [PanelState] {
+		&resource.panels
 	}
 
 	/// Returns all panels, mutably
-	pub fn panels_mut<'a>(&self, panels_lock: &'a mut PanelsLock) -> &'a mut [PanelState] {
-		panels_lock.get_mut(&self.lock_source)
+	pub fn panels_mut<'a>(&self, resource: &'a mut PanelsResource) -> &'a mut [PanelState] {
+		&mut resource.panels
 	}
 
 	/// Replaces all panels
-	pub fn replace_panels(&self, panels_lock: &mut PanelsLock, panels: impl IntoIterator<Item = Panel>) {
-		*panels_lock.get_mut(&self.lock_source) = panels.into_iter().map(PanelState::new).collect();
+	pub fn replace_panels(&self, resource: &mut PanelsResource, panels: impl IntoIterator<Item = Panel>) {
+		resource.panels = panels.into_iter().map(PanelState::new).collect();
 	}
 
 	/// Updates all panels
 	pub fn update_all(
 		&self,
-		panels_lock: &mut PanelsLock,
+		resource: &mut PanelsResource,
 		wgpu: &Wgpu,
 		image_loader: &ImageLoader,
 	) -> Result<(), anyhow::Error> {
-		let panels = panels_lock.get_mut(&self.lock_source);
-
-		for panel in &mut *panels {
+		for panel in &mut resource.panels {
 			panel
 				.update(&self.renderer, wgpu, image_loader)
 				.context("Unable to update panel")?;
@@ -156,28 +143,25 @@ impl Panels {
 	pub fn render(
 		&self,
 		input: &Input,
-		panels_lock: &PanelsLock,
+		resource: &PanelsResource,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
 		surface_view: &wgpu::TextureView,
 		surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
-		let panels = panels_lock.get(&self.lock_source);
 		let cursor_pos = input
 			.cursor_pos()
 			.map_or(Point2::new(0, 0), |pos| Point2::new(pos.x as i32, pos.y as i32));
 
 		// Then render
 		self.renderer
-			.render(panels, cursor_pos, queue, encoder, surface_view, surface_size)
+			.render(&resource.panels, cursor_pos, queue, encoder, surface_view, surface_size)
 	}
 }
 
-/// Source for all locks
-// Note: This is to ensure user can't create the locks themselves
-#[derive(Clone, Copy, Debug)]
-#[non_exhaustive]
-pub struct LockSource;
-
-/// Panels lock
-pub type PanelsLock<'a> = zsw_util::Lock<'a, MutexGuard<'a, Vec<PanelState>>, LockSource>;
+/// Panels resource
+#[derive(Debug)]
+pub struct PanelsResource {
+	/// All panels with their state
+	panels: Vec<PanelState>,
+}

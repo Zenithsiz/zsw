@@ -51,18 +51,17 @@
 	clippy::future_not_send,
 )]
 
-use tokio::time::Instant;
-
 // Imports
 use {
 	anyhow::Context,
 	std::{mem, time::Duration},
+	tokio::time::Instant,
 	winit::window::Window,
 	zsw_egui::Egui,
 	zsw_img::ImageLoader,
 	zsw_input::Input,
-	zsw_panels::Panels,
-	zsw_util::ServicesContains,
+	zsw_panels::{Panels, PanelsResource},
+	zsw_util::{ResourcesLock, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
@@ -87,7 +86,7 @@ impl Renderer {
 	/// - [`zsw_panels::PanelsLock`] on `panels`
 	/// - [`zsw_egui::RenderPassLock`] on `egui`
 	///   - [`zsw_egui::PlatformLock`] on `egui`
-	pub async fn run<S>(&self, services: &S) -> !
+	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
 	where
 		S: ServicesContains<Wgpu>
 			+ ServicesContains<Egui>
@@ -95,6 +94,7 @@ impl Renderer {
 			+ ServicesContains<Panels>
 			+ ServicesContains<Input>
 			+ ServicesContains<ImageLoader>,
+		R: ResourcesLock<PanelsResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -104,13 +104,13 @@ impl Renderer {
 
 			// Update
 			// DEADLOCK: Caller ensures we can lock it
-			if let Err(err) = Self::update(services).await {
+			if let Err(err) = Self::update(services, resources).await {
 				log::warn!("Unable to update: {err:?}");
 			}
 
 			// Render
 			// DEADLOCK: Caller ensures we can lock it
-			if let Err(err) = Self::render(services).await {
+			if let Err(err) = Self::render(services, resources).await {
 				log::warn!("Unable to render: {err:?}");
 			};
 
@@ -126,16 +126,17 @@ impl Renderer {
 	///
 	/// # Blocking
 	/// Locks [`zsw_panels::PanelsLock`] on `panels`
-	async fn update<S>(services: &S) -> Result<(), anyhow::Error>
+	async fn update<S, R>(services: &S, resources: &R) -> Result<(), anyhow::Error>
 	where
 		S: ServicesContains<Wgpu> + ServicesContains<Panels> + ServicesContains<ImageLoader>,
+		R: ResourcesLock<PanelsResource>,
 	{
 		// DEADLOCK: Caller ensures we can lock it
-		let mut panels_lock = services.service::<Panels>().lock_panels().await;
+		let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 		// Updates all panels
 		services.service::<Panels>().update_all(
-			&mut panels_lock,
+			&mut panels_resource,
 			services.service::<Wgpu>(),
 			services.service::<ImageLoader>(),
 		)
@@ -150,13 +151,14 @@ impl Renderer {
 	/// - [`zsw_egui::PaintJobsLock`] on `egui`
 	///   - [`zsw_egui::RenderPassLock`] on `egui`
 	///     - [`zsw_egui::PlatformLock`] on `egui`
-	async fn render<S>(services: &S) -> Result<(), anyhow::Error>
+	async fn render<S, R>(services: &S, resources: &R) -> Result<(), anyhow::Error>
 	where
 		S: ServicesContains<Wgpu>
 			+ ServicesContains<Egui>
 			+ ServicesContains<Window>
 			+ ServicesContains<Panels>
 			+ ServicesContains<Input>,
+		R: ResourcesLock<PanelsResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -175,12 +177,12 @@ impl Renderer {
 		// Render the panels
 		{
 			// DEADLOCK: Caller ensures we can lock it after the surface
-			let panels_lock = panels.lock_panels().await;
+			let panels_resource = resources.resource::<PanelsResource>().await;
 
 			panels
 				.render(
 					input,
-					&panels_lock,
+					&panels_resource,
 					wgpu.queue(),
 					&mut frame.encoder,
 					&frame.surface_view,

@@ -65,6 +65,7 @@ mod display_wrapper;
 mod fetch_update_lock;
 mod lock;
 mod rect;
+mod resource;
 mod scan_dir;
 mod service;
 mod thread;
@@ -75,6 +76,7 @@ pub use {
 	fetch_update_lock::{FetchUpdateLock, FetchUpdateLockGuard},
 	lock::Lock,
 	rect::Rect,
+	resource::{ResourcesBundle, ResourcesLock},
 	scan_dir::dir_files_iter,
 	service::{ServicesBundle, ServicesContains},
 	thread::ThreadSpawner,

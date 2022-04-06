@@ -66,10 +66,10 @@ use {
 		window::Window,
 	},
 	zsw_egui::Egui,
-	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels},
+	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{Playlist, PlaylistImage},
 	zsw_profiles::{Profile, Profiles},
-	zsw_util::{Rect, ServicesContains},
+	zsw_util::{Rect, ResourcesLock, ServicesContains},
 	zsw_wgpu::Wgpu,
 };
 
@@ -128,7 +128,7 @@ impl SettingsWindow {
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
 	/// Blocks until [`Self::paint_jobs`] on `egui` is called.
-	pub async fn run<S>(&self, services: &S) -> !
+	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
 	where
 		S: ServicesContains<Wgpu>
 			+ ServicesContains<Egui>
@@ -136,6 +136,7 @@ impl SettingsWindow {
 			+ ServicesContains<Panels>
 			+ ServicesContains<Playlist>
 			+ ServicesContains<Profiles>,
+		R: ResourcesLock<PanelsResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -166,7 +167,7 @@ impl SettingsWindow {
 				let mut playlist_lock = playlist.lock_playlist().await;
 
 				// DEADLOCK: Caller ensures we can lock it after the panels lock
-				let mut panels_lock = panels.lock_panels().await;
+				let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 				// TODO: Check locking of this
 				let mut inner = self.inner.lock().await;
@@ -182,7 +183,7 @@ impl SettingsWindow {
 						playlist,
 						profiles,
 						&mut playlist_lock,
-						&mut panels_lock,
+						&mut panels_resource,
 						&mut profiles_lock,
 					)
 				})
@@ -207,7 +208,7 @@ impl SettingsWindow {
 		playlist: &'playlist Playlist,
 		profiles: &'profiles Profiles,
 		playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
-		panels_lock: &mut zsw_panels::PanelsLock<'panels>,
+		panels_resource: &mut PanelsResource,
 		profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
@@ -234,7 +235,7 @@ impl SettingsWindow {
 				playlist,
 				profiles,
 				playlist_lock,
-				panels_lock,
+				panels_resource,
 				profiles_lock,
 			);
 		});
@@ -263,12 +264,12 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 	playlist: &'playlist Playlist,
 	profiles: &'profiles Profiles,
 	playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
-	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
+	panels_resource: &mut PanelsResource,
 	profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
 ) {
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
-		self::draw_panels(ui, new_panel_state, surface_size, panels, panels_lock);
+		self::draw_panels(ui, new_panel_state, surface_size, panels, panels_resource);
 	});
 	ui.collapsing("Playlist", |ui| {
 		self::draw_playlist(ui, playlist, playlist_lock);
@@ -280,7 +281,7 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 			playlist,
 			profiles,
 			playlist_lock,
-			panels_lock,
+			panels_resource,
 			profiles_lock,
 		);
 	});
@@ -293,7 +294,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 	playlist: &'playlist Playlist,
 	profiles: &'profiles Profiles,
 	playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
-	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
+	panels_resource: &mut PanelsResource,
 	profiles_lock: &mut zsw_profiles::ProfilesLock<'profiles>,
 ) {
 	// Draw all profiles
@@ -301,7 +302,9 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 		ui.horizontal(|ui| {
 			ui.label(path.display().to_string());
 			if ui.button("Apply").clicked() {
-				profile.apply(playlist, panels, playlist_lock, panels_lock).block_on();
+				profile
+					.apply(playlist, panels, playlist_lock, panels_resource)
+					.block_on();
 			}
 		});
 	}
@@ -341,7 +344,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 										return;
 									},
 								},
-								panels:    panels.panels(panels_lock).iter().map(|panel| panel.panel).collect(),
+								panels:    panels.panels(panels_resource).iter().map(|panel| panel.panel).collect(),
 							}
 						};
 
@@ -411,10 +414,10 @@ fn draw_panels<'panels>(
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
 	panels: &'panels Panels,
-	panels_lock: &mut zsw_panels::PanelsLock<'panels>,
+	panels_resource: &mut PanelsResource,
 ) {
 	// Draw all panels in their own header
-	for (idx, panel) in panels.panels_mut(panels_lock).iter_mut().enumerate() {
+	for (idx, panel) in panels.panels_mut(panels_resource).iter_mut().enumerate() {
 		ui.collapsing(format!("Panel {idx}"), |ui| {
 			ui.add(PanelWidget::new(panel, surface_size));
 		});
@@ -441,7 +444,7 @@ fn draw_panels<'panels>(
 
 		if ui.button("Add").clicked() {
 			panels.add_panel(
-				panels_lock,
+				panels_resource,
 				Panel::new(
 					new_panel_state.geometry,
 					new_panel_state.duration,

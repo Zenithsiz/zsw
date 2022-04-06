@@ -64,9 +64,9 @@ use {
 		collections::HashMap,
 		path::{Path, PathBuf},
 	},
-	zsw_panels::{Panel, Panels},
+	zsw_panels::{Panel, Panels, PanelsResource},
 	zsw_playlist::Playlist,
-	zsw_util::ServicesContains,
+	zsw_util::{ResourcesLock, ServicesContains},
 };
 
 /// Profiles
@@ -106,9 +106,10 @@ impl Profiles {
 	/// [`ProfilesLock`]
 	/// - [`zsw_playlist::PlaylistLock`]
 	///   - [`zsw_panels::PanelsLock`]
-	pub async fn run_loader_applier<S>(&self, path: &Path, services: &S)
+	pub async fn run_loader_applier<S, R>(&self, path: &Path, services: &S, resources: &R)
 	where
 		S: ServicesContains<Playlist> + ServicesContains<Panels>,
+		R: ResourcesLock<PanelsResource>,
 	{
 		let playlist = services.service::<Playlist>();
 		let panels = services.service::<Panels>();
@@ -125,11 +126,11 @@ impl Profiles {
 				// Lock
 				// DEADLOCK: Caller ensures we can lock them in this order after profiles lock
 				let mut playlist_lock = playlist.lock_playlist().await;
-				let mut panels_lock = panels.lock_panels().await;
+				let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 				// Then apply
 				profile
-					.apply(playlist, panels, &mut playlist_lock, &mut panels_lock)
+					.apply(playlist, panels, &mut playlist_lock, &mut panels_resource)
 					.await;
 			},
 
@@ -189,10 +190,10 @@ impl Profile {
 		playlist: &'playlist Playlist,
 		panels: &'panels Panels,
 		playlist_lock: &mut zsw_playlist::PlaylistLock<'playlist>,
-		panels_lock: &mut zsw_panels::PanelsLock<'panels>,
+		panels_resource: &'panels mut PanelsResource,
 	) {
 		playlist.set_root_path(playlist_lock, self.root_path.clone()).await;
-		panels.replace_panels(panels_lock, self.panels.iter().copied());
+		panels.replace_panels(panels_resource, self.panels.iter().copied());
 	}
 }
 
