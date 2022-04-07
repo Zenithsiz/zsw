@@ -14,6 +14,7 @@ use {
 };
 
 /// All resources
+#[derive(Debug)]
 pub struct Resources {
 	/// Panels
 	pub panels: Mutex<PanelsResource>,

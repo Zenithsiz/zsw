@@ -50,6 +50,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let (services, resources) = self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
 	let resources = Arc::new(resources);
+	tracing::debug!(?services, ?resources, "Created services and resources");
 
 	// Create the event handler
 	let mut event_handler = EventHandler::new();
