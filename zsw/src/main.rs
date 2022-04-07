@@ -121,16 +121,19 @@ fn main() -> Result<(), anyhow::Error> {
 	log::debug!("Arguments: {args:#?}");
 
 	// Create the runtime and enter it
+	// TODO: Adjust number of worker threads?
+	let worker_threads = 2 * thread::available_parallelism().map_or(1, NonZeroUsize::get);
 	let runtime = tokio::runtime::Builder::new_multi_thread()
-	.worker_threads(2 * thread::available_parallelism().map_or(1, NonZeroUsize::get)) // TODO: Adjust?
-	.enable_time()
-    .thread_name_fn(|| {
-       static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
-       let id = NEXT_ID.fetch_add(1, atomic::Ordering::AcqRel);
-       format!("tokio-runtime-{}", id)
-    })
-    .build()
-	.context("Unable to create runtime")?;
+		.worker_threads(worker_threads)
+		.enable_time()
+		.thread_name_fn(|| {
+			static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+			let id = NEXT_ID.fetch_add(1, atomic::Ordering::AcqRel);
+			format!("tokio-runtime-{}", id)
+		})
+		.build()
+		.context("Unable to create runtime")?;
+
 	let _runtime_enter = runtime.enter();
 
 	// Run the app and restart if we get an error (up to 5 errors)
