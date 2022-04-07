@@ -41,7 +41,7 @@ use {
 };
 
 /// Runs the application
-pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
+pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Build the window
 	let (mut event_loop, window) = self::create_window()?;
 	let window = Arc::new(window);
@@ -55,7 +55,7 @@ pub async fn run(args: Arc<Args>) -> Result<(), anyhow::Error> {
 	let mut event_handler = EventHandler::new();
 
 	// Spawn all futures
-	let join_handle = self::spawn_services(&services, &resources, &args);
+	let join_handle = self::spawn_services(&services, &resources, args);
 
 	// Run the event loop until exit
 	event_loop.run_return(|event, _, control_flow| {

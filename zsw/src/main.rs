@@ -84,10 +84,7 @@ use {
 	clap::StructOpt,
 	std::{
 		num::NonZeroUsize,
-		sync::{
-			atomic::{self, AtomicUsize},
-			Arc,
-		},
+		sync::atomic::{self, AtomicUsize},
 		thread,
 	},
 };
@@ -106,7 +103,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 	// Get arguments
 	let args = match Args::try_parse() {
-		Ok(args) => Arc::new(args),
+		Ok(args) => args,
 		Err(err) => {
 			tracing::warn!(?err, "Unable to retrieve arguments");
 			err.exit();
@@ -133,7 +130,7 @@ fn main() -> Result<(), anyhow::Error> {
 	// Run the app and restart if we get an error (up to 5 errors)
 	let mut errors = 0;
 	while errors < 5 {
-		match runtime.block_on(app::run(Arc::clone(&args))) {
+		match runtime.block_on(app::run(&args)) {
 			Ok(()) => {
 				tracing::info!("Application finished");
 				break;
