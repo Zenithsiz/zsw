@@ -54,7 +54,7 @@ impl<'scope, 'env, T> ThreadSpawner<'scope, 'env, T> {
 			.rev()
 			.map(|handle| {
 				let name = handle.thread().name().unwrap_or("<unnamed>").to_owned();
-				log::debug!("Joining thread '{name:?}'");
+				tracing::debug!(?name, "Joining thread");
 				handle
 					.join()
 					.map_err(|err| anyhow::anyhow!("Thread '{name}' panicked at {err:?}"))

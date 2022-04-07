@@ -57,7 +57,8 @@ thiserror = "1.0.30"
 # Logging
 chrono = "0.4.19"
 fern = {version = "0.6.0", features = ["colored"]}
-log = "0.4.14"
+tracing = "0.1.32"
+tracing-subscriber = {version = "0.3.10", features = ["json", "parking_lot"]}
 
 # Cmd
 clap = {version = "3.0.7", features = ["derive"]}

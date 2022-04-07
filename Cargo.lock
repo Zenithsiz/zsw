@@ -60,6 +60,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ansi_term"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d52a9bb7ec0cf484c551830a7ce27bd20d67eac647e1befb56b0be4ee39a55d2"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2552,14 +2561,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-log"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6923477a48e41c1951f1999ef8bb5a3023eb723ceadafe78ffb65dc366761e3"
+dependencies = [
+ "lazy_static",
+ "log",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-serde"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-subscriber"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9df98b037d039d03400d9dd06b0f8ce05486b5f25e9a2d7d36196e142ebbc52"
 dependencies = [
+ "ansi_term",
+ "parking_lot 0.12.0",
+ "serde",
+ "serde_json",
  "sharded-slab",
+ "smallvec",
  "thread_local",
  "tracing-core",
+ "tracing-log",
+ "tracing-serde",
 ]
 
 [[package]]
@@ -3050,7 +3087,6 @@ dependencies = [
  "fern",
  "futures",
  "image",
- "log",
  "native-dialog",
  "parking_lot 0.12.0",
  "pollster",
@@ -3060,6 +3096,8 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "wgpu",
  "winit",
  "zsw-egui",
@@ -3099,7 +3137,7 @@ dependencies = [
  "async-channel",
  "cgmath",
  "image",
- "log",
+ "tracing",
  "zsw-playlist",
  "zsw-util",
 ]
@@ -3124,11 +3162,11 @@ dependencies = [
  "crossbeam",
  "futures",
  "image",
- "log",
  "num-rational 0.4.0",
  "parking_lot 0.12.0",
  "rand",
  "serde",
+ "tracing",
  "wgpu",
  "winit",
  "zsw-img",
@@ -3153,9 +3191,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures",
- "log",
  "parking_lot 0.12.0",
  "serde",
+ "tracing",
  "zsw-panels",
  "zsw-playlist",
  "zsw-util",
@@ -3168,9 +3206,9 @@ dependencies = [
  "anyhow",
  "egui_wgpu_backend",
  "futures",
- "log",
  "pollster",
  "tokio",
+ "tracing",
  "winit",
  "zsw-egui",
  "zsw-img",
@@ -3191,9 +3229,9 @@ dependencies = [
  "egui",
  "epi",
  "futures",
- "log",
  "native-dialog",
  "pollster",
+ "tracing",
  "winit",
  "zsw-egui",
  "zsw-panels",
@@ -3213,10 +3251,10 @@ dependencies = [
  "crossbeam",
  "futures",
  "image",
- "log",
  "parking_lot 0.12.0",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -3226,9 +3264,9 @@ dependencies = [
  "anyhow",
  "crossbeam",
  "futures",
- "log",
  "parking_lot 0.12.0",
  "pollster",
+ "tracing",
  "wgpu",
  "winit",
  "zsw-util",

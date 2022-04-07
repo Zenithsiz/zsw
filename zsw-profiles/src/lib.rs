@@ -105,7 +105,7 @@ impl Profiles {
 		match self.load(&mut resource, path.to_path_buf()) {
 			// If we did, apply it
 			Ok(profile) => {
-				log::info!("Successfully loaded profile: {profile:?}");
+				tracing::info!(?profile, "Successfully loaded profile");
 
 				// Lock
 				// DEADLOCK: Caller ensures we can lock them in this order after profiles lock
@@ -118,7 +118,7 @@ impl Profiles {
 					.await;
 			},
 
-			Err(err) => log::warn!("Unable to load profile: {err:?}"),
+			Err(err) => tracing::warn!(?err, "Unable to load profile"),
 		}
 	}
 

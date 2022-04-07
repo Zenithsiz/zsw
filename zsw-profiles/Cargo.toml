@@ -22,7 +22,7 @@ serde = {version = "1.0.132", features = ["derive"]}
 anyhow = "1.0.52"
 
 # Logging
-log = "0.4.14"
+tracing = "0.1.32"
 
 # Threads
 parking_lot = {version = "0.12.0", features = ["deadlock_detection"]}

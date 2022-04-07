@@ -85,7 +85,7 @@ async fn handle_event(
 			// If we should be closing, set the control flow to exit
 			// Note: No point in updating egui if we're exiting
 			WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-				log::warn!("Received close request, closing window");
+				tracing::warn!("Received close request, closing window");
 				event_status.control_flow = EventLoopControlFlow::Exit;
 				event_status.update_egui = false;
 			},

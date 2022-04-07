@@ -109,13 +109,13 @@ impl Renderer {
 			// Update
 			// DEADLOCK: Caller ensures we can lock it
 			if let Err(err) = Self::update(services, resources).await {
-				log::warn!("Unable to update: {err:?}");
+				tracing::warn!(?err, "Unable to update");
 			}
 
 			// Render
 			// DEADLOCK: Caller ensures we can lock it
 			if let Err(err) = Self::render(services, resources).await {
-				log::warn!("Unable to render: {err:?}");
+				tracing::warn!(?err, "Unable to render");
 			};
 
 			// Then sleep until next frame

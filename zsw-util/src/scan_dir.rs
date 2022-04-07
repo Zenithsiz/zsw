@@ -28,12 +28,13 @@ pub fn dir_files_iter(path: PathBuf) -> impl Iterator<Item = PathBuf> {
 /// Ignores all errors reading directories / directory entries, simply logging them.
 // TODO: Not return a `Box<dyn Generator>`
 pub fn dir_files_gen(path: PathBuf) -> Pin<Box<dyn Generator<Yield = PathBuf, Return = ()> + Send>> {
+	#[allow(clippy::cognitive_complexity)] // It's fairly simple to understand
 	let gen = move || {
 		// Try to read the directory
 		let dir = match std::fs::read_dir(&path) {
 			Ok(dir) => dir,
 			Err(err) => {
-				log::warn!("Unable to read directory `{path:?}`: {:?}", anyhow::anyhow!(err));
+				tracing::warn!(?path, ?err, "Unable to read directory");
 				return;
 			},
 		};
@@ -44,7 +45,7 @@ pub fn dir_files_gen(path: PathBuf) -> Pin<Box<dyn Generator<Yield = PathBuf, Re
 			let entry = match entry {
 				Ok(entry) => entry,
 				Err(err) => {
-					log::warn!("Unable to read file entry in `{path:?}`: {:?}", anyhow::anyhow!(err));
+					tracing::warn!(?path, ?err, "Unable to read file entry");
 					continue;
 				},
 			};
@@ -52,10 +53,7 @@ pub fn dir_files_gen(path: PathBuf) -> Pin<Box<dyn Generator<Yield = PathBuf, Re
 			let file_type = match entry.file_type() {
 				Ok(file_type) => file_type,
 				Err(err) => {
-					log::warn!(
-						"Unable to read file type for `{entry_path:?}`: {:?}",
-						anyhow::anyhow!(err)
-					);
+					tracing::warn!(?entry_path, ?err, "Unable to read file type",);
 					continue;
 				},
 			};

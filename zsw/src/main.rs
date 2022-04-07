@@ -73,7 +73,7 @@
 // Modules
 mod app;
 mod args;
-mod logger;
+mod trace;
 
 // Exports
 pub use self::args::Args;
@@ -92,16 +92,10 @@ use {
 	},
 };
 
+#[allow(clippy::cognitive_complexity)] // TODO
 fn main() -> Result<(), anyhow::Error> {
-	// Initialize logger
-	match logger::init() {
-		Ok(()) => log::debug!("Initialized logging"),
-		Err(err) => eprintln!("Unable to initialize logger: {err:?}"),
-	}
-
-	// Initialize the tokio console subscriber if given the feature
-	#[cfg(feature = "tokio-console")]
-	console_subscriber::init();
+	// Initialize tracing
+	trace::init();
 
 	// Customize the rayon pool thread
 	// Note: This is used indirectly in `image` by `jpeg-decoder`
@@ -114,11 +108,11 @@ fn main() -> Result<(), anyhow::Error> {
 	let args = match Args::try_parse() {
 		Ok(args) => Arc::new(args),
 		Err(err) => {
-			log::warn!("Unable to retrieve arguments: {err:?}");
+			tracing::warn!(?err, "Unable to retrieve arguments");
 			err.exit();
 		},
 	};
-	log::debug!("Arguments: {args:#?}");
+	tracing::debug!(?args, "Arguments");
 
 	// Create the runtime and enter it
 	// TODO: Adjust number of worker threads?
@@ -141,11 +135,11 @@ fn main() -> Result<(), anyhow::Error> {
 	while errors < 5 {
 		match runtime.block_on(app::run(Arc::clone(&args))) {
 			Ok(()) => {
-				log::info!("Application finished");
+				tracing::info!("Application finished");
 				break;
 			},
 			Err(err) => {
-				log::error!("Application encountered fatal error: {err:?}");
+				tracing::error!(?err, "Application encountered fatal error");
 				errors += 1;
 				continue;
 			},

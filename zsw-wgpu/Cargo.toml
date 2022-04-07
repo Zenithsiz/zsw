@@ -24,7 +24,7 @@ pollster = "0.2.4"
 anyhow = "1.0.52"
 
 # Logging
-log = "0.4.14"
+tracing = "0.1.32"
 
 # Threads
 crossbeam = "0.8.1"

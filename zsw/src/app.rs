@@ -202,7 +202,7 @@ fn create_window() -> Result<(EventLoop<!>, Window), anyhow::Error> {
 		.reduce(Rect::merge)
 		.context("No monitors found")?;
 
-	log::debug!("Creating window (geometry: {:?})", window_geometry);
+	tracing::debug!(?window_geometry, "Creating window");
 	let window = WindowBuilder::new()
 		.with_position(PhysicalPosition {
 			x: window_geometry.pos[0],

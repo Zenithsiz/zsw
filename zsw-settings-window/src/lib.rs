@@ -54,6 +54,8 @@
 #![allow(unused_results)]
 // We need to pass a lot of state around, without an easy way to bundle it
 #![allow(clippy::too_many_arguments)]
+// TODO: Split into smaller functions
+#![allow(clippy::cognitive_complexity)]
 
 // Imports
 use {
@@ -214,7 +216,7 @@ impl SettingsWindow {
 						},
 					}
 				},
-				Err(err) => log::warn!("Unable to draw egui: {err:?}"),
+				Err(err) => tracing::warn!(?err, "Unable to draw egui"),
 			}
 		}
 	}
@@ -340,11 +342,11 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 				Ok(file_dialog) =>
 					if let Some(path) = file_dialog {
 						match profiles.load(profiles_resource, path.clone()) {
-							Ok(profile) => log::info!("Successfully loaded profile: {profile:?}"),
-							Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
+							Ok(profile) => tracing::info!(?profile, "Successfully loaded profile"),
+							Err(err) => tracing::warn!(?path, ?err, "Unable to load profile"),
 						}
 					},
-				Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
+				Err(err) => tracing::warn!(?err, "Unable to ask user for new root directory"),
 			}
 		}
 	});
@@ -362,7 +364,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 								root_path: match playlist.root_path(playlist_resource).block_on() {
 									Some(path) => path,
 									None => {
-										log::warn!("No root path was set");
+										tracing::warn!("No root path was set");
 										return;
 									},
 								},
@@ -372,10 +374,10 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 
 						match profiles.save(profiles_resource, path.clone(), profile) {
 							Ok(()) => (),
-							Err(err) => log::warn!("Unable to load profile at {path:?}: {err:?}"),
+							Err(err) => tracing::warn!(?path, ?err, "Unable to load profile"),
 						}
 					},
-				Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
+				Err(err) => tracing::warn!(?err, "Unable to ask user for new root directory"),
 			}
 		}
 	});
@@ -411,7 +413,7 @@ fn draw_playlist<'playlist>(
 						// TODO: Maybe reset both panels and loaders?
 					}
 				},
-				Err(err) => log::warn!("Unable to ask user for new root directory: {err:?}"),
+				Err(err) => tracing::warn!("Unable to ask user for new root directory: {err:?}"),
 			}
 		}
 	});

@@ -30,4 +30,4 @@ tokio = "1.17.0"
 anyhow = "1.0.52"
 
 # Logging
-log = "0.4.14"
+tracing = "0.1.32"

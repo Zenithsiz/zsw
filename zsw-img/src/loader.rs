@@ -65,7 +65,7 @@ impl ImageLoader {
 
 					// If we couldn't load, log, remove the path and retry
 					Err(err) => {
-						log::info!("Unable to load {path:?}: {err:?}");
+						tracing::info!(?path, ?err, "Unable to load file");
 
 						// DEADLOCK: Caller ensures we can lock it
 						let mut playlist_resource = resources.resource::<PlaylistResource>().await;
