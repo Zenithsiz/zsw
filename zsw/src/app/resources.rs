@@ -31,9 +31,12 @@ pub struct Resources {
 
 	/// Egui render pass
 	pub egui_render_pass: Mutex<EguiRenderPassResource>,
+}
 
+/// All mutable resources
+pub struct ResourcesMut {
 	/// Egui painter
-	pub egui_painter: Mutex<EguiPainterResource>,
+	pub egui_painter: EguiPainterResource,
 }
 
 impl ResourcesBundle for Resources {}
@@ -46,7 +49,6 @@ impl ResourcesBundle for Resources {}
 	[ WgpuSurfaceResource    ] [ wgpu_surface ];
 	[ EguiPlatformResource   ] [ egui_platform ];
 	[ EguiRenderPassResource ] [ egui_render_pass ];
-	[ EguiPainterResource    ] [ egui_painter ];
 )]
 impl zsw_util::Resources<ty> for Resources {
 	fn lock(&self) -> MutexLockFuture<ty> {

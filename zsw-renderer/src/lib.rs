@@ -9,7 +9,7 @@ use {
 	std::{mem, time::Duration},
 	tokio::time::Instant,
 	winit::window::Window,
-	zsw_egui::{Egui, EguiPainterResource, EguiPlatformResource, EguiRenderPassResource},
+	zsw_egui::{Egui, EguiPlatformResource, EguiRenderPassResource},
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::{Panels, PanelsResource},
@@ -49,8 +49,7 @@ impl Renderer {
 		R: Resources<PanelsResource>
 			+ Resources<WgpuSurfaceResource>
 			+ Resources<EguiPlatformResource>
-			+ Resources<EguiRenderPassResource>
-			+ Resources<EguiPainterResource>,
+			+ Resources<EguiRenderPassResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -112,8 +111,7 @@ impl Renderer {
 		R: Resources<PanelsResource>
 			+ Resources<WgpuSurfaceResource>
 			+ Resources<EguiPlatformResource>
-			+ Resources<EguiRenderPassResource>
-			+ Resources<EguiPainterResource>,
+			+ Resources<EguiRenderPassResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();

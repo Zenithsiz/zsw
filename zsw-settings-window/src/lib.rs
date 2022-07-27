@@ -82,7 +82,7 @@ impl SettingsWindow {
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
 	/// Blocks until [`Self::update_paint_jobs`] on `egui` is called.
-	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
+	pub async fn run<S, R>(&self, services: &S, resources: &R, egui_painter_resource: &mut EguiPainterResource) -> !
 	where
 		S: Services<Wgpu>
 			+ Services<Egui>
@@ -94,8 +94,7 @@ impl SettingsWindow {
 			+ Resources<PlaylistResource>
 			+ Resources<ProfilesResource>
 			+ Resources<WgpuSurfaceResource>
-			+ Resources<EguiPlatformResource>
-			+ Resources<EguiPainterResource>,
+			+ Resources<EguiPlatformResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -148,9 +147,8 @@ impl SettingsWindow {
 			};
 
 			// Try to update the paint jobs
-			let mut egui_painter_resource = resources.resource::<EguiPainterResource>().await;
 			match res {
-				Ok(paint_jobs) => egui.update_paint_jobs(&mut egui_painter_resource, paint_jobs).await,
+				Ok(paint_jobs) => egui.update_paint_jobs(egui_painter_resource, paint_jobs).await,
 				Err(err) => tracing::warn!(?err, "Unable to draw egui"),
 			}
 		}

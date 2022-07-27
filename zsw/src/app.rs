@@ -11,7 +11,11 @@ mod services;
 
 // Imports
 use {
-	self::{event_handler::EventHandler, resources::Resources, services::Services},
+	self::{
+		event_handler::EventHandler,
+		resources::{Resources, ResourcesMut},
+		services::Services,
+	},
 	crate::Args,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
@@ -47,7 +51,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let window = Arc::new(window);
 
 	// Create all services and resources
-	let (services, resources) = self::create_services_resources(Arc::clone(&window)).await?;
+	let (services, resources, resources_mut) = self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
 	let resources = Arc::new(resources);
 	tracing::debug!(?services, ?resources, "Created services and resources");
@@ -56,7 +60,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let mut event_handler = EventHandler::new();
 
 	// Spawn all futures
-	let join_handle = self::spawn_services(&services, &resources, args);
+	let join_handle = self::spawn_services(&services, &resources, resources_mut, args);
 
 	// Run the event loop until exit
 	event_loop.run_return(|event, _, control_flow| {
@@ -72,7 +76,9 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 }
 
 /// Creates all services and resources
-pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services, Resources), anyhow::Error> {
+pub async fn create_services_resources(
+	window: Arc<Window>,
+) -> Result<(Services, Resources, ResourcesMut), anyhow::Error> {
 	// Create the wgpu service
 	// TODO: Execute future in background and continue initializing
 	let (wgpu, wgpu_surface_resource) = Wgpu::new(Arc::clone(&window))
@@ -127,10 +133,13 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 		wgpu_surface:     Mutex::new(wgpu_surface_resource),
 		egui_platform:    Mutex::new(egui_platform_resource),
 		egui_render_pass: Mutex::new(egui_render_pass_resource),
-		egui_painter:     Mutex::new(egui_painter_resource),
 	};
 
-	Ok((services, resources))
+	let resources_mut = ResourcesMut {
+		egui_painter: egui_painter_resource,
+	};
+
+	Ok((services, resources, resources_mut))
 }
 
 /// Spawns all services and returns a future to join them all
@@ -138,17 +147,16 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 pub fn spawn_services(
 	services: &Arc<Services>,
 	resources: &Arc<Resources>,
+	mut resources_mut: ResourcesMut,
 	args: &Args,
 ) -> impl Future<Output = Result<(), anyhow::Error>> {
 	/// Macro to help spawn a service runner
-	macro spawn_service_runner([$($clones:ident),* $(,)?] $name:expr => $runner:expr) {
-		task::Builder::new().name($name).spawn({
-			$(
-				let $clones = Arc::clone(&$clones);
-			)*
-			async move { $runner.await }
-		})
-	}
+	macro spawn_service_runner([$($clones:ident),* $(,)?] $name:expr => $runner:expr) {{
+		$(
+			let $clones = Arc::clone(&$clones);
+		)*
+		task::Builder::new().name($name).spawn(async move { $runner.await })
+	}}
 
 	// Spawn all
 	let profiles_loader_task = args.profile.clone().map(move |path| {
@@ -168,7 +176,7 @@ pub fn spawn_services(
 		.collect::<Vec<_>>();
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources)
+		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter)
 	);
 	let renderer_task =
 		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources));
