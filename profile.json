@@ -1,15 +1,15 @@
 {
-	"root_path": "/home/filipe/.wallpaper/active",
+	"root_path": "/home/zenithsiz/.wallpaper/active",
 	"panels": [
 		{
 			"geometry": {
 				"pos": {
-					"x": 1360,
-					"y": 0
+					"x": 0,
+					"y": 312
 				},
 				"size": {
-					"x": 1920,
-					"y": 1080
+					"x": 1360,
+					"y": 768
 				}
 			},
 			"duration": 1800,
