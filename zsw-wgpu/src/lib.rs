@@ -242,6 +242,7 @@ async unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Sur
 	// Create the surface
 	// SAFETY: Caller promises the window outlives the surface
 	tracing::debug!(?window, "Creating wgpu surface");
+	#[deny(unsafe_op_in_unsafe_fn)]
 	let surface = unsafe { instance.create_surface(window) };
 
 	// Then request the adapter
