@@ -7,13 +7,12 @@
 use {
 	anyhow::Context,
 	crossbeam::atomic::AtomicCell,
+	futures::{channel::mpsc, SinkExt},
 	std::{
 		sync::Arc,
-		task::Waker,
 		time::{Duration, Instant},
 	},
 	winit::window::Window,
-	zsw_util::FetchUpdate,
 	zsw_wgpu::Wgpu,
 };
 
@@ -25,9 +24,6 @@ pub struct Egui {
 
 	/// Last frame time
 	frame_time: AtomicCell<Option<Duration>>,
-
-	/// Paint jobs waker
-	paint_jobs_waker: AtomicCell<Option<Waker>>,
 }
 
 impl std::fmt::Debug for Egui {
@@ -35,7 +31,6 @@ impl std::fmt::Debug for Egui {
 		f.debug_struct("Egui")
 			.field("repaint_signal", &self.repaint_signal)
 			.field("frame_time", &self.frame_time)
-			.field("paint_jobs_waker", &"..")
 			.finish()
 	}
 }
@@ -46,15 +41,7 @@ impl Egui {
 	pub fn new(
 		window: &Window,
 		wgpu: &Wgpu,
-	) -> Result<
-		(
-			Self,
-			EguiPlatformResource,
-			EguiRenderPassResource,
-			EguiPaintJobsResource,
-		),
-		anyhow::Error,
-	> {
+	) -> Result<(Self, EguiPlatformResource, EguiRenderPassResource, EguiPainterResource), anyhow::Error> {
 		// Create the egui platform
 		// TODO: Check if it's fine to use the window size here instead of the
 		//       wgpu surface size
@@ -77,18 +64,20 @@ impl Egui {
 		let service = Self {
 			repaint_signal,
 			frame_time: AtomicCell::new(None),
-			paint_jobs_waker: AtomicCell::new(None),
 		};
 
 		// Create the resources
+		// Note: By using a 0-size channel we achieve the least latency
+		let (paint_jobs_tx, paint_jobs_rx) = mpsc::channel(0);
 		let platform_resource = EguiPlatformResource { platform };
-		let render_pass_resource = EguiRenderPassResource { render_pass };
-		let paint_jobs_resource = EguiPaintJobsResource {
-			paint_jobs: FetchUpdate::new(vec![]),
+		let render_pass_resource = EguiRenderPassResource {
+			render_pass,
+			paint_jobs: vec![],
+			paint_jobs_rx,
 		};
+		let painter_resource = EguiPainterResource { paint_jobs_tx };
 
-
-		Ok((service, platform_resource, render_pass_resource, paint_jobs_resource))
+		Ok((service, platform_resource, render_pass_resource, painter_resource))
 	}
 
 	/// Draws egui
@@ -138,25 +127,23 @@ impl Egui {
 		platform_resource.platform.context().font_image()
 	}
 
-	/// Returns the current paint jobs
-	pub fn paint_jobs<'a>(&self, paint_jobs_resource: &'a mut EguiPaintJobsResource) -> &'a [egui::ClippedMesh] {
-		// Get the paint jobs
-		let paint_jobs = paint_jobs_resource.paint_jobs.fetch();
-
-		// If we have a waker, wake them
-		if let Some(waker) = self.paint_jobs_waker.take() {
-			waker.wake();
-		}
-
-		paint_jobs
-	}
-
-	/// Returns the render pass
-	pub fn render_pass<'a>(
+	/// Returns the render pass and paint jobs
+	pub fn render_pass_with_paint_jobs<'a>(
 		&self,
 		render_pass_resource: &'a mut EguiRenderPassResource,
-	) -> &'a mut egui_wgpu_backend::RenderPass {
-		&mut render_pass_resource.render_pass
+	) -> (&'a mut egui_wgpu_backend::RenderPass, &'a [egui::ClippedMesh]) {
+		// If we have any new paint jobs, update them
+		// TODO: Not panic here when the painter quit
+		if let Ok(paint_jobs) = render_pass_resource
+			.paint_jobs_rx
+			.try_next()
+			.transpose()
+			.expect("Egui painter quit")
+		{
+			render_pass_resource.paint_jobs = paint_jobs;
+		}
+
+		(&mut render_pass_resource.render_pass, &render_pass_resource.paint_jobs)
 	}
 
 	/// Updates the paint jobs
@@ -164,21 +151,15 @@ impl Egui {
 	/// Returns `Err` if they haven't been fetched yet
 	pub async fn update_paint_jobs(
 		&self,
-		paint_jobs_resource: &mut EguiPaintJobsResource,
+		painter_resource: &mut EguiPainterResource,
 		paint_jobs: Vec<egui::ClippedMesh>,
-	) -> Result<(), Vec<egui::ClippedMesh>> {
-		paint_jobs_resource.paint_jobs.update(paint_jobs)
-	}
-
-	/// Registers a waker to be woken up by the paint jobs being fetched
-	pub fn set_paint_jobs_waker(&self, paint_jobs_resource: &EguiPaintJobsResource, waker: Waker) {
-		// Set the waker
-		self.paint_jobs_waker.store(Some(waker));
-
-		// If the paint jobs were fetched in the meantime without waking, wake up
-		if paint_jobs_resource.paint_jobs.is_seen() && let Some(waker) = self.paint_jobs_waker.take() {
-			waker.wake();
-		}
+	) {
+		// TDO: Not panic
+		painter_resource
+			.paint_jobs_tx
+			.send(paint_jobs)
+			.await
+			.expect("Egui renderer quit");
 	}
 }
 
@@ -196,7 +177,14 @@ impl std::fmt::Debug for EguiPlatformResource {
 
 /// Render pass resource
 pub struct EguiRenderPassResource {
+	/// Render pass
 	render_pass: egui_wgpu_backend::RenderPass,
+
+	/// Current paint jobs
+	paint_jobs: Vec<egui::ClippedMesh>,
+
+	/// Paint jobs receiver
+	paint_jobs_rx: mpsc::Receiver<Vec<egui::ClippedMesh>>,
 }
 
 impl std::fmt::Debug for EguiRenderPassResource {
@@ -207,10 +195,11 @@ impl std::fmt::Debug for EguiRenderPassResource {
 	}
 }
 
-/// Paint jobs resource
+/// Painter resource
 #[derive(Debug)]
-pub struct EguiPaintJobsResource {
-	paint_jobs: FetchUpdate<Vec<egui::ClippedMesh>>,
+pub struct EguiPainterResource {
+	/// Paint jobs sender
+	paint_jobs_tx: mpsc::Sender<Vec<egui::ClippedMesh>>,
 }
 
 /// Repaint signal

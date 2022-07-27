@@ -90,7 +90,7 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 		Panels::new(wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
 
 	// Create egui
-	let (egui, egui_platform_resource, egui_render_pass_resource, egui_paint_jobs_resource) =
+	let (egui, egui_platform_resource, egui_render_pass_resource, egui_painter_resource) =
 		Egui::new(&window, &wgpu).context("Unable to create egui state")?;
 
 	// Create the profiles
@@ -127,7 +127,7 @@ pub async fn create_services_resources(window: Arc<Window>) -> Result<(Services,
 		wgpu_surface:     Mutex::new(wgpu_surface_resource),
 		egui_platform:    Mutex::new(egui_platform_resource),
 		egui_render_pass: Mutex::new(egui_render_pass_resource),
-		egui_paint_jobs:  Mutex::new(egui_paint_jobs_resource),
+		egui_painter:     Mutex::new(egui_painter_resource),
 	};
 
 	Ok((services, resources))

@@ -9,7 +9,7 @@ use {
 	std::{mem, time::Duration},
 	tokio::time::Instant,
 	winit::window::Window,
-	zsw_egui::{Egui, EguiPaintJobsResource, EguiPlatformResource, EguiRenderPassResource},
+	zsw_egui::{Egui, EguiPainterResource, EguiPlatformResource, EguiRenderPassResource},
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::{Panels, PanelsResource},
@@ -50,7 +50,7 @@ impl Renderer {
 			+ Resources<WgpuSurfaceResource>
 			+ Resources<EguiPlatformResource>
 			+ Resources<EguiRenderPassResource>
-			+ Resources<EguiPaintJobsResource>,
+			+ Resources<EguiPainterResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -104,9 +104,8 @@ impl Renderer {
 	/// Lock tree:
 	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
 	/// - [`zsw_panels::PanelsLock`] on `panels`
-	/// - [`zsw_egui::PaintJobsLock`] on `egui`
-	///   - [`zsw_egui::RenderPassLock`] on `egui`
-	///     - [`zsw_egui::PlatformLock`] on `egui`
+	/// - [`zsw_egui::RenderPassLock`] on `egui`
+	///   - [`zsw_egui::PlatformLock`] on `egui`
 	async fn render<S, R>(services: &S, resources: &R) -> Result<(), anyhow::Error>
 	where
 		S: Services<Wgpu> + Services<Egui> + Services<Window> + Services<Panels> + Services<Input>,
@@ -114,7 +113,7 @@ impl Renderer {
 			+ Resources<WgpuSurfaceResource>
 			+ Resources<EguiPlatformResource>
 			+ Resources<EguiRenderPassResource>
-			+ Resources<EguiPaintJobsResource>,
+			+ Resources<EguiPainterResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -158,15 +157,11 @@ impl Renderer {
 
 		// Get the egui render results
 		// DEADLOCK: Caller ensures we can lock it.
-		let mut egui_paint_jobs_resource = resources.resource::<EguiPaintJobsResource>().await;
-		let egui_paint_jobs = egui.paint_jobs(&mut egui_paint_jobs_resource);
+		let mut render_pass_resource = resources.resource::<EguiRenderPassResource>().await;
+		let (egui_render_pass, egui_paint_jobs) = egui.render_pass_with_paint_jobs(&mut render_pass_resource);
 
 		// If we have any paint jobs, draw egui
 		if !egui_paint_jobs.is_empty() {
-			// DEADLOCK: Caller ensures we can lock it after the wgpu surface lock
-			let mut render_pass_resource = resources.resource::<EguiRenderPassResource>().await;
-			let egui_render_pass = egui.render_pass(&mut render_pass_resource);
-
 			let font_image = {
 				// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
 				let platform_resource = resources.resource::<EguiPlatformResource>().await;
@@ -189,7 +184,7 @@ impl Renderer {
 				.context("Unable to render egui")?;
 		}
 
-		mem::drop(egui_paint_jobs_resource);
+		mem::drop(render_pass_resource);
 		wgpu.finish_render(frame);
 
 		Ok(())

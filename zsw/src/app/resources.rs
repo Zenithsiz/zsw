@@ -1,11 +1,9 @@
 //! Resources
 
-use zsw_egui::EguiPaintJobsResource;
-
 // Imports
 use {
 	futures::lock::{Mutex, MutexLockFuture},
-	zsw_egui::{EguiPlatformResource, EguiRenderPassResource},
+	zsw_egui::{EguiPainterResource, EguiPlatformResource, EguiRenderPassResource},
 	zsw_panels::PanelsResource,
 	zsw_playlist::PlaylistResource,
 	zsw_profiles::ProfilesResource,
@@ -34,8 +32,8 @@ pub struct Resources {
 	/// Egui render pass
 	pub egui_render_pass: Mutex<EguiRenderPassResource>,
 
-	/// Egui paint jobs
-	pub egui_paint_jobs: Mutex<EguiPaintJobsResource>,
+	/// Egui painter
+	pub egui_painter: Mutex<EguiPainterResource>,
 }
 
 impl ResourcesBundle for Resources {}
@@ -48,7 +46,7 @@ impl ResourcesBundle for Resources {}
 	[ WgpuSurfaceResource    ] [ wgpu_surface ];
 	[ EguiPlatformResource   ] [ egui_platform ];
 	[ EguiRenderPassResource ] [ egui_render_pass ];
-	[ EguiPaintJobsResource  ] [ egui_paint_jobs ];
+	[ EguiPainterResource    ] [ egui_painter ];
 )]
 impl zsw_util::Resources<ty> for Resources {
 	fn lock(&self) -> MutexLockFuture<ty> {

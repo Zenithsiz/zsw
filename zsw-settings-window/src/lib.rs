@@ -15,16 +15,15 @@ use {
 	egui::{plot, Widget},
 	futures::lock::Mutex,
 	pollster::FutureExt,
-	std::mem,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
 	},
-	zsw_egui::{Egui, EguiPaintJobsResource, EguiPlatformResource},
+	zsw_egui::{Egui, EguiPainterResource, EguiPlatformResource},
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
 	zsw_profiles::{Profile, Profiles, ProfilesResource},
-	zsw_util::{CondvarFuture, Rect, Resources, Services},
+	zsw_util::{Rect, Resources, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
@@ -82,7 +81,7 @@ impl SettingsWindow {
 	/// - [`zsw_profiles::ProfilesLock`] on `profiles`
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
-	/// Blocks until [`Self::paint_jobs`] on `egui` is called.
+	/// Blocks until [`Self::update_paint_jobs`] on `egui` is called.
 	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
 	where
 		S: Services<Wgpu>
@@ -96,7 +95,7 @@ impl SettingsWindow {
 			+ Resources<ProfilesResource>
 			+ Resources<WgpuSurfaceResource>
 			+ Resources<EguiPlatformResource>
-			+ Resources<EguiPaintJobsResource>,
+			+ Resources<EguiPainterResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
@@ -148,26 +147,10 @@ impl SettingsWindow {
 				})
 			};
 
+			// Try to update the paint jobs
+			let mut egui_painter_resource = resources.resource::<EguiPainterResource>().await;
 			match res {
-				// If we got the paint jobs, try to update
-				Ok(mut paint_jobs) => loop {
-					let mut paint_jobs_resource = resources.resource::<EguiPaintJobsResource>().await;
-					match egui.update_paint_jobs(&mut paint_jobs_resource, paint_jobs).await {
-						Ok(()) => break,
-						// If we didn't get it, register a waker and wait
-						Err(old_paint_jobs) => {
-							// Drop the resource and wait until woken
-							CondvarFuture::new(|waker| {
-								egui.set_paint_jobs_waker(&paint_jobs_resource, waker.clone());
-								mem::drop(paint_jobs_resource);
-							})
-							.await;
-
-							// Then try again
-							paint_jobs = old_paint_jobs;
-						},
-					}
-				},
+				Ok(paint_jobs) => egui.update_paint_jobs(&mut egui_painter_resource, paint_jobs).await,
 				Err(err) => tracing::warn!(?err, "Unable to draw egui"),
 			}
 		}
