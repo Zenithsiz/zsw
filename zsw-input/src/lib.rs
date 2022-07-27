@@ -12,6 +12,7 @@ pub struct Input {
 
 impl Input {
 	/// Creates a new input
+	#[must_use]
 	pub fn new() -> Self {
 		Self {
 			cursor_pos: AtomicCell::new(None),

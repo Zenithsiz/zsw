@@ -22,6 +22,7 @@ pub struct ThreadSpawner<'scope, 'env, T> {
 
 impl<'scope, 'env, T> ThreadSpawner<'scope, 'env, T> {
 	/// Creates a new thread spawner
+	#[must_use]
 	pub fn new(scope: &'scope Scope<'scope, 'env>) -> Self {
 		Self {
 			scope,
