@@ -3,6 +3,8 @@
 // Features
 #![feature(decl_macro, generator_trait, generators, never_type, type_alias_impl_trait)]
 
+use std::path::PathBuf;
+
 // Modules
 mod condvar_future;
 mod display_wrapper;
@@ -10,7 +12,6 @@ mod fetch_update;
 mod lock;
 mod rect;
 mod resource;
-mod scan_dir;
 mod service;
 mod thread;
 
@@ -22,7 +23,6 @@ pub use {
 	lock::Lock,
 	rect::Rect,
 	resource::{Resources, ResourcesBundle},
-	scan_dir::dir_files_iter,
 	service::{Services, ServicesBundle},
 	thread::ThreadSpawner,
 };
@@ -157,5 +157,47 @@ pub fn image_format(image: &DynamicImage) -> &'static str {
 		DynamicImage::ImageLumaA16(_) => "LumaA16",
 		DynamicImage::ImageRgb16(_) => "Rgb16",
 		DynamicImage::ImageRgba16(_) => "Rgba16",
+	}
+}
+
+/// Visits all files in `path` recursively
+pub fn visit_dir<P: AsRef<Path>>(path: &P, visitor: &mut impl FnMut(PathBuf)) {
+	let path = path.as_ref();
+
+	// Try to read the directory
+	let dir = match std::fs::read_dir(path) {
+		Ok(dir) => dir,
+		Err(err) => {
+			tracing::warn!(?path, ?err, "Unable to read directory");
+			return;
+		},
+	};
+
+	// Then go through each entry
+	for entry in dir {
+		// Read the entry and file type
+		let entry = match entry {
+			Ok(entry) => entry,
+			Err(err) => {
+				tracing::warn!(?path, ?err, "Unable to read file entry");
+				continue;
+			},
+		};
+		let entry_path = entry.path();
+		let file_type = match entry.file_type() {
+			Ok(file_type) => file_type,
+			Err(err) => {
+				tracing::warn!(?entry_path, ?err, "Unable to read file type",);
+				continue;
+			},
+		};
+
+		match file_type.is_dir() {
+			// Recurse on directories
+			true => self::visit_dir(&entry_path, &mut *visitor),
+
+			// Yield files
+			false => visitor(entry_path),
+		}
 	}
 }

@@ -88,9 +88,9 @@ impl Playlist {
 	pub async fn set_root_path<'a>(&'a self, resource: &mut PlaylistResource, root_path: PathBuf) {
 		// Remove all existing paths and add new ones
 		resource.images.clear();
-		for path in zsw_util::dir_files_iter(root_path.clone()) {
+		zsw_util::visit_dir(&root_path, &mut |path| {
 			let _ = resource.images.insert(Arc::new(PlaylistImage::File(path)));
-		}
+		});
 
 		// Remove all current paths too
 		resource.cur_images.clear();
