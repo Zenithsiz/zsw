@@ -349,6 +349,12 @@ impl<'a> PanelStateImageDescriptor<'a> {
 			.cast()
 			.expect("Panel size didn't fit into an `i32`");
 
+		// If either the image or our panel have a side with 0, return a square ratio
+		// TODO: Check if this is the right thing to do
+		if panel_size.x == 0 || panel_size.y == 0 || image_size.x == 0 || image_size.y == 0 {
+			return Vector2::new(0.0, 0.0);
+		}
+
 		// Image and panel ratios
 		let image_ratio = Rational32::new(image_size.x, image_size.y);
 		let panel_ratio = Rational32::new(panel_size.x, panel_size.y);
