@@ -5,7 +5,7 @@ use {
 	std::sync::Arc,
 	winit::window::Window,
 	zsw_egui::Egui,
-	zsw_img::ImageLoader,
+	zsw_img::ImageLoaderService,
 	zsw_input::Input,
 	zsw_panels::Panels,
 	zsw_playlist::PlaylistService,
@@ -32,7 +32,7 @@ pub struct Services {
 	pub playlist: PlaylistService,
 
 	/// Image loader
-	pub image_loader: ImageLoader,
+	pub image_loader: ImageLoaderService,
 
 	/// Panels
 	pub panels: Panels,
@@ -60,7 +60,7 @@ impl ServicesBundle for Services {}
 	[ Window         ] [ window ];
 	[ Wgpu           ] [ wgpu ];
 	[ PlaylistService       ] [ playlist ];
-	[ ImageLoader    ] [ image_loader ];
+	[ ImageLoaderService    ] [ image_loader ];
 	[ Panels         ] [ panels ];
 	[ Egui           ] [ egui ];
 	[ Profiles       ] [ profiles ];

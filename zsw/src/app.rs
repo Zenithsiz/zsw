@@ -33,7 +33,7 @@ use {
 		window::{Window, WindowBuilder},
 	},
 	zsw_egui::Egui,
-	zsw_img::ImageLoader,
+	zsw_img::ImageLoaderService,
 	zsw_input::Input,
 	zsw_panels::Panels,
 	zsw_playlist::PlaylistService,
@@ -89,7 +89,7 @@ pub async fn create_services_resources(
 	let (playlist, playlist_resource) = PlaylistService::new();
 
 	// Create the image loader
-	let image_loader = ImageLoader::new();
+	let image_loader = ImageLoaderService::new();
 
 	// Create the panels
 	let (panels, panels_resource) =

@@ -8,7 +8,7 @@ use {
 	num_rational::Rational32,
 	std::mem,
 	winit::dpi::PhysicalSize,
-	zsw_img::ImageLoader,
+	zsw_img::ImageLoaderService,
 	zsw_wgpu::Wgpu,
 };
 
@@ -41,7 +41,7 @@ impl PanelState {
 		&mut self,
 		renderer: &PanelsRenderer,
 		wgpu: &Wgpu,
-		image_loader: &ImageLoader,
+		image_loader: &ImageLoaderService,
 	) -> Result<(), anyhow::Error> {
 		// Next frame's progress
 		let next_progress = self.cur_progress.saturating_add(1).clamp(0, self.panel.duration);

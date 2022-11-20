@@ -7,7 +7,7 @@
 pub mod loader;
 
 // Exports
-pub use loader::ImageLoader;
+pub use loader::ImageLoaderService;
 
 // Imports
 use {

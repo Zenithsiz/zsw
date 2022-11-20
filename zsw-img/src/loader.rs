@@ -13,9 +13,9 @@ use {
 	zsw_util::{Resources, Services},
 };
 
-/// Image loader
+/// Image loader service
 #[derive(Debug)]
-pub struct ImageLoader {
+pub struct ImageLoaderService {
 	/// Image sender
 	image_tx: async_channel::Sender<Image>,
 
@@ -23,7 +23,7 @@ pub struct ImageLoader {
 	image_rx: async_channel::Receiver<Image>,
 }
 
-impl ImageLoader {
+impl ImageLoaderService {
 	/// Creates a new image loader.
 	#[must_use]
 	pub fn new() -> Self {
@@ -90,7 +90,7 @@ impl ImageLoader {
 	}
 }
 
-impl Default for ImageLoader {
+impl Default for ImageLoaderService {
 	fn default() -> Self {
 		Self::new()
 	}

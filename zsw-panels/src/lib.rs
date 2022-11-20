@@ -19,7 +19,7 @@ use {
 	anyhow::Context,
 	cgmath::Point2,
 	winit::dpi::PhysicalSize,
-	zsw_img::ImageLoader,
+	zsw_img::ImageLoaderService,
 	zsw_input::Input,
 	zsw_wgpu::Wgpu,
 };
@@ -77,7 +77,7 @@ impl Panels {
 		&self,
 		resource: &mut PanelsResource,
 		wgpu: &Wgpu,
-		image_loader: &ImageLoader,
+		image_loader: &ImageLoaderService,
 	) -> Result<(), anyhow::Error> {
 		for panel in &mut resource.panels {
 			panel
