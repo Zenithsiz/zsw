@@ -25,7 +25,7 @@ use {
 	tokio::task,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
-		event_loop::EventLoop,
+		event_loop::{EventLoop, EventLoopBuilder},
 		platform::{
 			run_return::EventLoopExtRunReturn,
 			unix::{WindowBuilderExtUnix, XWindowType},
@@ -71,10 +71,11 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		playlist_manager,
 		profiles_manager,
 		args,
-	);
+	)
+	.context("Unable to spawn all tasks")?;
 
 	// Run the event loop until exit
-	event_loop.run_return(|event, _, control_flow| {
+	let _ = event_loop.run_return(|event, _, control_flow| {
 		event_handler
 			.handle_event(&*services, &*resources, event, control_flow)
 			.block_on();
@@ -180,7 +181,7 @@ pub fn spawn_services(
 	playlist_manager: PlaylistManager,
 	profiles_manager: ProfilesManager,
 	args: &Args,
-) -> impl Future<Output = Result<(), anyhow::Error>> {
+) -> Result<impl Future<Output = Result<(), anyhow::Error>>, anyhow::Error> {
 	/// Macro to help spawn a service runner
 	macro spawn_service_runner([$($clones:ident),* $(,)?] $name:expr => $runner:expr) {{
 		$(
@@ -190,45 +191,54 @@ pub fn spawn_services(
 	}}
 
 	// Spawn all
-	let profiles_loader_task = args.profile.clone().map(|profile_path| {
-		spawn_service_runner!(
-			[services, resources, playlist_manager, profiles_manager] "Profiles loader" => async move {
-				// Try to load the profile
-				let profile = match profiles_manager.load(profile_path) {
-					Ok(profile) => profile,
-					Err(err) => {
-						tracing::warn!(?err, "Unable to load profile");
-						return;
-					}
-				};
+	let profiles_loader_task = args
+		.profile
+		.clone()
+		.map(|profile_path| {
+			spawn_service_runner!(
+				[services, resources, playlist_manager, profiles_manager] "Profiles loader" => async move {
+					// Try to load the profile
+					let profile = match profiles_manager.load(profile_path) {
+						Ok(profile) => profile,
+						Err(err) => {
+							tracing::warn!(?err, "Unable to load profile");
+							return;
+						}
+					};
 
-				// Then apply it
-				let mut panels_resource = resources.panels.lock().await;
-				profile.apply(&playlist_manager, &services.panels, &mut panels_resource);
-			}
-		)
-	});
+					// Then apply it
+					let mut panels_resource = resources.panels.lock().await;
+					profile.apply(&playlist_manager, &services.panels, &mut panels_resource);
+				}
+			)
+		})
+		.transpose()
+		.context("Unable to spawn profile loader task")?;
 
 	let playlist_runner_task = task::Builder::new()
 		.name("Playlist runner")
-		.spawn_blocking(move || playlist_runner.run());
+		.spawn_blocking(move || playlist_runner.run())
+		.context("Unable to spawn playlist runner task")?;
 
+	// TODO: Use spawn_blocking for these
 	let image_loader_tasks = (0..self::image_loader_tasks())
 		.map(|idx| {
 			spawn_service_runner!(
 				[services, playlist_receiver] &format!("Image loader #{idx}") => services.image_loader.run(playlist_receiver)
 			)
 		})
-		.collect::<Vec<_>>();
+		.collect::<Result<Vec<_>, _>>()
+		.context("Unable to spawn image loader tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
 		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter, playlist_manager, profiles_manager)
-	);
+	).context("Unable to spawn settings window task")?;
 	let renderer_task =
-		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources));
+		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources))
+			.context("Unable to spawn renderer task")?;
 
 	// Then create the join future
-	async move {
+	Ok(async move {
 		if let Some(task) = profiles_loader_task {
 			task.await.context("Unable to await for profiles loader runner")?;
 		}
@@ -243,13 +253,13 @@ pub fn spawn_services(
 			.context("Unable to await for settings window runner")?;
 		renderer_task.await.context("Unable to await for renderer runner")?;
 		Ok(())
-	}
+	})
 }
 
 /// Creates the window, as well as the associated event loop
 fn create_window() -> Result<(EventLoop<!>, Window), anyhow::Error> {
 	// Build the window
-	let event_loop = EventLoop::with_user_event();
+	let event_loop = EventLoopBuilder::with_user_event().build();
 
 	// Find the window geometry
 	// Note: We just merge all monitors' geometry.

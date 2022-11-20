@@ -12,7 +12,7 @@
 // Imports
 use {
 	cgmath::{Point2, Vector2},
-	egui::{plot, Widget},
+	egui::Widget,
 	futures::lock::Mutex,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -80,7 +80,7 @@ impl SettingsWindow {
 	/// - [`zsw_profiles::ProfilesLock`] on `profiles`
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
-	/// Blocks until [`Self::update_paint_jobs`] on `egui` is called.
+	/// Blocks until [`Self::update_output`] on `egui` is called.
 	pub async fn run<S, R>(
 		&self,
 		services: &S,
@@ -133,9 +133,9 @@ impl SettingsWindow {
 				})
 			};
 
-			// Try to update the paint jobs
+			// Try to update the output
 			match res {
-				Ok(paint_jobs) => egui.update_paint_jobs(egui_painter_resource, paint_jobs).await,
+				Ok(output) => egui.update_output(egui_painter_resource, output).await,
 				Err(err) => tracing::warn!(?err, "Unable to draw egui"),
 			}
 		}
@@ -144,7 +144,7 @@ impl SettingsWindow {
 	/// Draws the settings window
 	fn draw<'panels>(
 		inner: &mut Inner,
-		ctx: &egui::CtxRef,
+		ctx: &egui::Context,
 		_frame: &epi::Frame,
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
@@ -449,26 +449,9 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 			egui::Slider::new(&mut self.panel.panel.parallax_ratio, 0.0..=1.0).ui(ui);
 		});
 
-		ui.vertical(|ui| {
-			ui.horizontal(|ui| {
-				ui.label("Parallax exp");
-				egui::Slider::new(&mut self.panel.panel.parallax_exp, 0.0..=4.0).ui(ui);
-			});
-
-			ui.collapsing("Graph", |ui| {
-				let it = (0..=100).map(|i| {
-					let x = i as f32 / 100.0;
-					plot::Value::new(x, x.signum() * x.abs().powf(self.panel.panel.parallax_exp))
-				});
-				let line = plot::Line::new(plot::Values::from_values_iter(it));
-
-				plot::Plot::new("Frame timings (ms)")
-					.allow_drag(false)
-					.allow_zoom(false)
-					.show_background(false)
-					.view_aspect(1.0)
-					.show(ui, |plot_ui| plot_ui.line(line));
-			});
+		ui.horizontal(|ui| {
+			ui.label("Parallax exp");
+			egui::Slider::new(&mut self.panel.panel.parallax_exp, 0.0..=4.0).ui(ui);
 		});
 
 

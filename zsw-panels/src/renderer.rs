@@ -92,7 +92,7 @@ impl PanelsRenderer {
 		// Create the render pass for all panels
 		let render_pass_descriptor = wgpu::RenderPassDescriptor {
 			label:                    Some("[zsw::panel] Render pass"),
-			color_attachments:        &[wgpu::RenderPassColorAttachment {
+			color_attachments:        &[Some(wgpu::RenderPassColorAttachment {
 				view:           surface_view,
 				resolve_target: None,
 				ops:            wgpu::Operations {
@@ -104,7 +104,7 @@ impl PanelsRenderer {
 					}),
 					store: true,
 				},
-			}],
+			})],
 			depth_stencil_attachment: None,
 		};
 		let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
@@ -220,7 +220,7 @@ fn create_render_pipeline(
 		label:  Some("[zsw::panel] Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("renderer/shader.wgsl").into()),
 	};
-	let shader = device.create_shader_module(&shader_descriptor);
+	let shader = device.create_shader_module(shader_descriptor);
 
 	// Create the pipeline layout
 	let render_pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
@@ -230,11 +230,11 @@ fn create_render_pipeline(
 	};
 	let render_pipeline_layout = device.create_pipeline_layout(&render_pipeline_layout_descriptor);
 
-	let color_targets = [wgpu::ColorTargetState {
+	let color_targets = [Some(wgpu::ColorTargetState {
 		format:     surface_texture_format,
 		blend:      Some(wgpu::BlendState::ALPHA_BLENDING),
 		write_mask: wgpu::ColorWrites::ALL,
-	}];
+	})];
 	let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
 		label:         Some("[zsw::panel] Render pipeline"),
 		layout:        Some(&render_pipeline_layout),

@@ -7,66 +7,66 @@ version = "0.1.0"
 [dependencies]
 
 # Zsw
-zsw-egui = {path = "../zsw-egui"}
-zsw-img = {path = "../zsw-img"}
-zsw-input = {path = "../zsw-input"}
-zsw-panels = {path = "../zsw-panels"}
-zsw-playlist = {path = "../zsw-playlist"}
-zsw-profiles = {path = "../zsw-profiles"}
-zsw-renderer = {path = "../zsw-renderer"}
-zsw-settings-window = {path = "../zsw-settings-window"}
-zsw-util = {path = "../zsw-util"}
-zsw-wgpu = {path = "../zsw-wgpu"}
+zsw-egui = { path = "../zsw-egui" }
+zsw-img = { path = "../zsw-img" }
+zsw-input = { path = "../zsw-input" }
+zsw-panels = { path = "../zsw-panels" }
+zsw-playlist = { path = "../zsw-playlist" }
+zsw-profiles = { path = "../zsw-profiles" }
+zsw-renderer = { path = "../zsw-renderer" }
+zsw-settings-window = { path = "../zsw-settings-window" }
+zsw-util = { path = "../zsw-util" }
+zsw-wgpu = { path = "../zsw-wgpu" }
 
 # Windowing
-winit = "0.26.1"
+winit = "0.27.5"
 
 # Rendering
-wgpu = {version = "0.12.0", features = ["serde", "replay"]}
+wgpu = { version = "0.14.0", features = ["serde", "replay"] }
 
 # Gui
-egui = "0.16.1"
-egui_wgpu_backend = "0.16.0"
-egui_winit_platform = "0.13.0"
-epi = "0.16.0"
+egui = { version = "0.19.0", features = ["default_fonts"] }
+egui_wgpu_backend = "0.20.0"
+egui_winit_platform = "0.16.0"
+epi = "0.17.0"
 
 # Async
-async-channel = "1.6.1"
-console-subscriber = {version = "0.1.3", optional = true}
-futures = "0.3.21"
-pollster = "0.2.4"
-tokio = {version = "1.17.0", features = ["full", "tracing"]}
+async-channel = "1.7.1"
+console-subscriber = { version = "0.1.8", optional = true }
+futures = "0.3.25"
+pollster = "0.2.5"
+tokio = { version = "1.22.0", features = ["full", "tracing"] }
 
 # Serialization
-serde = {version = "1.0.132", features = ["derive"]}
-serde_json = "1.0.73"
+serde = { version = "1.0.147", features = ["derive"] }
+serde_json = "1.0.88"
 
 # Math
-cgmath = {version = "0.18.0", features = ["serde"]}
+cgmath = { version = "0.18.0", features = ["serde"] }
 
 # Image
-image = "0.23.14"
+image = "0.24.5"
 
 # Random
-rand = "0.8.4"
+rand = "0.8.5"
 
 # Error handling
-anyhow = "1.0.52"
-thiserror = "1.0.30"
+anyhow = "1.0.66"
+thiserror = "1.0.37"
 
 # Logging
-chrono = "0.4.19"
-fern = {version = "0.6.0", features = ["colored"]}
-tracing = "0.1.32"
-tracing-subscriber = {version = "0.3.10", features = ["json", "parking_lot"]}
+chrono = "0.4.23"
+fern = { version = "0.6.1", features = ["colored"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", features = ["json", "parking_lot"] }
 
 # Cmd
-clap = {version = "3.0.7", features = ["derive"]}
+clap = { version = "4.0.26", features = ["derive"] }
 
 # Util
-bytemuck = {version = "1.7.3", features = ["derive"]}
+bytemuck = { version = "1.12.3", features = ["derive"] }
 #num-rational = "0.4.0"
-duplicate = "0.4.0"
+duplicate = "0.4.1"
 
 # Filesystem
 # TODO: Use `notify` once issues with it using `std`'s `mpsc` are fixed
@@ -74,9 +74,9 @@ duplicate = "0.4.0"
 native-dialog = "0.6.3"
 
 # Threads
-crossbeam = "0.8.1"
-parking_lot = {version = "0.12.0", features = ["deadlock_detection"]}
-rayon = "1.5.1"
+crossbeam = "0.8.2"
+parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
+rayon = "1.6.0"
 
 [features]
 

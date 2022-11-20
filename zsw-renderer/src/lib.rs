@@ -6,7 +6,7 @@
 // Imports
 use {
 	anyhow::Context,
-	std::{mem, time::Duration},
+	std::time::Duration,
 	tokio::time::Instant,
 	winit::window::Window,
 	zsw_egui::{Egui, EguiPlatformResource, EguiRenderPassResource},
@@ -156,34 +156,44 @@ impl Renderer {
 		// Get the egui render results
 		// DEADLOCK: Caller ensures we can lock it.
 		let mut render_pass_resource = resources.resource::<EguiRenderPassResource>().await;
-		let (egui_render_pass, egui_paint_jobs) = egui.render_pass_with_paint_jobs(&mut render_pass_resource);
+		let (egui_render_pass, egui_output) = egui.render_pass_with_output(&mut render_pass_resource);
 
-		// If we have any paint jobs, draw egui
-		if !egui_paint_jobs.is_empty() {
-			let font_image = {
+		{
+			// Update textures
+			egui_render_pass
+				.add_textures(wgpu.device(), wgpu.queue(), &egui_output.textures_delta)
+				.context("Unable to update textures")?;
+
+			// Update buffers
+			let paint_jobs = {
 				// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
 				let platform_resource = resources.resource::<EguiPlatformResource>().await;
-				egui.font_image(&platform_resource)
+				platform_resource
+					.platform
+					.context()
+					.tessellate(egui_output.shapes.clone())
 			};
-
-			egui_render_pass.update_texture(wgpu.device(), wgpu.queue(), &font_image);
-			egui_render_pass.update_user_textures(wgpu.device(), wgpu.queue());
-			egui_render_pass.update_buffers(wgpu.device(), wgpu.queue(), egui_paint_jobs, &screen_descriptor);
+			egui_render_pass.update_buffers(wgpu.device(), wgpu.queue(), &paint_jobs, &screen_descriptor);
 
 			// Record all render passes.
 			egui_render_pass
 				.execute(
 					&mut frame.encoder,
 					&frame.surface_view,
-					egui_paint_jobs,
+					&paint_jobs,
 					&screen_descriptor,
 					None,
 				)
 				.context("Unable to render egui")?;
 		}
 
-		mem::drop(render_pass_resource);
+
+		//mem::drop(render_pass_resource);
 		wgpu.finish_render(frame);
+
+		egui_render_pass
+			.remove_textures(egui_output.textures_delta.clone())
+			.context("Unable to update textures")?;
 
 		Ok(())
 	}

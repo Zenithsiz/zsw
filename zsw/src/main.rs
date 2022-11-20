@@ -27,7 +27,7 @@ pub use self::args::Args;
 // Imports
 use {
 	anyhow::Context,
-	clap::StructOpt,
+	clap::Parser,
 	std::sync::atomic::{self, AtomicUsize},
 };
 

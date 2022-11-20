@@ -14,36 +14,36 @@ zsw-util = {path = "../zsw-util"}
 zsw-wgpu = {path = "../zsw-wgpu"}
 
 # Windowing
-winit = "0.26.1"
+winit = "0.27.5"
 
 # Rendering
-wgpu = {version = "0.12.0", features = ["serde", "replay"]}
+wgpu = {version = "0.14.0", features = ["serde", "replay"]}
 
 # Async
-futures = "0.3.21"
+futures = "0.3.25"
 
 # Serialization
-serde = {version = "1.0.132", features = ["derive"]}
+serde = {version = "1.0.147", features = ["derive"]}
 
 # Math
 cgmath = {version = "0.18.0", features = ["serde"]}
 
 # Image
-image = "0.23.14"
+image = "0.24.5"
 
 # Random
-rand = "0.8.4"
+rand = "0.8.5"
 
 # Error handling
-anyhow = "1.0.52"
+anyhow = "1.0.66"
 
 # Logging
-tracing = "0.1.32"
+tracing = "0.1.37"
 
 # Util
-bytemuck = {version = "1.7.3", features = ["derive"]}
-num-rational = "0.4.0"
+bytemuck = {version = "1.12.3", features = ["derive"]}
+num-rational = "0.4.1"
 
 # Threads
-crossbeam = "0.8.1"
-parking_lot = {version = "0.12.0", features = ["deadlock_detection"]}
+crossbeam = "0.8.2"
+parking_lot = {version = "0.12.1", features = ["deadlock_detection"]}

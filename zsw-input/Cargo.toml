@@ -8,13 +8,13 @@ version = "0.1.0"
 [dependencies]
 
 # Windowing
-winit = "0.26.1"
+winit = "0.27.5"
 
 # Async
-futures = "0.3.21"
+futures = "0.3.25"
 
 # Math
 cgmath = {version = "0.18.0", features = ["serde"]}
 
 # Threads
-crossbeam = "0.8.1"
+crossbeam = "0.8.2"

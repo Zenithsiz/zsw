@@ -172,7 +172,7 @@ impl Wgpu {
 	/// Finishes rendering a frame
 	pub fn finish_render(&self, frame: FrameRender) {
 		// Submit everything to the queue and present the surface's texture
-		self.queue.submit([frame.encoder.finish()]);
+		let _ = self.queue.submit([frame.encoder.finish()]);
 		frame.surface_texture.present();
 	}
 }
@@ -198,9 +198,10 @@ fn configure_window_surface(
 	device: &wgpu::Device,
 ) -> Result<(TextureFormat, PhysicalSize<u32>), anyhow::Error> {
 	// Get the format
-	let surface_texture_format = surface
-		.get_preferred_format(adapter)
-		.context("Unable to query preferred format")?;
+	let surface_texture_format = *surface
+		.get_supported_formats(adapter)
+		.first()
+		.context("No supported texture formats for surface found")?;
 	tracing::debug!(?surface_texture_format, "Found preferred surface format");
 
 	// Then configure it
@@ -293,5 +294,6 @@ const fn window_surface_configuration(
 		width:        size.width,
 		height:       size.height,
 		present_mode: wgpu::PresentMode::Mailbox,
+		alpha_mode:   wgpu::CompositeAlphaMode::Auto,
 	}
 }

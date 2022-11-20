@@ -68,14 +68,14 @@ impl Egui {
 
 		// Create the resources
 		// Note: By using a 0-size channel we achieve the least latency
-		let (paint_jobs_tx, paint_jobs_rx) = mpsc::channel(0);
+		let (output_tx, output_rx) = mpsc::channel(0);
 		let platform_resource = EguiPlatformResource { platform };
 		let render_pass_resource = EguiRenderPassResource {
 			render_pass,
-			paint_jobs: vec![],
-			paint_jobs_rx,
+			output: egui::FullOutput::default(),
+			output_rx,
 		};
-		let painter_resource = EguiPainterResource { paint_jobs_tx };
+		let painter_resource = EguiPainterResource { output_tx };
 
 		Ok((service, platform_resource, render_pass_resource, painter_resource))
 	}
@@ -85,8 +85,8 @@ impl Egui {
 		&self,
 		window: &Window,
 		platform_resource: &mut EguiPlatformResource,
-		f: impl FnOnce(&egui::CtxRef, &epi::Frame) -> Result<(), anyhow::Error>,
-	) -> Result<Vec<egui::ClippedMesh>, anyhow::Error> {
+		f: impl FnOnce(&egui::Context, &epi::Frame) -> Result<(), anyhow::Error>,
+	) -> Result<egui::FullOutput, anyhow::Error> {
 		// Start the frame
 		let egui_frame_start = Instant::now();
 		platform_resource.platform.begin_frame();
@@ -109,12 +109,11 @@ impl Egui {
 		// Then draw using it
 		f(&platform_resource.platform.context(), &egui_frame).context("Unable to draw")?;
 
-		// Finally end the frame and retrieve the paint jobs
-		let (_output, paint_commands) = platform_resource.platform.end_frame(Some(window));
-		let paint_jobs = platform_resource.platform.context().tessellate(paint_commands);
+		// Finally end the frame and retrieve the output
+		let full_output = platform_resource.platform.end_frame(Some(window));
 		self.frame_time.store(Some(egui_frame_start.elapsed()));
 
-		Ok(paint_jobs)
+		Ok(full_output)
 	}
 
 	/// Handles an event
@@ -122,42 +121,40 @@ impl Egui {
 		platform_resource.platform.handle_event(event);
 	}
 
+	/*
 	/// Returns the font image
 	pub fn font_image(&self, platform_resource: &EguiPlatformResource) -> Arc<egui::FontImage> {
 		platform_resource.platform.context().font_image()
 	}
+	*/
 
-	/// Returns the render pass and paint jobs
-	pub fn render_pass_with_paint_jobs<'a>(
+	/// Returns the render pass and output
+	pub fn render_pass_with_output<'a>(
 		&self,
 		render_pass_resource: &'a mut EguiRenderPassResource,
-	) -> (&'a mut egui_wgpu_backend::RenderPass, &'a [egui::ClippedMesh]) {
-		// If we have any new paint jobs, update them
+	) -> (&'a mut egui_wgpu_backend::RenderPass, &'a egui::FullOutput) {
+		// If we have a new output, update them
 		// TODO: Not panic here when the painter quit
-		if let Ok(paint_jobs) = render_pass_resource
-			.paint_jobs_rx
+		if let Ok(output) = render_pass_resource
+			.output_rx
 			.try_next()
 			.transpose()
 			.expect("Egui painter quit")
 		{
-			render_pass_resource.paint_jobs = paint_jobs;
+			render_pass_resource.output = output;
 		}
 
-		(&mut render_pass_resource.render_pass, &render_pass_resource.paint_jobs)
+		(&mut render_pass_resource.render_pass, &render_pass_resource.output)
 	}
 
-	/// Updates the paint jobs
+	/// Updates the output
 	///
-	/// Returns `Err` if they haven't been fetched yet
-	pub async fn update_paint_jobs(
-		&self,
-		painter_resource: &mut EguiPainterResource,
-		paint_jobs: Vec<egui::ClippedMesh>,
-	) {
+	/// Returns `Err` if it hasn't been fetched yet
+	pub async fn update_output(&self, painter_resource: &mut EguiPainterResource, output: egui::FullOutput) {
 		// TDO: Not panic
 		painter_resource
-			.paint_jobs_tx
-			.send(paint_jobs)
+			.output_tx
+			.send(output)
 			.await
 			.expect("Egui renderer quit");
 	}
@@ -166,7 +163,8 @@ impl Egui {
 /// Platform resource
 pub struct EguiPlatformResource {
 	/// Platform
-	platform: egui_winit_platform::Platform,
+	// TODO: Not pub?
+	pub platform: egui_winit_platform::Platform,
 }
 
 impl std::fmt::Debug for EguiPlatformResource {
@@ -180,11 +178,11 @@ pub struct EguiRenderPassResource {
 	/// Render pass
 	render_pass: egui_wgpu_backend::RenderPass,
 
-	/// Current paint jobs
-	paint_jobs: Vec<egui::ClippedMesh>,
+	/// Current output
+	output: egui::FullOutput,
 
-	/// Paint jobs receiver
-	paint_jobs_rx: mpsc::Receiver<Vec<egui::ClippedMesh>>,
+	/// Output receiver
+	output_rx: mpsc::Receiver<egui::FullOutput>,
 }
 
 impl std::fmt::Debug for EguiRenderPassResource {
@@ -196,10 +194,15 @@ impl std::fmt::Debug for EguiRenderPassResource {
 }
 
 /// Painter resource
-#[derive(Debug)]
 pub struct EguiPainterResource {
-	/// Paint jobs sender
-	paint_jobs_tx: mpsc::Sender<Vec<egui::ClippedMesh>>,
+	/// Output sender
+	output_tx: mpsc::Sender<egui::FullOutput>,
+}
+
+impl std::fmt::Debug for EguiPainterResource {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("EguiPainterResource").field("output_tx", &"..").finish()
+	}
 }
 
 /// Repaint signal

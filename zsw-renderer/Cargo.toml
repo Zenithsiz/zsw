@@ -16,18 +16,18 @@ zsw-util = {path = "../zsw-util"}
 zsw-wgpu = {path = "../zsw-wgpu"}
 
 # Windowing
-winit = "0.26.1"
+winit = "0.27.5"
 
 # Gui
-egui_wgpu_backend = "0.16.0"
+egui_wgpu_backend = "0.20.0"
 
 # Async
-futures = "0.3.21"
-pollster = "0.2.4"
-tokio = "1.17.0"
+futures = "0.3.25"
+pollster = "0.2.5"
+tokio = "1.22.0"
 
 # Error handling
-anyhow = "1.0.52"
+anyhow = "1.0.66"
 
 # Logging
-tracing = "0.1.32"
+tracing = "0.1.37"

@@ -13,16 +13,16 @@ zsw-playlist = {path = "../zsw-playlist"}
 zsw-util = {path = "../zsw-util"}
 
 # Async
-futures = "0.3.21"
+futures = "0.3.25"
 
 # Serialization
-serde = {version = "1.0.132", features = ["derive"]}
+serde = {version = "1.0.147", features = ["derive"]}
 
 # Error handling
-anyhow = "1.0.52"
+anyhow = "1.0.66"
 
 # Logging
-tracing = "0.1.32"
+tracing = "0.1.37"
 
 # Threads
-parking_lot = {version = "0.12.0", features = ["deadlock_detection"]}
+parking_lot = {version = "0.12.1", features = ["deadlock_detection"]}

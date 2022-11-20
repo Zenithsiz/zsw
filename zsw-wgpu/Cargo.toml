@@ -11,21 +11,21 @@ version = "0.1.0"
 zsw-util = {path = "../zsw-util"}
 
 # Windowing
-winit = "0.26.1"
+winit = "0.27.5"
 
 # Rendering
-wgpu = {version = "0.12.0", features = ["serde", "replay"]}
+wgpu = {version = "0.14.0", features = ["serde", "replay"]}
 
 # Async
-futures = "0.3.21"
-pollster = "0.2.4"
+futures = "0.3.25"
+pollster = "0.2.5"
 
 # Error handling
-anyhow = "1.0.52"
+anyhow = "1.0.66"
 
 # Logging
-tracing = "0.1.32"
+tracing = "0.1.37"
 
 # Threads
-crossbeam = "0.8.1"
-parking_lot = "0.12.0"
+crossbeam = "0.8.2"
+parking_lot = "0.12.1"

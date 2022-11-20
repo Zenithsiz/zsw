@@ -151,12 +151,11 @@ pub fn image_format(image: &DynamicImage) -> &'static str {
 		DynamicImage::ImageLumaA8(_) => "LumaA8",
 		DynamicImage::ImageRgb8(_) => "Rgb8",
 		DynamicImage::ImageRgba8(_) => "Rgba8",
-		DynamicImage::ImageBgr8(_) => "Bgr8",
-		DynamicImage::ImageBgra8(_) => "Bgra8",
 		DynamicImage::ImageLuma16(_) => "Luma16",
 		DynamicImage::ImageLumaA16(_) => "LumaA16",
 		DynamicImage::ImageRgb16(_) => "Rgb16",
 		DynamicImage::ImageRgba16(_) => "Rgba16",
+		_ => "<unknown>",
 	}
 }
 

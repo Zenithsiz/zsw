@@ -12,16 +12,16 @@ zsw-playlist = {path = "../zsw-playlist"}
 zsw-util = {path = "../zsw-util"}
 
 # Async
-async-channel = "1.6.1"
+async-channel = "1.7.1"
 
 # Math
 cgmath = {version = "0.18.0", features = ["serde"]}
 
 # Image
-image = "0.23.14"
+image = "0.24.5"
 
 # Error handling
-anyhow = "1.0.52"
+anyhow = "1.0.66"
 
 # Logging
-tracing = "0.1.32"
+tracing = "0.1.37"

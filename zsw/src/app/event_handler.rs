@@ -97,18 +97,12 @@ async fn handle_event(
 			WindowEvent::CursorMoved { position, .. } => input.update_cursor_pos(position),
 
 			// If right clicked, queue a click
-			// Note: If the window is open, we don't notify the settings_window, else
-			//       we don't notify egui instead
 			// TODO: Don't queue the open click here? Feels kinda hacky
 			WindowEvent::MouseInput {
 				state: winit::event::ElementState::Pressed,
 				button: winit::event::MouseButton::Right,
 				..
-			} => match settings_window.is_open().await {
-				true => event_status.update_egui = false,
-
-				false => settings_window.queue_open_click(input.cursor_pos()).await,
-			},
+			} => settings_window.queue_open_click(input.cursor_pos()).await,
 			_ => (),
 		},
 
