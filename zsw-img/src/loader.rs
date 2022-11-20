@@ -27,6 +27,8 @@ impl ImageLoaderService {
 	/// Creates a new image loader.
 	#[must_use]
 	pub fn new() -> Self {
+		// Note: We have the lowest possible bound due to images being quite big
+		// TODO: Make this customizable and even be able to be 0?
 		let (image_tx, image_rx) = async_channel::bounded(1);
 
 		Self { image_tx, image_rx }
