@@ -16,7 +16,7 @@ use {
 		path::{Path, PathBuf},
 	},
 	zsw_panels::{Panel, Panels, PanelsResource},
-	zsw_playlist::{Playlist, PlaylistResource},
+	zsw_playlist::{PlaylistResource, PlaylistService},
 	zsw_util::{Resources, Services},
 };
 
@@ -44,10 +44,10 @@ impl Profiles {
 	///   - [`zsw_panels::PanelsLock`]
 	pub async fn run_loader_applier<S, R>(&self, path: &Path, services: &S, resources: &R)
 	where
-		S: Services<Playlist> + Services<Panels>,
+		S: Services<PlaylistService> + Services<Panels>,
 		R: Resources<PanelsResource> + Resources<PlaylistResource> + Resources<ProfilesResource>,
 	{
-		let playlist = services.service::<Playlist>();
+		let playlist = services.service::<PlaylistService>();
 		let panels = services.service::<Panels>();
 
 		// DEADLOCK: Caller ensures we can lock it
@@ -120,7 +120,7 @@ impl Profile {
 	/// Applies a profile
 	pub async fn apply<'playlist, 'panels>(
 		&self,
-		playlist: &'playlist Playlist,
+		playlist: &'playlist PlaylistService,
 		panels: &'panels Panels,
 		playlist_resource: &mut PlaylistResource,
 		panels_resource: &mut PanelsResource,

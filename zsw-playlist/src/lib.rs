@@ -13,9 +13,8 @@ use {
 };
 
 /// Image playlist
-// TODO: Rename to `PlaylistService`
 #[derive(Debug)]
-pub struct Playlist {
+pub struct PlaylistService {
 	/// Image sender
 	img_tx: async_channel::Sender<Arc<PlaylistImage>>,
 
@@ -23,7 +22,7 @@ pub struct Playlist {
 	img_rx: async_channel::Receiver<Arc<PlaylistImage>>,
 }
 
-impl Playlist {
+impl PlaylistService {
 	/// Creates a new, empty, playlist, alongside all resources
 	#[must_use]
 	pub fn new() -> (Self, PlaylistResource) {

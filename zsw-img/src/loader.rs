@@ -9,7 +9,7 @@ mod load;
 // Imports
 use {
 	super::Image,
-	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
+	zsw_playlist::{PlaylistImage, PlaylistResource, PlaylistService},
 	zsw_util::{Resources, Services},
 };
 
@@ -40,10 +40,10 @@ impl ImageLoader {
 	/// Locks [`zsw_playlist::PlaylistLock`] on `playlist`
 	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
 	where
-		S: Services<Playlist>,
+		S: Services<PlaylistService>,
 		R: Resources<PlaylistResource>,
 	{
-		let playlist = services.service::<Playlist>();
+		let playlist = services.service::<PlaylistService>();
 
 		loop {
 			// DEADLOCK: Caller ensures we can lock it

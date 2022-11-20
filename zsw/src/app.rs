@@ -36,7 +36,7 @@ use {
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::Panels,
-	zsw_playlist::Playlist,
+	zsw_playlist::PlaylistService,
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
@@ -86,7 +86,7 @@ pub async fn create_services_resources(
 		.context("Unable to create renderer")?;
 
 	// Create the playlist
-	let (playlist, playlist_resource) = Playlist::new();
+	let (playlist, playlist_resource) = PlaylistService::new();
 
 	// Create the image loader
 	let image_loader = ImageLoader::new();

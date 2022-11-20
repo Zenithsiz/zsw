@@ -8,7 +8,7 @@ use {
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::Panels,
-	zsw_playlist::Playlist,
+	zsw_playlist::PlaylistService,
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
@@ -29,7 +29,7 @@ pub struct Services {
 	pub wgpu: Wgpu,
 
 	/// Playlist
-	pub playlist: Playlist,
+	pub playlist: PlaylistService,
 
 	/// Image loader
 	pub image_loader: ImageLoader,
@@ -59,7 +59,7 @@ impl ServicesBundle for Services {}
 	ty                 field;
 	[ Window         ] [ window ];
 	[ Wgpu           ] [ wgpu ];
-	[ Playlist       ] [ playlist ];
+	[ PlaylistService       ] [ playlist ];
 	[ ImageLoader    ] [ image_loader ];
 	[ Panels         ] [ panels ];
 	[ Egui           ] [ egui ];

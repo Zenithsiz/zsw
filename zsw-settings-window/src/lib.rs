@@ -21,7 +21,7 @@ use {
 	},
 	zsw_egui::{Egui, EguiPainterResource, EguiPlatformResource},
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
-	zsw_playlist::{Playlist, PlaylistImage, PlaylistResource},
+	zsw_playlist::{PlaylistImage, PlaylistResource, PlaylistService},
 	zsw_profiles::{Profile, Profiles, ProfilesResource},
 	zsw_util::{Rect, Resources, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
@@ -88,7 +88,7 @@ impl SettingsWindow {
 			+ Services<Egui>
 			+ Services<Window>
 			+ Services<Panels>
-			+ Services<Playlist>
+			+ Services<PlaylistService>
 			+ Services<Profiles>,
 		R: Resources<PanelsResource>
 			+ Resources<PlaylistResource>
@@ -99,7 +99,7 @@ impl SettingsWindow {
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
 		let profiles = services.service::<Profiles>();
-		let playlist = services.service::<Playlist>();
+		let playlist = services.service::<PlaylistService>();
 		let window = services.service::<Window>();
 		let panels = services.service::<Panels>();
 
@@ -162,7 +162,7 @@ impl SettingsWindow {
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
 		panels: &'panels Panels,
-		playlist: &'playlist Playlist,
+		playlist: &'playlist PlaylistService,
 		profiles: &'profiles Profiles,
 		playlist_resource: &mut PlaylistResource,
 		panels_resource: &mut PanelsResource,
@@ -218,7 +218,7 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
 	panels: &'panels Panels,
-	playlist: &'playlist Playlist,
+	playlist: &'playlist PlaylistService,
 	profiles: &'profiles Profiles,
 	playlist_resource: &mut PlaylistResource,
 	panels_resource: &mut PanelsResource,
@@ -248,7 +248,7 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 fn draw_profile<'playlist, 'panels, 'profiles>(
 	ui: &mut egui::Ui,
 	panels: &'panels Panels,
-	playlist: &'playlist Playlist,
+	playlist: &'playlist PlaylistService,
 	profiles: &'profiles Profiles,
 	playlist_resource: &mut PlaylistResource,
 	panels_resource: &mut PanelsResource,
@@ -319,7 +319,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 /// Draws the playlist settings
 fn draw_playlist<'playlist>(
 	ui: &mut egui::Ui,
-	playlist: &'playlist Playlist,
+	playlist: &'playlist PlaylistService,
 	playlist_resource: &mut PlaylistResource,
 ) {
 	// Draw the root path
