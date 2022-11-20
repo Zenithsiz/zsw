@@ -28,14 +28,9 @@ pub use self::args::Args;
 use {
 	anyhow::Context,
 	clap::StructOpt,
-	std::{
-		num::NonZeroUsize,
-		sync::atomic::{self, AtomicUsize},
-		thread,
-	},
+	std::sync::atomic::{self, AtomicUsize},
 };
 
-#[allow(clippy::cognitive_complexity)] // TODO
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize tracing
 	trace::init();
@@ -58,19 +53,7 @@ fn main() -> Result<(), anyhow::Error> {
 	tracing::debug!(?args, "Arguments");
 
 	// Create the runtime and enter it
-	// TODO: Adjust number of worker threads?
-	let worker_threads = 2 * thread::available_parallelism().map_or(1, NonZeroUsize::get);
-	let runtime = tokio::runtime::Builder::new_multi_thread()
-		.worker_threads(worker_threads)
-		.enable_time()
-		.thread_name_fn(|| {
-			static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
-			let id = NEXT_ID.fetch_add(1, atomic::Ordering::AcqRel);
-			format!("tokio-runtime-{id}")
-		})
-		.build()
-		.context("Unable to create runtime")?;
-
+	let runtime = self::create_runtime()?;
 	let _runtime_enter = runtime.enter();
 
 	// Run the app and restart if we get an error (up to 5 errors)
@@ -90,4 +73,17 @@ fn main() -> Result<(), anyhow::Error> {
 	}
 
 	Ok(())
+}
+
+/// Creates the tokio runtime
+fn create_runtime() -> Result<tokio::runtime::Runtime, anyhow::Error> {
+	tokio::runtime::Builder::new_multi_thread()
+		.enable_time()
+		.thread_name_fn(|| {
+			static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+			let id = NEXT_ID.fetch_add(1, atomic::Ordering::AcqRel);
+			format!("tokio-runtime-{id}")
+		})
+		.build()
+		.context("Unable to create runtime")
 }
