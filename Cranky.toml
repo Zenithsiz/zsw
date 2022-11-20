@@ -12,7 +12,7 @@ deny = [
 	"unsafe_op_in_unsafe_fn",
 
 	# We muse use `expect` instead
-	"clippy::unwrap_used"
+	"clippy::unwrap_used",
 ]
 
 allow = [
@@ -20,8 +20,9 @@ allow = [
 	"clippy::implicit_return",
 	"clippy::multiple_inherent_impl",
 	"clippy::pattern_type_mismatch",
-	"clippy::match_bool", # `match` reads easier than `if / else`
+	"clippy::match_bool",              # `match` reads easier than `if / else`
 	"clippy::single_match_else",
+	"clippy::option_if_let_else",
 	"clippy::self_named_module_files",
 	"clippy::items_after_statements",
 	"clippy::module_name_repetitions",
