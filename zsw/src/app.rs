@@ -37,7 +37,7 @@ use {
 	zsw_input::Input,
 	zsw_panels::Panels,
 	zsw_playlist::{PlaylistManager, PlaylistReceiver, PlaylistRunner},
-	zsw_profiles::ProfilesManager,
+	zsw_profiles::{Profile, ProfilesManager},
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
 	zsw_util::Rect,
@@ -61,6 +61,14 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Create the event handler
 	let mut event_handler = EventHandler::new();
 
+	// Try to load the default profile
+	// TODO: Not assume a default exists?
+	let default_profile =
+		match profiles_manager.load(args.profile.as_ref().cloned().unwrap_or_else(|| "profile.json".into())) {
+			Ok(profile) => profile,
+			Err(err) => return Err(err).context("Unable to load default profile"),
+		};
+
 	// Spawn all futures
 	let join_handle = self::spawn_services(
 		&services,
@@ -70,7 +78,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		playlist_receiver,
 		playlist_manager,
 		profiles_manager,
-		args,
+		default_profile,
 	)
 	.context("Unable to spawn all tasks")?;
 
@@ -180,7 +188,7 @@ pub fn spawn_services(
 	playlist_receiver: PlaylistReceiver,
 	playlist_manager: PlaylistManager,
 	profiles_manager: ProfilesManager,
-	args: &Args,
+	default_profile: Arc<Profile>,
 ) -> Result<impl Future<Output = Result<(), anyhow::Error>>, anyhow::Error> {
 	/// Macro to help spawn a service runner
 	macro spawn_service_runner([$($clones:ident),* $(,)?] $name:expr => $runner:expr) {{
@@ -191,29 +199,13 @@ pub fn spawn_services(
 	}}
 
 	// Spawn all
-	let profiles_loader_task = args
-		.profile
-		.clone()
-		.map(|profile_path| {
-			spawn_service_runner!(
-				[services, resources, playlist_manager, profiles_manager] "Profiles loader" => async move {
-					// Try to load the profile
-					let profile = match profiles_manager.load(profile_path) {
-						Ok(profile) => profile,
-						Err(err) => {
-							tracing::warn!(?err, "Unable to load profile");
-							return;
-						}
-					};
-
-					// Then apply it
-					let mut panels_resource = resources.panels.lock().await;
-					profile.apply(&playlist_manager, &services.panels, &mut panels_resource);
-				}
-			)
-		})
-		.transpose()
-		.context("Unable to spawn profile loader task")?;
+	let profiles_loader_task = spawn_service_runner!(
+		[services, resources, playlist_manager, default_profile] "Profiles loader" => async move {
+			let mut panels_resource = resources.panels.lock().await;
+			default_profile.apply(&playlist_manager, &services.panels, &mut panels_resource);
+		}
+	)
+	.context("Unable to spawn profile loader task")?;
 
 	let playlist_runner_task = task::Builder::new()
 		.name("Playlist runner")
@@ -221,7 +213,8 @@ pub fn spawn_services(
 		.context("Unable to spawn playlist runner task")?;
 
 	// TODO: Use spawn_blocking for these
-	let image_loader_tasks = (0..self::image_loader_tasks())
+	// TODO: Dynamically change the number of these to the number of panels / another value
+	let image_loader_tasks = (0..default_profile.panels.len())
 		.map(|idx| {
 			spawn_service_runner!(
 				[services, playlist_receiver] &format!("Image loader #{idx}") => services.image_loader.run(playlist_receiver)
@@ -239,9 +232,9 @@ pub fn spawn_services(
 
 	// Then create the join future
 	Ok(async move {
-		if let Some(task) = profiles_loader_task {
-			task.await.context("Unable to await for profiles loader runner")?;
-		}
+		profiles_loader_task
+			.await
+			.context("Unable to await for profiles loader runner")?;
 		playlist_runner_task
 			.await
 			.context("Unable to await for playlist runner")?;
@@ -297,7 +290,7 @@ fn monitor_geometry(monitor: &winit::monitor::MonitorHandle) -> Rect<i32, u32> {
 	}
 }
 
-/// Returns the number of tasks to use for the image loader runners
-fn image_loader_tasks() -> usize {
+/// Returns the default number of tasks to use for the image loader runners
+fn _default_image_loader_tasks() -> usize {
 	thread::available_parallelism().map_or(1, NonZeroUsize::get)
 }
