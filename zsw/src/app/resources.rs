@@ -5,7 +5,6 @@ use {
 	futures::lock::{Mutex, MutexLockFuture},
 	zsw_egui::{EguiPainterResource, EguiPlatformResource, EguiRenderPassResource},
 	zsw_panels::PanelsResource,
-	zsw_profiles::ProfilesResource,
 	zsw_util::ResourcesBundle,
 	zsw_wgpu::WgpuSurfaceResource,
 };
@@ -15,9 +14,6 @@ use {
 pub struct Resources {
 	/// Panels
 	pub panels: Mutex<PanelsResource>,
-
-	/// Profiles
-	pub profiles: Mutex<ProfilesResource>,
 
 	/// Wgpu surface
 	pub wgpu_surface: Mutex<WgpuSurfaceResource>,
@@ -40,7 +36,6 @@ impl ResourcesBundle for Resources {}
 #[duplicate::duplicate_item(
 	ty                 field;
 	[ PanelsResource         ] [ panels ];
-	[ ProfilesResource       ] [ profiles ];
 	[ WgpuSurfaceResource    ] [ wgpu_surface ];
 	[ EguiPlatformResource   ] [ egui_platform ];
 	[ EguiRenderPassResource ] [ egui_render_pass ];

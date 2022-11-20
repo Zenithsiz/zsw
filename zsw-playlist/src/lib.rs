@@ -32,7 +32,7 @@ enum Event {
 
 /// Playlist inner
 #[derive(Debug)]
-pub struct PlaylistInner {
+struct PlaylistInner {
 	/// Root path
 	root_path: Option<PathBuf>,
 

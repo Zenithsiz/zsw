@@ -8,131 +8,85 @@
 // Features
 #![feature(entry_insert)]
 
+// Modules
+mod profile;
+
+// Exports
+pub use profile::Profile;
+
 // Imports
 use {
 	anyhow::Context,
-	std::{
-		collections::HashMap,
-		path::{Path, PathBuf},
-	},
-	zsw_panels::{Panel, Panels, PanelsResource},
-	zsw_playlist::PlaylistManager,
-	zsw_util::{Resources, Services},
+	parking_lot::RwLock,
+	std::{collections::HashMap, path::PathBuf, sync::Arc},
 };
 
-/// Profiles
-// TODO: Recently loaded profiles
+/// Profiles inner
 #[derive(Debug)]
-#[allow(missing_copy_implementations)] // It might not be `Copy` in the future
-pub struct Profiles {}
+struct ProfilesInner {
+	/// All profiles by their path
+	profiles: HashMap<Arc<PathBuf>, Arc<Profile>>,
+}
 
-#[allow(clippy::unused_self)] // For accessing resources, we should require the service
-impl Profiles {
-	/// Creates a new profiles, alongside the resources
-	#[must_use]
-	pub fn new() -> (Self, ProfilesResource) {
-		(Self {}, ProfilesResource {
-			profiles: HashMap::new(),
-		})
-	}
+/// Profiles manager
+#[derive(Clone, Debug)]
+pub struct ProfilesManager {
+	/// Inner
+	inner: Arc<RwLock<ProfilesInner>>,
+}
 
-	/// Runs the initial profile loader and applier
-	///
-	/// # Lock
-	/// [`ProfilesLock`]
-	/// - [`zsw_panels::PanelsLock`]
-	pub async fn run_loader_applier<S, R>(
-		&self,
-		path: &Path,
-		services: &S,
-		resources: &R,
-		playlist_manager: PlaylistManager,
-	) where
-		S: Services<Panels>,
-		R: Resources<PanelsResource> + Resources<ProfilesResource>,
-	{
-		let panels = services.service::<Panels>();
-
-		// DEADLOCK: Caller ensures we can lock it
-		let mut resource = resources.resource::<ProfilesResource>().await;
-
-		// Then check if we got it
-		match self.load(&mut resource, path.to_path_buf()) {
-			// If we did, apply it
-			Ok(profile) => {
-				tracing::info!(?profile, "Successfully loaded profile");
-
-				// Lock
-				// DEADLOCK: Caller ensures we can lock them in this order after profiles lock
-				let mut panels_resource = resources.resource::<PanelsResource>().await;
-
-				// Then apply
-				profile.apply(&playlist_manager, panels, &mut panels_resource).await;
-			},
-
-			Err(err) => tracing::warn!(?err, "Unable to load profile"),
-		}
-	}
-
+impl ProfilesManager {
 	/// Returns all profiles by their path
 	#[must_use]
-	pub fn profiles<'a>(&self, resource: &'a ProfilesResource) -> &'a HashMap<PathBuf, Profile> {
-		&resource.profiles
+	pub fn profiles(&self) -> Vec<(Arc<PathBuf>, Arc<Profile>)> {
+		self.inner
+			.read()
+			.profiles
+			.iter()
+			.map(|(path, profile)| (Arc::clone(path), Arc::clone(profile)))
+			.collect()
+	}
+
+	/// Adds a a new profiles
+	fn create_new(&self, path: PathBuf, profile: Profile) -> Arc<Profile> {
+		let path = Arc::new(path);
+		let profile = Arc::new(profile);
+
+		self.inner
+			.write()
+			.profiles
+			.entry(path)
+			.insert_entry(profile)
+			.get()
+			.clone()
 	}
 
 	/// Loads a profile
-	pub fn load<'a>(&self, resource: &'a mut ProfilesResource, path: PathBuf) -> Result<&'a Profile, anyhow::Error> {
-		// Try to load it
+	pub fn load(&self, path: PathBuf) -> Result<Arc<Profile>, anyhow::Error> {
+		// Load the profile
 		let profile = zsw_util::parse_json_from_file(&path).context("Unable to load profile")?;
 
 		// Then add it
-		let profile = resource.profiles.entry(path).insert_entry(profile).into_mut();
-
-		Ok(profile)
+		Ok(self.create_new(path, profile))
 	}
 
 	/// Adds and saves a profile
-	pub fn save(&self, resource: &mut ProfilesResource, path: PathBuf, profile: Profile) -> Result<(), anyhow::Error> {
+	pub fn save(&self, path: PathBuf, profile: Profile) -> Result<Arc<Profile>, anyhow::Error> {
 		// Try to save it
 		zsw_util::serialize_json_to_file(&path, &profile).context("Unable to save profile")?;
 
 		// Then add it
-		#[allow(clippy::let_underscore_drop)] // We can drop the old profile
-		let _ = resource.profiles.insert(path, profile);
-
-		Ok(())
+		Ok(self.create_new(path, profile))
 	}
 }
 
+/// Creates the profiles service
+#[must_use]
+pub fn create() -> ProfilesManager {
+	let inner = ProfilesInner {
+		profiles: HashMap::new(),
+	};
+	let inner = Arc::new(RwLock::new(inner));
 
-/// A profile
-#[derive(Clone, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct Profile {
-	/// Root path
-	pub root_path: PathBuf,
-
-	/// All panels
-	pub panels: Vec<Panel>,
-}
-
-impl Profile {
-	/// Applies a profile
-	pub async fn apply<'panels>(
-		&self,
-		playlist_manager: &PlaylistManager,
-		panels: &'panels Panels,
-		panels_resource: &mut PanelsResource,
-	) {
-		tracing::debug!("Applying profile");
-		playlist_manager.set_root_path(self.root_path.clone());
-		panels.replace_panels(panels_resource, self.panels.iter().copied());
-	}
-}
-
-/// Profiles resource
-#[derive(Debug)]
-pub struct ProfilesResource {
-	/// All profiles by their path
-	profiles: HashMap<PathBuf, Profile>,
+	ProfilesManager { inner }
 }

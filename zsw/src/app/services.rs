@@ -8,7 +8,6 @@ use {
 	zsw_img::ImageLoaderService,
 	zsw_input::Input,
 	zsw_panels::Panels,
-	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
 	zsw_util::ServicesBundle,
@@ -36,9 +35,6 @@ pub struct Services {
 	/// Egui
 	pub egui: Egui,
 
-	/// Profiles
-	pub profiles: Profiles,
-
 	/// Renderer
 	pub renderer: Renderer,
 
@@ -58,7 +54,6 @@ impl ServicesBundle for Services {}
 	[ ImageLoaderService    ] [ image_loader ];
 	[ Panels         ] [ panels ];
 	[ Egui           ] [ egui ];
-	[ Profiles       ] [ profiles ];
 	[ Renderer       ] [ renderer ];
 	[ SettingsWindow ] [ settings_window ];
 	[ Input          ] [ input ];

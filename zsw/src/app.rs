@@ -37,7 +37,7 @@ use {
 	zsw_input::Input,
 	zsw_panels::Panels,
 	zsw_playlist::{PlaylistManager, PlaylistReceiver, PlaylistRunner},
-	zsw_profiles::Profiles,
+	zsw_profiles::ProfilesManager,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
 	zsw_util::Rect,
@@ -52,7 +52,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Create all services and resources
 	// TODO: Create and spawn all services in the same function
-	let (services, resources, resources_mut, playlist_runner, playlist_receiver, playlist_manager) =
+	let (services, resources, resources_mut, playlist_runner, playlist_receiver, playlist_manager, profiles_manager) =
 		self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
 	let resources = Arc::new(resources);
@@ -69,6 +69,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		playlist_runner,
 		playlist_receiver,
 		playlist_manager,
+		profiles_manager,
 		args,
 	);
 
@@ -96,6 +97,7 @@ pub async fn create_services_resources(
 		PlaylistRunner,
 		PlaylistReceiver,
 		PlaylistManager,
+		ProfilesManager,
 	),
 	anyhow::Error,
 > {
@@ -120,7 +122,7 @@ pub async fn create_services_resources(
 		Egui::new(&window, &wgpu).context("Unable to create egui state")?;
 
 	// Create the profiles
-	let (profiles, profiles_resource) = Profiles::new();
+	let profiles_manager = zsw_profiles::create();
 
 	// Create the renderer
 	let renderer = Renderer::new();
@@ -138,7 +140,6 @@ pub async fn create_services_resources(
 		image_loader,
 		panels,
 		egui,
-		profiles,
 		renderer,
 		settings_window,
 		input,
@@ -147,7 +148,6 @@ pub async fn create_services_resources(
 	// Bundle the resources
 	let resources = Resources {
 		panels:           Mutex::new(panels_resource),
-		profiles:         Mutex::new(profiles_resource),
 		wgpu_surface:     Mutex::new(wgpu_surface_resource),
 		egui_platform:    Mutex::new(egui_platform_resource),
 		egui_render_pass: Mutex::new(egui_render_pass_resource),
@@ -164,6 +164,7 @@ pub async fn create_services_resources(
 		playlist_runner,
 		playlist_receiver,
 		playlist_manager,
+		profiles_manager,
 	))
 }
 
@@ -177,6 +178,7 @@ pub fn spawn_services(
 	playlist_runner: PlaylistRunner,
 	playlist_receiver: PlaylistReceiver,
 	playlist_manager: PlaylistManager,
+	profiles_manager: ProfilesManager,
 	args: &Args,
 ) -> impl Future<Output = Result<(), anyhow::Error>> {
 	/// Macro to help spawn a service runner
@@ -188,10 +190,22 @@ pub fn spawn_services(
 	}}
 
 	// Spawn all
-	let profiles_loader_task = args.profile.clone().map(|path| {
+	let profiles_loader_task = args.profile.clone().map(|profile_path| {
 		spawn_service_runner!(
-			[services, resources, playlist_manager] "Profiles loader" =>
-			services.profiles.run_loader_applier(&path, &*services, &*resources, playlist_manager)
+			[services, resources, playlist_manager, profiles_manager] "Profiles loader" => async move {
+				// Try to load the profile
+				let profile = match profiles_manager.load(profile_path) {
+					Ok(profile) => profile,
+					Err(err) => {
+						tracing::warn!(?err, "Unable to load profile");
+						return;
+					}
+				};
+
+				// Then apply it
+				let mut panels_resource = resources.panels.lock().await;
+				profile.apply(&playlist_manager, &services.panels, &mut panels_resource);
+			}
 		)
 	});
 
@@ -208,7 +222,7 @@ pub fn spawn_services(
 		.collect::<Vec<_>>();
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter, playlist_manager)
+		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter, playlist_manager, profiles_manager)
 	);
 	let renderer_task =
 		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources));

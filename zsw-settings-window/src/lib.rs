@@ -14,7 +14,6 @@ use {
 	cgmath::{Point2, Vector2},
 	egui::{plot, Widget},
 	futures::lock::Mutex,
-	pollster::FutureExt,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
@@ -22,7 +21,7 @@ use {
 	zsw_egui::{Egui, EguiPainterResource, EguiPlatformResource},
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{PlaylistImage, PlaylistManager},
-	zsw_profiles::{Profile, Profiles, ProfilesResource},
+	zsw_profiles::{Profile, ProfilesManager},
 	zsw_util::{Rect, Resources, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
@@ -88,17 +87,14 @@ impl SettingsWindow {
 		resources: &R,
 		egui_painter_resource: &mut EguiPainterResource,
 		playlist_manager: PlaylistManager,
+		profiles_manager: ProfilesManager,
 	) -> !
 	where
-		S: Services<Wgpu> + Services<Egui> + Services<Window> + Services<Panels> + Services<Profiles>,
-		R: Resources<PanelsResource>
-			+ Resources<ProfilesResource>
-			+ Resources<WgpuSurfaceResource>
-			+ Resources<EguiPlatformResource>,
+		S: Services<Wgpu> + Services<Egui> + Services<Window> + Services<Panels>,
+		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource> + Resources<EguiPlatformResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
-		let profiles = services.service::<Profiles>();
 		let window = services.service::<Window>();
 		let panels = services.service::<Panels>();
 
@@ -116,9 +112,6 @@ impl SettingsWindow {
 				// DEADLOCK: Caller ensures we can lock it
 				let mut egui_platform_resource = resources.resource::<EguiPlatformResource>().await;
 
-				// DEADLOCK: Caller ensures we can lock it after the platform lock
-				let mut profiles_resource = resources.resource::<ProfilesResource>().await;
-
 				// DEADLOCK: Caller ensures we can lock it after the panels lock
 				let mut panels_resource = resources.resource::<PanelsResource>().await;
 
@@ -134,9 +127,8 @@ impl SettingsWindow {
 						window,
 						panels,
 						&playlist_manager,
-						profiles,
+						&profiles_manager,
 						&mut panels_resource,
-						&mut profiles_resource,
 					)
 				})
 			};
@@ -150,7 +142,7 @@ impl SettingsWindow {
 	}
 
 	/// Draws the settings window
-	fn draw<'panels, 'profiles>(
+	fn draw<'panels>(
 		inner: &mut Inner,
 		ctx: &egui::CtxRef,
 		_frame: &epi::Frame,
@@ -158,9 +150,8 @@ impl SettingsWindow {
 		window: &Window,
 		panels: &'panels Panels,
 		playlist_manager: &PlaylistManager,
-		profiles: &'profiles Profiles,
+		profiles_manager: &ProfilesManager,
 		panels_resource: &mut PanelsResource,
-		profiles_resource: &mut ProfilesResource,
 	) -> Result<(), anyhow::Error> {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
@@ -184,9 +175,8 @@ impl SettingsWindow {
 				surface_size,
 				panels,
 				playlist_manager,
-				profiles,
+				profiles_manager,
 				panels_resource,
-				profiles_resource,
 			);
 		});
 
@@ -206,15 +196,14 @@ impl SettingsWindow {
 }
 
 /// Draws the settings window
-fn draw_settings_window<'panels, 'profiles>(
+fn draw_settings_window<'panels>(
 	ui: &mut egui::Ui,
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
 	panels: &'panels Panels,
 	playlist_manager: &PlaylistManager,
-	profiles: &'profiles Profiles,
+	profiles_manager: &ProfilesManager,
 	panels_resource: &mut PanelsResource,
-	profiles_resource: &mut ProfilesResource,
 ) {
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
@@ -224,32 +213,24 @@ fn draw_settings_window<'panels, 'profiles>(
 		self::draw_playlist(ui, playlist_manager);
 	});
 	ui.collapsing("Profile", |ui| {
-		self::draw_profile(
-			ui,
-			panels,
-			playlist_manager,
-			profiles,
-			panels_resource,
-			profiles_resource,
-		);
+		self::draw_profile(ui, panels, playlist_manager, profiles_manager, panels_resource);
 	});
 }
 
 /// Draws the profile settings
-fn draw_profile<'panels, 'profiles>(
+fn draw_profile<'panels>(
 	ui: &mut egui::Ui,
 	panels: &'panels Panels,
 	playlist_manager: &PlaylistManager,
-	profiles: &'profiles Profiles,
+	profiles_manager: &ProfilesManager,
 	panels_resource: &mut PanelsResource,
-	profiles_resource: &mut ProfilesResource,
 ) {
 	// Draw all profiles
-	for (path, profile) in profiles.profiles(profiles_resource) {
+	for (path, profile) in profiles_manager.profiles() {
 		ui.horizontal(|ui| {
 			ui.label(path.display().to_string());
 			if ui.button("Apply").clicked() {
-				profile.apply(playlist_manager, panels, panels_resource).block_on();
+				profile.apply(playlist_manager, panels, panels_resource);
 			}
 		});
 	}
@@ -262,7 +243,7 @@ fn draw_profile<'panels, 'profiles>(
 			match file_dialog {
 				Ok(file_dialog) =>
 					if let Some(path) = file_dialog {
-						match profiles.load(profiles_resource, path.clone()) {
+						match profiles_manager.load(path.clone()) {
 							Ok(profile) => tracing::info!(?profile, "Successfully loaded profile"),
 							Err(err) => tracing::warn!(?path, ?err, "Unable to load profile"),
 						}
@@ -293,9 +274,8 @@ fn draw_profile<'panels, 'profiles>(
 							}
 						};
 
-						match profiles.save(profiles_resource, path.clone(), profile) {
-							Ok(()) => (),
-							Err(err) => tracing::warn!(?path, ?err, "Unable to load profile"),
+						if let Err(err) = profiles_manager.save(path.clone(), profile) {
+							tracing::warn!(?path, ?err, "Unable to load profile");
 						}
 					},
 				Err(err) => tracing::warn!(?err, "Unable to ask user for new root directory"),
