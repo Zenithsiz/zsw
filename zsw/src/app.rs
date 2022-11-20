@@ -36,7 +36,7 @@ use {
 	zsw_img::ImageLoaderService,
 	zsw_input::Input,
 	zsw_panels::Panels,
-	zsw_playlist::PlaylistService,
+	zsw_playlist::{PlaylistManager, PlaylistReceiver, PlaylistRunner},
 	zsw_profiles::Profiles,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
@@ -51,7 +51,9 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let window = Arc::new(window);
 
 	// Create all services and resources
-	let (services, resources, resources_mut) = self::create_services_resources(Arc::clone(&window)).await?;
+	// TODO: Create and spawn all services in the same function
+	let (services, resources, resources_mut, playlist_runner, playlist_receiver, playlist_manager) =
+		self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
 	let resources = Arc::new(resources);
 	tracing::debug!(?services, ?resources, "Created services and resources");
@@ -60,7 +62,15 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let mut event_handler = EventHandler::new();
 
 	// Spawn all futures
-	let join_handle = self::spawn_services(&services, &resources, resources_mut, args);
+	let join_handle = self::spawn_services(
+		&services,
+		&resources,
+		resources_mut,
+		playlist_runner,
+		playlist_receiver,
+		playlist_manager,
+		args,
+	);
 
 	// Run the event loop until exit
 	event_loop.run_return(|event, _, control_flow| {
@@ -78,7 +88,17 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 /// Creates all services and resources
 pub async fn create_services_resources(
 	window: Arc<Window>,
-) -> Result<(Services, Resources, ResourcesMut), anyhow::Error> {
+) -> Result<
+	(
+		Services,
+		Resources,
+		ResourcesMut,
+		PlaylistRunner,
+		PlaylistReceiver,
+		PlaylistManager,
+	),
+	anyhow::Error,
+> {
 	// Create the wgpu service
 	// TODO: Execute future in background and continue initializing
 	let (wgpu, wgpu_surface_resource) = Wgpu::new(Arc::clone(&window))
@@ -86,7 +106,7 @@ pub async fn create_services_resources(
 		.context("Unable to create renderer")?;
 
 	// Create the playlist
-	let (playlist, playlist_resource) = PlaylistService::new();
+	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
 
 	// Create the image loader
 	let image_loader = ImageLoaderService::new();
@@ -115,7 +135,6 @@ pub async fn create_services_resources(
 	let services = Services {
 		window,
 		wgpu,
-		playlist,
 		image_loader,
 		panels,
 		egui,
@@ -128,7 +147,6 @@ pub async fn create_services_resources(
 	// Bundle the resources
 	let resources = Resources {
 		panels:           Mutex::new(panels_resource),
-		playlist:         Mutex::new(playlist_resource),
 		profiles:         Mutex::new(profiles_resource),
 		wgpu_surface:     Mutex::new(wgpu_surface_resource),
 		egui_platform:    Mutex::new(egui_platform_resource),
@@ -139,44 +157,58 @@ pub async fn create_services_resources(
 		egui_painter: egui_painter_resource,
 	};
 
-	Ok((services, resources, resources_mut))
+	Ok((
+		services,
+		resources,
+		resources_mut,
+		playlist_runner,
+		playlist_receiver,
+		playlist_manager,
+	))
 }
 
 /// Spawns all services and returns a future to join them all
 // TODO: Hide future behind a `JoinHandle` type.
+#[allow(clippy::needless_pass_by_value)] // Ergonomics
 pub fn spawn_services(
 	services: &Arc<Services>,
 	resources: &Arc<Resources>,
 	mut resources_mut: ResourcesMut,
+	playlist_runner: PlaylistRunner,
+	playlist_receiver: PlaylistReceiver,
+	playlist_manager: PlaylistManager,
 	args: &Args,
 ) -> impl Future<Output = Result<(), anyhow::Error>> {
 	/// Macro to help spawn a service runner
 	macro spawn_service_runner([$($clones:ident),* $(,)?] $name:expr => $runner:expr) {{
 		$(
-			let $clones = Arc::clone(&$clones);
+			let $clones = $clones.clone();
 		)*
 		task::Builder::new().name($name).spawn(async move { $runner.await })
 	}}
 
 	// Spawn all
-	let profiles_loader_task = args.profile.clone().map(move |path| {
+	let profiles_loader_task = args.profile.clone().map(|path| {
 		spawn_service_runner!(
-			[services, resources] "Profiles loader" =>
-			services.profiles.run_loader_applier(&path, &*services, &*resources)
+			[services, resources, playlist_manager] "Profiles loader" =>
+			services.profiles.run_loader_applier(&path, &*services, &*resources, playlist_manager)
 		)
 	});
-	let playlist_task =
-		spawn_service_runner!([services, resources] "Playlist runner" => services.playlist.run(&*resources));
+
+	let playlist_runner_task = task::Builder::new()
+		.name("Playlist runner")
+		.spawn_blocking(move || playlist_runner.run());
+
 	let image_loader_tasks = (0..self::image_loader_tasks())
 		.map(|idx| {
 			spawn_service_runner!(
-				[services, resources] &format!("Image loader #{idx}") => services.image_loader.run(&*services, &*resources)
+				[services, playlist_receiver] &format!("Image loader #{idx}") => services.image_loader.run(playlist_receiver)
 			)
 		})
 		.collect::<Vec<_>>();
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter)
+		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter, playlist_manager)
 	);
 	let renderer_task =
 		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources));
@@ -186,7 +218,9 @@ pub fn spawn_services(
 		if let Some(task) = profiles_loader_task {
 			task.await.context("Unable to await for profiles loader runner")?;
 		}
-		playlist_task.await.context("Unable to await for playlist runner")?;
+		playlist_runner_task
+			.await
+			.context("Unable to await for playlist runner")?;
 		for task in image_loader_tasks {
 			task.await.context("Unable to wait for image loader runner")?;
 		}

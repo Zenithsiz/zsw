@@ -21,7 +21,7 @@ use {
 	},
 	zsw_egui::{Egui, EguiPainterResource, EguiPlatformResource},
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
-	zsw_playlist::{PlaylistImage, PlaylistResource, PlaylistService},
+	zsw_playlist::{PlaylistImage, PlaylistManager},
 	zsw_profiles::{Profile, Profiles, ProfilesResource},
 	zsw_util::{Rect, Resources, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
@@ -82,16 +82,16 @@ impl SettingsWindow {
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
 	/// Blocks until [`Self::update_paint_jobs`] on `egui` is called.
-	pub async fn run<S, R>(&self, services: &S, resources: &R, egui_painter_resource: &mut EguiPainterResource) -> !
+	pub async fn run<S, R>(
+		&self,
+		services: &S,
+		resources: &R,
+		egui_painter_resource: &mut EguiPainterResource,
+		playlist_manager: PlaylistManager,
+	) -> !
 	where
-		S: Services<Wgpu>
-			+ Services<Egui>
-			+ Services<Window>
-			+ Services<Panels>
-			+ Services<PlaylistService>
-			+ Services<Profiles>,
+		S: Services<Wgpu> + Services<Egui> + Services<Window> + Services<Panels> + Services<Profiles>,
 		R: Resources<PanelsResource>
-			+ Resources<PlaylistResource>
 			+ Resources<ProfilesResource>
 			+ Resources<WgpuSurfaceResource>
 			+ Resources<EguiPlatformResource>,
@@ -99,7 +99,6 @@ impl SettingsWindow {
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
 		let profiles = services.service::<Profiles>();
-		let playlist = services.service::<PlaylistService>();
 		let window = services.service::<Window>();
 		let panels = services.service::<Panels>();
 
@@ -120,9 +119,6 @@ impl SettingsWindow {
 				// DEADLOCK: Caller ensures we can lock it after the platform lock
 				let mut profiles_resource = resources.resource::<ProfilesResource>().await;
 
-				// DEADLOCK: Caller ensures we can lock it after the profiles lock
-				let mut playlist_resource = resources.resource::<PlaylistResource>().await;
-
 				// DEADLOCK: Caller ensures we can lock it after the panels lock
 				let mut panels_resource = resources.resource::<PanelsResource>().await;
 
@@ -137,9 +133,8 @@ impl SettingsWindow {
 						surface_size,
 						window,
 						panels,
-						playlist,
+						&playlist_manager,
 						profiles,
-						&mut playlist_resource,
 						&mut panels_resource,
 						&mut profiles_resource,
 					)
@@ -155,16 +150,15 @@ impl SettingsWindow {
 	}
 
 	/// Draws the settings window
-	fn draw<'playlist, 'panels, 'profiles>(
+	fn draw<'panels, 'profiles>(
 		inner: &mut Inner,
 		ctx: &egui::CtxRef,
 		_frame: &epi::Frame,
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
 		panels: &'panels Panels,
-		playlist: &'playlist PlaylistService,
+		playlist_manager: &PlaylistManager,
 		profiles: &'profiles Profiles,
-		playlist_resource: &mut PlaylistResource,
 		panels_resource: &mut PanelsResource,
 		profiles_resource: &mut ProfilesResource,
 	) -> Result<(), anyhow::Error> {
@@ -189,9 +183,8 @@ impl SettingsWindow {
 				&mut inner.new_panel_state,
 				surface_size,
 				panels,
-				playlist,
+				playlist_manager,
 				profiles,
-				playlist_resource,
 				panels_resource,
 				profiles_resource,
 			);
@@ -213,14 +206,13 @@ impl SettingsWindow {
 }
 
 /// Draws the settings window
-fn draw_settings_window<'playlist, 'panels, 'profiles>(
+fn draw_settings_window<'panels, 'profiles>(
 	ui: &mut egui::Ui,
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
 	panels: &'panels Panels,
-	playlist: &'playlist PlaylistService,
+	playlist_manager: &PlaylistManager,
 	profiles: &'profiles Profiles,
-	playlist_resource: &mut PlaylistResource,
 	panels_resource: &mut PanelsResource,
 	profiles_resource: &mut ProfilesResource,
 ) {
@@ -229,15 +221,14 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 		self::draw_panels(ui, new_panel_state, surface_size, panels, panels_resource);
 	});
 	ui.collapsing("Playlist", |ui| {
-		self::draw_playlist(ui, playlist, playlist_resource);
+		self::draw_playlist(ui, playlist_manager);
 	});
 	ui.collapsing("Profile", |ui| {
 		self::draw_profile(
 			ui,
 			panels,
-			playlist,
+			playlist_manager,
 			profiles,
-			playlist_resource,
 			panels_resource,
 			profiles_resource,
 		);
@@ -245,12 +236,11 @@ fn draw_settings_window<'playlist, 'panels, 'profiles>(
 }
 
 /// Draws the profile settings
-fn draw_profile<'playlist, 'panels, 'profiles>(
+fn draw_profile<'panels, 'profiles>(
 	ui: &mut egui::Ui,
 	panels: &'panels Panels,
-	playlist: &'playlist PlaylistService,
+	playlist_manager: &PlaylistManager,
 	profiles: &'profiles Profiles,
-	playlist_resource: &mut PlaylistResource,
 	panels_resource: &mut PanelsResource,
 	profiles_resource: &mut ProfilesResource,
 ) {
@@ -259,9 +249,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 		ui.horizontal(|ui| {
 			ui.label(path.display().to_string());
 			if ui.button("Apply").clicked() {
-				profile
-					.apply(playlist, panels, playlist_resource, panels_resource)
-					.block_on();
+				profile.apply(playlist_manager, panels, panels_resource).block_on();
 			}
 		});
 	}
@@ -294,7 +282,7 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 					if let Some(path) = file_dialog {
 						let profile = {
 							Profile {
-								root_path: match playlist.root_path(playlist_resource).block_on() {
+								root_path: match playlist_manager.root_path() {
 									Some(path) => path,
 									None => {
 										tracing::warn!("No root path was set");
@@ -317,18 +305,14 @@ fn draw_profile<'playlist, 'panels, 'profiles>(
 }
 
 /// Draws the playlist settings
-fn draw_playlist<'playlist>(
-	ui: &mut egui::Ui,
-	playlist: &'playlist PlaylistService,
-	playlist_resource: &mut PlaylistResource,
-) {
+fn draw_playlist(ui: &mut egui::Ui, playlist_manager: &PlaylistManager) {
 	// Draw the root path
 	ui.horizontal(|ui| {
 		// Show the current root path
 		ui.label("Root path");
 		ui.add_space(10.0);
 		{
-			match playlist.root_path(playlist_resource).block_on() {
+			match playlist_manager.root_path() {
 				Some(root_path) => ui.label(root_path.display().to_string()),
 				None => ui.label("<None>"),
 			};
@@ -341,7 +325,7 @@ fn draw_playlist<'playlist>(
 			match file_dialog {
 				Ok(file_dialog) => {
 					if let Some(path) = file_dialog {
-						playlist.set_root_path(playlist_resource, path).block_on();
+						playlist_manager.set_root_path(path);
 
 						// TODO: Maybe reset both panels and loaders?
 					}
@@ -354,13 +338,13 @@ fn draw_playlist<'playlist>(
 	// Draw all paths in the pipeline
 	ui.collapsing("Upcoming", |ui| {
 		egui::ScrollArea::new([true, true]).max_height(500.0).show(ui, |ui| {
-			playlist
-				.peek_next(playlist_resource, |image| match image {
+			for image in playlist_manager.peek_next() {
+				match &*image {
 					PlaylistImage::File(path) => {
 						ui.label(path.display().to_string());
 					},
-				})
-				.block_on();
+				}
+			}
 		});
 	});
 }

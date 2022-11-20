@@ -7,139 +7,11 @@
 
 // Imports
 use {
+	crossbeam::channel,
+	parking_lot::RwLock,
 	rand::prelude::SliceRandom,
-	std::{collections::HashSet, path::PathBuf, sync::Arc},
-	zsw_util::Resources,
+	std::{collections::HashSet, mem, path::PathBuf, sync::Arc},
 };
-
-/// Image playlist
-#[derive(Debug)]
-pub struct PlaylistService {
-	/// Image sender
-	img_tx: async_channel::Sender<Arc<PlaylistImage>>,
-
-	/// Image receiver
-	img_rx: async_channel::Receiver<Arc<PlaylistImage>>,
-}
-
-impl PlaylistService {
-	/// Creates a new, empty, playlist, alongside all resources
-	#[must_use]
-	pub fn new() -> (Self, PlaylistResource) {
-		// Note: Making the close channel unbounded is what allows us to not block
-		//       in `Self::stop`.
-		let (img_tx, img_rx) = async_channel::bounded(1);
-
-		// Create the service
-		let service = Self { img_tx, img_rx };
-
-		// Create the resource
-		let resource = PlaylistResource {
-			root_path:  None,
-			images:     HashSet::new(),
-			cur_images: vec![],
-		};
-
-		(service, resource)
-	}
-
-	/// Runs the playlist
-	///
-	/// # Blocking
-	/// Locks [`PlaylistLock`] on `self`.
-	pub async fn run<R>(&self, resources: &R) -> !
-	where
-		R: Resources<PlaylistResource>,
-	{
-		loop {
-			// Get the next image to send
-			// DEADLOCK: Caller ensures we can lock it
-			// Note: It's important to not have this in the match expression, as it would
-			//       keep the lock through the whole match.
-			let next = resources.resource::<PlaylistResource>().await.cur_images.pop();
-
-			// Then check if we got it
-			match next {
-				// If we got it, send it
-				// DEADLOCK: We don't hold any locks while sending
-				// Note: This can't return an `Err` because `self` owns a receiver
-				Some(image) => self.img_tx.send(image).await.expect("Image receiver was closed"),
-
-				// Else get the next batch and shuffle them
-				// DEADLOCK: Caller ensures we can lock it.
-				None => {
-					let mut resource = resources.resource::<PlaylistResource>().await;
-					let resource = &mut *resource;
-					resource.cur_images.extend(resource.images.iter().cloned());
-					resource.cur_images.shuffle(&mut rand::thread_rng());
-				},
-			}
-		}
-	}
-
-	/// Removes an image
-	pub async fn remove_image<'a>(&'a self, resource: &mut PlaylistResource, image: &PlaylistImage) {
-		// Note: We don't care if the image actually existed or not
-		let _ = resource.images.remove(image);
-	}
-
-	/// Sets the root path
-	pub async fn set_root_path<'a>(&'a self, resource: &mut PlaylistResource, root_path: PathBuf) {
-		// Remove all existing paths and add new ones
-		resource.images.clear();
-		zsw_util::visit_dir(&root_path, &mut |path| {
-			let _ = resource.images.insert(Arc::new(PlaylistImage::File(path)));
-		});
-
-		// Remove all current paths too
-		resource.cur_images.clear();
-
-		// Save the root path
-		resource.root_path = Some(root_path);
-	}
-
-	/// Returns the root path
-	pub async fn root_path<'a>(&'a self, resource: &'a PlaylistResource) -> Option<PathBuf> {
-		resource.root_path.clone()
-	}
-
-	/// Retrieves the next image
-	///
-	/// # Blocking
-	/// Locks [`PlaylistLock`] on `??`
-	// TODO: Replace `Locks` with a barrier on the channel
-	// Note: Doesn't literally lock it, but the other side of the channel
-	//       needs to lock it in order to progress, so it's equivalent
-	pub async fn next(&self) -> Arc<PlaylistImage> {
-		// Note: This can't return an `Err` because `self` owns a sender
-		// DEADLOCK: Caller ensures it won't hold an `PlaylistLock`,
-		//           and we ensure the other side of the channel
-		//           can progress.
-		self.img_rx.recv().await.expect("Image sender was closed")
-	}
-
-	/// Peeks the next images
-	pub async fn peek_next(&self, resource: &PlaylistResource, mut f: impl FnMut(&PlaylistImage) + Send) {
-		for image in resource.cur_images.iter().rev() {
-			f(image);
-		}
-	}
-}
-
-/// Playlist resource
-#[doc(hidden)]
-#[derive(Clone, Debug)]
-pub struct PlaylistResource {
-	/// Root path
-	// TODO: Use this properly
-	root_path: Option<PathBuf>,
-
-	/// All images
-	images: HashSet<Arc<PlaylistImage>>,
-
-	/// Current images
-	cur_images: Vec<Arc<PlaylistImage>>,
-}
 
 /// A playlist image
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
@@ -147,4 +19,222 @@ pub enum PlaylistImage {
 	/// File path
 	File(PathBuf),
 	// TODO: URL
+}
+
+/// Playlist event
+enum Event {
+	/// Remove Image
+	RemoveImg(Arc<PlaylistImage>),
+
+	/// Change root path
+	ChangeRoot(PathBuf),
+}
+
+/// Playlist inner
+#[derive(Debug)]
+pub struct PlaylistInner {
+	/// Root path
+	root_path: Option<PathBuf>,
+
+	/// All images
+	all_images: HashSet<Arc<PlaylistImage>>,
+
+	/// Current images
+	cur_images: Vec<Arc<PlaylistImage>>,
+}
+
+/// Playlist receiver
+///
+/// Receives images from the playlist
+#[derive(Clone, Debug)]
+pub struct PlaylistReceiver {
+	/// Image receiver
+	img_rx: channel::Receiver<Arc<PlaylistImage>>,
+
+	/// Event sender
+	event_tx: channel::Sender<Event>,
+}
+
+impl PlaylistReceiver {
+	/// Retrieves the next image.
+	///
+	/// Returns `None` if the playlist manager was closed
+	#[must_use]
+	pub fn next(&self) -> Option<Arc<PlaylistImage>> {
+		self.img_rx.recv().ok()
+	}
+
+	/// Removes an image
+	pub fn remove_image(&self, image: Arc<PlaylistImage>) {
+		// TODO: Care about this?
+		let _res = self.event_tx.send(Event::RemoveImg(image));
+	}
+}
+
+/// Playlist manager
+#[derive(Clone, Debug)]
+pub struct PlaylistManager {
+	/// Inner
+	inner: Arc<RwLock<PlaylistInner>>,
+
+	/// Event sender
+	event_tx: channel::Sender<Event>,
+}
+
+impl PlaylistManager {
+	/// Removes an image
+	pub fn remove_image(&self, image: Arc<PlaylistImage>) {
+		// TODO: Care about this?
+		let _res = self.event_tx.send(Event::RemoveImg(image));
+	}
+
+	/// Sets the root path
+	pub fn set_root_path(&self, root_path: impl Into<PathBuf>) {
+		// TODO: Care about this?
+		let _res = self.event_tx.send(Event::ChangeRoot(root_path.into()));
+	}
+
+	/// Returns the root path
+	#[must_use]
+	pub fn root_path(&self) -> Option<PathBuf> {
+		self.inner.read().root_path.clone()
+	}
+
+	/// Returns the remaining images in the current shuffle
+	#[must_use]
+	pub fn peek_next(&self) -> Vec<Arc<PlaylistImage>> {
+		self.inner.read().cur_images.clone()
+	}
+}
+
+/// Playlist runner
+///
+/// Responsible for driving the
+/// playlist receiver
+#[derive(Debug)]
+pub struct PlaylistRunner {
+	/// Inner
+	inner: Arc<RwLock<PlaylistInner>>,
+
+	/// Image sender
+	img_tx: channel::Sender<Arc<PlaylistImage>>,
+
+	/// Event receiver
+	event_rx: channel::Receiver<Event>,
+}
+
+impl PlaylistRunner {
+	/// Runs the playlist runner.
+	///
+	/// Returns once the playlist receiver is dropped
+	pub fn run(self) {
+		'run: loop {
+			// Lock the inner data for writing
+			let mut inner = self.inner.write();
+
+			match inner.all_images.is_empty() {
+				// If we have no images, block on the next event
+				true => {
+					// Note: Important we drop this before blocking
+					mem::drop(inner);
+
+					let event = match self.event_rx.recv() {
+						Ok(event) => event,
+						Err(channel::RecvError) => break 'run,
+					};
+					let mut inner = self.inner.write();
+					Self::handle_event(&mut inner, event);
+					continue;
+				},
+
+				// Else just consume all events we have
+				false => loop {
+					let event = match self.event_rx.try_recv() {
+						Ok(event) => event,
+						Err(channel::TryRecvError::Empty) => break,
+						Err(channel::TryRecvError::Disconnected) => break 'run,
+					};
+					Self::handle_event(&mut inner, event);
+				},
+			}
+
+			// Check if we have a next image to send
+			match inner.cur_images.pop() {
+				// If we got it, send it.
+				// Note: It's important to drop the lock while awaiting
+				// Note: If the sender got closed in the meantime, quit
+				Some(image) => {
+					mem::drop(inner);
+					if self.img_tx.send(image).is_err() {
+						break;
+					}
+				},
+
+				// Else get the next batch and shuffle them
+				// Note: If we got here, `all_images` has at least 1 image,
+				//       so we won't be "spin locking" here.
+				None => {
+					let inner = &mut *inner;
+
+					tracing::debug!("Reshuffling playlist");
+					inner.cur_images.extend(inner.all_images.iter().cloned());
+					inner.cur_images.shuffle(&mut rand::thread_rng());
+				},
+			}
+		}
+	}
+
+	/// Handles event `event`
+	fn handle_event(inner: &mut PlaylistInner, event: Event) {
+		match event {
+			// Note: We don't care if the image actually existed or not
+			Event::RemoveImg(image) => {
+				let _ = inner.all_images.remove(&image);
+			},
+
+			Event::ChangeRoot(root_path) => {
+				// Remove all existing paths and add new ones
+				inner.all_images.clear();
+				zsw_util::visit_dir(&root_path, &mut |path| {
+					let _ = inner.all_images.insert(Arc::new(PlaylistImage::File(path)));
+				});
+
+				// Remove all current paths too
+				inner.cur_images.clear();
+
+				// Save the root path
+				inner.root_path = Some(root_path);
+			},
+		};
+	}
+}
+
+/// Creates the playlist service
+#[must_use]
+pub fn create() -> (PlaylistRunner, PlaylistReceiver, PlaylistManager) {
+	// Create the channels
+	// Note: Since processing a single playlist item is cheap, we
+	//       use a small buffer size
+	let (img_tx, img_rx) = channel::bounded(1);
+	let (event_tx, event_rx) = channel::unbounded();
+
+	let inner = PlaylistInner {
+		root_path:  None,
+		all_images: HashSet::new(),
+		cur_images: vec![],
+	};
+	let inner = Arc::new(RwLock::new(inner));
+
+	let playlist_runner = PlaylistRunner {
+		inner: Arc::clone(&inner),
+		img_tx,
+		event_rx,
+	};
+	let playlist_receiver = PlaylistReceiver {
+		img_rx,
+		event_tx: event_tx.clone(),
+	};
+	let playlist_manager = PlaylistManager { inner, event_tx };
+
+	(playlist_runner, playlist_receiver, playlist_manager)
 }

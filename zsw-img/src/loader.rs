@@ -9,8 +9,7 @@ mod load;
 // Imports
 use {
 	super::Image,
-	zsw_playlist::{PlaylistImage, PlaylistResource, PlaylistService},
-	zsw_util::{Resources, Services},
+	zsw_playlist::{PlaylistImage, PlaylistReceiver},
 };
 
 /// Image loader service
@@ -37,19 +36,12 @@ impl ImageLoaderService {
 	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
-	///
-	/// # Blocking
-	/// Locks [`zsw_playlist::PlaylistLock`] on `playlist`
-	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
-	where
-		S: Services<PlaylistService>,
-		R: Resources<PlaylistResource>,
-	{
-		let playlist = services.service::<PlaylistService>();
-
+	pub async fn run(&self, playlist_receiver: PlaylistReceiver) {
 		loop {
-			// DEADLOCK: Caller ensures we can lock it
-			let image = playlist.next().await;
+			// Get the next image, or quit if no more
+			let Some(image) = playlist_receiver.next() else {
+				break;
+			};
 
 			match &*image {
 				PlaylistImage::File(path) => match load::load_image(path) {
@@ -68,10 +60,7 @@ impl ImageLoaderService {
 					// If we couldn't load, log, remove the path and retry
 					Err(err) => {
 						tracing::info!(?path, ?err, "Unable to load file");
-
-						// DEADLOCK: Caller ensures we can lock it
-						let mut playlist_resource = resources.resource::<PlaylistResource>().await;
-						playlist.remove_image(&mut playlist_resource, &image).await;
+						playlist_receiver.remove_image(image);
 					},
 				},
 			}

@@ -16,7 +16,7 @@ use {
 		path::{Path, PathBuf},
 	},
 	zsw_panels::{Panel, Panels, PanelsResource},
-	zsw_playlist::{PlaylistResource, PlaylistService},
+	zsw_playlist::PlaylistManager,
 	zsw_util::{Resources, Services},
 };
 
@@ -40,14 +40,17 @@ impl Profiles {
 	///
 	/// # Lock
 	/// [`ProfilesLock`]
-	/// - [`zsw_playlist::PlaylistLock`]
-	///   - [`zsw_panels::PanelsLock`]
-	pub async fn run_loader_applier<S, R>(&self, path: &Path, services: &S, resources: &R)
-	where
-		S: Services<PlaylistService> + Services<Panels>,
-		R: Resources<PanelsResource> + Resources<PlaylistResource> + Resources<ProfilesResource>,
+	/// - [`zsw_panels::PanelsLock`]
+	pub async fn run_loader_applier<S, R>(
+		&self,
+		path: &Path,
+		services: &S,
+		resources: &R,
+		playlist_manager: PlaylistManager,
+	) where
+		S: Services<Panels>,
+		R: Resources<PanelsResource> + Resources<ProfilesResource>,
 	{
-		let playlist = services.service::<PlaylistService>();
 		let panels = services.service::<Panels>();
 
 		// DEADLOCK: Caller ensures we can lock it
@@ -61,13 +64,10 @@ impl Profiles {
 
 				// Lock
 				// DEADLOCK: Caller ensures we can lock them in this order after profiles lock
-				let mut playlist_resource = resources.resource::<PlaylistResource>().await;
 				let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 				// Then apply
-				profile
-					.apply(playlist, panels, &mut playlist_resource, &mut panels_resource)
-					.await;
+				profile.apply(&playlist_manager, panels, &mut panels_resource).await;
 			},
 
 			Err(err) => tracing::warn!(?err, "Unable to load profile"),
@@ -118,14 +118,14 @@ pub struct Profile {
 
 impl Profile {
 	/// Applies a profile
-	pub async fn apply<'playlist, 'panels>(
+	pub async fn apply<'panels>(
 		&self,
-		playlist: &'playlist PlaylistService,
+		playlist_manager: &PlaylistManager,
 		panels: &'panels Panels,
-		playlist_resource: &mut PlaylistResource,
 		panels_resource: &mut PanelsResource,
 	) {
-		playlist.set_root_path(playlist_resource, self.root_path.clone()).await;
+		tracing::debug!("Applying profile");
+		playlist_manager.set_root_path(self.root_path.clone());
 		panels.replace_panels(panels_resource, self.panels.iter().copied());
 	}
 }
