@@ -1,7 +1,7 @@
 //! Egui
 
 // Features
-#![feature(never_type, let_chains)]
+#![feature(never_type)]
 
 // Imports
 use {

@@ -1,15 +1,7 @@
 //! Utility
 
 // Features
-#![feature(
-	decl_macro,
-	generator_trait,
-	generators,
-	mixed_integer_ops,
-	never_type,
-	generic_associated_types,
-	type_alias_impl_trait
-)]
+#![feature(decl_macro, generator_trait, generators, never_type, type_alias_impl_trait)]
 
 // Modules
 mod condvar_future;

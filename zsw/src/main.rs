@@ -8,14 +8,11 @@
 	inline_const,
 	stmt_expr_attributes,
 	try_trait_v2,
-	backtrace,
 	thread_id_value,
 	unwrap_infallible,
 	async_closure,
-	result_into_ok_or_err,
 	generators,
 	generator_trait,
-	mixed_integer_ops,
 	associated_type_bounds
 )]
 

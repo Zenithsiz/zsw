@@ -13,7 +13,7 @@ pub fn load_image(path: &Path) -> Result<DynamicImage, anyhow::Error> {
 	let path = path.canonicalize().context("Unable to canonicalize path")?;
 
 	// Open the image
-	let image_file = fs::File::open(&path).context("Unable to open image file")?;
+	let image_file = fs::File::open(path).context("Unable to open image file")?;
 	let mut image_file = BufReader::new(image_file);
 
 	// Then guess it's format
