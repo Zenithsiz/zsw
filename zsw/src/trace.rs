@@ -1,15 +1,13 @@
 //! Tracing
 
-use std::{backtrace::Backtrace, panic, thread};
-
 // Imports
 use {
-	std::{fs, io},
+	std::{backtrace::Backtrace, fs, io, panic, thread},
 	tracing::{metadata::LevelFilter, Level, Subscriber},
 	tracing_subscriber::{
 		filter,
 		fmt::{self, format::FmtSpan},
-		layer::Layer,
+		layer::{self, Layer},
 		prelude::*,
 		registry::LookupSpan,
 	},
@@ -49,7 +47,7 @@ where
 		.with_thread_ids(false);
 
 	// Setup the target filter
-	let target_filter = self::add_filters(filter::Targets::new().with_default(LevelFilter::DEBUG));
+	let target_filter = self::target_filters(LevelFilter::DEBUG);
 
 	// TODO: Not panic if unable to create log file
 	// TODO: Not leak the file
@@ -77,13 +75,28 @@ where
 		.with_thread_ids(false);
 
 	// Setup the target filter
-	let target_filter = self::add_filters(filter::Targets::new().with_default(LevelFilter::INFO));
+	let target_filter = self::target_filters(LevelFilter::INFO);
 
 	fmt::layer()
 		.event_format(format)
 		.with_span_events(FmtSpan::NONE)
 		.with_writer(io::stderr)
 		.with_filter(target_filter)
+}
+
+/// Create targets filters with a default level
+fn target_filters<S>(default_level: LevelFilter) -> Box<dyn layer::Filter<S> + Send + Sync + 'static>
+where
+	S: Subscriber + for<'a> LookupSpan<'a>,
+{
+	match tracing_subscriber::EnvFilter::builder()
+		.with_default_directive(default_level.into())
+		.try_from_env()
+	{
+		// TODO: Still apply the usuals filters by default, unless the user explicitly changes them?
+		Ok(env_filter) => Box::new(env_filter) as Box<dyn layer::Filter<S> + Send + Sync + 'static>,
+		Err(_) => Box::new(self::add_filters(filter::Targets::new().with_default(default_level))),
+	}
 }
 
 /// Adds filters to a targets
