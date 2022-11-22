@@ -116,6 +116,9 @@ pub struct PlaylistRunner {
 	/// Inner
 	inner: Arc<RwLock<PlaylistInner>>,
 
+	/// Image receiver
+	img_rx: channel::Receiver<Arc<PlaylistImage>>,
+
 	/// Image sender
 	img_tx: channel::Sender<Arc<PlaylistImage>>,
 
@@ -143,7 +146,7 @@ impl PlaylistRunner {
 						Err(channel::RecvError) => break 'run,
 					};
 					let mut inner = self.inner.write();
-					Self::handle_event(&mut inner, event);
+					self.handle_event(&mut inner, event);
 					continue;
 				},
 
@@ -154,7 +157,7 @@ impl PlaylistRunner {
 						Err(channel::TryRecvError::Empty) => break,
 						Err(channel::TryRecvError::Disconnected) => break 'run,
 					};
-					Self::handle_event(&mut inner, event);
+					self.handle_event(&mut inner, event);
 				},
 			}
 
@@ -185,7 +188,7 @@ impl PlaylistRunner {
 	}
 
 	/// Handles event `event`
-	fn handle_event(inner: &mut PlaylistInner, event: Event) {
+	fn handle_event(&self, inner: &mut PlaylistInner, event: Event) {
 		match event {
 			// Note: We don't care if the image actually existed or not
 			Event::RemoveImg(image) => {
@@ -201,6 +204,9 @@ impl PlaylistRunner {
 
 				// Remove all current paths too
 				inner.cur_images.clear();
+
+				// Flush all images in the channel buffer
+				while self.img_rx.try_recv().is_ok() {}
 
 				// Save the root path
 				inner.root_path = Some(root_path);
@@ -228,6 +234,7 @@ pub fn create() -> (PlaylistRunner, PlaylistReceiver, PlaylistManager) {
 	let playlist_runner = PlaylistRunner {
 		inner: Arc::clone(&inner),
 		img_tx,
+		img_rx: img_rx.clone(),
 		event_rx,
 	};
 	let playlist_receiver = PlaylistReceiver {
