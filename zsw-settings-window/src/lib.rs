@@ -81,22 +81,22 @@ impl SettingsWindow {
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
 	/// Blocks until [`Self::update_output`] on `egui` is called.
-	pub async fn run<S, R>(
-		&self,
-		services: &S,
-		resources: &R,
-		egui_painter_resource: &mut EguiPainterResource,
-		playlist_manager: PlaylistManager,
-		profiles_manager: ProfilesManager,
-	) -> !
+	pub async fn run<S, R>(&self, services: &S, resources: &R, egui_painter_resource: &mut EguiPainterResource) -> !
 	where
-		S: Services<Wgpu> + Services<Egui> + Services<Window> + Services<Panels>,
+		S: Services<Wgpu>
+			+ Services<Egui>
+			+ Services<Window>
+			+ Services<Panels>
+			+ Services<PlaylistManager>
+			+ Services<ProfilesManager>,
 		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource> + Resources<EguiPlatformResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
 		let window = services.service::<Window>();
 		let panels = services.service::<Panels>();
+		let playlist_manager = services.service::<PlaylistManager>();
+		let profiles_manager = services.service::<ProfilesManager>();
 
 
 		loop {
@@ -126,8 +126,8 @@ impl SettingsWindow {
 						surface_size,
 						window,
 						panels,
-						&playlist_manager,
-						&profiles_manager,
+						playlist_manager,
+						profiles_manager,
 						&mut panels_resource,
 					)
 				})

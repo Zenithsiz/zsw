@@ -36,8 +36,8 @@ use {
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::Panels,
-	zsw_playlist::{PlaylistManager, PlaylistReceiver, PlaylistRunner},
-	zsw_profiles::{Profile, ProfilesManager},
+	zsw_playlist::{PlaylistReceiver, PlaylistRunner},
+	zsw_profiles::Profile,
 	zsw_renderer::Renderer,
 	zsw_settings_window::SettingsWindow,
 	zsw_util::Rect,
@@ -52,16 +52,8 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Create all services and resources
 	// TODO: Create and spawn all services in the same function
-	let (
-		services,
-		resources,
-		resources_mut,
-		playlist_runner,
-		playlist_receiver,
-		playlist_manager,
-		profiles_manager,
-		image_loader,
-	) = self::create_services_resources(Arc::clone(&window)).await?;
+	let (services, resources, resources_mut, playlist_runner, playlist_receiver, image_loader) =
+		self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
 	let resources = Arc::new(resources);
 	tracing::debug!(?services, ?resources, "Created services and resources");
@@ -71,11 +63,13 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Try to load the default profile
 	// TODO: Not assume a default exists?
-	let default_profile =
-		match profiles_manager.load(args.profile.as_ref().cloned().unwrap_or_else(|| "profile.json".into())) {
-			Ok(profile) => profile,
-			Err(err) => return Err(err).context("Unable to load default profile"),
-		};
+	let default_profile = match services
+		.profiles_manager
+		.load(args.profile.as_ref().cloned().unwrap_or_else(|| "profile.json".into()))
+	{
+		Ok(profile) => profile,
+		Err(err) => return Err(err).context("Unable to load default profile"),
+	};
 
 	// Spawn all futures
 	let join_handle = self::spawn_services(
@@ -84,8 +78,6 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		resources_mut,
 		playlist_runner,
 		playlist_receiver,
-		playlist_manager,
-		profiles_manager,
 		image_loader,
 		default_profile,
 	)
@@ -114,8 +106,6 @@ pub async fn create_services_resources(
 		ResourcesMut,
 		PlaylistRunner,
 		PlaylistReceiver,
-		PlaylistManager,
-		ProfilesManager,
 		ImageLoader,
 	),
 	anyhow::Error,
@@ -157,6 +147,8 @@ pub async fn create_services_resources(
 		window,
 		wgpu,
 		image_receiver,
+		playlist_manager,
+		profiles_manager,
 		panels,
 		egui,
 		renderer,
@@ -182,8 +174,6 @@ pub async fn create_services_resources(
 		resources_mut,
 		playlist_runner,
 		playlist_receiver,
-		playlist_manager,
-		profiles_manager,
 		image_loader,
 	))
 }
@@ -197,8 +187,6 @@ pub fn spawn_services(
 	mut resources_mut: ResourcesMut,
 	playlist_runner: PlaylistRunner,
 	playlist_receiver: PlaylistReceiver,
-	playlist_manager: PlaylistManager,
-	profiles_manager: ProfilesManager,
 	image_loader: ImageLoader,
 	default_profile: Arc<Profile>,
 ) -> Result<impl Future<Output = Result<(), anyhow::Error>>, anyhow::Error> {
@@ -212,9 +200,9 @@ pub fn spawn_services(
 
 	// Spawn all
 	let profiles_loader_task = spawn_service_runner!(
-		[services, resources, playlist_manager, default_profile] "Profiles loader" => async move {
+		[services, resources, default_profile] "Profiles loader" => async move {
 			let mut panels_resource = resources.panels.lock().await;
-			default_profile.apply(&playlist_manager, &services.panels, &mut panels_resource);
+			default_profile.apply(&services.playlist_manager, &services.panels, &mut panels_resource);
 		}
 	)
 	.context("Unable to spawn profile loader task")?;
@@ -236,7 +224,7 @@ pub fn spawn_services(
 		.context("Unable to spawn image loader tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter, playlist_manager, profiles_manager)
+		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter)
 	).context("Unable to spawn settings window task")?;
 	let renderer_task =
 		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources))
