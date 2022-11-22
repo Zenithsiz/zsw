@@ -19,7 +19,7 @@ use {
 	anyhow::Context,
 	cgmath::Point2,
 	winit::dpi::PhysicalSize,
-	zsw_img::ImageLoaderService,
+	zsw_img::ImageReceiver,
 	zsw_input::Input,
 	zsw_wgpu::Wgpu,
 };
@@ -77,11 +77,11 @@ impl Panels {
 		&self,
 		resource: &mut PanelsResource,
 		wgpu: &Wgpu,
-		image_loader: &ImageLoaderService,
+		image_receiver: &ImageReceiver,
 	) -> Result<(), anyhow::Error> {
 		for panel in &mut resource.panels {
 			panel
-				.update(&self.renderer, wgpu, image_loader)
+				.update(&self.renderer, wgpu, image_receiver)
 				.context("Unable to update panel")?;
 		}
 

@@ -10,7 +10,7 @@ use {
 	tokio::time::Instant,
 	winit::window::Window,
 	zsw_egui::{Egui, EguiPlatformResource, EguiRenderPassResource},
-	zsw_img::ImageLoaderService,
+	zsw_img::ImageReceiver,
 	zsw_input::Input,
 	zsw_panels::{Panels, PanelsResource},
 	zsw_util::{Resources, Services},
@@ -45,7 +45,7 @@ impl Renderer {
 			+ Services<Window>
 			+ Services<Panels>
 			+ Services<Input>
-			+ Services<ImageLoaderService>,
+			+ Services<ImageReceiver>,
 		R: Resources<PanelsResource>
 			+ Resources<WgpuSurfaceResource>
 			+ Resources<EguiPlatformResource>
@@ -83,7 +83,7 @@ impl Renderer {
 	/// Locks [`zsw_panels::PanelsLock`] on `panels`
 	async fn update<S, R>(services: &S, resources: &R) -> Result<(), anyhow::Error>
 	where
-		S: Services<Wgpu> + Services<Panels> + Services<ImageLoaderService>,
+		S: Services<Wgpu> + Services<Panels> + Services<ImageReceiver>,
 		R: Resources<PanelsResource>,
 	{
 		// DEADLOCK: Caller ensures we can lock it
@@ -93,7 +93,7 @@ impl Renderer {
 		services.service::<Panels>().update_all(
 			&mut panels_resource,
 			services.service::<Wgpu>(),
-			services.service::<ImageLoaderService>(),
+			services.service::<ImageReceiver>(),
 		)
 	}
 

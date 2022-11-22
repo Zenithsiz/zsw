@@ -5,7 +5,7 @@ use {
 	std::sync::Arc,
 	winit::window::Window,
 	zsw_egui::Egui,
-	zsw_img::ImageLoaderService,
+	zsw_img::ImageReceiver,
 	zsw_input::Input,
 	zsw_panels::Panels,
 	zsw_renderer::Renderer,
@@ -26,8 +26,8 @@ pub struct Services {
 	/// Wgpu
 	pub wgpu: Wgpu,
 
-	/// Image loader
-	pub image_loader: ImageLoaderService,
+	/// Image receiver
+	pub image_receiver: ImageReceiver,
 
 	/// Panels
 	pub panels: Panels,
@@ -51,7 +51,7 @@ impl ServicesBundle for Services {}
 	ty                 field;
 	[ Window         ] [ window ];
 	[ Wgpu           ] [ wgpu ];
-	[ ImageLoaderService    ] [ image_loader ];
+	[ ImageReceiver  ] [ image_receiver ];
 	[ Panels         ] [ panels ];
 	[ Egui           ] [ egui ];
 	[ Renderer       ] [ renderer ];

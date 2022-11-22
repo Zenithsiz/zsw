@@ -8,7 +8,7 @@ use {
 	num_rational::Rational32,
 	std::mem,
 	winit::dpi::PhysicalSize,
-	zsw_img::ImageLoaderService,
+	zsw_img::ImageReceiver,
 	zsw_wgpu::Wgpu,
 };
 
@@ -41,7 +41,7 @@ impl PanelState {
 		&mut self,
 		renderer: &PanelsRenderer,
 		wgpu: &Wgpu,
-		image_loader: &ImageLoaderService,
+		image_receiver: &ImageReceiver,
 	) -> Result<(), anyhow::Error> {
 		// Next frame's progress
 		let next_progress = self.cur_progress.saturating_add(1).clamp(0, self.panel.duration);
@@ -56,7 +56,7 @@ impl PanelState {
 		// Note: We're only `take`ing the images because we need them by value
 		(self.images, self.cur_progress) = match mem::take(&mut self.images) {
 			// If we're empty, try to get a next image
-			PanelStateImages::Empty => match image_loader.try_recv() {
+			PanelStateImages::Empty => match image_receiver.try_recv() {
 				#[allow(clippy::cast_sign_loss)] // It's positive
 				Some(image) => (
 					PanelStateImages::PrimaryOnly {
@@ -72,7 +72,7 @@ impl PanelState {
 			},
 
 			// If we only have the primary, try to load the next image
-			PanelStateImages::PrimaryOnly { front } => match image_loader.try_recv() {
+			PanelStateImages::PrimaryOnly { front } => match image_receiver.try_recv() {
 				Some(image) => (
 					PanelStateImages::Both {
 						front,
@@ -88,7 +88,7 @@ impl PanelState {
 
 			// If we have both, try to update the progress and swap them if finished
 			PanelStateImages::Both { mut front, back } if finished => {
-				match image_loader.try_recv() {
+				match image_receiver.try_recv() {
 					// Note: We update the front and swap them
 					Some(image) => {
 						front.image.update(renderer, wgpu, image);

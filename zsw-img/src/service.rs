@@ -13,30 +13,17 @@ use {
 };
 
 /// Image loader service
-#[derive(Debug)]
-pub struct ImageLoaderService {
+#[derive(Clone, Debug)]
+pub struct ImageLoader {
 	/// Image sender
 	image_tx: async_channel::Sender<Image>,
-
-	/// Image receiver
-	image_rx: async_channel::Receiver<Image>,
 }
 
-impl ImageLoaderService {
-	/// Creates a new image loader.
-	#[must_use]
-	pub fn new() -> Self {
-		// Note: We have the lowest possible bound due to images being quite big
-		// TODO: Make this customizable and even be able to be 0?
-		let (image_tx, image_rx) = async_channel::bounded(1);
-
-		Self { image_tx, image_rx }
-	}
-
+impl ImageLoader {
 	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
-	pub async fn run(&self, playlist_receiver: PlaylistReceiver) {
+	pub async fn run(self, playlist_receiver: PlaylistReceiver) {
 		loop {
 			// Get the next image, or quit if no more
 			let Some(image) = playlist_receiver.next() else {
@@ -66,23 +53,31 @@ impl ImageLoaderService {
 			}
 		}
 	}
+}
 
+/// Image receiver
+#[derive(Debug)]
+pub struct ImageReceiver {
+	/// Image receiver
+	image_rx: async_channel::Receiver<Image>,
+}
+
+
+impl ImageReceiver {
 	/// Attempts to receive the image
 	#[must_use]
-	#[allow(clippy::missing_panics_doc)] // It's an internal assertion
 	pub fn try_recv(&self) -> Option<Image> {
-		// Try to get the result
-		// Note: This can't return an `Err` because `self` owns a sender
-		match self.image_rx.try_recv() {
-			Ok(image) => Some(image),
-			Err(async_channel::TryRecvError::Empty) => None,
-			Err(async_channel::TryRecvError::Closed) => panic!("Image loader sender was dropped"),
-		}
+		self.image_rx.try_recv().ok()
 	}
 }
 
-impl Default for ImageLoaderService {
-	fn default() -> Self {
-		Self::new()
-	}
+/// Creates the image loader service
+#[must_use]
+pub fn create() -> (ImageLoader, ImageReceiver) {
+	// Create the image channel
+	// Note: We have the lowest possible bound due to images being quite big
+	// TODO: Make this customizable and even be able to be 0?
+	let (image_tx, image_rx) = async_channel::bounded(1);
+
+	(ImageLoader { image_tx }, ImageReceiver { image_rx })
 }

@@ -4,10 +4,10 @@
 #![feature(never_type)]
 
 // Modules
-pub mod loader;
+pub mod service;
 
 // Exports
-pub use loader::ImageLoaderService;
+pub use service::{ImageLoader, ImageReceiver};
 
 // Imports
 use {cgmath::Vector2, image::DynamicImage, std::path::PathBuf};

@@ -33,7 +33,7 @@ use {
 		window::{Window, WindowBuilder},
 	},
 	zsw_egui::Egui,
-	zsw_img::ImageLoaderService,
+	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::Panels,
 	zsw_playlist::{PlaylistManager, PlaylistReceiver, PlaylistRunner},
@@ -52,8 +52,16 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Create all services and resources
 	// TODO: Create and spawn all services in the same function
-	let (services, resources, resources_mut, playlist_runner, playlist_receiver, playlist_manager, profiles_manager) =
-		self::create_services_resources(Arc::clone(&window)).await?;
+	let (
+		services,
+		resources,
+		resources_mut,
+		playlist_runner,
+		playlist_receiver,
+		playlist_manager,
+		profiles_manager,
+		image_loader,
+	) = self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
 	let resources = Arc::new(resources);
 	tracing::debug!(?services, ?resources, "Created services and resources");
@@ -78,6 +86,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		playlist_receiver,
 		playlist_manager,
 		profiles_manager,
+		image_loader,
 		default_profile,
 	)
 	.context("Unable to spawn all tasks")?;
@@ -107,6 +116,7 @@ pub async fn create_services_resources(
 		PlaylistReceiver,
 		PlaylistManager,
 		ProfilesManager,
+		ImageLoader,
 	),
 	anyhow::Error,
 > {
@@ -120,7 +130,7 @@ pub async fn create_services_resources(
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
 
 	// Create the image loader
-	let image_loader = ImageLoaderService::new();
+	let (image_loader, image_receiver) = zsw_img::service::create();
 
 	// Create the panels
 	let (panels, panels_resource) =
@@ -146,7 +156,7 @@ pub async fn create_services_resources(
 	let services = Services {
 		window,
 		wgpu,
-		image_loader,
+		image_receiver,
 		panels,
 		egui,
 		renderer,
@@ -174,6 +184,7 @@ pub async fn create_services_resources(
 		playlist_receiver,
 		playlist_manager,
 		profiles_manager,
+		image_loader,
 	))
 }
 
@@ -188,6 +199,7 @@ pub fn spawn_services(
 	playlist_receiver: PlaylistReceiver,
 	playlist_manager: PlaylistManager,
 	profiles_manager: ProfilesManager,
+	image_loader: ImageLoader,
 	default_profile: Arc<Profile>,
 ) -> Result<impl Future<Output = Result<(), anyhow::Error>>, anyhow::Error> {
 	/// Macro to help spawn a service runner
@@ -217,7 +229,7 @@ pub fn spawn_services(
 	let image_loader_tasks = (0..default_profile.panels.len())
 		.map(|idx| {
 			spawn_service_runner!(
-				[services, playlist_receiver] &format!("Image loader #{idx}") => services.image_loader.run(playlist_receiver)
+				[playlist_receiver, image_loader] &format!("Image loader #{idx}") => image_loader.run(playlist_receiver)
 			)
 		})
 		.collect::<Result<Vec<_>, _>>()
