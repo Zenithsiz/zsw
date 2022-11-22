@@ -485,7 +485,7 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 fn draw_panel_state_images(ui: &mut egui::Ui, kind: &str, image: &mut PanelStateImage) {
 	ui.horizontal(|ui| {
 		ui.label(kind);
-		ui.label(image.image.image_path().display().to_string());
+		ui.label(image.image.image_name());
 	});
 	ui.horizontal(|ui| {
 		ui.checkbox(&mut image.swap_dir, "Swap direction");

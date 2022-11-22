@@ -10,13 +10,13 @@ pub mod service;
 pub use service::{ImageLoader, ImageReceiver};
 
 // Imports
-use {cgmath::Vector2, image::DynamicImage, std::path::PathBuf};
+use {cgmath::Vector2, image::DynamicImage};
 
 /// Loaded image
 #[derive(Debug)]
 pub struct Image {
-	/// Path of the image
-	pub path: PathBuf,
+	/// Image name
+	pub name: String,
 
 	/// Image
 	pub image: DynamicImage,

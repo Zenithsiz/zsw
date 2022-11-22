@@ -8,14 +8,13 @@ version = "0.1.0"
 [dependencies]
 
 # Zsw
-zsw-playlist = {path = "../zsw-playlist"}
-zsw-util = {path = "../zsw-util"}
+zsw-util = { path = "../zsw-util" }
 
 # Async
 async-channel = "1.7.1"
 
 # Math
-cgmath = {version = "0.18.0", features = ["serde"]}
+cgmath = { version = "0.18.0", features = ["serde"] }
 
 # Image
 image = "0.24.5"

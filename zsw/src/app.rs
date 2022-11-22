@@ -6,6 +6,7 @@
 
 // Modules
 mod event_handler;
+mod image_provider;
 mod resources;
 mod services;
 
@@ -13,6 +14,7 @@ mod services;
 use {
 	self::{
 		event_handler::EventHandler,
+		image_provider::ImageProvider,
 		resources::{Resources, ResourcesMut},
 		services::Services,
 	},
@@ -214,10 +216,11 @@ pub fn spawn_services(
 
 	// TODO: Use spawn_blocking for these
 	// TODO: Dynamically change the number of these to the number of panels / another value
+	let image_provider = ImageProvider::new(playlist_receiver);
 	let image_loader_tasks = (0..default_profile.panels.len())
 		.map(|idx| {
 			spawn_service_runner!(
-				[playlist_receiver, image_loader] &format!("Image loader #{idx}") => image_loader.run(playlist_receiver)
+				[image_provider, image_loader] &format!("Image loader #{idx}") => image_loader.run(&image_provider)
 			)
 		})
 		.collect::<Result<Vec<_>, _>>()

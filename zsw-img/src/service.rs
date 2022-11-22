@@ -7,10 +7,7 @@
 mod load;
 
 // Imports
-use {
-	super::Image,
-	zsw_playlist::{PlaylistImage, PlaylistReceiver},
-};
+use {super::Image, std::io};
 
 /// Image loader service
 #[derive(Clone, Debug)]
@@ -23,32 +20,40 @@ impl ImageLoader {
 	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
-	pub async fn run(self, playlist_receiver: PlaylistReceiver) {
-		loop {
-			// Get the next image, or quit if no more
-			let Some(image) = playlist_receiver.next() else {
+	pub async fn run<P: RawImageProvider>(self, provider: &P) {
+		'run: loop {
+			// Get the next raw image, or quit if no more
+			let Some(mut raw_image) = provider.next_image() else {
 				break;
 			};
 
-			match &*image {
-				PlaylistImage::File(path) => match load::load_image(path) {
-					// If we got it, send it
-					Ok(image) => {
-						let image = Image {
-							path: path.clone(),
-							image,
-						};
+			// Try to load the image
+			let res = load::load_image(&mut raw_image.reader());
+			match res {
+				// If we got it, send it
+				Ok(image) => {
+					let image_name = raw_image.name().to_owned();
+					tracing::trace!(
+						"Loaded image {image_name}: ({} {}x{})",
+						zsw_util::image_format(&image),
+						image.width(),
+						image.height()
+					);
+					let image = Image {
+						name: image_name,
+						image,
+					};
 
-						// Note: This can't return an `Err` because `self` owns a receiver
-						// DEADLOCK: We don't hold any lock while sending
-						self.image_tx.send(image).await.expect("Image receiver was closed");
-					},
+					if self.image_tx.send(image).await.is_err() {
+						tracing::debug!("Quitting image loader: Receiver quit");
+						break 'run;
+					}
+				},
 
-					// If we couldn't load, log, remove the path and retry
-					Err(err) => {
-						tracing::info!(?path, ?err, "Unable to load file");
-						playlist_receiver.remove_image(image);
-					},
+				// If we couldn't load, log, remove the path and retry
+				Err(err) => {
+					tracing::info!(name = ?raw_image.name(), ?err, "Unable to load image");
+					provider.remove_image(&raw_image);
 				},
 			}
 		}
@@ -69,6 +74,32 @@ impl ImageReceiver {
 	pub fn try_recv(&self) -> Option<Image> {
 		self.image_rx.try_recv().ok()
 	}
+}
+
+/// Raw image provider
+pub trait RawImageProvider {
+	/// Raw image type
+	type RawImage: RawImage;
+
+	/// Provides the next image, if any
+	fn next_image(&self) -> Option<Self::RawImage>;
+
+	/// Removes an image
+	fn remove_image(&self, raw_image: &Self::RawImage);
+}
+
+/// Raw image
+pub trait RawImage {
+	/// Image Reader
+	type Reader<'a>: io::BufRead + io::Seek
+	where
+		Self: 'a;
+
+	/// Returns this image's reader
+	fn reader(&mut self) -> Self::Reader<'_>;
+
+	/// Returns this image's name
+	fn name(&self) -> &str;
 }
 
 /// Creates the image loader service

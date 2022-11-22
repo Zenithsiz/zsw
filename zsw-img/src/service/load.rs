@@ -4,30 +4,23 @@
 use {
 	anyhow::Context,
 	image::{io::Reader as ImageReader, DynamicImage},
-	std::{fs, io::BufReader, path::Path},
+	std::io,
 };
 
 /// Loads an image from a path
-pub fn load_image(path: &Path) -> Result<DynamicImage, anyhow::Error> {
-	// Canonicalize the path before loading
-	let path = path.canonicalize().context("Unable to canonicalize path")?;
-
-	// Open the image
-	let image_file = fs::File::open(path).context("Unable to open image file")?;
-	let mut image_file = BufReader::new(image_file);
-
+pub fn load_image<R: io::BufRead + io::Seek>(raw_image: &mut R) -> Result<DynamicImage, anyhow::Error> {
 	// Then guess it's format
-	let format = self::image_format(&mut image_file)?;
+	let format = self::image_format(raw_image)?;
 
 	// Else, just read the image
-	ImageReader::with_format(&mut image_file, format)
+	ImageReader::with_format(raw_image, format)
 		.decode()
 		.context("Unable to decode image")
 }
 
-/// Returns the image format of `image_file`
-fn image_format(image_file: &mut BufReader<fs::File>) -> Result<image::ImageFormat, anyhow::Error> {
-	ImageReader::new(image_file)
+/// Returns the image format of `raw_image`
+fn image_format<R: io::BufRead + io::Seek>(raw_image: &mut R) -> Result<image::ImageFormat, anyhow::Error> {
+	ImageReader::new(raw_image)
 		.with_guessed_format()
 		.context("Unable to guess image format")?
 		.format()

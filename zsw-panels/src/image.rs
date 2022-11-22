@@ -6,7 +6,6 @@ use {
 	crate::PanelsRenderer,
 	cgmath::Vector2,
 	image::DynamicImage,
-	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	zsw_img::Image,
 	zsw_wgpu::Wgpu,
@@ -38,8 +37,8 @@ pub struct PanelImage {
 	/// Image size
 	image_size: Vector2<u32>,
 
-	/// Path
-	image_path: PathBuf,
+	/// Name
+	image_name: String,
 }
 
 impl PanelImage {
@@ -47,7 +46,7 @@ impl PanelImage {
 	pub fn new(renderer: &PanelsRenderer, wgpu: &Wgpu, image: Image) -> Self {
 		// Create the texture and sampler
 		let image_size = image.size();
-		let (texture, texture_view) = self::create_image_texture(wgpu, &image.path, image.image);
+		let (texture, texture_view) = self::create_image_texture(wgpu, &image.name, image.image);
 		let texture_sampler = self::create_texture_sampler(wgpu.device());
 
 		// Create the uniforms
@@ -87,7 +86,7 @@ impl PanelImage {
 			uniforms,
 			uniforms_bind_group,
 			image_size,
-			image_path: image.path,
+			image_name: image.name,
 		}
 	}
 
@@ -96,7 +95,7 @@ impl PanelImage {
 		let size = image.size();
 
 		// Update our texture
-		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.path, image.image);
+		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.name, image.image);
 		self.image_bind_group = self::create_image_bind_group(
 			wgpu,
 			renderer.image_bind_group_layout(),
@@ -104,9 +103,9 @@ impl PanelImage {
 			&self.texture_sampler,
 		);
 
-		// Then update the image size and path
+		// Then update the image size and name
 		self.image_size = size;
-		self.image_path = image.path;
+		self.image_name = image.name;
 	}
 
 	/// Returns the uniforms buffer
@@ -124,9 +123,9 @@ impl PanelImage {
 		&self.image_bind_group
 	}
 
-	/// Returns the path
-	pub fn image_path(&self) -> &Path {
-		&self.image_path
+	/// Returns the image name
+	pub fn image_name(&self) -> &str {
+		&self.image_name
 	}
 
 	/// Returns the image size
@@ -177,7 +176,7 @@ fn create_image_bind_group(
 }
 
 /// Creates the image texture and view
-fn create_image_texture(wgpu: &Wgpu, path: &Path, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
+fn create_image_texture(wgpu: &Wgpu, name: &str, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
 	// Get the image's format, converting if necessary.
 	let (image, format) = match image {
 		// With `rgba` we can simply use the image
@@ -192,7 +191,7 @@ fn create_image_texture(wgpu: &Wgpu, path: &Path, image: DynamicImage) -> (wgpu:
 		},
 	};
 
-	let label = format!("[zsw::panel] Image {path:?}");
+	let label = format!("[zsw::panel] Image {name:?}");
 	let texture_descriptor = self::texture_descriptor(&label, image.width(), image.height(), format);
 	let texture = wgpu
 		.device()
