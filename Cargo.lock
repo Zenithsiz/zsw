@@ -3579,7 +3579,6 @@ dependencies = [
  "num-rational",
  "parking_lot",
  "rand",
- "serde",
  "tracing",
  "wgpu",
  "winit",
@@ -3611,7 +3610,6 @@ dependencies = [
  "parking_lot",
  "serde",
  "tracing",
- "zsw-panels",
  "zsw-util",
 ]
 

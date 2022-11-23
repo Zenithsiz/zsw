@@ -8,25 +8,22 @@ version = "0.1.0"
 [dependencies]
 
 # Zsw
-zsw-img = {path = "../zsw-img"}
-zsw-input = {path = "../zsw-input"}
-zsw-util = {path = "../zsw-util"}
-zsw-wgpu = {path = "../zsw-wgpu"}
+zsw-img = { path = "../zsw-img" }
+zsw-input = { path = "../zsw-input" }
+zsw-util = { path = "../zsw-util" }
+zsw-wgpu = { path = "../zsw-wgpu" }
 
 # Windowing
 winit = "0.27.5"
 
 # Rendering
-wgpu = {version = "0.14.0", features = ["serde", "replay"]}
+wgpu = { version = "0.14.0", features = ["serde", "replay"] }
 
 # Async
 futures = "0.3.25"
 
-# Serialization
-serde = {version = "1.0.147", features = ["derive"]}
-
 # Math
-cgmath = {version = "0.18.0", features = ["serde"]}
+cgmath = { version = "0.18.0", features = ["serde"] }
 
 # Image
 image = "0.24.5"
@@ -41,9 +38,9 @@ anyhow = "1.0.66"
 tracing = "0.1.37"
 
 # Util
-bytemuck = {version = "1.12.3", features = ["derive"]}
+bytemuck = { version = "1.12.3", features = ["derive"] }
 num-rational = "0.4.1"
 
 # Threads
 crossbeam = "0.8.2"
-parking_lot = {version = "0.12.1", features = ["deadlock_detection"]}
+parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }

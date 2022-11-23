@@ -9,7 +9,7 @@
 #![feature(entry_insert)]
 
 // Modules
-mod profile;
+pub mod profile;
 
 // Exports
 pub use profile::Profile;

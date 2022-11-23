@@ -8,7 +8,6 @@ version = "0.1.0"
 [dependencies]
 
 # Zsw
-zsw-panels = { path = "../zsw-panels" } # TODO: Also remove dependency on?
 zsw-util = { path = "../zsw-util" }
 
 # Async

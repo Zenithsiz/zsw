@@ -200,3 +200,20 @@ pub fn visit_dir<P: AsRef<Path>>(path: &P, visitor: &mut impl FnMut(PathBuf)) {
 		}
 	}
 }
+
+
+// TODO: Move these elsewhere?
+#[must_use]
+pub fn default_panel_parallax_ratio() -> f32 {
+	1.0
+}
+
+#[must_use]
+pub fn default_panel_parallax_exp() -> f32 {
+	2.0
+}
+
+#[must_use]
+pub fn default_panel_parallax_reverse() -> bool {
+	false
+}

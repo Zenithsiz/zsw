@@ -5,7 +5,6 @@ use zsw_util::Rect;
 
 /// A panel
 #[derive(Clone, Copy, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Panel {
 	/// Geometry
 	pub geometry: Rect<i32, u32>,
@@ -18,15 +17,12 @@ pub struct Panel {
 
 	// TODO: make parallax optional with a struct wrapped in `Option`
 	/// Parallax scale, 0.0 .. 1.0
-	#[serde(default = "default_parallax_ratio")]
 	pub parallax_ratio: f32,
 
 	/// Parallax exponentiation
-	#[serde(default = "default_parallax_exp")]
 	pub parallax_exp: f32,
 
 	/// Reverse parallax
-	#[serde(default = "default_reverse_parallax")]
 	pub reverse_parallax: bool,
 }
 
@@ -38,21 +34,9 @@ impl Panel {
 			geometry,
 			duration,
 			fade_point,
-			parallax_ratio: self::default_parallax_ratio(),
-			parallax_exp: self::default_parallax_exp(),
-			reverse_parallax: self::default_reverse_parallax(),
+			parallax_ratio: zsw_util::default_panel_parallax_ratio(),
+			parallax_exp: zsw_util::default_panel_parallax_exp(),
+			reverse_parallax: zsw_util::default_panel_parallax_reverse(),
 		}
 	}
-}
-
-fn default_parallax_ratio() -> f32 {
-	1.0
-}
-
-fn default_parallax_exp() -> f32 {
-	2.0
-}
-
-fn default_reverse_parallax() -> bool {
-	false
 }

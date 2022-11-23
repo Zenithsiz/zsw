@@ -1,7 +1,12 @@
 //! Profile applier
 
 // Imports
-use {super::Services, std::path::PathBuf, zsw_profiles::Profile};
+use {
+	super::Services,
+	std::path::PathBuf,
+	zsw_panels::Panel,
+	zsw_profiles::{profile, Profile},
+};
 
 /// Profile applier
 #[derive(Clone, Debug)]
@@ -11,6 +16,32 @@ impl ProfileApplier {
 	/// Creates a new profile applier
 	pub fn new() -> Self {
 		Self {}
+	}
+
+	/// Converts a `profile::Panel` to a `Panel`
+	fn create_panel(panel: &profile::Panel) -> Panel {
+		Panel {
+			geometry:         panel.geometry,
+			duration:         panel.duration,
+			fade_point:       panel.fade_point,
+			parallax_ratio:   panel.parallax.ratio,
+			parallax_exp:     panel.parallax.exp,
+			reverse_parallax: panel.parallax.reverse,
+		}
+	}
+
+	/// Converts a `Panel` to `profile::Panel`
+	fn dump_panel(panel: &Panel) -> profile::Panel {
+		profile::Panel {
+			geometry:   panel.geometry,
+			duration:   panel.duration,
+			fade_point: panel.fade_point,
+			parallax:   profile::PanelParallax {
+				ratio:   panel.parallax_ratio,
+				exp:     panel.parallax_exp,
+				reverse: panel.reverse_parallax,
+			},
+		}
 	}
 }
 
@@ -26,7 +57,7 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 		services.playlist_manager.set_root_path(profile.root_path.clone());
 		services
 			.panels
-			.replace_panels(panels_resource, profile.panels.iter().copied());
+			.replace_panels(panels_resource, profile.panels.iter().map(Self::create_panel));
 	}
 
 	fn current(&self, services: &Services, panels_resource: &mut zsw_panels::PanelsResource) -> zsw_profiles::Profile {
@@ -43,7 +74,7 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 				.panels
 				.panels(panels_resource)
 				.iter()
-				.map(|panel| panel.panel)
+				.map(|panel| Self::dump_panel(&panel.panel))
 				.collect(),
 		}
 	}

@@ -14,8 +14,10 @@
 			},
 			"duration": 1800,
 			"fade_point": 1440,
-			"parallax_ratio": 0.98,
-			"reverse_parallax": true
+			"parallax": {
+				"ratio": 0.98,
+				"reverse": true
+			}
 		},
 		{
 			"geometry": {
@@ -30,8 +32,10 @@
 			},
 			"duration": 1800,
 			"fade_point": 1440,
-			"parallax_ratio": 0.98,
-			"reverse_parallax": true
+			"parallax": {
+				"ratio": 0.98,
+				"reverse": true
+			}
 		}
 	]
 }
