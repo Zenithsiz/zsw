@@ -6,7 +6,7 @@ use {
 	winit::window::Window,
 	zsw_img::ImageReceiver,
 	zsw_input::Input,
-	zsw_panels::Panels,
+	zsw_panels::PanelsEditor,
 	zsw_playlist::PlaylistManager,
 	zsw_profiles::ProfilesManager,
 	zsw_renderer::Renderer,
@@ -36,8 +36,8 @@ pub struct Services {
 	/// Profiles manager
 	pub profiles_manager: ProfilesManager,
 
-	/// Panels
-	pub panels: Panels,
+	/// Panels editor
+	pub panels_editor: PanelsEditor,
 
 	/// Renderer
 	pub renderer: Renderer,
@@ -58,7 +58,7 @@ impl ServicesBundle for Services {}
 	[ ImageReceiver    ] [ image_receiver ];
 	[ PlaylistManager  ] [ playlist_manager ];
 	[ ProfilesManager  ] [ profiles_manager ];
-	[ Panels           ] [ panels ];
+	[ PanelsEditor     ] [ panels_editor ];
 	[ Renderer         ] [ renderer ];
 	[ SettingsWindow   ] [ settings_window ];
 	[ Input            ] [ input ];

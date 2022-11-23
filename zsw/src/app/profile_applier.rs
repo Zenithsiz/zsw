@@ -56,7 +56,7 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 		tracing::debug!(?profile, "Applying profile");
 		services.playlist_manager.set_root_path(profile.root_path.clone());
 		services
-			.panels
+			.panels_editor
 			.replace_panels(panels_resource, profile.panels.iter().map(Self::create_panel));
 	}
 
@@ -71,7 +71,7 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 				},
 			},
 			panels:    services
-				.panels
+				.panels_editor
 				.panels(panels_resource)
 				.iter()
 				.map(|panel| Self::dump_panel(&panel.panel))

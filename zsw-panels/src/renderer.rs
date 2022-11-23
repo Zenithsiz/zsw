@@ -8,7 +8,14 @@ mod vertex;
 pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 
 // Imports
-use {crate::PanelState, cgmath::Point2, wgpu::util::DeviceExt, winit::dpi::PhysicalSize};
+use {
+	crate::PanelsResource,
+	cgmath::Point2,
+	wgpu::util::DeviceExt,
+	winit::dpi::PhysicalSize,
+	zsw_img::ImageReceiver,
+	zsw_wgpu::Wgpu,
+};
 
 /// Panels renderer
 ///
@@ -41,7 +48,8 @@ pub struct PanelsRenderer {
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
-	pub fn new(device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat) -> Result<Self, anyhow::Error> {
+	#[must_use]
+	pub fn new(device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat) -> Self {
 		// Create the index buffer
 		let indices = self::create_indices(device);
 
@@ -60,13 +68,13 @@ impl PanelsRenderer {
 			&image_bind_group_layout,
 		);
 
-		Ok(Self {
+		Self {
 			render_pipeline,
 			vertices,
 			indices,
 			uniforms_bind_group_layout,
 			image_bind_group_layout,
-		})
+		}
 	}
 
 	/// Returns the uniforms' bind group layout
@@ -79,10 +87,24 @@ impl PanelsRenderer {
 		&self.image_bind_group_layout
 	}
 
-	/// Renders panels
-	pub fn render<'a>(
+	/// Updates all panels
+	pub fn update_all(
 		&self,
-		panels: impl IntoIterator<Item = &'a PanelState>,
+		resource: &mut PanelsResource,
+		wgpu: &Wgpu,
+		image_receiver: &ImageReceiver,
+	) -> Result<(), anyhow::Error> {
+		for panel in &mut resource.panels {
+			panel.update(self, wgpu, image_receiver);
+		}
+
+		Ok(())
+	}
+
+	/// Renders all panels
+	pub fn render(
+		&self,
+		panels: &PanelsResource,
 		cursor_pos: Point2<i32>,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
@@ -115,7 +137,7 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
-		for panel in panels {
+		for panel in &panels.panels {
 			// Calculate the position matrix for the panel
 			let pos_matrix = panel.pos_matrix(surface_size);
 

@@ -37,12 +37,7 @@ impl PanelState {
 	}
 
 	/// Updates this panel's state
-	pub fn update(
-		&mut self,
-		renderer: &PanelsRenderer,
-		wgpu: &Wgpu,
-		image_receiver: &ImageReceiver,
-	) -> Result<(), anyhow::Error> {
+	pub fn update(&mut self, renderer: &PanelsRenderer, wgpu: &Wgpu, image_receiver: &ImageReceiver) {
 		// Next frame's progress
 		let next_progress = self.cur_progress.saturating_add(1).clamp(0, self.panel.duration);
 
@@ -108,8 +103,6 @@ impl PanelState {
 			// Else just update the progress
 			state @ PanelStateImages::Both { .. } => (state, next_progress),
 		};
-
-		Ok(())
 	}
 
 	/// Calculates this panel's position matrix

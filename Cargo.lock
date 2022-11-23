@@ -3619,6 +3619,7 @@ name = "zsw-renderer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cgmath",
  "egui_wgpu_backend",
  "futures",
  "pollster",

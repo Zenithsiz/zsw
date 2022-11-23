@@ -6,13 +6,14 @@
 // Imports
 use {
 	anyhow::Context,
+	cgmath::Point2,
 	std::time::Duration,
 	tokio::time::Instant,
 	winit::window::Window,
 	zsw_egui::EguiRenderer,
 	zsw_img::ImageReceiver,
 	zsw_input::Input,
-	zsw_panels::{Panels, PanelsResource},
+	zsw_panels::{PanelsRenderer, PanelsResource},
 	zsw_util::{Resources, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
@@ -36,9 +37,15 @@ impl Renderer {
 	/// [`zsw_panels::PanelsLock`] on `panels`
 	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
 	/// - [`zsw_panels::PanelsLock`] on `panels`
-	pub async fn run<S, R>(&self, services: &S, resources: &R, egui_renderer: &mut EguiRenderer) -> !
+	pub async fn run<S, R>(
+		&self,
+		services: &S,
+		resources: &R,
+		panels_renderer: &mut PanelsRenderer,
+		egui_renderer: &mut EguiRenderer,
+	) -> !
 	where
-		S: Services<Wgpu> + Services<Window> + Services<Panels> + Services<Input> + Services<ImageReceiver>,
+		S: Services<Wgpu> + Services<Window> + Services<Input> + Services<ImageReceiver>,
 		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
 	{
 		// Duration we're sleeping
@@ -49,13 +56,13 @@ impl Renderer {
 
 			// Update
 			// DEADLOCK: Caller ensures we can lock it
-			if let Err(err) = Self::update(services, resources).await {
+			if let Err(err) = Self::update(services, resources, panels_renderer).await {
 				tracing::warn!(?err, "Unable to update");
 			}
 
 			// Render
 			// DEADLOCK: Caller ensures we can lock it
-			if let Err(err) = Self::render(services, resources, egui_renderer).await {
+			if let Err(err) = Self::render(services, resources, panels_renderer, egui_renderer).await {
 				tracing::warn!(?err, "Unable to render");
 			};
 
@@ -71,16 +78,20 @@ impl Renderer {
 	///
 	/// # Blocking
 	/// Locks [`zsw_panels::PanelsLock`] on `panels`
-	async fn update<S, R>(services: &S, resources: &R) -> Result<(), anyhow::Error>
+	async fn update<S, R>(
+		services: &S,
+		resources: &R,
+		panels_renderer: &mut PanelsRenderer,
+	) -> Result<(), anyhow::Error>
 	where
-		S: Services<Wgpu> + Services<Panels> + Services<ImageReceiver>,
+		S: Services<Wgpu> + Services<ImageReceiver>,
 		R: Resources<PanelsResource>,
 	{
 		// DEADLOCK: Caller ensures we can lock it
 		let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 		// Updates all panels
-		services.service::<Panels>().update_all(
+		panels_renderer.update_all(
 			&mut panels_resource,
 			services.service::<Wgpu>(),
 			services.service::<ImageReceiver>(),
@@ -93,14 +104,18 @@ impl Renderer {
 	/// Lock tree:
 	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
 	/// - [`zsw_panels::PanelsLock`] on `panels`
-	async fn render<S, R>(services: &S, resources: &R, egui_renderer: &mut EguiRenderer) -> Result<(), anyhow::Error>
+	async fn render<S, R>(
+		services: &S,
+		resources: &R,
+		panels_renderer: &mut PanelsRenderer,
+		egui_renderer: &mut EguiRenderer,
+	) -> Result<(), anyhow::Error>
 	where
-		S: Services<Wgpu> + Services<Window> + Services<Panels> + Services<Input>,
+		S: Services<Wgpu> + Services<Window> + Services<Input>,
 		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let window = services.service::<Window>();
-		let panels = services.service::<Panels>();
 		let input = services.service::<Input>();
 
 		// Lock the wgpu surface
@@ -118,10 +133,12 @@ impl Renderer {
 			// DEADLOCK: Caller ensures we can lock it after the surface
 			let panels_resource = resources.resource::<PanelsResource>().await;
 
-			panels
+			panels_renderer
 				.render(
-					input,
 					&panels_resource,
+					input
+						.cursor_pos()
+						.map_or(Point2::new(0, 0), |pos| Point2::new(pos.x as i32, pos.y as i32)),
 					wgpu.queue(),
 					&mut frame.encoder,
 					&frame.surface_view,

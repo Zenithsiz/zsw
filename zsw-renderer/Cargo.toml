@@ -8,18 +8,21 @@ version = "0.1.0"
 [dependencies]
 
 # Zsw
-zsw-egui = {path = "../zsw-egui"}
-zsw-img = {path = "../zsw-img"}
-zsw-input = {path = "../zsw-input"}
-zsw-panels = {path = "../zsw-panels"}
-zsw-util = {path = "../zsw-util"}
-zsw-wgpu = {path = "../zsw-wgpu"}
+zsw-egui = { path = "../zsw-egui" }
+zsw-img = { path = "../zsw-img" }
+zsw-input = { path = "../zsw-input" }
+zsw-panels = { path = "../zsw-panels" }
+zsw-util = { path = "../zsw-util" }
+zsw-wgpu = { path = "../zsw-wgpu" }
 
 # Windowing
 winit = "0.27.5"
 
 # Gui
 egui_wgpu_backend = "0.20.0"
+
+# Math
+cgmath = { version = "0.18.0", features = ["serde"] }
 
 # Async
 futures = "0.3.25"

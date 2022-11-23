@@ -20,7 +20,7 @@ use {
 		window::Window,
 	},
 	zsw_egui::EguiPainter,
-	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
+	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, PanelsEditor, PanelsResource},
 	zsw_playlist::{PlaylistImage, PlaylistManager},
 	zsw_profiles::{Profile, ProfilesManager},
 	zsw_util::{Rect, Resources, Services, ServicesBundle},
@@ -85,7 +85,11 @@ impl SettingsWindow {
 		egui_painter: &mut EguiPainter,
 		profile_applier: impl ProfileApplier<S>,
 	) where
-		S: Services<Wgpu> + Services<Window> + Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
+		S: Services<Wgpu>
+			+ Services<Window>
+			+ Services<PanelsEditor>
+			+ Services<PlaylistManager>
+			+ Services<ProfilesManager>,
 		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
@@ -140,7 +144,7 @@ impl SettingsWindow {
 		panels_resource: &mut PanelsResource,
 		profile_applier: &impl ProfileApplier<S>,
 	) where
-		S: Services<Window> + Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
+		S: Services<Window> + Services<PanelsEditor> + Services<PlaylistManager> + Services<ProfilesManager>,
 	{
 		let window = services.service::<Window>();
 
@@ -192,7 +196,7 @@ fn draw_settings_window<S>(
 	panels_resource: &mut PanelsResource,
 	profile_applier: &impl ProfileApplier<S>,
 ) where
-	S: Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
+	S: Services<PanelsEditor> + Services<PlaylistManager> + Services<ProfilesManager>,
 {
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
@@ -322,12 +326,12 @@ fn draw_panels<S>(
 	services: &S,
 	panels_resource: &mut PanelsResource,
 ) where
-	S: Services<Panels>,
+	S: Services<PanelsEditor>,
 {
-	let panels = services.service::<Panels>();
+	let panels_editor = services.service::<PanelsEditor>();
 
 	// Draw all panels in their own header
-	for (idx, panel) in panels.panels_mut(panels_resource).iter_mut().enumerate() {
+	for (idx, panel) in panels_editor.panels_mut(panels_resource).iter_mut().enumerate() {
 		ui.collapsing(format!("Panel {idx}"), |ui| {
 			ui.add(PanelWidget::new(panel, surface_size));
 		});
@@ -353,7 +357,7 @@ fn draw_panels<S>(
 		});
 
 		if ui.button("Add").clicked() {
-			panels.add_panel(
+			panels_editor.add_panel(
 				panels_resource,
 				Panel::new(
 					new_panel_state.geometry,
