@@ -169,9 +169,16 @@ pub fn create(window: &Window, wgpu: &Wgpu) -> (EguiRenderer, EguiPainter, EguiE
 	// Create the egui repaint signal
 	let repaint_signal = Arc::new(RepaintSignal);
 
+	// Note: In debug mode, when using a 0-sized channel it seems the sender isn't notified when
+	//       the receiver receives the value, so we use a 1-sized channel
+	// TODO: This might involve UB, just use 1? And clear the buffer on new input/event?
 	// Note: By using a 0-size channel we achieve the least latency for the painter output
 	//       For events however, there's no advantage to using a 0-size channel
-	let (output_tx, output_rx) = mpsc::channel(0);
+	let output_buffer = match cfg!(debug_assertions) {
+		true => 1,
+		false => 0,
+	};
+	let (output_tx, output_rx) = mpsc::channel(output_buffer);
 	let (event_tx, event_rx) = mpsc::unbounded();
 
 	(
