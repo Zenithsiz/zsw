@@ -22,7 +22,7 @@ use {
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{PlaylistImage, PlaylistManager},
 	zsw_profiles::{Profile, ProfilesManager},
-	zsw_util::{Rect, Resources, Services},
+	zsw_util::{Rect, Resources, Services, ServicesBundle},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
@@ -81,7 +81,13 @@ impl SettingsWindow {
 	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
 	///     - [`zsw_panels::PanelsLock`] on `panels`
 	/// Blocks until [`Self::update_output`] on `egui` is called.
-	pub async fn run<S, R>(&self, services: &S, resources: &R, egui_painter_resource: &mut EguiPainterResource) -> !
+	pub async fn run<S, R>(
+		&self,
+		services: &S,
+		resources: &R,
+		egui_painter_resource: &mut EguiPainterResource,
+		profile_applier: impl ProfileApplier<S>,
+	) -> !
 	where
 		S: Services<Wgpu>
 			+ Services<Egui>
@@ -94,9 +100,6 @@ impl SettingsWindow {
 		let wgpu = services.service::<Wgpu>();
 		let egui = services.service::<Egui>();
 		let window = services.service::<Window>();
-		let panels = services.service::<Panels>();
-		let playlist_manager = services.service::<PlaylistManager>();
-		let profiles_manager = services.service::<ProfilesManager>();
 
 
 		loop {
@@ -124,11 +127,9 @@ impl SettingsWindow {
 						ctx,
 						frame,
 						surface_size,
-						window,
-						panels,
-						playlist_manager,
-						profiles_manager,
+						services,
 						&mut panels_resource,
+						&profile_applier,
 					)
 				})
 			};
@@ -142,17 +143,20 @@ impl SettingsWindow {
 	}
 
 	/// Draws the settings window
-	fn draw<'panels>(
+	fn draw<S>(
 		inner: &mut Inner,
 		ctx: &egui::Context,
 		_frame: &epi::Frame,
 		surface_size: PhysicalSize<u32>,
-		window: &Window,
-		panels: &'panels Panels,
-		playlist_manager: &PlaylistManager,
-		profiles_manager: &ProfilesManager,
+		services: &S,
 		panels_resource: &mut PanelsResource,
-	) -> Result<(), anyhow::Error> {
+		profile_applier: &impl ProfileApplier<S>,
+	) -> Result<(), anyhow::Error>
+	where
+		S: Services<Window> + Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
+	{
+		let window = services.service::<Window>();
+
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
 
@@ -173,10 +177,9 @@ impl SettingsWindow {
 				ui,
 				&mut inner.new_panel_state,
 				surface_size,
-				panels,
-				playlist_manager,
-				profiles_manager,
+				services,
 				panels_resource,
+				profile_applier,
 			);
 		});
 
@@ -196,41 +199,47 @@ impl SettingsWindow {
 }
 
 /// Draws the settings window
-fn draw_settings_window<'panels>(
+fn draw_settings_window<S>(
 	ui: &mut egui::Ui,
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
-	panels: &'panels Panels,
-	playlist_manager: &PlaylistManager,
-	profiles_manager: &ProfilesManager,
+	services: &S,
 	panels_resource: &mut PanelsResource,
-) {
+	profile_applier: &impl ProfileApplier<S>,
+) where
+	S: Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
+{
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
-		self::draw_panels(ui, new_panel_state, surface_size, panels, panels_resource);
+		self::draw_panels(ui, new_panel_state, surface_size, services, panels_resource);
 	});
 	ui.collapsing("Playlist", |ui| {
-		self::draw_playlist(ui, playlist_manager);
+		self::draw_playlist(ui, services);
 	});
 	ui.collapsing("Profile", |ui| {
-		self::draw_profile(ui, panels, playlist_manager, profiles_manager, panels_resource);
+		self::draw_profile(ui, services, panels_resource, profile_applier);
 	});
 }
 
 /// Draws the profile settings
-fn draw_profile<'panels>(
+fn draw_profile<S>(
 	ui: &mut egui::Ui,
-	panels: &'panels Panels,
-	playlist_manager: &PlaylistManager,
-	profiles_manager: &ProfilesManager,
+	services: &S,
 	panels_resource: &mut PanelsResource,
-) {
+	profile_applier: &impl ProfileApplier<S>,
+) where
+	S: Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
+{
+	let panels = services.service::<Panels>();
+	let playlist_manager = services.service::<PlaylistManager>();
+	let profiles_manager = services.service::<ProfilesManager>();
+
 	// Draw all profiles
 	for (path, profile) in profiles_manager.profiles() {
 		ui.horizontal(|ui| {
 			ui.label(path.display().to_string());
 			if ui.button("Apply").clicked() {
-				profile.apply(playlist_manager, panels, panels_resource);
+				profile_applier.apply(&profile, services, panels_resource);
 			}
 		});
 	}
@@ -285,7 +294,12 @@ fn draw_profile<'panels>(
 }
 
 /// Draws the playlist settings
-fn draw_playlist(ui: &mut egui::Ui, playlist_manager: &PlaylistManager) {
+fn draw_playlist<S>(ui: &mut egui::Ui, services: &S)
+where
+	S: Services<PlaylistManager>,
+{
+	let playlist_manager = services.service::<PlaylistManager>();
+
 	// Draw the root path
 	ui.horizontal(|ui| {
 		// Show the current root path
@@ -330,13 +344,17 @@ fn draw_playlist(ui: &mut egui::Ui, playlist_manager: &PlaylistManager) {
 }
 
 /// Draws the panels settings
-fn draw_panels<'panels>(
+fn draw_panels<S>(
 	ui: &mut egui::Ui,
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
-	panels: &'panels Panels,
+	services: &S,
 	panels_resource: &mut PanelsResource,
-) {
+) where
+	S: Services<Panels>,
+{
+	let panels = services.service::<Panels>();
+
 	// Draw all panels in their own header
 	for (idx, panel) in panels.panels_mut(panels_resource).iter_mut().enumerate() {
 		ui.collapsing(format!("Panel {idx}"), |ui| {
@@ -523,4 +541,13 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>, max_size: Physica
 		.clamp_range(0..=max_y)
 		.speed(10)
 		.ui(ui);
+}
+
+/// Profile applier
+// TODO: Move this elsewhere once used elsewhere?
+pub trait ProfileApplier<S: ServicesBundle> {
+	/// Applies a profile
+	// TODO: Not hardcore `panels_resource` once we remove resources?
+	// TODO: Not pass `services` and have `self` store them instead?
+	fn apply(&self, profile: &Profile, services: &S, panels_resource: &mut PanelsResource);
 }

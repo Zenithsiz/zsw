@@ -8,15 +8,14 @@ version = "0.1.0"
 [dependencies]
 
 # Zsw
-zsw-panels = {path = "../zsw-panels"}
-zsw-playlist = {path = "../zsw-playlist"}
-zsw-util = {path = "../zsw-util"}
+zsw-panels = { path = "../zsw-panels" } # TODO: Also remove dependency on?
+zsw-util = { path = "../zsw-util" }
 
 # Async
 futures = "0.3.25"
 
 # Serialization
-serde = {version = "1.0.147", features = ["derive"]}
+serde = { version = "1.0.147", features = ["derive"] }
 
 # Error handling
 anyhow = "1.0.66"
@@ -25,4 +24,4 @@ anyhow = "1.0.66"
 tracing = "0.1.37"
 
 # Threads
-parking_lot = {version = "0.12.1", features = ["deadlock_detection"]}
+parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }

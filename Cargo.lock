@@ -3612,7 +3612,6 @@ dependencies = [
  "serde",
  "tracing",
  "zsw-panels",
- "zsw-playlist",
  "zsw-util",
 ]
 

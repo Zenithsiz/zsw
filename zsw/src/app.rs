@@ -7,6 +7,7 @@
 // Modules
 mod event_handler;
 mod image_provider;
+mod profile_applier;
 mod resources;
 mod services;
 
@@ -15,6 +16,7 @@ use {
 	self::{
 		event_handler::EventHandler,
 		image_provider::ImageProvider,
+		profile_applier::ProfileApplier,
 		resources::{Resources, ResourcesMut},
 		services::Services,
 	},
@@ -41,7 +43,7 @@ use {
 	zsw_playlist::{PlaylistReceiver, PlaylistRunner},
 	zsw_profiles::Profile,
 	zsw_renderer::Renderer,
-	zsw_settings_window::SettingsWindow,
+	zsw_settings_window::{ProfileApplier as _, SettingsWindow},
 	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
@@ -201,10 +203,11 @@ pub fn spawn_services(
 	}}
 
 	// Spawn all
+	let profile_applier = ProfileApplier::new();
 	let profiles_loader_task = spawn_service_runner!(
-		[services, resources, default_profile] "Profiles loader" => async move {
+		[services, resources, default_profile, profile_applier] "Profiles loader" => async move {
 			let mut panels_resource = resources.panels.lock().await;
-			default_profile.apply(&services.playlist_manager, &services.panels, &mut panels_resource);
+			profile_applier.apply(&default_profile, &services, &mut panels_resource);
 		}
 	)
 	.context("Unable to spawn profile loader task")?;
@@ -227,7 +230,7 @@ pub fn spawn_services(
 		.context("Unable to spawn image loader tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter)
+		[services, resources, profile_applier] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter, profile_applier)
 	).context("Unable to spawn settings window task")?;
 	let renderer_task =
 		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources))
