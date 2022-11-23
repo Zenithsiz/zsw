@@ -228,10 +228,8 @@ fn draw_profile<S>(
 	panels_resource: &mut PanelsResource,
 	profile_applier: &impl ProfileApplier<S>,
 ) where
-	S: Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
+	S: Services<ProfilesManager>,
 {
-	let panels = services.service::<Panels>();
-	let playlist_manager = services.service::<PlaylistManager>();
 	let profiles_manager = services.service::<ProfilesManager>();
 
 	// Draw all profiles
@@ -270,19 +268,7 @@ fn draw_profile<S>(
 			match file_dialog {
 				Ok(file_dialog) =>
 					if let Some(path) = file_dialog {
-						let profile = {
-							Profile {
-								root_path: match playlist_manager.root_path() {
-									Some(path) => path,
-									None => {
-										tracing::warn!("No root path was set");
-										return;
-									},
-								},
-								panels:    panels.panels(panels_resource).iter().map(|panel| panel.panel).collect(),
-							}
-						};
-
+						let profile = profile_applier.current(services, panels_resource);
 						if let Err(err) = profiles_manager.save(path.clone(), profile) {
 							tracing::warn!(?path, ?err, "Unable to load profile");
 						}
@@ -545,9 +531,15 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>, max_size: Physica
 
 /// Profile applier
 // TODO: Move this elsewhere once used elsewhere?
+// TODO: Since it also gets the current profile, it's no longer just an applier, rename?
+//       `ProfileManager` might be too general though.
 pub trait ProfileApplier<S: ServicesBundle> {
 	/// Applies a profile
 	// TODO: Not hardcore `panels_resource` once we remove resources?
 	// TODO: Not pass `services` and have `self` store them instead?
 	fn apply(&self, profile: &Profile, services: &S, panels_resource: &mut PanelsResource);
+
+	/// Retrieves the current profile
+	// TODO: Same TODOs as above
+	fn current(&self, services: &S, panels_resource: &mut PanelsResource) -> Profile;
 }
