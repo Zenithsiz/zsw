@@ -13,7 +13,8 @@
 	async_closure,
 	generators,
 	generator_trait,
-	associated_type_bounds
+	associated_type_bounds,
+	let_chains
 )]
 
 // Modules

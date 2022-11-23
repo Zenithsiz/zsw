@@ -17,7 +17,7 @@ use {
 		event_handler::EventHandler,
 		image_provider::ImageProvider,
 		profile_applier::ProfileApplier,
-		resources::{Resources, ResourcesMut},
+		resources::Resources,
 		services::Services,
 	},
 	crate::Args,
@@ -36,7 +36,7 @@ use {
 		},
 		window::{Window, WindowBuilder},
 	},
-	zsw_egui::Egui,
+	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
 	zsw_img::ImageLoader,
 	zsw_input::Input,
 	zsw_panels::Panels,
@@ -56,8 +56,16 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Create all services and resources
 	// TODO: Create and spawn all services in the same function
-	let (services, resources, resources_mut, playlist_runner, playlist_receiver, image_loader) =
-		self::create_services_resources(Arc::clone(&window)).await?;
+	let (
+		services,
+		resources,
+		playlist_runner,
+		playlist_receiver,
+		image_loader,
+		egui_painter,
+		egui_renderer,
+		mut egui_event_handler,
+	) = self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
 	let resources = Arc::new(resources);
 	tracing::debug!(?services, ?resources, "Created services and resources");
@@ -79,18 +87,19 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	let join_handle = self::spawn_services(
 		&services,
 		&resources,
-		resources_mut,
 		playlist_runner,
 		playlist_receiver,
 		image_loader,
 		default_profile,
+		egui_painter,
+		egui_renderer,
 	)
 	.context("Unable to spawn all tasks")?;
 
 	// Run the event loop until exit
 	let _ = event_loop.run_return(|event, _, control_flow| {
 		event_handler
-			.handle_event(&*services, &*resources, event, control_flow)
+			.handle_event(&*services, event, control_flow, &mut egui_event_handler)
 			.block_on();
 	});
 
@@ -107,10 +116,12 @@ pub async fn create_services_resources(
 	(
 		Services,
 		Resources,
-		ResourcesMut,
 		PlaylistRunner,
 		PlaylistReceiver,
 		ImageLoader,
+		EguiPainter,
+		EguiRenderer,
+		EguiEventHandler,
 	),
 	anyhow::Error,
 > {
@@ -131,8 +142,7 @@ pub async fn create_services_resources(
 		Panels::new(wgpu.device(), wgpu.surface_texture_format()).context("Unable to create panels")?;
 
 	// Create egui
-	let (egui, egui_platform_resource, egui_render_pass_resource, egui_painter_resource) =
-		Egui::new(&window, &wgpu).context("Unable to create egui state")?;
+	let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(&window, &wgpu);
 
 	// Create the profiles
 	let profiles_manager = zsw_profiles::create();
@@ -154,7 +164,6 @@ pub async fn create_services_resources(
 		playlist_manager,
 		profiles_manager,
 		panels,
-		egui,
 		renderer,
 		settings_window,
 		input,
@@ -162,23 +171,19 @@ pub async fn create_services_resources(
 
 	// Bundle the resources
 	let resources = Resources {
-		panels:           Mutex::new(panels_resource),
-		wgpu_surface:     Mutex::new(wgpu_surface_resource),
-		egui_platform:    Mutex::new(egui_platform_resource),
-		egui_render_pass: Mutex::new(egui_render_pass_resource),
-	};
-
-	let resources_mut = ResourcesMut {
-		egui_painter: egui_painter_resource,
+		panels:       Mutex::new(panels_resource),
+		wgpu_surface: Mutex::new(wgpu_surface_resource),
 	};
 
 	Ok((
 		services,
 		resources,
-		resources_mut,
 		playlist_runner,
 		playlist_receiver,
 		image_loader,
+		egui_painter,
+		egui_renderer,
+		egui_event_handler,
 	))
 }
 
@@ -188,11 +193,12 @@ pub async fn create_services_resources(
 pub fn spawn_services(
 	services: &Arc<Services>,
 	resources: &Arc<Resources>,
-	mut resources_mut: ResourcesMut,
 	playlist_runner: PlaylistRunner,
 	playlist_receiver: PlaylistReceiver,
 	image_loader: ImageLoader,
 	default_profile: Arc<Profile>,
+	mut egui_painter: EguiPainter,
+	mut egui_renderer: EguiRenderer,
 ) -> Result<impl Future<Output = Result<(), anyhow::Error>>, anyhow::Error> {
 	/// Macro to help spawn a service runner
 	macro spawn_service_runner([$($clones:ident),* $(,)?] $name:expr => $runner:expr) {{
@@ -230,10 +236,10 @@ pub fn spawn_services(
 		.context("Unable to spawn image loader tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources, profile_applier] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut resources_mut.egui_painter, profile_applier)
+		[services, resources, profile_applier] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut egui_painter, profile_applier)
 	).context("Unable to spawn settings window task")?;
 	let renderer_task =
-		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources))
+		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources, &mut egui_renderer))
 			.context("Unable to spawn renderer task")?;
 
 	// Then create the join future

@@ -5,8 +5,6 @@
 
 // Imports
 use {
-	anyhow::Context,
-	crossbeam::atomic::AtomicCell,
 	futures::{channel::mpsc, SinkExt},
 	std::{
 		sync::Arc,
@@ -16,80 +14,38 @@ use {
 	zsw_wgpu::Wgpu,
 };
 
-
-/// All egui state
-pub struct Egui {
+/// Egui painter
+pub struct EguiPainter {
 	/// Repaint signal
 	repaint_signal: Arc<RepaintSignal>,
 
 	/// Last frame time
-	frame_time: AtomicCell<Option<Duration>>,
+	frame_time: Option<Duration>,
+
+	/// Platform
+	platform: egui_winit_platform::Platform,
+
+	/// Output sender
+	// TODO: Use a custom type instead of a tuple?
+	output_tx: mpsc::Sender<(egui::FullOutput, Vec<egui::ClippedPrimitive>)>,
+
+	/// Event receiver
+	event_rx: mpsc::UnboundedReceiver<winit::event::Event<'static, !>>,
 }
 
-impl std::fmt::Debug for Egui {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Egui")
-			.field("repaint_signal", &self.repaint_signal)
-			.field("frame_time", &self.frame_time)
-			.finish()
-	}
-}
+impl EguiPainter {
+	/// Draws egui.
+	///
+	/// Returns `None` if the renderer has quit
+	pub async fn draw(&mut self, window: &Window, f: impl FnOnce(&egui::Context, &epi::Frame)) -> Option<()> {
+		// If we have events, handle them
+		while let Ok(event) = self.event_rx.try_next().transpose()? {
+			self.platform.handle_event(&event);
+		}
 
-#[allow(clippy::unused_self)] // For accessing resources, we should require the service
-impl Egui {
-	/// Creates the egui state
-	pub fn new(
-		window: &Window,
-		wgpu: &Wgpu,
-	) -> Result<(Self, EguiPlatformResource, EguiRenderPassResource, EguiPainterResource), anyhow::Error> {
-		// Create the egui platform
-		// TODO: Check if it's fine to use the window size here instead of the
-		//       wgpu surface size
-		let window_size = window.inner_size();
-		let platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
-			physical_width:   window_size.width,
-			physical_height:  window_size.height,
-			scale_factor:     window.scale_factor(),
-			font_definitions: egui::FontDefinitions::default(),
-			style:            egui::Style::default(),
-		});
-
-		// Create the egui render pass
-		let render_pass = egui_wgpu_backend::RenderPass::new(wgpu.device(), wgpu.surface_texture_format(), 1);
-
-		// Create the egui repaint signal
-		let repaint_signal = Arc::new(RepaintSignal);
-
-		// Create the service
-		let service = Self {
-			repaint_signal,
-			frame_time: AtomicCell::new(None),
-		};
-
-		// Create the resources
-		// Note: By using a 0-size channel we achieve the least latency
-		let (output_tx, output_rx) = mpsc::channel(0);
-		let platform_resource = EguiPlatformResource { platform };
-		let render_pass_resource = EguiRenderPassResource {
-			render_pass,
-			output: egui::FullOutput::default(),
-			output_rx,
-		};
-		let painter_resource = EguiPainterResource { output_tx };
-
-		Ok((service, platform_resource, render_pass_resource, painter_resource))
-	}
-
-	/// Draws egui
-	pub fn draw(
-		&self,
-		window: &Window,
-		platform_resource: &mut EguiPlatformResource,
-		f: impl FnOnce(&egui::Context, &epi::Frame) -> Result<(), anyhow::Error>,
-	) -> Result<egui::FullOutput, anyhow::Error> {
 		// Start the frame
 		let egui_frame_start = Instant::now();
-		platform_resource.platform.begin_frame();
+		self.platform.begin_frame();
 
 		// Create the frame
 		let app_output = epi::backend::AppOutput::default();
@@ -98,7 +54,7 @@ impl Egui {
 			info:           epi::IntegrationInfo {
 				name:                    "egui",
 				web_info:                None,
-				cpu_usage:               self.frame_time.load().as_ref().map(Duration::as_secs_f32),
+				cpu_usage:               self.frame_time.as_ref().map(Duration::as_secs_f32),
 				native_pixels_per_point: Some(window.scale_factor() as f32),
 				prefer_dark_mode:        None,
 			},
@@ -107,109 +63,140 @@ impl Egui {
 		});
 
 		// Then draw using it
-		f(&platform_resource.platform.context(), &egui_frame).context("Unable to draw")?;
+		f(&self.platform.context(), &egui_frame);
 
-		// Finally end the frame and retrieve the output
-		let full_output = platform_resource.platform.end_frame(Some(window));
-		self.frame_time.store(Some(egui_frame_start.elapsed()));
+		// Finally end the frame, retrieve the output and create the paint jobs
+		let output = self.platform.end_frame(Some(window));
+		let paint_jobs = self.platform.context().tessellate(output.shapes.clone());
+		self.frame_time = Some(egui_frame_start.elapsed());
 
-		Ok(full_output)
-	}
-
-	/// Handles an event
-	pub fn handle_event(&self, platform_resource: &mut EguiPlatformResource, event: &winit::event::Event<!>) {
-		platform_resource.platform.handle_event(event);
-	}
-
-	/*
-	/// Returns the font image
-	pub fn font_image(&self, platform_resource: &EguiPlatformResource) -> Arc<egui::FontImage> {
-		platform_resource.platform.context().font_image()
-	}
-	*/
-
-	/// Returns the render pass and output
-	pub fn render_pass_with_output<'a>(
-		&self,
-		render_pass_resource: &'a mut EguiRenderPassResource,
-	) -> (&'a mut egui_wgpu_backend::RenderPass, &'a egui::FullOutput) {
-		// If we have a new output, update them
-		// TODO: Not panic here when the painter quit
-		if let Ok(output) = render_pass_resource
-			.output_rx
-			.try_next()
-			.transpose()
-			.expect("Egui painter quit")
-		{
-			render_pass_resource.output = output;
-		}
-
-		(&mut render_pass_resource.render_pass, &render_pass_resource.output)
-	}
-
-	/// Updates the output
-	///
-	/// Returns `Err` if it hasn't been fetched yet
-	pub async fn update_output(&self, painter_resource: &mut EguiPainterResource, output: egui::FullOutput) {
-		// TDO: Not panic
-		painter_resource
-			.output_tx
-			.send(output)
-			.await
-			.expect("Egui renderer quit");
+		self.output_tx.send((output, paint_jobs)).await.ok()
 	}
 }
 
-/// Platform resource
-pub struct EguiPlatformResource {
-	/// Platform
-	// TODO: Not pub?
-	pub platform: egui_winit_platform::Platform,
-}
-
-impl std::fmt::Debug for EguiPlatformResource {
+impl std::fmt::Debug for EguiPainter {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("EguiPlatformResource").field("platform", &"..").finish()
-	}
-}
-
-/// Render pass resource
-pub struct EguiRenderPassResource {
-	/// Render pass
-	render_pass: egui_wgpu_backend::RenderPass,
-
-	/// Current output
-	output: egui::FullOutput,
-
-	/// Output receiver
-	output_rx: mpsc::Receiver<egui::FullOutput>,
-}
-
-impl std::fmt::Debug for EguiRenderPassResource {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("EguiRenderPassResource")
-			.field("render_pass", &"..")
+		f.debug_struct("EguiPainter")
+			.field("repaint_signal", &self.repaint_signal)
+			.field("frame_time", &self.frame_time)
+			.field("platform", &"..")
+			.field("output_tx", &"..")
+			.field("event_rx", &self.event_rx)
 			.finish()
 	}
 }
 
-/// Painter resource
-pub struct EguiPainterResource {
-	/// Output sender
-	output_tx: mpsc::Sender<egui::FullOutput>,
+/// Egui Renderer
+pub struct EguiRenderer {
+	/// Render pass
+	render_pass: egui_wgpu_backend::RenderPass,
+
+	/// Current output
+	cur_output: egui::FullOutput,
+
+	/// Current paint jobs
+	cur_paint_jobs: Vec<egui::ClippedPrimitive>,
+
+	/// Output receiver
+	output_rx: mpsc::Receiver<(egui::FullOutput, Vec<egui::ClippedPrimitive>)>,
 }
 
-impl std::fmt::Debug for EguiPainterResource {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("EguiPainterResource").field("output_tx", &"..").finish()
+impl EguiRenderer {
+	/// Returns the render pass and output.
+	///
+	/// Returns `None` if either the painter or event handler quit
+	#[must_use]
+	pub fn render_pass_with_output(
+		&mut self,
+	) -> Option<(
+		&mut egui_wgpu_backend::RenderPass,
+		&egui::FullOutput,
+		&[egui::ClippedPrimitive],
+	)> {
+		// If we have a new output, update them
+		// TODO: Not panic here when the painter quit
+		if let Ok((output, paint_jobs)) = self.output_rx.try_next().transpose()? {
+			self.cur_output = output;
+			self.cur_paint_jobs = paint_jobs;
+		}
+
+		Some((&mut self.render_pass, &self.cur_output, &self.cur_paint_jobs))
 	}
+}
+
+impl std::fmt::Debug for EguiRenderer {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("EguiRenderer")
+			.field("render_pass", &"..")
+			.field("output", &"..")
+			.field("output_rx", &"..")
+			.finish()
+	}
+}
+
+/// Egui Event handler
+#[derive(Debug)]
+pub struct EguiEventHandler {
+	/// Event sender
+	event_tx: mpsc::UnboundedSender<winit::event::Event<'static, !>>,
+}
+
+impl EguiEventHandler {
+	/// Handles an event
+	pub async fn handle_event(&mut self, event: winit::event::Event<'static, !>) {
+		// Note: We don't care if the event won't be handled
+		let _ = self.event_tx.send(event).await;
+	}
+}
+
+/// Creates the egui service
+pub fn create(window: &Window, wgpu: &Wgpu) -> (EguiRenderer, EguiPainter, EguiEventHandler) {
+	// Create the egui platform
+	// TODO: Check if it's fine to use the window size here instead of the
+	//       wgpu surface size
+	let window_size = window.inner_size();
+	let platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
+		physical_width:   window_size.width,
+		physical_height:  window_size.height,
+		scale_factor:     window.scale_factor(),
+		font_definitions: egui::FontDefinitions::default(),
+		style:            egui::Style::default(),
+	});
+
+	// Create the egui render pass
+	let render_pass = egui_wgpu_backend::RenderPass::new(wgpu.device(), wgpu.surface_texture_format(), 1);
+
+	// Create the egui repaint signal
+	let repaint_signal = Arc::new(RepaintSignal);
+
+	// Note: By using a 0-size channel we achieve the least latency for the painter output
+	//       For events however, there's no advantage to using a 0-size channel
+	let (output_tx, output_rx) = mpsc::channel(0);
+	let (event_tx, event_rx) = mpsc::unbounded();
+
+	(
+		EguiRenderer {
+			render_pass,
+			cur_output: egui::FullOutput::default(),
+			cur_paint_jobs: vec![],
+			output_rx,
+		},
+		EguiPainter {
+			repaint_signal,
+			frame_time: None,
+			platform,
+			output_tx,
+			event_rx,
+		},
+		EguiEventHandler { event_tx },
+	)
 }
 
 /// Repaint signal
 // Note: We paint egui every frame, so this isn't required currently, but
 //       we should take it into consideration eventually.
 #[derive(Clone, Copy, Debug)]
-pub struct RepaintSignal;
+struct RepaintSignal;
 
 impl epi::backend::RepaintSignal for RepaintSignal {
 	fn request_repaint(&self) {}

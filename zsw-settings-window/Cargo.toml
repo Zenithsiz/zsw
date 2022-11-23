@@ -42,3 +42,4 @@ native-dialog = "0.6.3"
 
 # Threads
 crossbeam = "0.8.2"
+parking_lot = "0.12.1"

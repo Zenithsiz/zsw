@@ -14,11 +14,12 @@ use {
 	cgmath::{Point2, Vector2},
 	egui::Widget,
 	futures::lock::Mutex,
+	std::mem,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		window::Window,
 	},
-	zsw_egui::{Egui, EguiPainterResource, EguiPlatformResource},
+	zsw_egui::EguiPainter,
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, Panels, PanelsResource},
 	zsw_playlist::{PlaylistImage, PlaylistManager},
 	zsw_profiles::{Profile, ProfilesManager},
@@ -76,31 +77,19 @@ impl SettingsWindow {
 	/// # Blocking
 	/// Lock tree:
 	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
-	/// [`zsw_egui::PlatformLock`] on `egui`
-	/// - [`zsw_profiles::ProfilesLock`] on `profiles`
-	///   - [`zsw_playlist::PlaylistLock`] on `playlist`
-	///     - [`zsw_panels::PanelsLock`] on `panels`
-	/// Blocks until [`Self::update_output`] on `egui` is called.
+	/// [`zsw_panels::PanelsLock`] on `panels`
 	pub async fn run<S, R>(
 		&self,
 		services: &S,
 		resources: &R,
-		egui_painter_resource: &mut EguiPainterResource,
+		egui_painter: &mut EguiPainter,
 		profile_applier: impl ProfileApplier<S>,
-	) -> !
-	where
-		S: Services<Wgpu>
-			+ Services<Egui>
-			+ Services<Window>
-			+ Services<Panels>
-			+ Services<PlaylistManager>
-			+ Services<ProfilesManager>,
-		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource> + Resources<EguiPlatformResource>,
+	) where
+		S: Services<Wgpu> + Services<Window> + Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
+		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
-		let egui = services.service::<Egui>();
 		let window = services.service::<Window>();
-
 
 		loop {
 			// Get the surface size
@@ -110,18 +99,15 @@ impl SettingsWindow {
 				wgpu.surface_size(&wgpu_surface_resource)
 			};
 
-			// Draw egui
-			let res = {
-				// DEADLOCK: Caller ensures we can lock it
-				let mut egui_platform_resource = resources.resource::<EguiPlatformResource>().await;
+			// DEADLOCK: Caller ensures we can lock it after the panels lock
+			let mut panels_resource = resources.resource::<PanelsResource>().await;
 
-				// DEADLOCK: Caller ensures we can lock it after the panels lock
-				let mut panels_resource = resources.resource::<PanelsResource>().await;
+			// TODO: Check locking of this
+			let mut inner = self.inner.lock().await;
 
-				// TODO: Check locking of this
-				let mut inner = self.inner.lock().await;
-
-				egui.draw(window, &mut egui_platform_resource, |ctx, frame| {
+			// Draw
+			let res = egui_painter
+				.draw(window, |ctx, frame| {
 					Self::draw(
 						&mut inner,
 						ctx,
@@ -130,14 +116,16 @@ impl SettingsWindow {
 						services,
 						&mut panels_resource,
 						&profile_applier,
-					)
+					);
+					mem::drop(inner);
+					mem::drop(panels_resource);
 				})
-			};
+				.await;
 
-			// Try to update the output
-			match res {
-				Ok(output) => egui.update_output(egui_painter_resource, output).await,
-				Err(err) => tracing::warn!(?err, "Unable to draw egui"),
+			// If the renderer has quit, quit too
+			if res.is_none() {
+				tracing::debug!("Quitting settings window: Receiver quit");
+				break;
 			}
 		}
 	}
@@ -151,8 +139,7 @@ impl SettingsWindow {
 		services: &S,
 		panels_resource: &mut PanelsResource,
 		profile_applier: &impl ProfileApplier<S>,
-	) -> Result<(), anyhow::Error>
-	where
+	) where
 		S: Services<Window> + Services<Panels> + Services<PlaylistManager> + Services<ProfilesManager>,
 	{
 		let window = services.service::<Window>();
@@ -182,8 +169,6 @@ impl SettingsWindow {
 				profile_applier,
 			);
 		});
-
-		Ok(())
 	}
 
 	/// Queues an open click
@@ -381,6 +366,7 @@ fn draw_panels<S>(
 }
 
 /// New panel state
+#[derive(Debug)]
 struct NewPanelState {
 	/// Geometry
 	geometry: Rect<i32, u32>,

@@ -9,7 +9,7 @@ use {
 	std::time::Duration,
 	tokio::time::Instant,
 	winit::window::Window,
-	zsw_egui::{Egui, EguiPlatformResource, EguiRenderPassResource},
+	zsw_egui::EguiRenderer,
 	zsw_img::ImageReceiver,
 	zsw_input::Input,
 	zsw_panels::{Panels, PanelsResource},
@@ -36,20 +36,10 @@ impl Renderer {
 	/// [`zsw_panels::PanelsLock`] on `panels`
 	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
 	/// - [`zsw_panels::PanelsLock`] on `panels`
-	/// - [`zsw_egui::RenderPassLock`] on `egui`
-	///   - [`zsw_egui::PlatformLock`] on `egui`
-	pub async fn run<S, R>(&self, services: &S, resources: &R) -> !
+	pub async fn run<S, R>(&self, services: &S, resources: &R, egui_renderer: &mut EguiRenderer) -> !
 	where
-		S: Services<Wgpu>
-			+ Services<Egui>
-			+ Services<Window>
-			+ Services<Panels>
-			+ Services<Input>
-			+ Services<ImageReceiver>,
-		R: Resources<PanelsResource>
-			+ Resources<WgpuSurfaceResource>
-			+ Resources<EguiPlatformResource>
-			+ Resources<EguiRenderPassResource>,
+		S: Services<Wgpu> + Services<Window> + Services<Panels> + Services<Input> + Services<ImageReceiver>,
+		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -65,7 +55,7 @@ impl Renderer {
 
 			// Render
 			// DEADLOCK: Caller ensures we can lock it
-			if let Err(err) = Self::render(services, resources).await {
+			if let Err(err) = Self::render(services, resources, egui_renderer).await {
 				tracing::warn!(?err, "Unable to render");
 			};
 
@@ -103,18 +93,12 @@ impl Renderer {
 	/// Lock tree:
 	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
 	/// - [`zsw_panels::PanelsLock`] on `panels`
-	/// - [`zsw_egui::RenderPassLock`] on `egui`
-	///   - [`zsw_egui::PlatformLock`] on `egui`
-	async fn render<S, R>(services: &S, resources: &R) -> Result<(), anyhow::Error>
+	async fn render<S, R>(services: &S, resources: &R, egui_renderer: &mut EguiRenderer) -> Result<(), anyhow::Error>
 	where
-		S: Services<Wgpu> + Services<Egui> + Services<Window> + Services<Panels> + Services<Input>,
-		R: Resources<PanelsResource>
-			+ Resources<WgpuSurfaceResource>
-			+ Resources<EguiPlatformResource>
-			+ Resources<EguiRenderPassResource>,
+		S: Services<Wgpu> + Services<Window> + Services<Panels> + Services<Input>,
+		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
-		let egui = services.service::<Egui>();
 		let window = services.service::<Window>();
 		let panels = services.service::<Panels>();
 		let input = services.service::<Input>();
@@ -146,54 +130,40 @@ impl Renderer {
 				.context("Unable to render panels")?;
 		}
 
-		#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
-		let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-			physical_width:  surface_size.width,
-			physical_height: surface_size.height,
-			scale_factor:    window.scale_factor() as f32,
-		};
-
-		// Get the egui render results
-		// DEADLOCK: Caller ensures we can lock it.
-		let mut render_pass_resource = resources.resource::<EguiRenderPassResource>().await;
-		let (egui_render_pass, egui_output) = egui.render_pass_with_output(&mut render_pass_resource);
-
-		{
+		// Render egui
+		// Note: If the egui painter quit, just don't render
+		if let Some((egui_render_pass, egui_output, paint_jobs)) = egui_renderer.render_pass_with_output() {
 			// Update textures
+			#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
+			let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
+				physical_width:  surface_size.width,
+				physical_height: surface_size.height,
+				scale_factor:    window.scale_factor() as f32,
+			};
 			egui_render_pass
 				.add_textures(wgpu.device(), wgpu.queue(), &egui_output.textures_delta)
 				.context("Unable to update textures")?;
 
 			// Update buffers
-			let paint_jobs = {
-				// DEADLOCK: Caller ensures we can lock it after the egui render pass lock
-				let platform_resource = resources.resource::<EguiPlatformResource>().await;
-				platform_resource
-					.platform
-					.context()
-					.tessellate(egui_output.shapes.clone())
-			};
-			egui_render_pass.update_buffers(wgpu.device(), wgpu.queue(), &paint_jobs, &screen_descriptor);
+			egui_render_pass.update_buffers(wgpu.device(), wgpu.queue(), paint_jobs, &screen_descriptor);
 
 			// Record all render passes.
 			egui_render_pass
 				.execute(
 					&mut frame.encoder,
 					&frame.surface_view,
-					&paint_jobs,
+					paint_jobs,
 					&screen_descriptor,
 					None,
 				)
 				.context("Unable to render egui")?;
+
+			egui_render_pass
+				.remove_textures(egui_output.textures_delta.clone())
+				.context("Unable to update textures")?;
 		}
 
-
-		//mem::drop(render_pass_resource);
 		wgpu.finish_render(frame);
-
-		egui_render_pass
-			.remove_textures(egui_output.textures_delta.clone())
-			.context("Unable to update textures")?;
 
 		Ok(())
 	}

@@ -23,4 +23,4 @@ anyhow = "1.0.66"
 tracing = "0.1.37"
 
 # Threads
-parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
+parking_lot = "0.12.1"

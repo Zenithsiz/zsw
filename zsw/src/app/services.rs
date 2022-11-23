@@ -4,7 +4,6 @@
 use {
 	std::sync::Arc,
 	winit::window::Window,
-	zsw_egui::Egui,
 	zsw_img::ImageReceiver,
 	zsw_input::Input,
 	zsw_panels::Panels,
@@ -40,9 +39,6 @@ pub struct Services {
 	/// Panels
 	pub panels: Panels,
 
-	/// Egui
-	pub egui: Egui,
-
 	/// Renderer
 	pub renderer: Renderer,
 
@@ -63,7 +59,6 @@ impl ServicesBundle for Services {}
 	[ PlaylistManager  ] [ playlist_manager ];
 	[ ProfilesManager  ] [ profiles_manager ];
 	[ Panels           ] [ panels ];
-	[ Egui             ] [ egui ];
 	[ Renderer         ] [ renderer ];
 	[ SettingsWindow   ] [ settings_window ];
 	[ Input            ] [ input ];

@@ -43,4 +43,4 @@ num-rational = "0.4.1"
 
 # Threads
 crossbeam = "0.8.2"
-parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
+parking_lot = "0.12.1"
