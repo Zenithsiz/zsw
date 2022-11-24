@@ -3689,5 +3689,6 @@ dependencies = [
  "tracing",
  "wgpu",
  "winit",
+ "zsw-input",
  "zsw-util",
 ]

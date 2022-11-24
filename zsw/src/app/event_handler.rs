@@ -8,8 +8,6 @@ use {
 	},
 	zsw_egui::EguiEventHandler,
 	zsw_input::InputUpdater,
-	zsw_util::Services,
-	zsw_wgpu::Wgpu,
 };
 
 /// Event handler
@@ -24,18 +22,14 @@ impl EventHandler {
 	/// Handles an event
 	pub async fn handle_event<S>(
 		&mut self,
-		services: &S,
+		_services: &S,
 		event: Event<'_, !>,
 		control_flow: &mut EventLoopControlFlow,
 		egui_event_handler: &mut EguiEventHandler,
 		input_updater: &mut InputUpdater,
-	) where
-		S: Services<Wgpu>,
-	{
-		let wgpu = services.service::<Wgpu>();
-
+	) {
 		// Handle the event
-		let event_status = self::handle_event(&event, wgpu, input_updater);
+		let event_status = self::handle_event(&event, input_updater);
 
 		// Then update egui, if we should
 		if event_status.update_egui && let Some(event) = event.to_static() {
@@ -57,7 +51,7 @@ struct EventStatus {
 }
 
 /// Handles an event
-fn handle_event(event: &Event<'_, !>, wgpu: &Wgpu, input_updater: &mut InputUpdater) -> EventStatus {
+fn handle_event(event: &Event<'_, !>, input_updater: &mut InputUpdater) -> EventStatus {
 	// Default event status
 	let mut event_status = EventStatus {
 		control_flow: EventLoopControlFlow::Wait,
@@ -76,7 +70,7 @@ fn handle_event(event: &Event<'_, !>, wgpu: &Wgpu, input_updater: &mut InputUpda
 			},
 
 			// If we resized, queue a resize on wgpu
-			WindowEvent::Resized(size) => wgpu.resize(size),
+			WindowEvent::Resized(size) => input_updater.on_resize(size),
 
 			// On move, update the cursor position
 			WindowEvent::CursorMoved { position, .. } => input_updater.update_cursor_pos(position),

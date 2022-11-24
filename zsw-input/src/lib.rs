@@ -5,7 +5,10 @@ use {
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
 	tokio::sync::broadcast,
-	winit::{dpi::PhysicalPosition, event::MouseButton},
+	winit::{
+		dpi::{PhysicalPosition, PhysicalSize},
+		event::MouseButton,
+	},
 };
 
 /// Input inner
@@ -23,6 +26,9 @@ pub struct InputUpdater {
 
 	/// On click sender
 	on_click_tx: broadcast::Sender<MouseButton>,
+
+	/// On resize sender
+	on_resize_tx: broadcast::Sender<PhysicalSize<u32>>,
 }
 
 impl InputUpdater {
@@ -41,6 +47,11 @@ impl InputUpdater {
 	pub fn on_click(&self, button: MouseButton) {
 		let _ = self.on_click_tx.send(button);
 	}
+
+	/// Sends an on-resize event
+	pub fn on_resize(&self, size: PhysicalSize<u32>) {
+		let _ = self.on_resize_tx.send(size);
+	}
 }
 
 /// Input receiver
@@ -51,13 +62,17 @@ pub struct InputReceiver {
 
 	/// On click receiver
 	on_click_rx: broadcast::Receiver<MouseButton>,
+
+	/// On resize receiver
+	on_resize_rx: broadcast::Receiver<PhysicalSize<u32>>,
 }
 
 impl Clone for InputReceiver {
 	fn clone(&self) -> Self {
 		Self {
-			inner:       self.inner.clone(),
-			on_click_rx: self.on_click_rx.resubscribe(),
+			inner:        self.inner.clone(),
+			on_click_rx:  self.on_click_rx.resubscribe(),
+			on_resize_rx: self.on_resize_rx.resubscribe(),
 		}
 	}
 }
@@ -73,6 +88,11 @@ impl InputReceiver {
 	pub fn on_click(&mut self) -> Option<MouseButton> {
 		self.on_click_rx.try_recv().ok()
 	}
+
+	/// Returns any last on-resize event, if any
+	pub fn on_resize(&mut self) -> Option<PhysicalSize<u32>> {
+		self.on_resize_rx.try_recv().ok()
+	}
 }
 
 /// Creates the input service
@@ -83,11 +103,17 @@ pub fn create() -> (InputUpdater, InputReceiver) {
 	});
 
 	let (on_click_tx, on_click_rx) = broadcast::channel(16);
+	let (on_resize_tx, on_resize_rx) = broadcast::channel(16);
 	(
 		InputUpdater {
 			inner: Arc::clone(&inner),
 			on_click_tx,
+			on_resize_tx,
 		},
-		InputReceiver { inner, on_click_rx },
+		InputReceiver {
+			inner,
+			on_click_rx,
+			on_resize_rx,
+		},
 	)
 }

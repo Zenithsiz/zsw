@@ -8,13 +8,14 @@ version = "0.1.0"
 [dependencies]
 
 # Zsw
-zsw-util = {path = "../zsw-util"}
+zsw-input = { path = "../zsw-input" }
+zsw-util = { path = "../zsw-util" }
 
 # Windowing
 winit = "0.27.5"
 
 # Rendering
-wgpu = {version = "0.14.0", features = ["serde", "replay"]}
+wgpu = { version = "0.14.0", features = ["serde", "replay"] }
 
 # Async
 futures = "0.3.25"

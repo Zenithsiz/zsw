@@ -12,10 +12,10 @@
 // Imports
 use {
 	anyhow::Context,
-	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
+	zsw_input::InputReceiver,
 };
 
 /// Wgpu interface
@@ -41,17 +41,6 @@ pub struct Wgpu {
 	///
 	/// Used on each resize, so we configure the surface with the same texture format each time.
 	surface_texture_format: TextureFormat,
-
-	/// Queued resize
-	///
-	/// Will be `None` if no resizes are queued.
-	// Note: We queue resizes for 2 reasons:
-	//       1. So that multiple window resizes per frame only trigger an actual surface resize to
-	//          improve performance.
-	//       2. So that resizing may be done before rendering, so we can have a synchronizes-with
-	//          relation between surface resizes and drawing. This ensures we never resize the surface
-	//          without showing the user at least 1 frame of the resized surface.
-	queued_resize: AtomicCell<Option<PhysicalSize<u32>>>,
 
 	/// Window
 	// Note: Our surface must outlive the window, so we make sure of it by arcing it
@@ -80,7 +69,6 @@ impl Wgpu {
 			device,
 			queue,
 			surface_texture_format,
-			queued_resize: AtomicCell::new(None),
 			_window: window,
 		};
 
@@ -95,11 +83,13 @@ impl Wgpu {
 	}
 
 	/// Returns the wgpu device
+	#[must_use]
 	pub const fn device(&self) -> &wgpu::Device {
 		&self.device
 	}
 
 	/// Returns the wgpu queue
+	#[must_use]
 	pub const fn queue(&self) -> &wgpu::Queue {
 		&self.queue
 	}
@@ -114,28 +104,23 @@ impl Wgpu {
 	}
 
 	/// Returns the surface texture format
+	#[must_use]
 	pub const fn surface_texture_format(&self) -> wgpu::TextureFormat {
 		self.surface_texture_format
-	}
-
-	/// Resizes the underlying surface
-	///
-	/// The resize isn't executed immediately. Instead, it is
-	/// queued to happen at the start of the next render.
-	///
-	/// This means you can call this method whenever you receive
-	/// the resize event from the window.
-	pub fn resize(&self, size: PhysicalSize<u32>) {
-		// Queue the resize
-		self.queued_resize.store(Some(size));
 	}
 
 	/// Starts rendering a frame.
 	///
 	/// Returns the encoder and surface view to render onto
-	pub fn start_render(&self, surface_resource: &mut WgpuSurfaceResource) -> Result<FrameRender, anyhow::Error> {
+	pub fn start_render(
+		&self,
+		surface_resource: &mut WgpuSurfaceResource,
+		input_receiver: &mut InputReceiver,
+	) -> Result<FrameRender, anyhow::Error> {
 		// Check for resizes
-		if let Some(size) = self.queued_resize.take() {
+		// TODO: Only resize on the *last* queued? This seemed to cause some weird behavior with cursor
+		//       position in the settings window tough
+		while let Some(size) = input_receiver.on_resize() {
 			tracing::info!(?size, "Resizing");
 			if size.width > 0 && size.height > 0 {
 				// Update our surface
