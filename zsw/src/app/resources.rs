@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	futures::lock::{Mutex, MutexLockFuture},
+	futures::lock::{Mutex, MutexGuard},
 	zsw_panels::PanelsResource,
 	zsw_util::ResourcesBundle,
 	zsw_wgpu::WgpuSurfaceResource,
@@ -26,7 +26,9 @@ impl ResourcesBundle for Resources {}
 	[ WgpuSurfaceResource    ] [ wgpu_surface ];
 )]
 impl zsw_util::Resources<ty> for Resources {
-	fn lock(&self) -> MutexLockFuture<ty> {
-		self.field.lock()
+	type Resource<'a> = MutexGuard<'a, ty>;
+
+	async fn lock(&self) -> Self::Resource<'_> {
+		self.field.lock().await
 	}
 }

@@ -1,7 +1,15 @@
 //! Utility
 
 // Features
-#![feature(decl_macro, generator_trait, generators, never_type, type_alias_impl_trait)]
+#![feature(
+	decl_macro,
+	generator_trait,
+	generators,
+	never_type,
+	type_alias_impl_trait,
+	async_fn_in_trait
+)]
+#![allow(incomplete_features)]
 
 use std::path::PathBuf;
 

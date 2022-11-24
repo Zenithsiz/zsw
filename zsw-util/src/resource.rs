@@ -1,23 +1,24 @@
 //! Resources
 
 // Imports
-use futures::lock::MutexLockFuture;
+use std::ops::{Deref, DerefMut};
 
 /// Resources bundle
 pub trait ResourcesBundle {
 	/// Retrieves the resource `Resource`
-	fn resource<Resource>(&self) -> MutexLockFuture<Resource>
+	async fn resource<R>(&self) -> <Self as Resources<R>>::Resource<'_>
 	where
-		Self: self::Resources<Resource>,
+		Self: Resources<R>,
 	{
-		self.lock()
+		self.lock().await
 	}
 }
 
 /// Resources bundle that can lock `Resource`
-pub trait Resources<Resource>: ResourcesBundle {
+pub trait Resources<R>: ResourcesBundle {
+	/// Resource wrapper
+	type Resource<'a>: Deref<Target = R> + DerefMut;
+
 	/// Locks and retrieves `Resource`
-	// TODO: Proper future?
-	// TODO: Use a locker instead of this
-	fn lock(&self) -> MutexLockFuture<Resource>;
+	async fn lock(&self) -> Self::Resource<'_>;
 }
