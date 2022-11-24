@@ -3585,7 +3585,6 @@ dependencies = [
  "wgpu",
  "winit",
  "zsw-img",
- "zsw-input",
  "zsw-util",
  "zsw-wgpu",
 ]

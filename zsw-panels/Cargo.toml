@@ -9,7 +9,6 @@ version = "0.1.0"
 
 # Zsw
 zsw-img = { path = "../zsw-img" }
-zsw-input = { path = "../zsw-input" }
 zsw-util = { path = "../zsw-util" }
 zsw-wgpu = { path = "../zsw-wgpu" }
 
