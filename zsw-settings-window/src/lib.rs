@@ -13,7 +13,6 @@
 use {
 	cgmath::{Point2, Vector2},
 	egui::Widget,
-	futures::lock::Mutex,
 	std::mem,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_egui::EguiPainter,
@@ -25,8 +24,9 @@ use {
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
-/// Inner data
-struct Inner {
+/// Settings window
+#[derive(Debug)]
+pub struct SettingsWindow {
 	/// If open
 	open: bool,
 
@@ -34,41 +34,21 @@ struct Inner {
 	new_panel_state: NewPanelState,
 }
 
-impl Inner {
-	/// Creates the inner data
-	pub fn new(surface_size: PhysicalSize<u32>) -> Self {
-		Self {
-			open:            false,
-			new_panel_state: NewPanelState::new(surface_size),
-		}
-	}
-}
-
-/// Settings window
-#[derive(Debug)]
-pub struct SettingsWindow {
-	/// Inner
-	inner: Mutex<Inner>,
-}
-
 impl SettingsWindow {
 	/// Creates the settings window
 	#[must_use]
 	pub fn new(window: &Window) -> Self {
-		// Create the inner data
-		// TODO: Check if it's fine to use the window size here instead of the
-		//       wgpu surface size
-		let window_size = window.inner_size();
-		let inner = Inner::new(window_size);
-
 		Self {
-			inner: Mutex::new(inner),
+			open:            false,
+			// TODO: Check if it's fine to use the window size here instead of the
+			//       wgpu surface size
+			new_panel_state: NewPanelState::new(window.inner_size()),
 		}
 	}
 
 	/// Runs the setting window
 	pub async fn run<S, R>(
-		&self,
+		&mut self,
 		services: &S,
 		resources: &mut R,
 		egui_painter: &mut EguiPainter,
@@ -90,14 +70,10 @@ impl SettingsWindow {
 			let surface_size = wgpu.surface_size(&*resources.resource::<WgpuSurfaceResource>().await);
 			let mut panels_resource = resources.resource::<PanelsResource>().await;
 
-			// TODO: Check locking of this
-			let mut inner = self.inner.lock().await;
-
 			// Draw
 			let res = egui_painter
 				.draw(window, |ctx, frame| {
-					Self::draw(
-						&mut inner,
+					self.draw(
 						ctx,
 						frame,
 						surface_size,
@@ -106,7 +82,6 @@ impl SettingsWindow {
 						&profile_applier,
 						input_receiver,
 					);
-					mem::drop(inner);
 					mem::drop(panels_resource);
 				})
 				.await;
@@ -121,7 +96,7 @@ impl SettingsWindow {
 
 	/// Draws the settings window
 	fn draw<S>(
-		inner: &mut Inner,
+		&mut self,
 		ctx: &egui::Context,
 		_frame: &epi::Frame,
 		surface_size: PhysicalSize<u32>,
@@ -147,14 +122,14 @@ impl SettingsWindow {
 
 			// Then set the current position and that we're open
 			settings_window = settings_window.current_pos(egui::pos2(cursor_pos.x, cursor_pos.y));
-			inner.open = true;
+			self.open = true;
 		}
 
 		// Then render it
-		settings_window.open(&mut inner.open).show(ctx, |ui| {
+		settings_window.open(&mut self.open).show(ctx, |ui| {
 			self::draw_settings_window(
 				ui,
-				&mut inner.new_panel_state,
+				&mut self.new_panel_state,
 				surface_size,
 				services,
 				panels_resource,

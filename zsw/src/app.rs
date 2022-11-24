@@ -68,6 +68,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		panels_renderer,
 		input_receiver,
 		mut input_updater,
+		settings_window,
 	) = self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
 	tracing::debug!(?services, ?resources, "Created services and resources");
@@ -97,6 +98,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		egui_renderer,
 		panels_renderer,
 		input_receiver,
+		settings_window,
 	)
 	.context("Unable to spawn all tasks")?;
 
@@ -135,6 +137,7 @@ pub async fn create_services_resources(
 		PanelsRenderer,
 		InputReceiver,
 		InputUpdater,
+		SettingsWindow,
 	),
 	anyhow::Error,
 > {
@@ -178,7 +181,6 @@ pub async fn create_services_resources(
 		profiles_manager,
 		panels_editor,
 		renderer,
-		settings_window,
 	};
 
 	// Bundle the resources
@@ -199,6 +201,7 @@ pub async fn create_services_resources(
 		panels_renderer,
 		input_receiver,
 		input_updater,
+		settings_window,
 	))
 }
 
@@ -216,6 +219,7 @@ pub fn spawn_services(
 	mut egui_renderer: EguiRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut input_receiver: InputReceiver,
+	mut settings_window: SettingsWindow,
 ) -> Result<impl Future<Output = Result<(), anyhow::Error>>, anyhow::Error> {
 	/// Macro to help spawn a service runner
 	macro spawn_service_runner([$($clones:ident),* $(,)?] $name:expr => $runner:expr) {{
@@ -254,7 +258,7 @@ pub fn spawn_services(
 		.context("Unable to spawn image loader tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources, profile_applier, input_receiver] "Settings window runner" => services.settings_window.run(&*services, &mut { resources }, &mut egui_painter, profile_applier, &mut { input_receiver })
+		[services, resources, profile_applier, input_receiver] "Settings window runner" => settings_window.run(&*services, &mut { resources }, &mut egui_painter, profile_applier, &mut { input_receiver })
 	).context("Unable to spawn settings window task")?;
 	let renderer_task =
 		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &mut { resources }, &mut panels_renderer, &mut egui_renderer, &mut input_receiver))

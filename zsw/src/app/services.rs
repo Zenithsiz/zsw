@@ -9,7 +9,6 @@ use {
 	zsw_playlist::PlaylistManager,
 	zsw_profiles::ProfilesManager,
 	zsw_renderer::Renderer,
-	zsw_settings_window::SettingsWindow,
 	zsw_util::ServicesBundle,
 	zsw_wgpu::Wgpu,
 };
@@ -40,9 +39,6 @@ pub struct Services {
 
 	/// Renderer
 	pub renderer: Renderer,
-
-	/// Settings window
-	pub settings_window: SettingsWindow,
 }
 
 impl ServicesBundle for Services {}
@@ -56,7 +52,6 @@ impl ServicesBundle for Services {}
 	[ ProfilesManager  ] [ profiles_manager ];
 	[ PanelsEditor     ] [ panels_editor ];
 	[ Renderer         ] [ renderer ];
-	[ SettingsWindow   ] [ settings_window ];
 )]
 impl zsw_util::Services<ty> for Services {
 	fn get(&self) -> &ty {
