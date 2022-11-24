@@ -20,7 +20,8 @@ impl EventHandler {
 	}
 
 	/// Handles an event
-	pub async fn handle_event<S>(
+	#[allow(clippy::unused_self)] // We might use it in the future
+	pub fn handle_event<S>(
 		&mut self,
 		_services: &S,
 		event: Event<'_, !>,
@@ -33,7 +34,7 @@ impl EventHandler {
 
 		// Then update egui, if we should
 		if event_status.update_egui && let Some(event) = event.to_static() {
-			egui_event_handler.handle_event(event).await;
+			egui_event_handler.handle_event(event);
 		}
 
 		// Then set the control flow

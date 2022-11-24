@@ -5,11 +5,11 @@
 
 // Imports
 use {
-	futures::{channel::mpsc, SinkExt},
 	std::{
 		sync::Arc,
 		time::{Duration, Instant},
 	},
+	tokio::sync::mpsc,
 	winit::window::Window,
 	zsw_wgpu::Wgpu,
 };
@@ -39,8 +39,12 @@ impl EguiPainter {
 	/// Returns `None` if the renderer has quit
 	pub async fn draw(&mut self, window: &Window, f: impl FnOnce(&egui::Context, &epi::Frame)) -> Option<()> {
 		// If we have events, handle them
-		while let Ok(event) = self.event_rx.try_next().transpose()? {
-			self.platform.handle_event(&event);
+		loop {
+			match self.event_rx.try_recv() {
+				Ok(event) => self.platform.handle_event(&event),
+				Err(mpsc::error::TryRecvError::Disconnected) => return None,
+				Err(mpsc::error::TryRecvError::Empty) => break,
+			}
 		}
 
 		// Start the frame
@@ -80,7 +84,7 @@ impl std::fmt::Debug for EguiPainter {
 			.field("repaint_signal", &self.repaint_signal)
 			.field("frame_time", &self.frame_time)
 			.field("platform", &"..")
-			.field("output_tx", &"..")
+			.field("output_tx", &self.output_tx)
 			.field("event_rx", &self.event_rx)
 			.finish()
 	}
@@ -115,10 +119,14 @@ impl EguiRenderer {
 	)> {
 		// If we have a new output, update them
 		// TODO: Not panic here when the painter quit
-		if let Ok((output, paint_jobs)) = self.output_rx.try_next().transpose()? {
-			self.cur_output = output;
-			self.cur_paint_jobs = paint_jobs;
-		}
+		match self.output_rx.try_recv() {
+			Ok((output, paint_jobs)) => {
+				self.cur_output = output;
+				self.cur_paint_jobs = paint_jobs;
+			},
+			Err(mpsc::error::TryRecvError::Disconnected) => return None,
+			Err(mpsc::error::TryRecvError::Empty) => (),
+		};
 
 		Some((&mut self.render_pass, &self.cur_output, &self.cur_paint_jobs))
 	}
@@ -129,7 +137,7 @@ impl std::fmt::Debug for EguiRenderer {
 		f.debug_struct("EguiRenderer")
 			.field("render_pass", &"..")
 			.field("output", &"..")
-			.field("output_rx", &"..")
+			.field("output_rx", &self.output_rx)
 			.finish()
 	}
 }
@@ -143,9 +151,10 @@ pub struct EguiEventHandler {
 
 impl EguiEventHandler {
 	/// Handles an event
-	pub async fn handle_event(&mut self, event: winit::event::Event<'static, !>) {
+	pub fn handle_event(&mut self, event: winit::event::Event<'static, !>) {
 		// Note: We don't care if the event won't be handled
-		let _ = self.event_tx.send(event).await;
+		#[allow(clippy::let_underscore_drop)]
+		let _ = self.event_tx.send(event);
 	}
 }
 
@@ -169,17 +178,10 @@ pub fn create(window: &Window, wgpu: &Wgpu) -> (EguiRenderer, EguiPainter, EguiE
 	// Create the egui repaint signal
 	let repaint_signal = Arc::new(RepaintSignal);
 
-	// Note: In debug mode, when using a 0-sized channel it seems the sender isn't notified when
-	//       the receiver receives the value, so we use a 1-sized channel
-	// TODO: This might involve UB, just use 1? And clear the buffer on new input/event?
-	// Note: By using a 0-size channel we achieve the least latency for the painter output
-	//       For events however, there's no advantage to using a 0-size channel
-	let output_buffer = match cfg!(debug_assertions) {
-		true => 1,
-		false => 0,
-	};
-	let (output_tx, output_rx) = mpsc::channel(output_buffer);
-	let (event_tx, event_rx) = mpsc::unbounded();
+	// TODO: We can't use a 1-size channel for some reason, the `output_tx` gets stuck
+	//       sending the 2nd output and never continues.
+	let (output_tx, output_rx) = mpsc::channel(2);
+	let (event_tx, event_rx) = mpsc::unbounded_channel();
 
 	(
 		EguiRenderer {

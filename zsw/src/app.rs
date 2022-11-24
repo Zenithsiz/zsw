@@ -24,7 +24,6 @@ use {
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	futures::lock::Mutex,
-	pollster::FutureExt,
 	std::{num::NonZeroUsize, sync::Arc, thread},
 	tokio::task,
 	winit::{
@@ -150,15 +149,13 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// Run the event loop until exit
 	let _ = event_loop.run_return(|event, _, control_flow| {
-		event_handler
-			.handle_event(
-				&services,
-				event,
-				control_flow,
-				&mut egui_event_handler,
-				&mut input_updater,
-			)
-			.block_on();
+		event_handler.handle_event(
+			&services,
+			event,
+			control_flow,
+			&mut egui_event_handler,
+			&mut input_updater,
+		);
 	});
 
 	// Then join all tasks
