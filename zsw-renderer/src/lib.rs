@@ -31,16 +31,10 @@ impl Renderer {
 	}
 
 	/// Runs the renderer
-	///
-	/// # Blocking
-	/// Lock tree:
-	/// [`zsw_panels::PanelsLock`] on `panels`
-	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
-	/// - [`zsw_panels::PanelsLock`] on `panels`
 	pub async fn run<S, R>(
 		&self,
 		services: &S,
-		resources: &R,
+		resources: &mut R,
 		panels_renderer: &mut PanelsRenderer,
 		egui_renderer: &mut EguiRenderer,
 	) -> !
@@ -75,12 +69,9 @@ impl Renderer {
 	}
 
 	/// Updates all panels
-	///
-	/// # Blocking
-	/// Locks [`zsw_panels::PanelsLock`] on `panels`
 	async fn update<S, R>(
 		services: &S,
-		resources: &R,
+		resources: &mut R,
 		panels_renderer: &mut PanelsRenderer,
 	) -> Result<(), anyhow::Error>
 	where
@@ -99,14 +90,9 @@ impl Renderer {
 	}
 
 	/// Renders
-	///
-	/// # Blocking
-	/// Lock tree:
-	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
-	/// - [`zsw_panels::PanelsLock`] on `panels`
 	async fn render<S, R>(
 		services: &S,
-		resources: &R,
+		resources: &mut R,
 		panels_renderer: &mut PanelsRenderer,
 		egui_renderer: &mut EguiRenderer,
 	) -> Result<(), anyhow::Error>

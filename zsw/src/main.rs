@@ -15,9 +15,8 @@
 	generator_trait,
 	associated_type_bounds,
 	let_chains,
-	async_fn_in_trait
+	type_alias_impl_trait
 )]
-#![allow(incomplete_features)]
 
 // Modules
 mod app;

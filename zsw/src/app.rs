@@ -17,7 +17,7 @@ use {
 		event_handler::EventHandler,
 		image_provider::ImageProvider,
 		profile_applier::ProfileApplier,
-		resources::Resources,
+		resources::{Resources, ResourcesInner},
 		services::Services,
 	},
 	crate::Args,
@@ -39,12 +39,12 @@ use {
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
 	zsw_img::ImageLoader,
 	zsw_input::Input,
-	zsw_panels::PanelsRenderer,
+	zsw_panels::{PanelsRenderer, PanelsResource},
 	zsw_playlist::{PlaylistReceiver, PlaylistRunner},
 	zsw_profiles::Profile,
 	zsw_renderer::Renderer,
 	zsw_settings_window::{ProfileApplier as _, SettingsWindow},
-	zsw_util::Rect,
+	zsw_util::{Rect, ResourcesBundle},
 	zsw_wgpu::Wgpu,
 };
 
@@ -68,7 +68,6 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		panels_renderer,
 	) = self::create_services_resources(Arc::clone(&window)).await?;
 	let services = Arc::new(services);
-	let resources = Arc::new(resources);
 	tracing::debug!(?services, ?resources, "Created services and resources");
 
 	// Create the event handler
@@ -173,10 +172,10 @@ pub async fn create_services_resources(
 	};
 
 	// Bundle the resources
-	let resources = Resources {
+	let resources = Resources(Arc::new(ResourcesInner {
 		panels:       Mutex::new(panels_resource),
 		wgpu_surface: Mutex::new(wgpu_surface_resource),
-	};
+	}));
 
 	Ok((
 		services,
@@ -196,7 +195,7 @@ pub async fn create_services_resources(
 #[allow(clippy::needless_pass_by_value)] // Ergonomics
 pub fn spawn_services(
 	services: &Arc<Services>,
-	resources: &Arc<Resources>,
+	resources: &Resources,
 	playlist_runner: PlaylistRunner,
 	playlist_receiver: PlaylistReceiver,
 	image_loader: ImageLoader,
@@ -217,7 +216,8 @@ pub fn spawn_services(
 	let profile_applier = ProfileApplier::new();
 	let profiles_loader_task = spawn_service_runner!(
 		[services, resources, default_profile, profile_applier] "Profiles loader" => async move {
-			let mut panels_resource = resources.panels.lock().await;
+			let mut resources = resources;
+			let mut panels_resource = resources.resource::<PanelsResource>().await;
 			profile_applier.apply(&default_profile, &services, &mut panels_resource);
 		}
 	)
@@ -241,10 +241,10 @@ pub fn spawn_services(
 		.context("Unable to spawn image loader tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources, profile_applier] "Settings window runner" => services.settings_window.run(&*services, &*resources, &mut egui_painter, profile_applier)
+		[services, resources, profile_applier] "Settings window runner" => services.settings_window.run(&*services, &mut { resources }, &mut egui_painter, profile_applier)
 	).context("Unable to spawn settings window task")?;
 	let renderer_task =
-		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &*resources, &mut panels_renderer, &mut egui_renderer))
+		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &mut { resources }, &mut panels_renderer, &mut egui_renderer))
 			.context("Unable to spawn renderer task")?;
 
 	// Then create the join future

@@ -3,20 +3,27 @@
 // Imports
 use {
 	futures::lock::{Mutex, MutexGuard},
+	std::{future::Future, sync::Arc},
 	zsw_panels::PanelsResource,
 	zsw_util::ResourcesBundle,
 	zsw_wgpu::WgpuSurfaceResource,
 };
 
-/// All resources
+/// Resources inner storage
 #[derive(Debug)]
-pub struct Resources {
+pub struct ResourcesInner {
 	/// Panels
 	pub panels: Mutex<PanelsResource>,
 
 	/// Wgpu surface
 	pub wgpu_surface: Mutex<WgpuSurfaceResource>,
 }
+
+/// Resources
+// TODO: Remove this wrapper once we can impl `Resources` on `&'a ResourcesInner`
+//       Or once we can impl on `Arc<ResourcesInner>` (if it becomes fundamental)
+#[derive(Clone, Debug)]
+pub struct Resources(pub Arc<ResourcesInner>);
 
 impl ResourcesBundle for Resources {}
 
@@ -26,10 +33,16 @@ impl ResourcesBundle for Resources {}
 	[ WgpuSurfaceResource    ] [ wgpu_surface ];
 )]
 impl zsw_util::Resources<ty> for Resources {
-	type Resource<'a> = MutexGuard<'a, ty>;
+	type Resource<'a> = MutexGuard<'a, ty>
+	where
+		Self: 'a;
 
-	async fn lock(&self) -> Self::Resource<'_> {
-		self.field.lock().await
+	type LockFuture<'a> = impl Future<Output = Self::Resource<'a>>
+	where
+		Self: 'a;
+
+	fn lock(&mut self) -> Self::LockFuture<'_> {
+		async move { self.0.field.lock().await }
 	}
 }
 
@@ -40,26 +53,46 @@ impl zsw_util::Resources<ty> for Resources {
 const _: () = {
 	// Main impl
 	impl zsw_util::ResourcesTuple2<ty1, ty2> for Resources {
-		type Resources1<'a> = MutexGuard<'a, ty1>;
-		type Resources2<'a> = MutexGuard<'a, ty2>;
+		type Resources1<'a> = MutexGuard<'a, ty1>
+		where
+			Self: 'a;
+		type Resources2<'a> = MutexGuard<'a, ty2>
+		where
+			Self: 'a;
 
-		async fn lock(&self) -> (Self::Resources1<'_>, Self::Resources2<'_>) {
-			let val1 = self.val1.lock().await;
-			let val2 = self.val2.lock().await;
+		type LockFuture<'a> = impl Future<Output = (Self::Resources1<'a>, Self::Resources2<'a>)>
+		where
+			Self: 'a;
 
-			(val1, val2)
+		fn lock(&mut self) -> Self::LockFuture<'_> {
+			async move {
+				let val1 = self.0.val1.lock().await;
+				let val2 = self.0.val2.lock().await;
+
+				(val1, val2)
+			}
 		}
 	}
 
 	// Reverse impl (with same locking order)
 	// Note: Can't be a blanket impl (until specialization ?)
 	impl zsw_util::ResourcesTuple2<ty2, ty1> for Resources {
-		type Resources1<'a> = <Self as zsw_util::ResourcesTuple2<ty1, ty2>>::Resources2<'a>;
-		type Resources2<'a> = <Self as zsw_util::ResourcesTuple2<ty1, ty2>>::Resources1<'a>;
+		type Resources1<'a> = <Self as zsw_util::ResourcesTuple2<ty1, ty2>>::Resources2<'a>
+		where
+			Self: 'a;
+		type Resources2<'a> = <Self as zsw_util::ResourcesTuple2<ty1, ty2>>::Resources1<'a>
+		where
+			Self: 'a;
 
-		async fn lock(&self) -> (Self::Resources1<'_>, Self::Resources2<'_>) {
-			let (val1, val2) = <Self as zsw_util::ResourcesTuple2<ty1, ty2>>::lock(self).await;
-			(val2, val1)
+		type LockFuture<'a> = impl Future<Output = (Self::Resources1<'a>, Self::Resources2<'a>)>
+			where
+				Self: 'a;
+
+		fn lock(&mut self) -> Self::LockFuture<'_> {
+			async move {
+				let (val1, val2) = <Self as zsw_util::ResourcesTuple2<ty1, ty2>>::lock(self).await;
+				(val2, val1)
+			}
 		}
 	}
 };

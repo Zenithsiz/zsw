@@ -73,15 +73,10 @@ impl SettingsWindow {
 	}
 
 	/// Runs the setting window
-	///
-	/// # Blocking
-	/// Lock tree:
-	/// [`zsw_wgpu::SurfaceLock`] on `wgpu`
-	/// [`zsw_panels::PanelsLock`] on `panels`
 	pub async fn run<S, R>(
 		&self,
 		services: &S,
-		resources: &R,
+		resources: &mut R,
 		egui_painter: &mut EguiPainter,
 		profile_applier: impl ProfileApplier<S>,
 	) where
