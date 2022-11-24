@@ -13,14 +13,14 @@ use {super::Image, std::io};
 #[derive(Clone, Debug)]
 pub struct ImageLoader {
 	/// Image sender
-	image_tx: async_channel::Sender<Image>,
+	image_tx: crossbeam::channel::Sender<Image>,
 }
 
 impl ImageLoader {
 	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
-	pub async fn run<P: RawImageProvider>(self, provider: &P) {
+	pub fn run<P: RawImageProvider>(self, provider: &P) {
 		'run: loop {
 			// Get the next raw image, or quit if no more
 			let Some(mut raw_image) = provider.next_image() else {
@@ -44,7 +44,7 @@ impl ImageLoader {
 						image,
 					};
 
-					if self.image_tx.send(image).await.is_err() {
+					if self.image_tx.send(image).is_err() {
 						tracing::debug!("Quitting image loader: Receiver quit");
 						break 'run;
 					}
@@ -64,7 +64,7 @@ impl ImageLoader {
 #[derive(Debug)]
 pub struct ImageReceiver {
 	/// Image receiver
-	image_rx: async_channel::Receiver<Image>,
+	image_rx: crossbeam::channel::Receiver<Image>,
 }
 
 
@@ -107,8 +107,8 @@ pub trait RawImage {
 pub fn create() -> (ImageLoader, ImageReceiver) {
 	// Create the image channel
 	// Note: We have the lowest possible bound due to images being quite big
-	// TODO: Make this customizable and even be able to be 0?
-	let (image_tx, image_rx) = async_channel::bounded(1);
+	// TODO: Make this customizable?
+	let (image_tx, image_rx) = crossbeam::channel::bounded(0);
 
 	(ImageLoader { image_tx }, ImageReceiver { image_rx })
 }

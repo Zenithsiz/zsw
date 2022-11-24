@@ -109,14 +109,15 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		.spawn_blocking(move || playlist_runner.run())
 		.context("Unable to spawn playlist runner task")?;
 
-	// TODO: Use spawn_blocking for these
 	// TODO: Dynamically change the number of these to the number of panels / another value
 	let image_provider = ImageProvider::new(playlist_receiver);
 	let image_loader_tasks = (0..default_profile.panels.len())
 		.map(|idx| {
-			spawn_service_runner!(
-				[image_provider, image_loader] &format!("Image loader #{idx}") => image_loader.run(&image_provider)
-			)
+			let image_loader = image_loader.clone();
+			let image_provider = image_provider.clone();
+			thread::Builder::new()
+				.name(format!("Image loader #{idx}"))
+				.spawn(move || image_loader.run(&image_provider))
 		})
 		.collect::<Result<Vec<_>, _>>()
 		.context("Unable to spawn image loader tasks")?;
@@ -137,7 +138,8 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 			.await
 			.context("Unable to await for playlist runner")?;
 		for task in image_loader_tasks {
-			task.await.context("Unable to wait for image loader runner")?;
+			task.join()
+				.map_err(|err| anyhow::anyhow!("Unable to wait for image loader runner: {err:?}"))?;
 		}
 		settings_window_task
 			.await
