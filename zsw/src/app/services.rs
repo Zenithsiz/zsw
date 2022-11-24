@@ -5,7 +5,6 @@ use {
 	std::sync::Arc,
 	winit::window::Window,
 	zsw_img::ImageReceiver,
-	zsw_input::Input,
 	zsw_panels::PanelsEditor,
 	zsw_playlist::PlaylistManager,
 	zsw_profiles::ProfilesManager,
@@ -44,9 +43,6 @@ pub struct Services {
 
 	/// Settings window
 	pub settings_window: SettingsWindow,
-
-	/// Input
-	pub input: Input,
 }
 
 impl ServicesBundle for Services {}
@@ -61,7 +57,6 @@ impl ServicesBundle for Services {}
 	[ PanelsEditor     ] [ panels_editor ];
 	[ Renderer         ] [ renderer ];
 	[ SettingsWindow   ] [ settings_window ];
-	[ Input            ] [ input ];
 )]
 impl zsw_util::Services<ty> for Services {
 	fn get(&self) -> &ty {

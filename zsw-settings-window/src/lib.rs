@@ -1,7 +1,7 @@
 //! Settings window
 
 // Features
-#![feature(never_type)]
+#![feature(never_type, let_chains)]
 // `egui` returns a response on every operation, but we don't use them
 #![allow(unused_results)]
 // We need to pass a lot of state around, without an easy way to bundle it
@@ -15,11 +15,9 @@ use {
 	egui::Widget,
 	futures::lock::Mutex,
 	std::mem,
-	winit::{
-		dpi::{PhysicalPosition, PhysicalSize},
-		window::Window,
-	},
+	winit::{dpi::PhysicalSize, window::Window},
 	zsw_egui::EguiPainter,
+	zsw_input::InputReceiver,
 	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, PanelsEditor, PanelsResource},
 	zsw_playlist::{PlaylistImage, PlaylistManager},
 	zsw_profiles::{Profile, ProfilesManager},
@@ -34,18 +32,14 @@ struct Inner {
 
 	/// New panel state
 	new_panel_state: NewPanelState,
-
-	/// Queued open click
-	queued_open_click: Option<PhysicalPosition<f64>>,
 }
 
 impl Inner {
 	/// Creates the inner data
 	pub fn new(surface_size: PhysicalSize<u32>) -> Self {
 		Self {
-			open:              false,
-			new_panel_state:   NewPanelState::new(surface_size),
-			queued_open_click: None,
+			open:            false,
+			new_panel_state: NewPanelState::new(surface_size),
 		}
 	}
 }
@@ -79,6 +73,7 @@ impl SettingsWindow {
 		resources: &mut R,
 		egui_painter: &mut EguiPainter,
 		profile_applier: impl ProfileApplier<S>,
+		input_receiver: &mut InputReceiver,
 	) where
 		S: Services<Wgpu>
 			+ Services<Window>
@@ -109,6 +104,7 @@ impl SettingsWindow {
 						services,
 						&mut panels_resource,
 						&profile_applier,
+						input_receiver,
 					);
 					mem::drop(inner);
 					mem::drop(panels_resource);
@@ -132,6 +128,7 @@ impl SettingsWindow {
 		services: &S,
 		panels_resource: &mut PanelsResource,
 		profile_applier: &impl ProfileApplier<S>,
+		input_receiver: &mut InputReceiver,
 	) where
 		S: Services<Window> + Services<PanelsEditor> + Services<PlaylistManager> + Services<ProfilesManager>,
 	{
@@ -140,8 +137,10 @@ impl SettingsWindow {
 		// Create the base settings window
 		let mut settings_window = egui::Window::new("Settings");
 
-		// If we have any queued click, summon the window there
-		if let Some(cursor_pos) = inner.queued_open_click.take() {
+		// If we got a click, open the window
+		if input_receiver.on_click() == Some(winit::event::MouseButton::Right) && let Some(cursor_pos) = input_receiver.cursor_pos() {
+			tracing::debug!("Opening settings window");
+
 			// Adjust cursor pos to account for the scale factor
 			let scale_factor = window.scale_factor();
 			let cursor_pos = cursor_pos.to_logical(scale_factor);
@@ -162,17 +161,6 @@ impl SettingsWindow {
 				profile_applier,
 			);
 		});
-	}
-
-	/// Queues an open click
-	// TODO: Maybe move this to input system?
-	pub async fn queue_open_click(&self, cursor_pos: Option<PhysicalPosition<f64>>) {
-		self.inner.lock().await.queued_open_click = cursor_pos;
-	}
-
-	/// Returns if the window is open
-	pub async fn is_open(&self) -> bool {
-		self.inner.lock().await.open
 	}
 }
 

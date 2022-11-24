@@ -3564,6 +3564,7 @@ dependencies = [
  "cgmath",
  "crossbeam",
  "futures",
+ "tokio",
  "winit",
 ]
 
@@ -3651,6 +3652,7 @@ dependencies = [
  "tracing",
  "winit",
  "zsw-egui",
+ "zsw-input",
  "zsw-panels",
  "zsw-playlist",
  "zsw-profiles",

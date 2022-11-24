@@ -13,6 +13,7 @@ zsw-panels = { path = "../zsw-panels" }
 zsw-playlist = { path = "../zsw-playlist" }
 zsw-profiles = { path = "../zsw-profiles" }
 zsw-renderer = { path = "../zsw-renderer" }
+zsw-input = { path = "../zsw-input" }
 zsw-util = { path = "../zsw-util" }
 zsw-wgpu = { path = "../zsw-wgpu" }
 

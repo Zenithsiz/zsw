@@ -7,8 +7,7 @@ use {
 		event_loop::ControlFlow as EventLoopControlFlow,
 	},
 	zsw_egui::EguiEventHandler,
-	zsw_input::Input,
-	zsw_settings_window::SettingsWindow,
+	zsw_input::InputUpdater,
 	zsw_util::Services,
 	zsw_wgpu::Wgpu,
 };
@@ -23,22 +22,20 @@ impl EventHandler {
 	}
 
 	/// Handles an event
-	// TODO: Invert dependencies of `settings_window` and `panels` and let them depend on us
 	pub async fn handle_event<S>(
 		&mut self,
 		services: &S,
 		event: Event<'_, !>,
 		control_flow: &mut EventLoopControlFlow,
 		egui_event_handler: &mut EguiEventHandler,
+		input_updater: &mut InputUpdater,
 	) where
-		S: Services<Wgpu> + Services<SettingsWindow> + Services<Input>,
+		S: Services<Wgpu>,
 	{
 		let wgpu = services.service::<Wgpu>();
-		let settings_window = services.service::<SettingsWindow>();
-		let input = services.service::<Input>();
 
 		// Handle the event
-		let event_status = self::handle_event(&event, wgpu, input, settings_window).await;
+		let event_status = self::handle_event(&event, wgpu, input_updater);
 
 		// Then update egui, if we should
 		if event_status.update_egui && let Some(event) = event.to_static() {
@@ -60,12 +57,7 @@ struct EventStatus {
 }
 
 /// Handles an event
-async fn handle_event(
-	event: &Event<'_, !>,
-	wgpu: &Wgpu,
-	input: &Input,
-	settings_window: &SettingsWindow,
-) -> EventStatus {
+fn handle_event(event: &Event<'_, !>, wgpu: &Wgpu, input_updater: &mut InputUpdater) -> EventStatus {
 	// Default event status
 	let mut event_status = EventStatus {
 		control_flow: EventLoopControlFlow::Wait,
@@ -87,15 +79,15 @@ async fn handle_event(
 			WindowEvent::Resized(size) => wgpu.resize(size),
 
 			// On move, update the cursor position
-			WindowEvent::CursorMoved { position, .. } => input.update_cursor_pos(position),
+			WindowEvent::CursorMoved { position, .. } => input_updater.update_cursor_pos(position),
 
-			// If right clicked, queue a click
-			// TODO: Don't queue the open click here? Feels kinda hacky
+			// If right clicked, send an on-click
 			WindowEvent::MouseInput {
 				state: winit::event::ElementState::Pressed,
-				button: winit::event::MouseButton::Right,
+				button,
 				..
-			} => settings_window.queue_open_click(input.cursor_pos()).await,
+			} => input_updater.on_click(button),
+
 			_ => (),
 		},
 
@@ -106,10 +98,10 @@ async fn handle_event(
 			DeviceEvent::MouseMotion {
 				delta: (delta_x, delta_y),
 			} =>
-				if let Some(mut cursor_pos) = input.cursor_pos() {
+				if let Some(mut cursor_pos) = input_updater.cursor_pos() {
 					cursor_pos.x += delta_x;
 					cursor_pos.y += delta_y;
-					input.update_cursor_pos(cursor_pos);
+					input_updater.update_cursor_pos(cursor_pos);
 				},
 			_ => (),
 		},

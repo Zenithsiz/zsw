@@ -12,7 +12,7 @@ use {
 	winit::window::Window,
 	zsw_egui::EguiRenderer,
 	zsw_img::ImageReceiver,
-	zsw_input::Input,
+	zsw_input::InputReceiver,
 	zsw_panels::{PanelsRenderer, PanelsResource},
 	zsw_util::{Resources, ResourcesTuple2, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
@@ -37,9 +37,10 @@ impl Renderer {
 		resources: &mut R,
 		panels_renderer: &mut PanelsRenderer,
 		egui_renderer: &mut EguiRenderer,
+		input_receiver: &mut InputReceiver,
 	) -> !
 	where
-		S: Services<Wgpu> + Services<Window> + Services<Input> + Services<ImageReceiver>,
+		S: Services<Wgpu> + Services<Window> + Services<ImageReceiver>,
 		R: Resources<PanelsResource> + ResourcesTuple2<PanelsResource, WgpuSurfaceResource>,
 	{
 		// Duration we're sleeping
@@ -54,7 +55,7 @@ impl Renderer {
 			}
 
 			// Render
-			if let Err(err) = Self::render(services, resources, panels_renderer, egui_renderer).await {
+			if let Err(err) = Self::render(services, resources, panels_renderer, egui_renderer, input_receiver).await {
 				tracing::warn!(?err, "Unable to render");
 			};
 
@@ -92,14 +93,14 @@ impl Renderer {
 		resources: &mut R,
 		panels_renderer: &mut PanelsRenderer,
 		egui_renderer: &mut EguiRenderer,
+		input_receiver: &mut InputReceiver,
 	) -> Result<(), anyhow::Error>
 	where
-		S: Services<Wgpu> + Services<Window> + Services<Input>,
+		S: Services<Wgpu> + Services<Window>,
 		R: ResourcesTuple2<PanelsResource, WgpuSurfaceResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let window = services.service::<Window>();
-		let input = services.service::<Input>();
 		let (panels_resource, mut surface_resource) = resources.resources_tuple2().await;
 
 		// Then render
@@ -110,12 +111,14 @@ impl Renderer {
 
 		// Render the panels
 		{
+			let cursor_pos = input_receiver
+				.cursor_pos()
+				.map_or(Point2::new(0, 0), |pos| Point2::new(pos.x as i32, pos.y as i32));
+
 			panels_renderer
 				.render(
 					&panels_resource,
-					input
-						.cursor_pos()
-						.map_or(Point2::new(0, 0), |pos| Point2::new(pos.x as i32, pos.y as i32)),
+					cursor_pos,
 					wgpu.queue(),
 					&mut frame.encoder,
 					&frame.surface_view,
