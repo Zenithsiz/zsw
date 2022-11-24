@@ -7,7 +7,8 @@
 	generators,
 	never_type,
 	type_alias_impl_trait,
-	async_fn_in_trait
+	async_fn_in_trait,
+	specialization
 )]
 #![allow(incomplete_features)]
 
@@ -30,7 +31,7 @@ pub use {
 	fetch_update::FetchUpdate,
 	lock::Lock,
 	rect::Rect,
-	resource::{Resources, ResourcesBundle},
+	resource::{Resources, ResourcesBundle, ResourcesTuple2},
 	service::{Services, ServicesBundle},
 	thread::ThreadSpawner,
 };

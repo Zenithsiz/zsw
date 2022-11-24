@@ -16,7 +16,10 @@ image = "0.24.5"
 futures = "0.3.25"
 
 # Math
-cgmath = {version = "0.18.0", features = ["serde"]}
+cgmath = { version = "0.18.0", features = ["serde"] }
+
+# Util
+duplicate = "0.4.1"
 
 # Error
 anyhow = "1.0.66"

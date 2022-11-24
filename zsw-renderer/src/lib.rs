@@ -7,14 +7,14 @@
 use {
 	anyhow::Context,
 	cgmath::Point2,
-	std::time::Duration,
+	std::{mem, time::Duration},
 	tokio::time::Instant,
 	winit::window::Window,
 	zsw_egui::EguiRenderer,
 	zsw_img::ImageReceiver,
 	zsw_input::Input,
 	zsw_panels::{PanelsRenderer, PanelsResource},
-	zsw_util::{Resources, Services},
+	zsw_util::{Resources, ResourcesTuple2, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
@@ -46,7 +46,7 @@ impl Renderer {
 	) -> !
 	where
 		S: Services<Wgpu> + Services<Window> + Services<Input> + Services<ImageReceiver>,
-		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
+		R: Resources<PanelsResource> + ResourcesTuple2<PanelsResource, WgpuSurfaceResource>,
 	{
 		// Duration we're sleeping
 		let sleep_duration = Duration::from_secs_f32(1.0 / 60.0);
@@ -112,15 +112,12 @@ impl Renderer {
 	) -> Result<(), anyhow::Error>
 	where
 		S: Services<Wgpu> + Services<Window> + Services<Input>,
-		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
+		R: ResourcesTuple2<PanelsResource, WgpuSurfaceResource>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let window = services.service::<Window>();
 		let input = services.service::<Input>();
-
-		// Lock the wgpu surface
-		// DEADLOCK: Caller ensures we can lock it
-		let mut surface_resource = resources.resource::<WgpuSurfaceResource>().await;
+		let (panels_resource, mut surface_resource) = resources.resources_tuple2().await;
 
 		// Then render
 		let surface_size = wgpu.surface_size(&surface_resource);
@@ -130,9 +127,6 @@ impl Renderer {
 
 		// Render the panels
 		{
-			// DEADLOCK: Caller ensures we can lock it after the surface
-			let panels_resource = resources.resource::<PanelsResource>().await;
-
 			panels_renderer
 				.render(
 					&panels_resource,
@@ -145,6 +139,7 @@ impl Renderer {
 					surface_size,
 				)
 				.context("Unable to render panels")?;
+			mem::drop(panels_resource);
 		}
 
 		// Render egui
@@ -181,6 +176,7 @@ impl Renderer {
 		}
 
 		wgpu.finish_render(frame);
+		mem::drop(surface_resource);
 
 		Ok(())
 	}

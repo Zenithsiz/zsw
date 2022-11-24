@@ -3666,6 +3666,7 @@ dependencies = [
  "anyhow",
  "cgmath",
  "crossbeam",
+ "duplicate",
  "futures",
  "image",
  "parking_lot",
