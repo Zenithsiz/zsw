@@ -92,13 +92,7 @@ impl SettingsWindow {
 
 		loop {
 			// Get the surface size
-			// DEADLOCK: Caller ensures we can lock it
-			let surface_size = {
-				let wgpu_surface_resource = resources.resource::<WgpuSurfaceResource>().await;
-				wgpu.surface_size(&wgpu_surface_resource)
-			};
-
-			// DEADLOCK: Caller ensures we can lock it after the panels lock
+			let surface_size = wgpu.surface_size(&*resources.resource::<WgpuSurfaceResource>().await);
 			let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 			// TODO: Check locking of this

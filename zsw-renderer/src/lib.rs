@@ -49,13 +49,11 @@ impl Renderer {
 			let start_time = Instant::now();
 
 			// Update
-			// DEADLOCK: Caller ensures we can lock it
 			if let Err(err) = Self::update(services, resources, panels_renderer).await {
 				tracing::warn!(?err, "Unable to update");
 			}
 
 			// Render
-			// DEADLOCK: Caller ensures we can lock it
 			if let Err(err) = Self::render(services, resources, panels_renderer, egui_renderer).await {
 				tracing::warn!(?err, "Unable to render");
 			};
@@ -78,7 +76,6 @@ impl Renderer {
 		S: Services<Wgpu> + Services<ImageReceiver>,
 		R: Resources<PanelsResource>,
 	{
-		// DEADLOCK: Caller ensures we can lock it
 		let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 		// Updates all panels
