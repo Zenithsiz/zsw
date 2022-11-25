@@ -112,24 +112,7 @@ impl Wgpu {
 	/// Starts rendering a frame.
 	///
 	/// Returns the encoder and surface view to render onto
-	pub fn start_render(
-		&self,
-		surface_resource: &mut WgpuSurfaceResource,
-		input_receiver: &mut InputReceiver,
-	) -> Result<FrameRender, anyhow::Error> {
-		// Check for resizes
-		// TODO: Only resize on the *last* queued? This seemed to cause some weird behavior with cursor
-		//       position in the settings window tough
-		while let Some(size) = input_receiver.on_resize() {
-			tracing::info!(?size, "Resizing");
-			if size.width > 0 && size.height > 0 {
-				// Update our surface
-				let config = self::window_surface_configuration(self.surface_texture_format, size);
-				surface_resource.surface.configure(&self.device, &config);
-				surface_resource.size = size;
-			}
-		}
-
+	pub fn start_render(&self, surface_resource: &mut WgpuSurfaceResource) -> Result<FrameRender, anyhow::Error> {
 		// And then get the surface texture
 		let surface_texture = surface_resource
 			.surface
@@ -154,11 +137,34 @@ impl Wgpu {
 		})
 	}
 
+	/// Checks for and performs a resize
+	fn check_resize(&self, input_receiver: &mut InputReceiver, surface_resource: &mut WgpuSurfaceResource) {
+		// TODO: Only resize on the *last* queued? This seemed to cause some weird behavior with cursor
+		//       position in the settings window tough
+		while let Some(size) = input_receiver.on_resize() {
+			tracing::info!(?size, "Resizing");
+			if size.width > 0 && size.height > 0 {
+				// Update our surface
+				let config = self::window_surface_configuration(self.surface_texture_format, size);
+				surface_resource.surface.configure(&self.device, &config);
+				surface_resource.size = size;
+			}
+		}
+	}
+
 	/// Finishes rendering a frame
-	pub fn finish_render(&self, frame: FrameRender) {
+	pub fn finish_render(
+		&self,
+		frame: FrameRender,
+		surface_resource: &mut WgpuSurfaceResource,
+		input_receiver: &mut InputReceiver,
+	) {
 		// Submit everything to the queue and present the surface's texture
 		let _ = self.queue.submit([frame.encoder.finish()]);
 		frame.surface_texture.present();
+
+		// Check for resizes
+		self.check_resize(input_receiver, surface_resource);
 	}
 }
 

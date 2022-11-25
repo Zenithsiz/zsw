@@ -106,7 +106,7 @@ impl Renderer {
 		// Then render
 		let surface_size = wgpu.surface_size(&surface_resource);
 		let mut frame = wgpu
-			.start_render(&mut surface_resource, input_receiver)
+			.start_render(&mut surface_resource)
 			.context("Unable to start render")?;
 
 		// Render the panels
@@ -161,7 +161,7 @@ impl Renderer {
 				.context("Unable to update textures")?;
 		}
 
-		wgpu.finish_render(frame);
+		wgpu.finish_render(frame, &mut surface_resource, input_receiver);
 		mem::drop(surface_resource);
 
 		Ok(())
