@@ -139,9 +139,9 @@ impl Wgpu {
 
 	/// Checks for and performs a resize
 	fn check_resize(&self, input_receiver: &mut InputReceiver, surface_resource: &mut WgpuSurfaceResource) {
-		// TODO: Only resize on the *last* queued? This seemed to cause some weird behavior with cursor
-		//       position in the settings window tough
-		while let Some(size) = input_receiver.on_resize() {
+		// Note: We only do the last resize as there's no point doing any in-between ones.
+		let last_resize = std::iter::from_fn(|| input_receiver.on_resize()).last();
+		if let Some(size) = last_resize {
 			tracing::info!(?size, "Resizing");
 			if size.width > 0 && size.height > 0 {
 				// Update our surface
