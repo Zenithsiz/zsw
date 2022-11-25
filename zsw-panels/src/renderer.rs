@@ -13,7 +13,7 @@ use {
 	cgmath::Point2,
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
-	zsw_img::ImageReceiver,
+	zsw_img::{ImageReceiver, RawImageProvider},
 	zsw_wgpu::Wgpu,
 };
 
@@ -88,11 +88,11 @@ impl PanelsRenderer {
 	}
 
 	/// Updates all panels
-	pub fn update_all(
+	pub fn update_all<P: RawImageProvider>(
 		&self,
 		resource: &mut PanelsResource,
 		wgpu: &Wgpu,
-		image_receiver: &ImageReceiver,
+		image_receiver: &ImageReceiver<P>,
 	) -> Result<(), anyhow::Error> {
 		for panel in &mut resource.panels {
 			panel.update(self, wgpu, image_receiver);

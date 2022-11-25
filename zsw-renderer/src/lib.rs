@@ -11,7 +11,7 @@ use {
 	tokio::time::Instant,
 	winit::window::Window,
 	zsw_egui::EguiRenderer,
-	zsw_img::ImageReceiver,
+	zsw_img::{ImageReceiver, RawImageProvider},
 	zsw_input::InputReceiver,
 	zsw_panels::{PanelsRenderer, PanelsResource},
 	zsw_util::{Resources, ResourcesTuple2, Services},
@@ -31,7 +31,7 @@ impl Renderer {
 	}
 
 	/// Runs the renderer
-	pub async fn run<S, R>(
+	pub async fn run<S, R, P: RawImageProvider>(
 		&self,
 		services: &S,
 		resources: &mut R,
@@ -40,7 +40,7 @@ impl Renderer {
 		input_receiver: &mut InputReceiver,
 	) -> !
 	where
-		S: Services<Wgpu> + Services<Window> + Services<ImageReceiver>,
+		S: Services<Wgpu> + Services<Window> + Services<ImageReceiver<P>>,
 		R: Resources<PanelsResource> + ResourcesTuple2<PanelsResource, WgpuSurfaceResource>,
 	{
 		// Duration we're sleeping
@@ -68,13 +68,13 @@ impl Renderer {
 	}
 
 	/// Updates all panels
-	async fn update<S, R>(
+	async fn update<S, R, P: RawImageProvider>(
 		services: &S,
 		resources: &mut R,
 		panels_renderer: &mut PanelsRenderer,
 	) -> Result<(), anyhow::Error>
 	where
-		S: Services<Wgpu> + Services<ImageReceiver>,
+		S: Services<Wgpu> + Services<ImageReceiver<P>>,
 		R: Resources<PanelsResource>,
 	{
 		let mut panels_resource = resources.resource::<PanelsResource>().await;
@@ -83,7 +83,7 @@ impl Renderer {
 		panels_renderer.update_all(
 			&mut panels_resource,
 			services.service::<Wgpu>(),
-			services.service::<ImageReceiver>(),
+			services.service::<ImageReceiver<P>>(),
 		)
 	}
 

@@ -14,17 +14,26 @@ use {
 
 /// Image loader service
 #[derive(Clone, Debug)]
-pub struct ImageLoader {
+pub struct ImageLoader<P: RawImageProvider> {
 	/// Image sender
-	image_tx: crossbeam::channel::Sender<Image>,
+	image_tx: crossbeam::channel::Sender<Image<P>>,
+
+	/// To remove image receiver
+	to_remove_image_rx: crossbeam::channel::Receiver<Image<P>>,
 }
 
-impl ImageLoader {
+impl<P: RawImageProvider> ImageLoader<P> {
 	/// Runs this image loader
 	///
 	/// Multiple image loaders may run at the same time
-	pub fn run<P: RawImageProvider>(self, provider: &P) {
+	pub fn run(self, provider: &P) {
 		'run: loop {
+			// If we have any images to remove, remove them
+			// Note: We don't care if the sender quit for this channel
+			while let Ok(image) = self.to_remove_image_rx.try_recv() {
+				provider.remove_image(image.raw_image_token);
+			}
+
 			// Get the next raw image, or quit if no more
 			let Some(mut raw_image) = provider.next_image() else {
 				break;
@@ -45,6 +54,7 @@ impl ImageLoader {
 					let image = Image {
 						name: image_name,
 						image,
+						raw_image_token: raw_image.into_token(),
 					};
 
 					if self.image_tx.send(image).is_err() {
@@ -56,7 +66,7 @@ impl ImageLoader {
 				// If we couldn't load, log, remove the path and retry
 				Err(err) => {
 					tracing::info!(name = ?raw_image.name(), ?err, "Unable to load image");
-					provider.remove_image(&raw_image);
+					provider.remove_image(raw_image.into_token());
 				},
 			}
 		}
@@ -65,16 +75,16 @@ impl ImageLoader {
 
 /// Image resizer service
 #[derive(Clone, Debug)]
-pub struct ImageResizer {
+pub struct ImageResizer<P: RawImageProvider> {
 	/// Resized image sender
-	resized_image_tx: crossbeam::channel::Sender<Image>,
+	resized_image_tx: crossbeam::channel::Sender<Image<P>>,
 
 	/// To resize image receiver
 	// TODO: Proper type for this instead of tuple
-	to_resize_image_rx: crossbeam::channel::Receiver<(Image, u32)>,
+	to_resize_image_rx: crossbeam::channel::Receiver<(Image<P>, u32)>,
 }
 
-impl ImageResizer {
+impl<P: RawImageProvider> ImageResizer<P> {
 	/// Runs this image resizer
 	///
 	/// Multiple image resizers may run at the same time
@@ -97,24 +107,32 @@ impl ImageResizer {
 
 /// Image receiver
 #[derive(Debug)]
-pub struct ImageReceiver {
+pub struct ImageReceiver<P: RawImageProvider> {
 	/// Image receiver
-	image_rx: crossbeam::channel::Receiver<Image>,
+	image_rx: crossbeam::channel::Receiver<Image<P>>,
+
+	/// To remove image sender
+	to_remove_image_tx: crossbeam::channel::Sender<Image<P>>,
 
 	/// To resize image sender
-	to_resize_image_tx: crossbeam::channel::Sender<(Image, u32)>,
+	to_resize_image_tx: crossbeam::channel::Sender<(Image<P>, u32)>,
 }
 
-impl ImageReceiver {
+impl<P: RawImageProvider> ImageReceiver<P> {
 	/// Attempts to receive the image
 	// TODO: Return an error when receiver quit
 	#[must_use]
-	pub fn try_recv(&self) -> Option<Image> {
+	pub fn try_recv(&self) -> Option<Image<P>> {
 		self.image_rx.try_recv().ok()
 	}
 
+	/// Queues an image to be removed
+	pub fn queue_remove(&self, image: Image<P>) -> Result<(), Image<P>> {
+		self.to_remove_image_tx.send(image).map_err(|err| err.0)
+	}
+
 	/// Queues an image to be resized
-	pub fn queue_resize(&self, image: Image, max_size: u32) -> Result<(), Image> {
+	pub fn queue_resize(&self, image: Image<P>, max_size: u32) -> Result<(), Image<P>> {
 		self.to_resize_image_tx.send((image, max_size)).map_err(|err| err.0 .0)
 	}
 }
@@ -128,7 +146,7 @@ pub trait RawImageProvider {
 	fn next_image(&self) -> Option<Self::RawImage>;
 
 	/// Removes an image
-	fn remove_image(&self, raw_image: &Self::RawImage);
+	fn remove_image(&self, token: <Self::RawImage as RawImage>::Token);
 }
 
 /// Raw image
@@ -138,17 +156,27 @@ pub trait RawImage {
 	where
 		Self: 'a;
 
+	/// Image token type.
+	///
+	/// Used to identify the image. Will be stored along-side
+	/// the loaded image for it's lifecycle, so should not contain
+	/// anything "heavy" (e.g. an open file)
+	type Token: std::fmt::Debug;
+
 	/// Returns this image's reader
 	fn reader(&mut self) -> Self::Reader<'_>;
 
 	/// Returns this image's name
 	fn name(&self) -> &str;
+
+	/// Consumes this raw image into a token representing it
+	fn into_token(self) -> Self::Token;
 }
 
 /// Resizes an image
 // TODO: Allow max size for both width and height?
 #[allow(clippy::cast_sign_loss)] // We're sure it's positive
-pub fn resize_image(image: &mut Image, max_size: u32) {
+pub fn resize_image<P: RawImageProvider>(image: &mut Image<P>, max_size: u32) {
 	let width_f32 = image.image.width() as f32;
 	let height_f32 = image.image.height() as f32;
 	let resize_factor = f32::min(max_size as f32 / width_f32, max_size as f32 / height_f32);
@@ -194,18 +222,20 @@ fn image_format<R: io::BufRead + io::Seek>(raw_image: &mut R) -> Result<image::I
 
 /// Creates the image loader service
 #[must_use]
-pub fn create() -> (ImageLoader, ImageResizer, ImageReceiver) {
+pub fn create<P: RawImageProvider>() -> (ImageLoader<P>, ImageResizer<P>, ImageReceiver<P>) {
 	// Create the image channel
 	// Note: We have the lowest possible bound on the receiver due to images being quite big
-	// Note: Since the resizer is on-demand, we use an unbounded buffer to avoid waiting
+	// Note: Since the resizer / remover is on-demand, we use an unbounded buffer to avoid waiting
 	//       queueing requests on receiving the images.
 	// TODO: Make this customizable?
 	let (image_tx, image_rx) = crossbeam::channel::bounded(0);
 	let (to_resize_image_tx, to_resize_image_rx) = crossbeam::channel::unbounded();
+	let (to_remove_image_tx, to_remove_image_rx) = crossbeam::channel::unbounded();
 
 	(
 		ImageLoader {
 			image_tx: image_tx.clone(),
+			to_remove_image_rx,
 		},
 		ImageResizer {
 			resized_image_tx: image_tx,
@@ -213,6 +243,7 @@ pub fn create() -> (ImageLoader, ImageResizer, ImageReceiver) {
 		},
 		ImageReceiver {
 			image_rx,
+			to_remove_image_tx,
 			to_resize_image_tx,
 		},
 	)

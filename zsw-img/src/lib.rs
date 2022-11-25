@@ -7,22 +7,25 @@
 pub mod loader;
 
 // Exports
-pub use loader::{ImageLoader, ImageReceiver};
+pub use loader::{ImageLoader, ImageReceiver, RawImage, RawImageProvider};
 
 // Imports
 use {cgmath::Vector2, image::DynamicImage};
 
 /// Loaded image
 #[derive(Debug)]
-pub struct Image {
+pub struct Image<P: RawImageProvider> {
 	/// Image name
 	pub name: String,
 
 	/// Image
 	pub image: DynamicImage,
+
+	/// Raw image token
+	pub raw_image_token: <P::RawImage as RawImage>::Token,
 }
 
-impl Image {
+impl<P: RawImageProvider> Image<P> {
 	/// Returns the image's size
 	#[must_use]
 	pub fn size(&self) -> Vector2<u32> {

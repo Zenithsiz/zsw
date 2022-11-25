@@ -4,25 +4,26 @@
 use {
 	anyhow::Context,
 	std::{fs, io, path::Path, sync::Arc},
+	zsw_img::{RawImage, RawImageProvider},
 	zsw_playlist::{PlaylistImage, PlaylistReceiver},
 };
 
 /// Image provider based on `PlaylistReceiver` for `ImageLoader`
 #[derive(Clone, Debug)]
-pub struct ImageProvider {
+pub struct AppRawImageProvider {
 	/// Playlist receiver
 	playlist_receiver: PlaylistReceiver,
 }
 
-impl ImageProvider {
+impl AppRawImageProvider {
 	/// Creates a new image provider
 	pub fn new(playlist_receiver: PlaylistReceiver) -> Self {
 		Self { playlist_receiver }
 	}
 }
 
-impl zsw_img::loader::RawImageProvider for ImageProvider {
-	type RawImage = RawImage;
+impl RawImageProvider for AppRawImageProvider {
+	type RawImage = AppRawImage;
 
 	fn next_image(&self) -> Option<Self::RawImage> {
 		// Keep requesting until we manage to load it (or we're out of them)
@@ -31,7 +32,7 @@ impl zsw_img::loader::RawImageProvider for ImageProvider {
 
 			match self::open_image(&playlist_image) {
 				Ok(reader) =>
-					break RawImage {
+					break AppRawImage {
 						reader,
 						name: self::image_name(&playlist_image),
 						playlist_image,
@@ -47,14 +48,13 @@ impl zsw_img::loader::RawImageProvider for ImageProvider {
 		Some(image)
 	}
 
-	fn remove_image(&self, raw_image: &Self::RawImage) {
-		self.playlist_receiver
-			.remove_image(Arc::clone(&raw_image.playlist_image));
+	fn remove_image(&self, token: <Self::RawImage as RawImage>::Token) {
+		self.playlist_receiver.remove_image(token);
 	}
 }
 
 /// Raw image for `RawImageProvider::RawImage`
-pub struct RawImage {
+pub struct AppRawImage {
 	/// Reader
 	reader: io::BufReader<fs::File>,
 
@@ -65,10 +65,11 @@ pub struct RawImage {
 	playlist_image: Arc<PlaylistImage>,
 }
 
-impl zsw_img::loader::RawImage for RawImage {
+impl RawImage for AppRawImage {
 	type Reader<'a> = &'a mut io::BufReader<fs::File>
 	where
-		Self: 'a,;
+		Self: 'a;
+	type Token = Arc<PlaylistImage>;
 
 	fn reader(&mut self) -> Self::Reader<'_> {
 		&mut self.reader
@@ -76,6 +77,10 @@ impl zsw_img::loader::RawImage for RawImage {
 
 	fn name(&self) -> &str {
 		&self.name
+	}
+
+	fn into_token(self) -> Self::Token {
+		self.playlist_image
 	}
 }
 

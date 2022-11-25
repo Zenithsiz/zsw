@@ -2,6 +2,7 @@
 
 // Imports
 use {
+	super::image_provider::AppRawImageProvider,
 	std::sync::Arc,
 	winit::window::Window,
 	zsw_img::ImageReceiver,
@@ -26,7 +27,7 @@ pub struct Services {
 	pub wgpu: Wgpu,
 
 	/// Image receiver
-	pub image_receiver: ImageReceiver,
+	pub image_receiver: ImageReceiver<AppRawImageProvider>,
 
 	/// Playlist manager
 	pub playlist_manager: PlaylistManager,
@@ -44,14 +45,14 @@ pub struct Services {
 impl ServicesBundle for Services {}
 
 #[duplicate::duplicate_item(
-	ty                 field;
-	[ Window           ] [ window ];
-	[ Wgpu             ] [ wgpu ];
-	[ ImageReceiver    ] [ image_receiver ];
-	[ PlaylistManager  ] [ playlist_manager ];
-	[ ProfilesManager  ] [ profiles_manager ];
-	[ PanelsEditor     ] [ panels_editor ];
-	[ Renderer         ] [ renderer ];
+	ty                                field;
+	[ Window                          ] [ window ];
+	[ Wgpu                            ] [ wgpu ];
+	[ ImageReceiver<AppRawImageProvider> ] [ image_receiver ];
+	[ PlaylistManager                 ] [ playlist_manager ];
+	[ ProfilesManager                 ] [ profiles_manager ];
+	[ PanelsEditor                    ] [ panels_editor ];
+	[ Renderer                        ] [ renderer ];
 )]
 impl zsw_util::Services<ty> for Services {
 	fn get(&self) -> &ty {

@@ -15,7 +15,7 @@ mod services;
 use {
 	self::{
 		event_handler::EventHandler,
-		image_provider::ImageProvider,
+		image_provider::AppRawImageProvider,
 		profile_applier::ProfileApplier,
 		resources::{Resources, ResourcesInner},
 		services::Services,
@@ -109,7 +109,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		.context("Unable to spawn playlist runner task")?;
 
 	// TODO: Dynamically change the number of these to the number of panels / another value
-	let image_provider = ImageProvider::new(playlist_receiver);
+	let image_provider = AppRawImageProvider::new(playlist_receiver);
 	let image_loader_tasks = (0..default_profile.panels.len())
 		.map(|idx| {
 			let image_loader = image_loader.clone();

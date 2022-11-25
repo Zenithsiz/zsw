@@ -8,7 +8,7 @@ use {
 	num_rational::Rational32,
 	std::mem,
 	winit::dpi::PhysicalSize,
-	zsw_img::ImageReceiver,
+	zsw_img::{ImageReceiver, RawImageProvider},
 	zsw_wgpu::Wgpu,
 };
 
@@ -37,7 +37,12 @@ impl PanelState {
 	}
 
 	/// Updates this panel's state
-	pub fn update(&mut self, renderer: &PanelsRenderer, wgpu: &Wgpu, image_receiver: &ImageReceiver) {
+	pub fn update<P: RawImageProvider>(
+		&mut self,
+		renderer: &PanelsRenderer,
+		wgpu: &Wgpu,
+		image_receiver: &ImageReceiver<P>,
+	) {
 		// Next frame's progress
 		let next_progress = self.cur_progress.saturating_add(1).clamp(0, self.panel.duration);
 
@@ -61,8 +66,10 @@ impl PanelState {
 							tracing::debug!("Unable to use image {}: {err}", image.name);
 							if let Err(image) = image_receiver.queue_resize(image, err.max_size) {
 								// Note: If we can't remove, just drop it
-								// TODO: Remove it
 								tracing::debug!("Unable to resize image {}, removing it", image.name);
+								if let Err(image) = image_receiver.queue_remove(image) {
+									tracing::debug!("Unable to remove image {}", image.name);
+								}
 							}
 
 							// Then try again

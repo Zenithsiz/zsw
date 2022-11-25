@@ -8,7 +8,7 @@ use {
 	image::DynamicImage,
 	std::borrow::Cow,
 	wgpu::util::DeviceExt,
-	zsw_img::Image,
+	zsw_img::{Image, RawImageProvider},
 	zsw_wgpu::Wgpu,
 };
 
@@ -44,7 +44,11 @@ pub struct PanelImage {
 
 impl PanelImage {
 	/// Creates a new image
-	pub fn new(renderer: &PanelsRenderer, wgpu: &Wgpu, image: &Image) -> Result<Self, ImageTooBigError> {
+	pub fn new<P: RawImageProvider>(
+		renderer: &PanelsRenderer,
+		wgpu: &Wgpu,
+		image: &Image<P>,
+	) -> Result<Self, ImageTooBigError> {
 		// Create the texture and sampler
 		let image_size = image.size();
 		let (texture, texture_view) = self::create_image_texture(wgpu, &image.name, &image.image)?;
@@ -92,7 +96,12 @@ impl PanelImage {
 	}
 
 	/// Updates this image
-	pub fn update(&mut self, renderer: &PanelsRenderer, wgpu: &Wgpu, image: &Image) -> Result<(), ImageTooBigError> {
+	pub fn update<P: RawImageProvider>(
+		&mut self,
+		renderer: &PanelsRenderer,
+		wgpu: &Wgpu,
+		image: &Image<P>,
+	) -> Result<(), ImageTooBigError> {
 		// Update our texture
 		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.name, &image.image)?;
 		self.image_bind_group = self::create_image_bind_group(
