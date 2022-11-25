@@ -126,11 +126,5 @@ fn panic_hook(info: &panic::PanicInfo<'_>) {
 
 	let backtrace = Backtrace::force_capture();
 
-	tracing::error!(
-		thread_name,
-		msg,
-		?location,
-		?backtrace,
-		"Thread '{thread_name}' panicked at '{msg}'"
-	);
+	tracing::error!("Thread '{thread_name}' panicked at {location}: {msg}\nBacktrace:\n{backtrace}");
 }
