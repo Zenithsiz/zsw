@@ -6,6 +6,7 @@ use {
 	crate::PanelsRenderer,
 	cgmath::Vector2,
 	image::DynamicImage,
+	more_asserts::assert_le,
 	wgpu::util::DeviceExt,
 	zsw_img::Image,
 	zsw_wgpu::Wgpu,
@@ -178,7 +179,7 @@ fn create_image_bind_group(
 /// Creates the image texture and view
 fn create_image_texture(wgpu: &Wgpu, name: &str, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
 	// Get the image's format, converting if necessary.
-	let (image, format) = match image {
+	let (mut image, format) = match image {
 		// With `rgba` we can simply use the image
 		image @ DynamicImage::ImageRgba8(_) => (image, wgpu::TextureFormat::Rgba8UnormSrgb),
 
@@ -190,6 +191,38 @@ fn create_image_texture(wgpu: &Wgpu, name: &str, image: DynamicImage) -> (wgpu::
 			(DynamicImage::ImageRgba8(image), wgpu::TextureFormat::Rgba8UnormSrgb)
 		},
 	};
+
+	// If it's larger than the max size, downscale it
+	let limits = wgpu.device().limits();
+	#[allow(clippy::cast_sign_loss)] // We're sure it's positive
+	if image.width() > limits.max_texture_dimension_2d || image.height() > limits.max_texture_dimension_2d {
+		let width = image.width() as f32;
+		let height = image.height() as f32;
+		let resize_factor = f32::min(
+			limits.max_texture_dimension_2d as f32 / width,
+			limits.max_texture_dimension_2d as f32 / height,
+		);
+		let resize_width = (width * resize_factor) as u32;
+		let resize_height = (height * resize_factor) as u32;
+		assert_le!(
+			resize_width,
+			limits.max_texture_dimension_2d,
+			"Calculated width is too large"
+		);
+		assert_le!(
+			resize_height,
+			limits.max_texture_dimension_2d,
+			"Calculated height is too large"
+		);
+
+		tracing::warn!(
+			"Image too big! Resizing {name}: {}x{} to {resize_width}x{resize_height} ({:.2}%)",
+			image.width(),
+			image.height(),
+			resize_factor * 100.0
+		);
+		image = image.resize(resize_width, resize_height, image::imageops::FilterType::Lanczos3);
+	}
 
 	let label = format!("[zsw::panel] Image {name:?}");
 	let texture_descriptor = self::texture_descriptor(&label, image.width(), image.height(), format);
