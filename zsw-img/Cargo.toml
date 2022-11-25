@@ -27,3 +27,6 @@ tracing = "0.1.37"
 
 # Threads
 crossbeam = "0.8.2"
+
+# Util
+more-asserts = "0.3.1"

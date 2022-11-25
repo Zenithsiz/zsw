@@ -55,7 +55,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		.await
 		.context("Unable to create renderer")?;
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
-	let (image_loader, image_receiver) = zsw_img::loader::create();
+	let (image_loader, image_resizer, image_receiver) = zsw_img::loader::create();
 	let (mut panels_renderer, panels_editor, panels_resource) =
 		zsw_panels::create(wgpu.device(), wgpu.surface_texture_format());
 	let (mut egui_renderer, mut egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
@@ -120,6 +120,15 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		})
 		.collect::<Result<Vec<_>, _>>()
 		.context("Unable to spawn image loader tasks")?;
+	let image_resizer_tasks = (0..default_profile.panels.len())
+		.map(|idx| {
+			let image_resizer = image_resizer.clone();
+			thread::Builder::new()
+				.name(format!("Image resizer #{idx}"))
+				.spawn(move || image_resizer.run())
+		})
+		.collect::<Result<Vec<_>, _>>()
+		.context("Unable to spawn image loader tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
 		[services, resources, profile_applier, input_receiver] "Settings window runner" => settings_window.run(&*services, &mut { resources }, &mut egui_painter, profile_applier, &mut { input_receiver })
@@ -139,6 +148,10 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		for task in image_loader_tasks {
 			task.join()
 				.map_err(|err| anyhow::anyhow!("Unable to wait for image loader runner: {err:?}"))?;
+		}
+		for task in image_resizer_tasks {
+			task.join()
+				.map_err(|err| anyhow::anyhow!("Unable to wait for image resizer runner: {err:?}"))?;
 		}
 		settings_window_task
 			.await

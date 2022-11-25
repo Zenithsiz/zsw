@@ -1,5 +1,8 @@
 //! Panel
 
+// Features
+#![feature(decl_macro)]
+
 // Modules
 mod image;
 mod panel;

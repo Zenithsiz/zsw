@@ -49,59 +49,83 @@ impl PanelState {
 
 		// Update the image state
 		// Note: We're only `take`ing the images because we need them by value
-		(self.images, self.cur_progress) = match mem::take(&mut self.images) {
-			// If we're empty, try to get a next image
-			PanelStateImages::Empty => match image_receiver.try_recv() {
-				#[allow(clippy::cast_sign_loss)] // It's positive
-				Some(image) => (
-					PanelStateImages::PrimaryOnly {
-						front: PanelStateImage {
-							image:    PanelImage::new(renderer, wgpu, image),
-							swap_dir: rand::random(),
+		(self.images, self.cur_progress) = 'update: loop {
+			// Handles a `Result<T, ImageTooBigError>`
+			macro handle_image_too_big_error($image:expr, $res:expr) {
+				match $res {
+					Ok(value) => value,
+					Err(err) => match $image {
+						image => {
+							// Try to resize
+							// Note: If we can't resize, we just instead remove
+							tracing::debug!("Unable to use image {}: {err}", image.name);
+							if let Err(image) = image_receiver.queue_resize(image, err.max_size) {
+								// Note: If we can't remove, just drop it
+								// TODO: Remove it
+								tracing::debug!("Unable to resize image {}, removing it", image.name);
+							}
+
+							// Then try again
+							continue 'update;
 						},
 					},
-					// Note: Ensure it's below `0.5` to avoid starting during a fade.
-					(rand::random::<f32>() / 2.0 * self.panel.duration as f32) as u64,
-				),
-				None => (PanelStateImages::Empty, 0),
-			},
-
-			// If we only have the primary, try to load the next image
-			PanelStateImages::PrimaryOnly { front } => match image_receiver.try_recv() {
-				Some(image) => (
-					PanelStateImages::Both {
-						front,
-						back: PanelStateImage {
-							image:    PanelImage::new(renderer, wgpu, image),
-							swap_dir: rand::random(),
-						},
-					},
-					next_progress,
-				),
-				None => (PanelStateImages::PrimaryOnly { front }, next_progress),
-			},
-
-			// If we have both, try to update the progress and swap them if finished
-			PanelStateImages::Both { mut front, back } if finished => {
-				match image_receiver.try_recv() {
-					// Note: We update the front and swap them
-					Some(image) => {
-						front.image.update(renderer, wgpu, image);
-						front.swap_dir = rand::random();
-						(
-							PanelStateImages::Both {
-								front: back,
-								back:  front,
-							},
-							swapped_progress,
-						)
-					},
-					None => (PanelStateImages::Both { front, back }, next_progress),
 				}
-			},
+			}
 
-			// Else just update the progress
-			state @ PanelStateImages::Both { .. } => (state, next_progress),
+			break match mem::take(&mut self.images) {
+				// If we're empty, try to get a next image
+				PanelStateImages::Empty => match image_receiver.try_recv() {
+					#[allow(clippy::cast_sign_loss)] // It's positive
+					Some(image) => (
+						PanelStateImages::PrimaryOnly {
+							front: PanelStateImage {
+								image:    handle_image_too_big_error!(image, PanelImage::new(renderer, wgpu, &image)),
+								swap_dir: rand::random(),
+							},
+						},
+						// Note: Ensure it's below `0.5` to avoid starting during a fade.
+						(rand::random::<f32>() / 2.0 * self.panel.duration as f32) as u64,
+					),
+					None => (PanelStateImages::Empty, 0),
+				},
+
+				// If we only have the primary, try to load the next image
+				PanelStateImages::PrimaryOnly { front } => match image_receiver.try_recv() {
+					Some(image) => (
+						PanelStateImages::Both {
+							front,
+							back: PanelStateImage {
+								image:    handle_image_too_big_error!(image, PanelImage::new(renderer, wgpu, &image)),
+								swap_dir: rand::random(),
+							},
+						},
+						next_progress,
+					),
+					None => (PanelStateImages::PrimaryOnly { front }, next_progress),
+				},
+
+				// If we have both, try to update the progress and swap them if finished
+				PanelStateImages::Both { mut front, back } if finished => {
+					match image_receiver.try_recv() {
+						// Note: We update the front and swap them
+						Some(image) => {
+							handle_image_too_big_error!(image, front.image.update(renderer, wgpu, &image));
+							front.swap_dir = rand::random();
+							(
+								PanelStateImages::Both {
+									front: back,
+									back:  front,
+								},
+								swapped_progress,
+							)
+						},
+						None => (PanelStateImages::Both { front, back }, next_progress),
+					}
+				},
+
+				// Else just update the progress
+				state @ PanelStateImages::Both { .. } => (state, next_progress),
+			};
 		};
 	}
 

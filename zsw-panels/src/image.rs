@@ -6,7 +6,7 @@ use {
 	crate::PanelsRenderer,
 	cgmath::Vector2,
 	image::DynamicImage,
-	more_asserts::assert_le,
+	std::borrow::Cow,
 	wgpu::util::DeviceExt,
 	zsw_img::Image,
 	zsw_wgpu::Wgpu,
@@ -44,10 +44,10 @@ pub struct PanelImage {
 
 impl PanelImage {
 	/// Creates a new image
-	pub fn new(renderer: &PanelsRenderer, wgpu: &Wgpu, image: Image) -> Self {
+	pub fn new(renderer: &PanelsRenderer, wgpu: &Wgpu, image: &Image) -> Result<Self, ImageTooBigError> {
 		// Create the texture and sampler
 		let image_size = image.size();
-		let (texture, texture_view) = self::create_image_texture(wgpu, &image.name, image.image);
+		let (texture, texture_view) = self::create_image_texture(wgpu, &image.name, &image.image)?;
 		let texture_sampler = self::create_texture_sampler(wgpu.device());
 
 		// Create the uniforms
@@ -79,7 +79,7 @@ impl PanelImage {
 			&texture_sampler,
 		);
 
-		Self {
+		Ok(Self {
 			texture,
 			texture_view,
 			texture_sampler,
@@ -87,16 +87,14 @@ impl PanelImage {
 			uniforms,
 			uniforms_bind_group,
 			image_size,
-			image_name: image.name,
-		}
+			image_name: image.name.clone(),
+		})
 	}
 
 	/// Updates this image
-	pub fn update(&mut self, renderer: &PanelsRenderer, wgpu: &Wgpu, image: Image) {
-		let size = image.size();
-
+	pub fn update(&mut self, renderer: &PanelsRenderer, wgpu: &Wgpu, image: &Image) -> Result<(), ImageTooBigError> {
 		// Update our texture
-		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.name, image.image);
+		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.name, &image.image)?;
 		self.image_bind_group = self::create_image_bind_group(
 			wgpu,
 			renderer.image_bind_group_layout(),
@@ -105,8 +103,10 @@ impl PanelImage {
 		);
 
 		// Then update the image size and name
-		self.image_size = size;
-		self.image_name = image.name;
+		self.image_size = image.size();
+		self.image_name = image.name.clone();
+
+		Ok(())
 	}
 
 	/// Returns the uniforms buffer
@@ -176,52 +176,52 @@ fn create_image_bind_group(
 	wgpu.device().create_bind_group(&descriptor)
 }
 
+/// Error when an image is too large
+#[derive(Clone, Copy, Debug)]
+#[derive(thiserror::Error)]
+#[error("Image was too big: {image_width}x{image_height} max {max_size}x{max_size}")]
+pub struct ImageTooBigError {
+	/// Image width
+	pub image_width: u32,
+
+	/// Image height
+	pub image_height: u32,
+
+	/// Max size
+	pub max_size: u32,
+}
+
 /// Creates the image texture and view
-fn create_image_texture(wgpu: &Wgpu, name: &str, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
+fn create_image_texture(
+	wgpu: &Wgpu,
+	name: &str,
+	image: &DynamicImage,
+) -> Result<(wgpu::Texture, wgpu::TextureView), ImageTooBigError> {
 	// Get the image's format, converting if necessary.
-	let (mut image, format) = match image {
+	let (image, format) = match image {
 		// With `rgba` we can simply use the image
-		image @ DynamicImage::ImageRgba8(_) => (image, wgpu::TextureFormat::Rgba8UnormSrgb),
+		image @ DynamicImage::ImageRgba8(_) => (Cow::Borrowed(image), wgpu::TextureFormat::Rgba8UnormSrgb),
 
 		// TODO: Don't convert more common formats (such as rgb8) if possible.
 
 		// Else simply convert to rgba8
 		image => {
-			let image = image.into_rgba8();
-			(DynamicImage::ImageRgba8(image), wgpu::TextureFormat::Rgba8UnormSrgb)
+			let image = image.to_rgba8();
+			(
+				Cow::Owned(DynamicImage::ImageRgba8(image)),
+				wgpu::TextureFormat::Rgba8UnormSrgb,
+			)
 		},
 	};
 
-	// If it's larger than the max size, downscale it
+	// If the image is too large, return Err
 	let limits = wgpu.device().limits();
-	#[allow(clippy::cast_sign_loss)] // We're sure it's positive
 	if image.width() > limits.max_texture_dimension_2d || image.height() > limits.max_texture_dimension_2d {
-		let width = image.width() as f32;
-		let height = image.height() as f32;
-		let resize_factor = f32::min(
-			limits.max_texture_dimension_2d as f32 / width,
-			limits.max_texture_dimension_2d as f32 / height,
-		);
-		let resize_width = (width * resize_factor) as u32;
-		let resize_height = (height * resize_factor) as u32;
-		assert_le!(
-			resize_width,
-			limits.max_texture_dimension_2d,
-			"Calculated width is too large"
-		);
-		assert_le!(
-			resize_height,
-			limits.max_texture_dimension_2d,
-			"Calculated height is too large"
-		);
-
-		tracing::warn!(
-			"Image too big! Resizing {name}: {}x{} to {resize_width}x{resize_height} ({:.2}%)",
-			image.width(),
-			image.height(),
-			resize_factor * 100.0
-		);
-		image = image.resize(resize_width, resize_height, image::imageops::FilterType::Lanczos3);
+		return Err(ImageTooBigError {
+			image_width:  image.width(),
+			image_height: image.height(),
+			max_size:     limits.max_texture_dimension_2d,
+		});
 	}
 
 	let label = format!("[zsw::panel] Image {name:?}");
@@ -231,7 +231,7 @@ fn create_image_texture(wgpu: &Wgpu, name: &str, image: DynamicImage) -> (wgpu::
 		.create_texture_with_data(wgpu.queue(), &texture_descriptor, image.as_bytes());
 	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
 	let texture_view = texture.create_view(&texture_view_descriptor);
-	(texture, texture_view)
+	Ok((texture, texture_view))
 }
 
 /// Builds the texture descriptor

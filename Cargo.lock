@@ -3561,6 +3561,7 @@ dependencies = [
  "cgmath",
  "crossbeam",
  "image",
+ "more-asserts",
  "tracing",
  "zsw-util",
 ]
@@ -3590,6 +3591,7 @@ dependencies = [
  "num-rational",
  "parking_lot",
  "rand",
+ "thiserror",
  "tracing",
  "wgpu",
  "winit",
