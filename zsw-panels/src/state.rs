@@ -63,12 +63,12 @@ impl PanelState {
 						image => {
 							// Try to resize
 							// Note: If we can't resize, we just instead remove
-							tracing::debug!("Unable to use image {}: {err}", image.name);
+							tracing::warn!("Unable to use image {}: {err}", image.name);
 							if let Err(image) = image_receiver.queue_resize(image, err.max_size) {
 								// Note: If we can't remove, just drop it
-								tracing::debug!("Unable to resize image {}, removing it", image.name);
+								tracing::warn!("Unable to resize image {}, removing it", image.name);
 								if let Err(image) = image_receiver.queue_remove(image) {
-									tracing::debug!("Unable to remove image {}", image.name);
+									tracing::warn!("Unable to remove image {}", image.name);
 								}
 							}
 

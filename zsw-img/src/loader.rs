@@ -190,7 +190,7 @@ pub fn resize_image<P: RawImageProvider>(image: &mut Image<P>, max_size: u32) {
 	image.image = image
 		.image
 		.resize(resize_width, resize_height, image::imageops::FilterType::Lanczos3);
-	tracing::warn!(
+	tracing::debug!(
 		"Resized {}: {}x{} to {resize_width}x{resize_height} ({:.2}%)",
 		image.name,
 		image.image.width(),

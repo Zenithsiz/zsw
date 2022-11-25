@@ -128,7 +128,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 				.spawn(move || image_resizer.run())
 		})
 		.collect::<Result<Vec<_>, _>>()
-		.context("Unable to spawn image loader tasks")?;
+		.context("Unable to spawn image resizer tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
 		[services, resources, profile_applier, input_receiver] "Settings window runner" => settings_window.run(&*services, &mut { resources }, &mut egui_painter, profile_applier, &mut { input_receiver })
