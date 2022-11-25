@@ -21,7 +21,7 @@ impl ImageProvider {
 	}
 }
 
-impl zsw_img::service::RawImageProvider for ImageProvider {
+impl zsw_img::loader::RawImageProvider for ImageProvider {
 	type RawImage = RawImage;
 
 	fn next_image(&self) -> Option<Self::RawImage> {
@@ -65,7 +65,7 @@ pub struct RawImage {
 	playlist_image: Arc<PlaylistImage>,
 }
 
-impl zsw_img::service::RawImage for RawImage {
+impl zsw_img::loader::RawImage for RawImage {
 	type Reader<'a> = &'a mut io::BufReader<fs::File>
 	where
 		Self: 'a,;

@@ -55,7 +55,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		.await
 		.context("Unable to create renderer")?;
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
-	let (image_loader, image_receiver) = zsw_img::service::create();
+	let (image_loader, image_receiver) = zsw_img::loader::create();
 	let (mut panels_renderer, panels_editor, panels_resource) =
 		zsw_panels::create(wgpu.device(), wgpu.surface_texture_format());
 	let (mut egui_renderer, mut egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);

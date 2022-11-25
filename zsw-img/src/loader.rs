@@ -3,11 +3,13 @@
 //! See the [`ImageLoader`] type for more details on how image loading
 //! works.
 
-// Modules
-mod load;
-
 // Imports
-use {super::Image, std::io};
+use {
+	super::Image,
+	anyhow::Context,
+	image::{io::Reader as ImageReader, DynamicImage},
+	std::io,
+};
 
 /// Image loader service
 #[derive(Clone, Debug)]
@@ -28,7 +30,7 @@ impl ImageLoader {
 			};
 
 			// Try to load the image
-			let res = load::load_image(&mut raw_image.reader());
+			let res = self::load_image(&mut raw_image.reader());
 			match res {
 				// If we got it, send it
 				Ok(image) => {
@@ -111,4 +113,24 @@ pub fn create() -> (ImageLoader, ImageReceiver) {
 	let (image_tx, image_rx) = crossbeam::channel::bounded(0);
 
 	(ImageLoader { image_tx }, ImageReceiver { image_rx })
+}
+
+/// Loads an image from a path
+fn load_image<R: io::BufRead + io::Seek>(raw_image: &mut R) -> Result<DynamicImage, anyhow::Error> {
+	// Then guess it's format
+	let format = self::image_format(raw_image)?;
+
+	// Else, just read the image
+	ImageReader::with_format(raw_image, format)
+		.decode()
+		.context("Unable to decode image")
+}
+
+/// Returns the image format of `raw_image`
+fn image_format<R: io::BufRead + io::Seek>(raw_image: &mut R) -> Result<image::ImageFormat, anyhow::Error> {
+	ImageReader::new(raw_image)
+		.with_guessed_format()
+		.context("Unable to guess image format")?
+		.format()
+		.context("Image format not supported")
 }
