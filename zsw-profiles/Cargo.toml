@@ -16,6 +16,9 @@ futures = "0.3.25"
 # Serialization
 serde = { version = "1.0.147", features = ["derive"] }
 
+# Data
+indexmap = "1.9.2"
+
 # Error handling
 anyhow = "1.0.66"
 

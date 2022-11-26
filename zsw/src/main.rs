@@ -21,10 +21,11 @@
 // Modules
 mod app;
 mod args;
+mod config;
 mod trace;
 
 // Exports
-pub use self::args::Args;
+pub use self::{args::Args, config::Config};
 
 // Imports
 use {

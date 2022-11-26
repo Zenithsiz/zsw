@@ -20,11 +20,12 @@ use {
 		resources::{Resources, ResourcesInner},
 		services::Services,
 	},
-	crate::Args,
+	crate::{Args, Config},
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
+	directories::ProjectDirs,
 	futures::lock::Mutex,
-	std::{num::NonZeroUsize, sync::Arc, thread},
+	std::{fs, io, num::NonZeroUsize, path::Path, sync::Arc, thread},
 	tokio::task,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -44,7 +45,18 @@ use {
 
 /// Runs the application
 #[allow(clippy::too_many_lines)] // TODO: Refactor
-pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
+pub async fn run(_args: &Args) -> Result<(), anyhow::Error> {
+	// Try to create the directories for the app
+	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
+	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
+
+	// Then read the config
+	let config_path = dirs.data_dir().join("config.yaml");
+	tracing::debug!("Loading config from {config_path:?}");
+	let config = self::load_config_or_default(&config_path);
+	let config = Arc::new(config);
+	tracing::debug!(?config, "Loaded config");
+
 	// Build the window
 	let (mut event_loop, window) = self::create_window()?;
 	let window = Arc::new(window);
@@ -83,22 +95,24 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	}));
 	tracing::debug!(?services, ?resources, "Created services and resources");
 
-	// Try to load the default profile
-	// TODO: Not assume a default exists?
-	let default_profile = match services
-		.profiles_manager
-		.load(args.profile.as_ref().cloned().unwrap_or_else(|| "profile.json".into()))
-	{
-		Ok(profile) => profile,
-		Err(err) => return Err(err).context("Unable to load default profile"),
-	};
-
 	// Spawn all
 	let profiles_loader_task = spawn_service_runner!(
-		[services, resources, default_profile, profile_applier] "Profiles loader" => async move {
+		[services, resources, config, profile_applier] "Profiles loader" => async move {
 			let mut resources = resources;
-			let mut panels_resource = resources.resource::<PanelsResource>().await;
-			profile_applier.apply(&default_profile, &services, &mut panels_resource);
+
+			// Load all profiles
+			for profile_path in &config.profiles {
+				if let Err(err) = services.profiles_manager.load(profile_path.clone()) {
+					tracing::warn!("Unable to load profile: {err:?}");
+				}
+			}
+
+			// Apply the first one
+			if let Some((default_profile_path, default_profile)) = services.profiles_manager.first_profile() {
+				tracing::info!("Applying default profile {default_profile_path:?}");
+				let mut panels_resource = resources.resource::<PanelsResource>().await;
+				profile_applier.apply(&default_profile, &services, &mut panels_resource);
+			}
 		}
 	)
 	.context("Unable to spawn profile loader task")?;
@@ -110,7 +124,8 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 
 	// TODO: Dynamically change the number of these to the number of panels / another value
 	let image_provider = AppRawImageProvider::new(playlist_receiver);
-	let image_loader_tasks = (0..default_profile.panels.len())
+	let image_tasks = thread::available_parallelism().map_or(1, NonZeroUsize::get);
+	let image_loader_tasks = (0..image_tasks)
 		.map(|idx| {
 			let image_loader = image_loader.clone();
 			let image_provider = image_provider.clone();
@@ -120,7 +135,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		})
 		.collect::<Result<Vec<_>, _>>()
 		.context("Unable to spawn image loader tasks")?;
-	let image_resizer_tasks = (0..default_profile.panels.len())
+	let image_resizer_tasks = (0..image_tasks)
 		.map(|idx| {
 			let image_resizer = image_resizer.clone();
 			thread::Builder::new()
@@ -177,6 +192,60 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	Ok(())
 }
 
+/// Loads the config or default
+fn load_config_or_default(config_path: &Path) -> Config {
+	match self::load_config(config_path) {
+		Ok(config) => config,
+		Err(err) if err.is_open_file() => {
+			tracing::debug!("No config file found, creating a default");
+			let config = Config::default();
+			if let Err(err) = self::write_config(config_path, &config) {
+				tracing::warn!("Unable to write default config: {err:?}");
+			}
+			config
+		},
+		Err(err) => {
+			tracing::warn!("Unable to open config file, using default: {err:?}");
+			Config::default()
+		},
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+enum LoadError {
+	/// Open file
+	#[error("Unable to open file")]
+	OpenFile(#[source] io::Error),
+
+	/// Read file
+	#[error("Unable to read file")]
+	ReadFile(#[source] serde_yaml::Error),
+}
+
+impl LoadError {
+	/// Returns `true` if the load error is [`OpenFile`].
+	///
+	/// [`OpenFile`]: LoadError::OpenFile
+	#[must_use]
+	fn is_open_file(&self) -> bool {
+		matches!(self, Self::OpenFile(_))
+	}
+}
+
+/// Loads the config.
+fn load_config(config_path: &Path) -> Result<Config, LoadError> {
+	let config_file = fs::File::open(config_path).map_err(LoadError::OpenFile)?;
+	let config = serde_yaml::from_reader(config_file).map_err(LoadError::ReadFile)?;
+
+	Ok(config)
+}
+
+/// Writes the config
+fn write_config(config_path: &Path, config: &Config) -> Result<(), anyhow::Error> {
+	let config_file = fs::File::create(config_path)?;
+	serde_yaml::to_writer(config_file, config)?;
+	Ok(())
+}
 
 /// Creates the window, as well as the associated event loop
 fn create_window() -> Result<(EventLoop<!>, Window), anyhow::Error> {

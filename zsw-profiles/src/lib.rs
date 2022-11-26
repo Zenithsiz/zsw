@@ -17,15 +17,16 @@ pub use profile::Profile;
 // Imports
 use {
 	anyhow::Context,
+	indexmap::IndexMap,
 	parking_lot::RwLock,
-	std::{collections::HashMap, path::PathBuf, sync::Arc},
+	std::{path::PathBuf, sync::Arc},
 };
 
 /// Profiles inner
 #[derive(Debug)]
 struct ProfilesInner {
 	/// All profiles by their path
-	profiles: HashMap<Arc<PathBuf>, Arc<Profile>>,
+	profiles: IndexMap<Arc<PathBuf>, Arc<Profile>>,
 }
 
 /// Profiles manager
@@ -36,6 +37,16 @@ pub struct ProfilesManager {
 }
 
 impl ProfilesManager {
+	/// Returns the first profile
+	#[must_use]
+	pub fn first_profile(&self) -> Option<(Arc<PathBuf>, Arc<Profile>)> {
+		self.inner
+			.read()
+			.profiles
+			.first()
+			.map(|(path, profile)| (Arc::clone(path), Arc::clone(profile)))
+	}
+
 	/// Returns all profiles by their path
 	#[must_use]
 	pub fn profiles(&self) -> Vec<(Arc<PathBuf>, Arc<Profile>)> {
@@ -52,13 +63,16 @@ impl ProfilesManager {
 		let path = Arc::new(path);
 		let profile = Arc::new(profile);
 
-		self.inner
-			.write()
-			.profiles
-			.entry(path)
-			.insert_entry(profile)
-			.get()
-			.clone()
+		let mut inner = self.inner.write();
+		let entry = inner.profiles.entry(path);
+		match entry {
+			indexmap::map::Entry::Occupied(mut entry) => *entry.get_mut() = Arc::clone(&profile),
+			indexmap::map::Entry::Vacant(entry) => {
+				let _ = entry.insert(Arc::clone(&profile));
+			},
+		};
+
+		profile
 	}
 
 	/// Loads a profile
@@ -84,7 +98,7 @@ impl ProfilesManager {
 #[must_use]
 pub fn create() -> ProfilesManager {
 	let inner = ProfilesInner {
-		profiles: HashMap::new(),
+		profiles: IndexMap::new(),
 	};
 	let inner = Arc::new(RwLock::new(inner));
 
