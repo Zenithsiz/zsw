@@ -83,26 +83,26 @@ pub struct PlaylistManager {
 
 impl PlaylistManager {
 	/// Removes an image
-	pub fn remove_image(&self, image: Arc<PlaylistImage>) {
+	pub fn remove_image(&mut self, image: Arc<PlaylistImage>) {
 		// TODO: Care about this?
 		let _res = self.event_tx.send(Event::RemoveImg(image));
 	}
 
 	/// Sets the root path
-	pub fn set_root_path(&self, root_path: impl Into<PathBuf>) {
+	pub fn set_root_path(&mut self, root_path: impl Into<PathBuf>) {
 		// TODO: Care about this?
 		let _res = self.event_tx.send(Event::ChangeRoot(root_path.into()));
 	}
 
 	/// Returns the root path
 	#[must_use]
-	pub fn root_path(&self) -> Option<PathBuf> {
+	pub fn root_path(&mut self) -> Option<PathBuf> {
 		self.inner.read().root_path.clone()
 	}
 
 	/// Returns the remaining images in the current shuffle
 	#[must_use]
-	pub fn peek_next(&self) -> Vec<Arc<PlaylistImage>> {
+	pub fn peek_next(&mut self) -> Vec<Arc<PlaylistImage>> {
 		self.inner.read().cur_images.clone()
 	}
 }

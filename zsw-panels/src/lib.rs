@@ -29,56 +29,56 @@ pub struct PanelsEditor {}
 #[allow(clippy::unused_self)] // For accessing resources, we should require the service
 impl PanelsEditor {
 	/// Adds a new panel
-	pub fn add_panel(&self, resource: &mut PanelsResource, panel: Panel) {
+	pub fn add_panel(&mut self, resource: &mut PanelsResource, panel: Panel) {
 		resource.panels.push(PanelState::new(panel));
 	}
 
 	/// Returns all panels
 	#[must_use]
-	pub fn panels<'a>(&self, resource: &'a PanelsResource) -> &'a [PanelState] {
+	pub fn panels<'a>(&mut self, resource: &'a PanelsResource) -> &'a [PanelState] {
 		&resource.panels
 	}
 
 	/// Returns all panels, mutably
 	#[must_use]
-	pub fn panels_mut<'a>(&self, resource: &'a mut PanelsResource) -> &'a mut [PanelState] {
+	pub fn panels_mut<'a>(&mut self, resource: &'a mut PanelsResource) -> &'a mut [PanelState] {
 		&mut resource.panels
 	}
 
 	/// Replaces all panels
-	pub fn replace_panels(&self, resource: &mut PanelsResource, panels: impl IntoIterator<Item = Panel>) {
+	pub fn replace_panels(&mut self, resource: &mut PanelsResource, panels: impl IntoIterator<Item = Panel>) {
 		resource.panels = panels.into_iter().map(PanelState::new).collect();
 	}
 
 	/// Returns the max image size
 	#[must_use]
-	pub fn max_image_size(&self, resource: &PanelsResource) -> Option<u32> {
+	pub fn max_image_size(&mut self, resource: &PanelsResource) -> Option<u32> {
 		resource.max_image_size
 	}
 
 	/// Sets the max image size
-	pub fn set_max_image_size(&self, resource: &mut PanelsResource, max_image_size: Option<u32>) {
+	pub fn set_max_image_size(&mut self, resource: &mut PanelsResource, max_image_size: Option<u32>) {
 		resource.max_image_size = max_image_size;
 	}
 
 	/// Returns the max image size mutably
-	pub fn max_image_size_mut<'a>(&self, resource: &'a mut PanelsResource) -> Option<&'a mut u32> {
+	pub fn max_image_size_mut<'a>(&mut self, resource: &'a mut PanelsResource) -> Option<&'a mut u32> {
 		resource.max_image_size.as_mut()
 	}
 
 	/// Returns the shader
 	#[must_use]
-	pub fn shader(&self, resource: &PanelsResource) -> PanelsShader {
+	pub fn shader(&mut self, resource: &PanelsResource) -> PanelsShader {
 		resource.shader
 	}
 
 	/// Sets the shader
-	pub fn set_shader(&self, resource: &mut PanelsResource, shader: PanelsShader) {
+	pub fn set_shader(&mut self, resource: &mut PanelsResource, shader: PanelsShader) {
 		resource.shader = shader;
 	}
 
 	/// Returns the shader mutably
-	pub fn shader_mut<'a>(&self, resource: &'a mut PanelsResource) -> &'a mut PanelsShader {
+	pub fn shader_mut<'a>(&mut self, resource: &'a mut PanelsResource) -> &'a mut PanelsShader {
 		&mut resource.shader
 	}
 }

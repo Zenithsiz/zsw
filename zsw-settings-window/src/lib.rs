@@ -118,9 +118,9 @@ impl<P> SettingsWindow<P> {
 						&mut self.state,
 						&mut self.input_receiver,
 						&mut self.profile_applier,
-						&self.playlist_manager,
-						&self.profiles_manager,
-						&self.panels_editor,
+						&mut self.playlist_manager,
+						&mut self.profiles_manager,
+						&mut self.panels_editor,
 						&self.window,
 						ctx,
 						frame,
@@ -144,9 +144,9 @@ impl<P> SettingsWindow<P> {
 		state: &mut SettingsWindowState,
 		input_receiver: &mut InputReceiver,
 		profile_applier: &mut P,
-		playlist_manager: &PlaylistManager,
-		profiles_manager: &ProfilesManager,
-		panels_editor: &PanelsEditor,
+		playlist_manager: &mut PlaylistManager,
+		profiles_manager: &mut ProfilesManager,
+		panels_editor: &mut PanelsEditor,
 		window: &Window,
 		ctx: &egui::Context,
 		_frame: &epi::Frame,
@@ -194,9 +194,9 @@ fn draw_settings_window(
 	surface_size: PhysicalSize<u32>,
 	panels_resource: &mut PanelsResource,
 	profile_applier: &mut impl ProfileApplier,
-	playlist_manager: &PlaylistManager,
-	profiles_manager: &ProfilesManager,
-	panels_editor: &PanelsEditor,
+	playlist_manager: &mut PlaylistManager,
+	profiles_manager: &mut ProfilesManager,
+	panels_editor: &mut PanelsEditor,
 ) {
 	// Draw the panels header
 	ui.collapsing("Panels", |ui| {
@@ -215,7 +215,7 @@ fn draw_profile(
 	ui: &mut egui::Ui,
 	panels_resource: &mut PanelsResource,
 	profile_applier: &mut impl ProfileApplier,
-	profiles_manager: &ProfilesManager,
+	profiles_manager: &mut ProfilesManager,
 ) {
 	// Draw all profiles
 	for (path, profile) in profiles_manager.profiles() {
@@ -265,7 +265,7 @@ fn draw_profile(
 }
 
 /// Draws the playlist settings
-fn draw_playlist(ui: &mut egui::Ui, playlist_manager: &PlaylistManager) {
+fn draw_playlist(ui: &mut egui::Ui, playlist_manager: &mut PlaylistManager) {
 	// Draw the root path
 	ui.horizontal(|ui| {
 		// Show the current root path
@@ -315,7 +315,7 @@ fn draw_panels(
 	new_panel_state: &mut NewPanelState,
 	surface_size: PhysicalSize<u32>,
 	panels_resource: &mut PanelsResource,
-	panels_editor: &PanelsEditor,
+	panels_editor: &mut PanelsEditor,
 ) {
 	// TODO: Decide on number to put here?
 	match panels_editor.max_image_size_mut(panels_resource) {

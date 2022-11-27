@@ -39,7 +39,7 @@ pub struct ProfilesManager {
 impl ProfilesManager {
 	/// Returns the first profile
 	#[must_use]
-	pub fn first_profile(&self) -> Option<(Arc<PathBuf>, Arc<Profile>)> {
+	pub fn first_profile(&mut self) -> Option<(Arc<PathBuf>, Arc<Profile>)> {
 		self.inner
 			.read()
 			.profiles
@@ -49,7 +49,7 @@ impl ProfilesManager {
 
 	/// Returns all profiles by their path
 	#[must_use]
-	pub fn profiles(&self) -> Vec<(Arc<PathBuf>, Arc<Profile>)> {
+	pub fn profiles(&mut self) -> Vec<(Arc<PathBuf>, Arc<Profile>)> {
 		self.inner
 			.read()
 			.profiles
@@ -59,7 +59,7 @@ impl ProfilesManager {
 	}
 
 	/// Adds a a new profiles
-	fn create_new(&self, path: PathBuf, profile: Profile) -> Arc<Profile> {
+	fn create_new(&mut self, path: PathBuf, profile: Profile) -> Arc<Profile> {
 		let path = Arc::new(path);
 		let profile = Arc::new(profile);
 
@@ -76,7 +76,7 @@ impl ProfilesManager {
 	}
 
 	/// Loads a profile
-	pub fn load(&self, path: PathBuf) -> Result<Arc<Profile>, anyhow::Error> {
+	pub fn load(&mut self, path: PathBuf) -> Result<Arc<Profile>, anyhow::Error> {
 		// Load the profile
 		let profile = zsw_util::parse_json_from_file(&path).context("Unable to load profile")?;
 
@@ -85,7 +85,7 @@ impl ProfilesManager {
 	}
 
 	/// Adds and saves a profile
-	pub fn save(&self, path: PathBuf, profile: Profile) -> Result<Arc<Profile>, anyhow::Error> {
+	pub fn save(&mut self, path: PathBuf, profile: Profile) -> Result<Arc<Profile>, anyhow::Error> {
 		// Try to save it
 		zsw_util::serialize_json_to_file(&path, &profile).context("Unable to save profile")?;
 
