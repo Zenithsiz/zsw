@@ -30,11 +30,8 @@ use {
 //       via the uniforms.
 #[derive(Debug)]
 pub struct PanelsRenderer {
-	/// Fade Render pipeline
-	fade_render_pipeline: wgpu::RenderPipeline,
-
-	/// Fade-white Render pipeline
-	fade_white_render_pipeline: wgpu::RenderPipeline,
+	/// Pipelines
+	pipelines: PanelsPipelines,
 
 	/// Vertex buffer
 	vertices: wgpu::Buffer,
@@ -85,8 +82,10 @@ impl PanelsRenderer {
 		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu, surface_resource);
 
 		Self {
-			fade_render_pipeline,
-			fade_white_render_pipeline,
+			pipelines: PanelsPipelines {
+				fade:       fade_render_pipeline,
+				fade_white: fade_white_render_pipeline,
+			},
 			vertices,
 			indices,
 			uniforms_bind_group_layout,
@@ -168,8 +167,8 @@ impl PanelsRenderer {
 
 		// Set our shared pipeline, indices, vertices and uniform bind group
 		let pipeline = match resource.shader {
-			PanelsShader::Fade => &self.fade_render_pipeline,
-			PanelsShader::FadeWhite { .. } => &self.fade_white_render_pipeline,
+			PanelsShader::Fade => &self.pipelines.fade,
+			PanelsShader::FadeWhite { .. } => &self.pipelines.fade_white,
 		};
 		render_pass.set_pipeline(pipeline);
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -201,6 +200,16 @@ impl PanelsRenderer {
 
 		Ok(())
 	}
+}
+
+/// Pipelines for [`PanelsRenderer`]
+#[derive(Debug)]
+pub struct PanelsPipelines {
+	/// Fade Render pipeline
+	fade: wgpu::RenderPipeline,
+
+	/// Fade-white Render pipeline
+	fade_white: wgpu::RenderPipeline,
 }
 
 /// Creates the vertices
