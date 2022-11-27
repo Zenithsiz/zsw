@@ -134,7 +134,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 			let image_loader = image_loader.clone();
 			let image_provider = image_provider.clone();
 			thread::Builder::new()
-				.name(format!("Image loader #{idx}"))
+				.name(format!("ImgLoader${idx}"))
 				.spawn(move || image_loader.run(&image_provider))
 		})
 		.collect::<Result<Vec<_>, _>>()
@@ -147,7 +147,7 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		.map(|idx| {
 			let image_resizer = image_resizer.clone();
 			thread::Builder::new()
-				.name(format!("Image resizer #{idx}"))
+				.name(format!("ImgResizer${idx}"))
 				.spawn(move || image_resizer.run())
 		})
 		.collect::<Result<Vec<_>, _>>()

@@ -85,7 +85,7 @@ fn create_runtime() -> Result<tokio::runtime::Runtime, anyhow::Error> {
 		.thread_name_fn(|| {
 			static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 			let id = NEXT_ID.fetch_add(1, atomic::Ordering::AcqRel);
-			format!("tokio-runtime-{id}")
+			format!("tokio${id}")
 		})
 		.build()
 		.context("Unable to create runtime")
