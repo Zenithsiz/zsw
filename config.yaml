@@ -1,2 +1,4 @@
 profiles:
   - 'profile.json'
+image_loader_threads: 1
+image_resizer_threads: 1

@@ -124,10 +124,12 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		.spawn_blocking(move || playlist_runner.run())
 		.context("Unable to spawn playlist runner task")?;
 
-	// TODO: Dynamically change the number of these to the number of panels / another value
 	let image_provider = AppRawImageProvider::new(playlist_receiver);
-	let image_tasks = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-	let image_loader_tasks = (0..image_tasks)
+	let image_loader_tasks_len = config
+		.image_loader_threads
+		.or_else(|| thread::available_parallelism().ok())
+		.map_or(1, NonZeroUsize::get);
+	let image_loader_tasks = (0..image_loader_tasks_len)
 		.map(|idx| {
 			let image_loader = image_loader.clone();
 			let image_provider = image_provider.clone();
@@ -137,7 +139,11 @@ pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 		})
 		.collect::<Result<Vec<_>, _>>()
 		.context("Unable to spawn image loader tasks")?;
-	let image_resizer_tasks = (0..image_tasks)
+	let image_resizer_tasks_len = config
+		.image_resizer_threads
+		.or_else(|| thread::available_parallelism().ok())
+		.map_or(1, NonZeroUsize::get);
+	let image_resizer_tasks = (0..image_resizer_tasks_len)
 		.map(|idx| {
 			let image_resizer = image_resizer.clone();
 			thread::Builder::new()
