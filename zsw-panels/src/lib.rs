@@ -17,6 +17,10 @@ pub use self::{
 	state::{PanelState, PanelStateImage, PanelStateImages},
 };
 
+// Imports
+use zsw_wgpu::{Wgpu, WgpuSurfaceResource};
+
+
 /// Panels editor
 #[derive(Debug)]
 #[allow(missing_copy_implementations)] // It might not in the future
@@ -57,11 +61,11 @@ pub struct PanelsResource {
 /// Creates the panels service
 #[must_use]
 pub fn create(
-	device: &wgpu::Device,
-	surface_texture_format: wgpu::TextureFormat,
+	wgpu: &Wgpu,
+	surface_resource: &mut WgpuSurfaceResource,
 ) -> (PanelsRenderer, PanelsEditor, PanelsResource) {
 	(
-		PanelsRenderer::new(device, surface_texture_format),
+		PanelsRenderer::new(wgpu, surface_resource),
 		PanelsEditor {},
 		PanelsResource { panels: vec![] },
 	)

@@ -3678,6 +3678,7 @@ dependencies = [
  "pollster",
  "tokio",
  "tracing",
+ "wgpu",
  "winit",
  "zsw-egui",
  "zsw-img",

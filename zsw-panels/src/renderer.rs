@@ -14,7 +14,7 @@ use {
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
 	zsw_img::{ImageReceiver, RawImageProvider},
-	zsw_wgpu::Wgpu,
+	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
 /// Panels renderer
@@ -44,29 +44,31 @@ pub struct PanelsRenderer {
 
 	/// Image bind group layout
 	image_bind_group_layout: wgpu::BindGroupLayout,
+
+	/// Msaa frame-buffer
+	// TODO: Resize this on resize?
+	msaa_framebuffer: wgpu::TextureView,
 }
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
 	#[must_use]
-	pub fn new(device: &wgpu::Device, surface_texture_format: wgpu::TextureFormat) -> Self {
+	pub fn new(wgpu: &Wgpu, surface_resource: &mut WgpuSurfaceResource) -> Self {
 		// Create the index buffer
-		let indices = self::create_indices(device);
+		let indices = self::create_indices(wgpu);
 
 		// Create the vertex buffer
-		let vertices = self::create_vertices(device);
+		let vertices = self::create_vertices(wgpu);
 
 		// Create the bind group layouts
-		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(device);
-		let image_bind_group_layout = self::create_image_bind_group_layout(device);
+		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu);
+		let image_bind_group_layout = self::create_image_bind_group_layout(wgpu);
 
 		// Create the render pipeline
-		let render_pipeline = self::create_render_pipeline(
-			device,
-			surface_texture_format,
-			&uniforms_bind_group_layout,
-			&image_bind_group_layout,
-		);
+		let render_pipeline = self::create_render_pipeline(wgpu, &uniforms_bind_group_layout, &image_bind_group_layout);
+
+		// Create the framebuffer
+		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu, surface_resource);
 
 		Self {
 			render_pipeline,
@@ -74,6 +76,7 @@ impl PanelsRenderer {
 			indices,
 			uniforms_bind_group_layout,
 			image_bind_group_layout,
+			msaa_framebuffer,
 		}
 	}
 
@@ -112,9 +115,8 @@ impl PanelsRenderer {
 		surface_size: PhysicalSize<u32>,
 	) -> Result<(), anyhow::Error> {
 		// Create the render pass for all panels
-		let render_pass_descriptor = wgpu::RenderPassDescriptor {
-			label:                    Some("[zsw::panel] Render pass"),
-			color_attachments:        &[Some(wgpu::RenderPassColorAttachment {
+		let render_pass_color_attachment = match MSAA_SAMPLES {
+			1 => wgpu::RenderPassColorAttachment {
 				view:           surface_view,
 				resolve_target: None,
 				ops:            wgpu::Operations {
@@ -126,7 +128,24 @@ impl PanelsRenderer {
 					}),
 					store: true,
 				},
-			})],
+			},
+			_ => wgpu::RenderPassColorAttachment {
+				view:           &self.msaa_framebuffer,
+				resolve_target: Some(surface_view),
+				ops:            wgpu::Operations {
+					load:  wgpu::LoadOp::Clear(wgpu::Color {
+						r: 0.0,
+						g: 0.0,
+						b: 0.0,
+						a: 1.0,
+					}),
+					store: false,
+				},
+			},
+		};
+		let render_pass_descriptor = wgpu::RenderPassDescriptor {
+			label:                    Some("[zsw::panel] Render pass"),
+			color_attachments:        &[Some(render_pass_color_attachment)],
 			depth_stencil_attachment: None,
 		};
 		let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
@@ -161,18 +180,18 @@ impl PanelsRenderer {
 }
 
 /// Creates the vertices
-fn create_vertices(device: &wgpu::Device) -> wgpu::Buffer {
+fn create_vertices(wgpu: &Wgpu) -> wgpu::Buffer {
 	let descriptor = wgpu::util::BufferInitDescriptor {
 		label:    Some("[zsw::panel] Vertex buffer"),
 		contents: bytemuck::cast_slice(&PanelVertex::QUAD),
 		usage:    wgpu::BufferUsages::VERTEX,
 	};
 
-	device.create_buffer_init(&descriptor)
+	wgpu.device().create_buffer_init(&descriptor)
 }
 
 /// Creates the indices
-fn create_indices(device: &wgpu::Device) -> wgpu::Buffer {
+fn create_indices(wgpu: &Wgpu) -> wgpu::Buffer {
 	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
 	let descriptor = wgpu::util::BufferInitDescriptor {
 		label:    Some("[zsw::panel] Index buffer"),
@@ -180,12 +199,12 @@ fn create_indices(device: &wgpu::Device) -> wgpu::Buffer {
 		usage:    wgpu::BufferUsages::INDEX,
 	};
 
-	device.create_buffer_init(&descriptor)
+	wgpu.device().create_buffer_init(&descriptor)
 }
 
 
 /// Creates the image bind group layout
-fn create_image_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+fn create_image_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("[zsw::panel] Image bind group layout"),
 		entries: &[
@@ -208,11 +227,11 @@ fn create_image_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayou
 		],
 	};
 
-	device.create_bind_group_layout(&descriptor)
+	wgpu.device().create_bind_group_layout(&descriptor)
 }
 
 /// Creates the uniforms bind group layout
-fn create_uniforms_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+fn create_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("[zsw::panel] Uniform bind group layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
@@ -227,13 +246,12 @@ fn create_uniforms_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLa
 		}],
 	};
 
-	device.create_bind_group_layout(&descriptor)
+	wgpu.device().create_bind_group_layout(&descriptor)
 }
 
 /// Creates the render pipeline
 fn create_render_pipeline(
-	device: &wgpu::Device,
-	surface_texture_format: wgpu::TextureFormat,
+	wgpu: &Wgpu,
 	uniforms_bind_group_layout: &wgpu::BindGroupLayout,
 	texture_bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
@@ -242,7 +260,7 @@ fn create_render_pipeline(
 		label:  Some("[zsw::panel] Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("renderer/shader.wgsl").into()),
 	};
-	let shader = device.create_shader_module(shader_descriptor);
+	let shader = wgpu.device().create_shader_module(shader_descriptor);
 
 	// Create the pipeline layout
 	let render_pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
@@ -250,10 +268,10 @@ fn create_render_pipeline(
 		bind_group_layouts:   &[uniforms_bind_group_layout, texture_bind_group_layout],
 		push_constant_ranges: &[],
 	};
-	let render_pipeline_layout = device.create_pipeline_layout(&render_pipeline_layout_descriptor);
+	let render_pipeline_layout = wgpu.device().create_pipeline_layout(&render_pipeline_layout_descriptor);
 
 	let color_targets = [Some(wgpu::ColorTargetState {
-		format:     surface_texture_format,
+		format:     wgpu.surface_texture_format(),
 		blend:      Some(wgpu::BlendState::ALPHA_BLENDING),
 		write_mask: wgpu::ColorWrites::ALL,
 	})];
@@ -276,7 +294,7 @@ fn create_render_pipeline(
 		},
 		depth_stencil: None,
 		multisample:   wgpu::MultisampleState {
-			count: 1,
+			count: MSAA_SAMPLES,
 			mask: u64::MAX,
 			alpha_to_coverage_enabled: false,
 		},
@@ -288,5 +306,32 @@ fn create_render_pipeline(
 		multiview:     None,
 	};
 
-	device.create_render_pipeline(&render_pipeline_descriptor)
+	wgpu.device().create_render_pipeline(&render_pipeline_descriptor)
 }
+
+/// Creates the msaa framebuffer
+fn create_msaa_framebuffer(wgpu: &Wgpu, surface_resource: &mut WgpuSurfaceResource) -> wgpu::TextureView {
+	let size = wgpu.surface_size(surface_resource);
+	let msaa_texture_extent = wgpu::Extent3d {
+		width:                 size.width,
+		height:                size.height,
+		depth_or_array_layers: 1,
+	};
+
+	let msaa_frame_descriptor = &wgpu::TextureDescriptor {
+		size:            msaa_texture_extent,
+		mip_level_count: 1,
+		sample_count:    MSAA_SAMPLES,
+		dimension:       wgpu::TextureDimension::D2,
+		format:          wgpu.surface_texture_format(),
+		usage:           wgpu::TextureUsages::RENDER_ATTACHMENT,
+		label:           None,
+	};
+
+	wgpu.device()
+		.create_texture(msaa_frame_descriptor)
+		.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+/// MSAA samples
+const MSAA_SAMPLES: u32 = 4;
