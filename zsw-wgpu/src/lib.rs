@@ -13,6 +13,7 @@
 use {
 	anyhow::Context,
 	std::sync::Arc,
+	tokio::sync::broadcast,
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_input::InputReceiver,
@@ -84,6 +85,9 @@ pub struct WgpuRenderer {
 
 	/// Surface texture format
 	surface_texture_format: Arc<TextureFormat>,
+
+	/// On resize sender
+	on_resize_tx: broadcast::Sender<PhysicalSize<u32>>,
 }
 
 impl WgpuRenderer {
@@ -126,6 +130,9 @@ impl WgpuRenderer {
 				let config = self::window_surface_configuration(*self.surface_texture_format, size);
 				surface_resource.surface.configure(&self.device, &config);
 				surface_resource.size = size;
+
+				// Then send an event
+				let _ = self.on_resize_tx.send(size);
 			}
 		}
 	}
@@ -143,6 +150,28 @@ impl WgpuRenderer {
 
 		// Check for resizes
 		self.check_resize(input_receiver, surface_resource);
+	}
+}
+
+/// Wgpu resize receiver
+#[derive(Debug)]
+pub struct WgpuResizeReceiver {
+	/// On resize receiver
+	on_resize_rx: broadcast::Receiver<PhysicalSize<u32>>,
+}
+
+impl Clone for WgpuResizeReceiver {
+	fn clone(&self) -> Self {
+		Self {
+			on_resize_rx: self.on_resize_rx.resubscribe(),
+		}
+	}
+}
+
+impl WgpuResizeReceiver {
+	/// Returns any last on-resize event, if any
+	pub fn on_resize(&mut self) -> Option<PhysicalSize<u32>> {
+		self.on_resize_rx.try_recv().ok()
 	}
 }
 
@@ -273,7 +302,9 @@ const fn window_surface_configuration(
 
 
 /// Creates the `wgpu` services
-pub async fn create(window: Arc<Window>) -> Result<(Wgpu, WgpuRenderer, WgpuSurfaceResource), anyhow::Error> {
+pub async fn create(
+	window: Arc<Window>,
+) -> Result<(Wgpu, WgpuRenderer, WgpuResizeReceiver, WgpuSurfaceResource), anyhow::Error> {
 	// Create the surface and adapter
 	// SAFETY: Due to the window being arced, and we storing it, we ensure the window outlives us and thus the surface
 	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
@@ -288,6 +319,7 @@ pub async fn create(window: Arc<Window>) -> Result<(Wgpu, WgpuRenderer, WgpuSurf
 	let surface_texture_format = Arc::new(surface_texture_format);
 	tracing::info!("Successfully initialized");
 
+	let (on_resize_tx, on_resize_rx) = broadcast::channel(16);
 	Ok((
 		Wgpu {
 			device:                 Arc::clone(&device),
@@ -298,7 +330,9 @@ pub async fn create(window: Arc<Window>) -> Result<(Wgpu, WgpuRenderer, WgpuSurf
 			device,
 			queue,
 			surface_texture_format,
+			on_resize_tx,
 		},
+		WgpuResizeReceiver { on_resize_rx },
 		WgpuSurfaceResource {
 			surface,
 			size: surface_size,

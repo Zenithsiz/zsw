@@ -130,6 +130,7 @@ impl Renderer {
 
 			panels_renderer
 				.render(
+					services,
 					&panels_resource,
 					cursor_pos,
 					wgpu.queue(),

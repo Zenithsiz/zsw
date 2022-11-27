@@ -14,7 +14,8 @@ use {
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
 	zsw_img::{ImageReceiver, RawImageProvider},
-	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
+	zsw_util::Services,
+	zsw_wgpu::{Wgpu, WgpuResizeReceiver, WgpuSurfaceResource},
 };
 
 /// Panels renderer
@@ -48,12 +49,19 @@ pub struct PanelsRenderer {
 	/// Msaa frame-buffer
 	// TODO: Resize this on resize?
 	msaa_framebuffer: wgpu::TextureView,
+
+	/// Wgpu resizer
+	wgpu_resize_receiver: WgpuResizeReceiver,
 }
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
 	#[must_use]
-	pub fn new(wgpu: &Wgpu, surface_resource: &mut WgpuSurfaceResource) -> Self {
+	pub fn new(
+		wgpu: &Wgpu,
+		surface_resource: &mut WgpuSurfaceResource,
+		wgpu_resize_receiver: WgpuResizeReceiver,
+	) -> Self {
 		// Create the index buffer
 		let indices = self::create_indices(wgpu);
 
@@ -79,7 +87,7 @@ impl PanelsRenderer {
 		);
 
 		// Create the framebuffer
-		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu, surface_resource);
+		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu, wgpu.surface_size(surface_resource));
 
 		Self {
 			pipelines: PanelsPipelines {
@@ -91,6 +99,7 @@ impl PanelsRenderer {
 			uniforms_bind_group_layout,
 			image_bind_group_layout,
 			msaa_framebuffer,
+			wgpu_resize_receiver,
 		}
 	}
 
@@ -120,15 +129,27 @@ impl PanelsRenderer {
 	}
 
 	/// Renders all panels
-	pub fn render(
-		&self,
+	#[allow(clippy::too_many_arguments)] // TODO: Refactor
+	pub fn render<S>(
+		&mut self,
+		services: &S,
 		resource: &PanelsResource,
 		cursor_pos: Point2<i32>,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
 		surface_view: &wgpu::TextureView,
 		surface_size: PhysicalSize<u32>,
-	) -> Result<(), anyhow::Error> {
+	) -> Result<(), anyhow::Error>
+	where
+		S: Services<Wgpu>,
+	{
+		// Resize out msaa framebuffer if needed
+		let last_resize = std::iter::from_fn(|| self.wgpu_resize_receiver.on_resize()).last();
+		if let Some(size) = last_resize {
+			tracing::debug!("Resizing msaa framebuffer to {}x{}", size.width, size.height);
+			self.msaa_framebuffer = self::create_msaa_framebuffer(services.service::<Wgpu>(), size);
+		}
+
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match MSAA_SAMPLES {
 			1 => wgpu::RenderPassColorAttachment {
@@ -344,8 +365,7 @@ fn create_render_pipeline(
 }
 
 /// Creates the msaa framebuffer
-fn create_msaa_framebuffer(wgpu: &Wgpu, surface_resource: &mut WgpuSurfaceResource) -> wgpu::TextureView {
-	let size = wgpu.surface_size(surface_resource);
+fn create_msaa_framebuffer(wgpu: &Wgpu, size: PhysicalSize<u32>) -> wgpu::TextureView {
 	let msaa_texture_extent = wgpu::Extent3d {
 		width:                 size.width,
 		height:                size.height,

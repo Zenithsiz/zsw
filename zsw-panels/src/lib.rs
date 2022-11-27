@@ -18,7 +18,7 @@ pub use self::{
 };
 
 // Imports
-use zsw_wgpu::{Wgpu, WgpuSurfaceResource};
+use zsw_wgpu::{Wgpu, WgpuResizeReceiver, WgpuSurfaceResource};
 
 
 /// Panels editor
@@ -122,9 +122,10 @@ impl PanelsShader {
 pub fn create(
 	wgpu: &Wgpu,
 	surface_resource: &mut WgpuSurfaceResource,
+	wgpu_resize_receiver: WgpuResizeReceiver,
 ) -> (PanelsRenderer, PanelsEditor, PanelsResource) {
 	(
-		PanelsRenderer::new(wgpu, surface_resource),
+		PanelsRenderer::new(wgpu, surface_resource, wgpu_resize_receiver),
 		PanelsEditor {},
 		PanelsResource {
 			panels:         vec![],

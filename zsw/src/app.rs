@@ -50,12 +50,14 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 
 	// Create all services and resources
 	// TODO: Execute futures in background and continue initializing
-	let (wgpu, mut wgpu_renderer, mut wgpu_surface_resource) = zsw_wgpu::create(Arc::clone(&window))
-		.await
-		.context("Unable to create renderer")?;
+	let (wgpu, mut wgpu_renderer, wgpu_resize_receiver, mut wgpu_surface_resource) =
+		zsw_wgpu::create(Arc::clone(&window))
+			.await
+			.context("Unable to create renderer")?;
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
 	let (image_loader, image_resizer, image_receiver) = zsw_img::loader::create();
-	let (mut panels_renderer, panels_editor, panels_resource) = zsw_panels::create(&wgpu, &mut wgpu_surface_resource);
+	let (mut panels_renderer, panels_editor, panels_resource) =
+		zsw_panels::create(&wgpu, &mut wgpu_surface_resource, wgpu_resize_receiver);
 	let (mut egui_renderer, mut egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
 	let profiles_manager = zsw_profiles::create();
 	let (mut input_updater, mut input_receiver) = zsw_input::create();
