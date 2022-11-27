@@ -64,6 +64,7 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 	let mut settings_window = SettingsWindow::new(&window);
 	let mut event_handler = EventHandler::new();
 	let profile_applier = ProfileApplier::new();
+	let image_provider = AppRawImageProvider::new(playlist_receiver);
 
 
 	// Bundle the services and resources
@@ -109,7 +110,6 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 		.spawn_blocking(move || playlist_runner.run())
 		.context("Unable to spawn playlist runner task")?;
 
-	let image_provider = AppRawImageProvider::new(playlist_receiver);
 	let image_loader_tasks_len = config
 		.image_loader_threads
 		.or_else(|| thread::available_parallelism().ok())
