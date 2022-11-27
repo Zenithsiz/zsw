@@ -86,6 +86,9 @@ pub struct WgpuRenderer {
 	/// Surface texture format
 	surface_texture_format: Arc<TextureFormat>,
 
+	/// Input receiver
+	input_receiver: InputReceiver,
+
 	/// On resize sender
 	on_resize_tx: broadcast::Sender<PhysicalSize<u32>>,
 }
@@ -120,9 +123,9 @@ impl WgpuRenderer {
 	}
 
 	/// Checks for and performs a resize
-	fn check_resize(&self, input_receiver: &mut InputReceiver, surface_resource: &mut WgpuSurfaceResource) {
+	fn check_resize(&mut self, surface_resource: &mut WgpuSurfaceResource) {
 		// Note: We only do the last resize as there's no point doing any in-between ones.
-		let last_resize = std::iter::from_fn(|| input_receiver.on_resize()).last();
+		let last_resize = std::iter::from_fn(|| self.input_receiver.on_resize()).last();
 		if let Some(size) = last_resize {
 			tracing::info!(?size, "Resizing");
 			if size.width > 0 && size.height > 0 {
@@ -138,18 +141,13 @@ impl WgpuRenderer {
 	}
 
 	/// Finishes rendering a frame
-	pub fn finish_render(
-		&self,
-		frame: FrameRender,
-		surface_resource: &mut WgpuSurfaceResource,
-		input_receiver: &mut InputReceiver,
-	) {
+	pub fn finish_render(&mut self, frame: FrameRender, surface_resource: &mut WgpuSurfaceResource) {
 		// Submit everything to the queue and present the surface's texture
 		let _ = self.queue.submit([frame.encoder.finish()]);
 		frame.surface_texture.present();
 
 		// Check for resizes
-		self.check_resize(input_receiver, surface_resource);
+		self.check_resize(surface_resource);
 	}
 }
 
@@ -304,6 +302,7 @@ const fn window_surface_configuration(
 /// Creates the `wgpu` services
 pub async fn create(
 	window: Arc<Window>,
+	input_receiver: InputReceiver,
 ) -> Result<(Wgpu, WgpuRenderer, WgpuResizeReceiver, WgpuSurfaceResource), anyhow::Error> {
 	// Create the surface and adapter
 	// SAFETY: Due to the window being arced, and we storing it, we ensure the window outlives us and thus the surface
@@ -330,6 +329,7 @@ pub async fn create(
 			device,
 			queue,
 			surface_texture_format,
+			input_receiver,
 			on_resize_tx,
 		},
 		WgpuResizeReceiver { on_resize_rx },

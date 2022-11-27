@@ -50,16 +50,17 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 
 	// Create all services and resources
 	// TODO: Execute futures in background and continue initializing
-	let (wgpu, wgpu_renderer, wgpu_resize_receiver, mut wgpu_surface_resource) = zsw_wgpu::create(Arc::clone(&window))
-		.await
-		.context("Unable to create renderer")?;
+	let (mut input_updater, input_receiver) = zsw_input::create();
+	let (wgpu, wgpu_renderer, wgpu_resize_receiver, mut wgpu_surface_resource) =
+		zsw_wgpu::create(Arc::clone(&window), input_receiver.clone())
+			.await
+			.context("Unable to create renderer")?;
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
 	let (image_loader, image_resizer, image_receiver) = zsw_img::loader::create();
 	let (panels_renderer, panels_editor, panels_resource) =
 		zsw_panels::create(&wgpu, &mut wgpu_surface_resource, wgpu_resize_receiver);
 	let (egui_renderer, egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
 	let profiles_manager = zsw_profiles::create();
-	let (mut input_updater, input_receiver) = zsw_input::create();
 	let renderer = Renderer::new(panels_renderer, egui_renderer, input_receiver.clone(), wgpu_renderer);
 	let profile_applier = ProfileApplier::new();
 	let mut settings_window = SettingsWindow::new(&window, egui_painter, input_receiver, profile_applier.clone());

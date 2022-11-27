@@ -171,8 +171,7 @@ impl Renderer {
 				.context("Unable to update textures")?;
 		}
 
-		self.wgpu_renderer
-			.finish_render(frame, &mut surface_resource, &mut self.input_receiver);
+		self.wgpu_renderer.finish_render(frame, &mut surface_resource);
 		mem::drop(surface_resource);
 
 		Ok(())
