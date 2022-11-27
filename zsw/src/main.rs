@@ -31,19 +31,21 @@ pub use self::{args::Args, config::Config};
 use {
 	anyhow::Context,
 	clap::Parser,
-	std::sync::atomic::{self, AtomicUsize},
+	directories::ProjectDirs,
+	std::{
+		fs,
+		io,
+		path::Path,
+		sync::{
+			atomic::{self, AtomicUsize},
+			Arc,
+		},
+	},
 };
 
 fn main() -> Result<(), anyhow::Error> {
 	// Initialize tracing
 	trace::init();
-
-	// Customize the rayon pool thread
-	// Note: This is used indirectly in `image` by `jpeg-decoder`
-	rayon::ThreadPoolBuilder::new()
-		.thread_name(|idx| format!("rayon${idx}"))
-		.build_global()
-		.context("Unable to build `rayon` global thread pool")?;
 
 	// Get arguments
 	let args = match Args::try_parse() {
@@ -55,6 +57,24 @@ fn main() -> Result<(), anyhow::Error> {
 	};
 	tracing::debug!(?args, "Arguments");
 
+	// Try to create the directories for the app
+	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
+	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
+
+	// Then read the config
+	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.yaml"));
+	tracing::debug!("Loading config from {config_path:?}");
+	let config = self::load_config_or_default(&config_path);
+	tracing::debug!(?config, "Loaded config");
+	let config = Arc::new(config);
+
+	// Customize the rayon pool thread
+	// Note: This is used indirectly in `image` by `jpeg-decoder`
+	rayon::ThreadPoolBuilder::new()
+		.thread_name(|idx| format!("rayon${idx}"))
+		.build_global()
+		.context("Unable to build `rayon` global thread pool")?;
+
 	// Create the runtime and enter it
 	let runtime = self::create_runtime()?;
 	let _runtime_enter = runtime.enter();
@@ -62,7 +82,7 @@ fn main() -> Result<(), anyhow::Error> {
 	// Run the app and restart if we get an error (up to 5 errors)
 	let mut errors = 0;
 	while errors < 5 {
-		match runtime.block_on(app::run(&args)) {
+		match runtime.block_on(app::run(&config)) {
 			Ok(()) => {
 				tracing::info!("Application finished");
 				break;
@@ -89,4 +109,59 @@ fn create_runtime() -> Result<tokio::runtime::Runtime, anyhow::Error> {
 		})
 		.build()
 		.context("Unable to create runtime")
+}
+
+/// Loads the config or default
+fn load_config_or_default(config_path: &Path) -> Config {
+	match self::load_config(config_path) {
+		Ok(config) => config,
+		Err(err) if err.is_open_file() => {
+			tracing::debug!("No config file found, creating a default");
+			let config = Config::default();
+			if let Err(err) = self::write_config(config_path, &config) {
+				tracing::warn!("Unable to write default config: {err:?}");
+			}
+			config
+		},
+		Err(err) => {
+			tracing::warn!("Unable to open config file, using default: {err:?}");
+			Config::default()
+		},
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+enum LoadError {
+	/// Open file
+	#[error("Unable to open file")]
+	OpenFile(#[source] io::Error),
+
+	/// Read file
+	#[error("Unable to read file")]
+	ReadFile(#[source] serde_yaml::Error),
+}
+
+impl LoadError {
+	/// Returns `true` if the load error is [`OpenFile`].
+	///
+	/// [`OpenFile`]: LoadError::OpenFile
+	#[must_use]
+	fn is_open_file(&self) -> bool {
+		matches!(self, Self::OpenFile(_))
+	}
+}
+
+/// Loads the config.
+fn load_config(config_path: &Path) -> Result<Config, LoadError> {
+	let config_file = fs::File::open(config_path).map_err(LoadError::OpenFile)?;
+	let config = serde_yaml::from_reader(config_file).map_err(LoadError::ReadFile)?;
+
+	Ok(config)
+}
+
+/// Writes the config
+fn write_config(config_path: &Path, config: &Config) -> Result<(), anyhow::Error> {
+	let config_file = fs::File::create(config_path)?;
+	serde_yaml::to_writer(config_file, config)?;
+	Ok(())
 }
