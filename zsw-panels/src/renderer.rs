@@ -9,7 +9,7 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 
 // Imports
 use {
-	crate::PanelsResource,
+	crate::{PanelsResource, PanelsShader},
 	cgmath::Point2,
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -30,8 +30,11 @@ use {
 //       via the uniforms.
 #[derive(Debug)]
 pub struct PanelsRenderer {
-	/// Render pipeline
-	render_pipeline: wgpu::RenderPipeline,
+	/// Fade Render pipeline
+	fade_render_pipeline: wgpu::RenderPipeline,
+
+	/// Fade-white Render pipeline
+	fade_white_render_pipeline: wgpu::RenderPipeline,
 
 	/// Vertex buffer
 	vertices: wgpu::Buffer,
@@ -64,14 +67,26 @@ impl PanelsRenderer {
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu);
 		let image_bind_group_layout = self::create_image_bind_group_layout(wgpu);
 
-		// Create the render pipeline
-		let render_pipeline = self::create_render_pipeline(wgpu, &uniforms_bind_group_layout, &image_bind_group_layout);
+		// Create the render pipelines
+		let fade_render_pipeline = self::create_render_pipeline(
+			wgpu,
+			&uniforms_bind_group_layout,
+			&image_bind_group_layout,
+			include_str!("renderer/fade.wgsl"),
+		);
+		let fade_white_render_pipeline = self::create_render_pipeline(
+			wgpu,
+			&uniforms_bind_group_layout,
+			&image_bind_group_layout,
+			include_str!("renderer/fade_white.wgsl"),
+		);
 
 		// Create the framebuffer
 		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu, surface_resource);
 
 		Self {
-			render_pipeline,
+			fade_render_pipeline,
+			fade_white_render_pipeline,
 			vertices,
 			indices,
 			uniforms_bind_group_layout,
@@ -108,7 +123,7 @@ impl PanelsRenderer {
 	/// Renders all panels
 	pub fn render(
 		&self,
-		panels: &PanelsResource,
+		resource: &PanelsResource,
 		cursor_pos: Point2<i32>,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
@@ -152,12 +167,16 @@ impl PanelsRenderer {
 		let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
 
 		// Set our shared pipeline, indices, vertices and uniform bind group
-		render_pass.set_pipeline(&self.render_pipeline);
+		let pipeline = match resource.shader {
+			PanelsShader::Fade => &self.fade_render_pipeline,
+			PanelsShader::FadeWhite { .. } => &self.fade_white_render_pipeline,
+		};
+		render_pass.set_pipeline(pipeline);
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
-		for panel in &panels.panels {
+		for panel in &resource.panels {
 			// Calculate the position matrix for the panel
 			let pos_matrix = panel.pos_matrix(surface_size);
 
@@ -165,7 +184,11 @@ impl PanelsRenderer {
 			for descriptor in panel.image_descriptors() {
 				// Update the uniforms
 				let uvs_matrix = descriptor.uvs_matrix(cursor_pos);
-				let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha());
+				let extra = match resource.shader {
+					PanelsShader::Fade => [0.0; 3],
+					PanelsShader::FadeWhite { strength } => [strength, 0.0, 0.0],
+				};
+				let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha(), extra);
 				let image = descriptor.image();
 				queue.write_buffer(image.uniforms(), 0, bytemuck::cast_slice(&[uniforms]));
 
@@ -255,11 +278,12 @@ fn create_render_pipeline(
 	wgpu: &Wgpu,
 	uniforms_bind_group_layout: &wgpu::BindGroupLayout,
 	texture_bind_group_layout: &wgpu::BindGroupLayout,
+	shader: &str,
 ) -> wgpu::RenderPipeline {
 	// Load the shader
 	let shader_descriptor = wgpu::ShaderModuleDescriptor {
 		label:  Some("[zsw::panel] Shader"),
-		source: wgpu::ShaderSource::Wgsl(include_str!("renderer/shader.wgsl").into()),
+		source: wgpu::ShaderSource::Wgsl(shader.into()),
 	};
 	let shader = wgpu.device().create_shader_module(shader_descriptor);
 

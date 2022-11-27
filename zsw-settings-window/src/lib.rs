@@ -17,7 +17,7 @@ use {
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_egui::EguiPainter,
 	zsw_input::InputReceiver,
-	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, PanelsEditor, PanelsResource},
+	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, PanelsEditor, PanelsResource, PanelsShader},
 	zsw_playlist::{PlaylistImage, PlaylistManager},
 	zsw_profiles::{Profile, ProfilesManager},
 	zsw_util::{Rect, Resources, Services, ServicesBundle},
@@ -293,6 +293,30 @@ fn draw_panels<S>(
 				panels_editor.set_max_image_size(panels_resource, Some(4096));
 			},
 	}
+
+	ui.vertical(|ui| {
+		ui.label("Shader");
+		let cur_shader = panels_editor.shader_mut(panels_resource);
+		egui::ComboBox::from_label("Select one!")
+			.selected_text(cur_shader.name())
+			.show_ui(ui, |ui| {
+				// TODO: Not have default values here?
+				let shaders = [PanelsShader::Fade, PanelsShader::FadeWhite { strength: 1.0 }];
+				for shader in shaders {
+					ui.selectable_value(cur_shader, shader, shader.name());
+				}
+			});
+
+		match cur_shader {
+			PanelsShader::Fade => (),
+			PanelsShader::FadeWhite { strength } => {
+				ui.horizontal(|ui| {
+					ui.label("Strength");
+					egui::Slider::new(strength, 0.0..=20.0).ui(ui);
+				});
+			},
+		}
+	});
 
 	// Draw all panels in their own header
 	for (idx, panel) in panels_editor.panels_mut(panels_resource).iter_mut().enumerate() {

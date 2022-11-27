@@ -65,6 +65,22 @@ impl PanelsEditor {
 	pub fn max_image_size_mut<'a>(&self, resource: &'a mut PanelsResource) -> Option<&'a mut u32> {
 		resource.max_image_size.as_mut()
 	}
+
+	/// Returns the shader
+	#[must_use]
+	pub fn shader(&self, resource: &PanelsResource) -> PanelsShader {
+		resource.shader
+	}
+
+	/// Sets the shader
+	pub fn set_shader(&self, resource: &mut PanelsResource, shader: PanelsShader) {
+		resource.shader = shader;
+	}
+
+	/// Returns the shader mutably
+	pub fn shader_mut<'a>(&self, resource: &'a mut PanelsResource) -> &'a mut PanelsShader {
+		&mut resource.shader
+	}
 }
 
 /// Panels resource
@@ -75,6 +91,30 @@ pub struct PanelsResource {
 
 	/// Max image size
 	max_image_size: Option<u32>,
+
+	/// Shader to use
+	shader: PanelsShader,
+}
+
+/// Shader to render with
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum PanelsShader {
+	/// Fade
+	Fade,
+
+	/// Fade-white
+	FadeWhite { strength: f32 },
+}
+
+impl PanelsShader {
+	/// Returns the shader name
+	#[must_use]
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::Fade => "Fade",
+			Self::FadeWhite { .. } => "Fade White",
+		}
+	}
 }
 
 /// Creates the panels service
@@ -89,6 +129,7 @@ pub fn create(
 		PanelsResource {
 			panels:         vec![],
 			max_image_size: None,
+			shader:         PanelsShader::Fade,
 		},
 	)
 }
