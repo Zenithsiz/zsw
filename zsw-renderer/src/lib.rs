@@ -15,7 +15,7 @@ use {
 	zsw_input::InputReceiver,
 	zsw_panels::{PanelsEditor, PanelsRenderer, PanelsResource},
 	zsw_util::{Resources, ResourcesTuple2, Services},
-	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
+	zsw_wgpu::{Wgpu, WgpuRenderer, WgpuSurfaceResource},
 };
 
 /// Renderer
@@ -38,6 +38,7 @@ impl Renderer {
 		panels_renderer: &mut PanelsRenderer,
 		egui_renderer: &mut EguiRenderer,
 		input_receiver: &mut InputReceiver,
+		wgpu_renderer: &mut WgpuRenderer,
 	) -> !
 	where
 		S: Services<Wgpu> + Services<Window> + Services<ImageReceiver<P>> + Services<PanelsEditor>,
@@ -55,7 +56,16 @@ impl Renderer {
 			}
 
 			// Render
-			if let Err(err) = Self::render(services, resources, panels_renderer, egui_renderer, input_receiver).await {
+			if let Err(err) = Self::render(
+				services,
+				resources,
+				panels_renderer,
+				egui_renderer,
+				input_receiver,
+				wgpu_renderer,
+			)
+			.await
+			{
 				tracing::warn!(?err, "Unable to render");
 			};
 
@@ -96,6 +106,7 @@ impl Renderer {
 		panels_renderer: &mut PanelsRenderer,
 		egui_renderer: &mut EguiRenderer,
 		input_receiver: &mut InputReceiver,
+		wgpu_renderer: &mut WgpuRenderer,
 	) -> Result<(), anyhow::Error>
 	where
 		S: Services<Wgpu> + Services<Window>,
@@ -107,7 +118,7 @@ impl Renderer {
 
 		// Then render
 		let surface_size = wgpu.surface_size(&surface_resource);
-		let mut frame = wgpu
+		let mut frame = wgpu_renderer
 			.start_render(&mut surface_resource)
 			.context("Unable to start render")?;
 
@@ -163,7 +174,7 @@ impl Renderer {
 				.context("Unable to update textures")?;
 		}
 
-		wgpu.finish_render(frame, &mut surface_resource, input_receiver);
+		wgpu_renderer.finish_render(frame, &mut surface_resource, input_receiver);
 		mem::drop(surface_resource);
 
 		Ok(())

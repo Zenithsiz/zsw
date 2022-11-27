@@ -39,7 +39,6 @@ use {
 	zsw_renderer::Renderer,
 	zsw_settings_window::{ProfileApplier as _, SettingsWindow},
 	zsw_util::{Rect, ResourcesBundle},
-	zsw_wgpu::Wgpu,
 };
 
 /// Runs the application
@@ -51,7 +50,7 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 
 	// Create all services and resources
 	// TODO: Execute futures in background and continue initializing
-	let (wgpu, mut wgpu_surface_resource) = Wgpu::new(Arc::clone(&window))
+	let (wgpu, mut wgpu_renderer, mut wgpu_surface_resource) = zsw_wgpu::create(Arc::clone(&window))
 		.await
 		.context("Unable to create renderer")?;
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
@@ -139,11 +138,14 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 		.context("Unable to spawn image resizer tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources, profile_applier, input_receiver] "Settings window runner" => settings_window.run(&*services, &mut { resources }, &mut egui_painter, profile_applier, &mut { input_receiver })
-	).context("Unable to spawn settings window task")?;
-	let renderer_task =
-		spawn_service_runner!([services, resources] "Renderer" => services.renderer.run(&*services, &mut { resources }, &mut panels_renderer, &mut egui_renderer, &mut input_receiver))
-			.context("Unable to spawn renderer task")?;
+		[services, resources, profile_applier, input_receiver] "Settings window runner" => {
+			settings_window.run(&*services, &mut { resources }, &mut egui_painter, profile_applier, &mut { input_receiver })
+	})
+	.context("Unable to spawn settings window task")?;
+	let renderer_task = spawn_service_runner!(
+		[services, resources] "Renderer" => {
+			services.renderer.run(&*services, &mut { resources }, &mut panels_renderer, &mut egui_renderer, &mut input_receiver, &mut wgpu_renderer)
+	}).context("Unable to spawn renderer task")?;
 
 	// Then create the join future
 	let join_handle = async move {

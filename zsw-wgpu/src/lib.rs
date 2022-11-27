@@ -18,7 +18,7 @@ use {
 	zsw_input::InputReceiver,
 };
 
-/// Wgpu interface
+/// Wgpu
 // TODO: Figure out if drop order matters here. Dropping the surface after the device/queue
 //       seems to not result in any panics, but it might be worth checking, especially if we
 //       ever need to "restart" `wgpu` in any scenario without restarting the application.
@@ -32,61 +32,28 @@ pub struct Wgpu {
 	//       doesn't work well without a sleep, which would defeat the point of
 	//       polling it in another thread instead of on the main thread whenever
 	//       an event is received.
-	device: wgpu::Device,
+	device: Arc<wgpu::Device>,
 
 	/// Queue
-	queue: wgpu::Queue,
+	queue: Arc<wgpu::Queue>,
 
 	/// Surface texture format
 	///
 	/// Used on each resize, so we configure the surface with the same texture format each time.
-	surface_texture_format: TextureFormat,
+	surface_texture_format: Arc<TextureFormat>,
 }
 
 #[allow(clippy::unused_self)] // For accessing resources, we should require the service
 impl Wgpu {
-	/// Creates the `wgpu` wrapper given the window to create it in, alongside the resource
-	pub async fn new(window: Arc<Window>) -> Result<(Self, WgpuSurfaceResource), anyhow::Error> {
-		// Create the surface and adapter
-		// SAFETY: Due to the window being arced, and we storing it, we ensure the window outlives us and thus the surface
-		let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
-
-		// Then create the device and it's queue
-		let (device, queue) = self::create_device(&adapter).await?;
-
-		// Configure the surface and get the preferred texture format and surface size
-		let (surface_texture_format, surface_size) =
-			self::configure_window_surface(&window, &surface, &adapter, &device)?;
-
-		tracing::info!("Successfully initialized");
-
-		// Create the service
-		let service = Self {
-			device,
-			queue,
-			surface_texture_format,
-		};
-
-		// Create the surface resource
-		let surface_resource = WgpuSurfaceResource {
-			surface,
-			size: surface_size,
-			_window: window,
-		};
-
-
-		Ok((service, surface_resource))
-	}
-
 	/// Returns the wgpu device
 	#[must_use]
-	pub const fn device(&self) -> &wgpu::Device {
+	pub fn device(&self) -> &wgpu::Device {
 		&self.device
 	}
 
 	/// Returns the wgpu queue
 	#[must_use]
-	pub const fn queue(&self) -> &wgpu::Queue {
+	pub fn queue(&self) -> &wgpu::Queue {
 		&self.queue
 	}
 
@@ -101,10 +68,25 @@ impl Wgpu {
 
 	/// Returns the surface texture format
 	#[must_use]
-	pub const fn surface_texture_format(&self) -> wgpu::TextureFormat {
-		self.surface_texture_format
+	pub fn surface_texture_format(&self) -> wgpu::TextureFormat {
+		*self.surface_texture_format
 	}
+}
 
+/// Wgpu renderer
+#[derive(Debug)]
+pub struct WgpuRenderer {
+	/// Device
+	device: Arc<wgpu::Device>,
+
+	/// Queue
+	queue: Arc<wgpu::Queue>,
+
+	/// Surface texture format
+	surface_texture_format: Arc<TextureFormat>,
+}
+
+impl WgpuRenderer {
 	/// Starts rendering a frame.
 	///
 	/// Returns the encoder and surface view to render onto
@@ -141,7 +123,7 @@ impl Wgpu {
 			tracing::info!(?size, "Resizing");
 			if size.width > 0 && size.height > 0 {
 				// Update our surface
-				let config = self::window_surface_configuration(self.surface_texture_format, size);
+				let config = self::window_surface_configuration(*self.surface_texture_format, size);
 				surface_resource.surface.configure(&self.device, &config);
 				surface_resource.size = size;
 			}
@@ -287,4 +269,40 @@ const fn window_surface_configuration(
 		present_mode: wgpu::PresentMode::Mailbox,
 		alpha_mode:   wgpu::CompositeAlphaMode::Auto,
 	}
+}
+
+
+/// Creates the `wgpu` services
+pub async fn create(window: Arc<Window>) -> Result<(Wgpu, WgpuRenderer, WgpuSurfaceResource), anyhow::Error> {
+	// Create the surface and adapter
+	// SAFETY: Due to the window being arced, and we storing it, we ensure the window outlives us and thus the surface
+	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
+
+	// Then create the device and it's queue
+	let (device, queue) = self::create_device(&adapter).await?;
+	let device = Arc::new(device);
+	let queue = Arc::new(queue);
+
+	// Configure the surface and get the preferred texture format and surface size
+	let (surface_texture_format, surface_size) = self::configure_window_surface(&window, &surface, &adapter, &device)?;
+	let surface_texture_format = Arc::new(surface_texture_format);
+	tracing::info!("Successfully initialized");
+
+	Ok((
+		Wgpu {
+			device:                 Arc::clone(&device),
+			queue:                  Arc::clone(&queue),
+			surface_texture_format: Arc::clone(&surface_texture_format),
+		},
+		WgpuRenderer {
+			device,
+			queue,
+			surface_texture_format,
+		},
+		WgpuSurfaceResource {
+			surface,
+			size: surface_size,
+			_window: window,
+		},
+	))
 }
