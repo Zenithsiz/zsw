@@ -1,7 +1,15 @@
 //! Arguments
 
+// Imports
+use std::path::PathBuf;
+
 /// Arguments
 #[derive(Debug)]
 #[derive(clap::Parser)]
-#[allow(missing_copy_implementations)] // It won't implement Copy in the future
-pub struct Args {}
+pub struct Args {
+	/// Config file
+	///
+	/// Overrides the default config file
+	#[clap(long = "config")]
+	pub config: Option<PathBuf>,
+}

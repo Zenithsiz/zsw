@@ -45,13 +45,16 @@ use {
 
 /// Runs the application
 #[allow(clippy::too_many_lines)] // TODO: Refactor
-pub async fn run(_args: &Args) -> Result<(), anyhow::Error> {
+pub async fn run(args: &Args) -> Result<(), anyhow::Error> {
 	// Try to create the directories for the app
 	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
 	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 
 	// Then read the config
-	let config_path = dirs.data_dir().join("config.yaml");
+	let config_path = args
+		.config
+		.clone()
+		.unwrap_or_else(|| dirs.data_dir().join("config.yaml"));
 	tracing::debug!("Loading config from {config_path:?}");
 	let config = self::load_config_or_default(&config_path);
 	let config = Arc::new(config);
