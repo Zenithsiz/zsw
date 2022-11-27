@@ -23,7 +23,7 @@ use {
 // TODO: Figure out if drop order matters here. Dropping the surface after the device/queue
 //       seems to not result in any panics, but it might be worth checking, especially if we
 //       ever need to "restart" `wgpu` in any scenario without restarting the application.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Wgpu {
 	/// Device
 	// TODO: There exists a `Device::poll` method, but I'm not sure if we should

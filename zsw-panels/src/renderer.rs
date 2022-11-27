@@ -14,7 +14,6 @@ use {
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
 	zsw_img::{ImageReceiver, RawImageProvider},
-	zsw_util::Services,
 	zsw_wgpu::{Wgpu, WgpuResizeReceiver, WgpuSurfaceResource},
 };
 
@@ -47,8 +46,10 @@ pub struct PanelsRenderer {
 	image_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Msaa frame-buffer
-	// TODO: Resize this on resize?
 	msaa_framebuffer: wgpu::TextureView,
+
+	/// Wgpu
+	wgpu: Wgpu,
 
 	/// Wgpu resizer
 	wgpu_resize_receiver: WgpuResizeReceiver,
@@ -58,36 +59,36 @@ impl PanelsRenderer {
 	/// Creates a new renderer for the panels
 	#[must_use]
 	pub fn new(
-		wgpu: &Wgpu,
+		wgpu: Wgpu,
 		surface_resource: &mut WgpuSurfaceResource,
 		wgpu_resize_receiver: WgpuResizeReceiver,
 	) -> Self {
 		// Create the index buffer
-		let indices = self::create_indices(wgpu);
+		let indices = self::create_indices(&wgpu);
 
 		// Create the vertex buffer
-		let vertices = self::create_vertices(wgpu);
+		let vertices = self::create_vertices(&wgpu);
 
 		// Create the bind group layouts
-		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu);
-		let image_bind_group_layout = self::create_image_bind_group_layout(wgpu);
+		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(&wgpu);
+		let image_bind_group_layout = self::create_image_bind_group_layout(&wgpu);
 
 		// Create the render pipelines
 		let fade_render_pipeline = self::create_render_pipeline(
-			wgpu,
+			&wgpu,
 			&uniforms_bind_group_layout,
 			&image_bind_group_layout,
 			include_str!("renderer/fade.wgsl"),
 		);
 		let fade_white_render_pipeline = self::create_render_pipeline(
-			wgpu,
+			&wgpu,
 			&uniforms_bind_group_layout,
 			&image_bind_group_layout,
 			include_str!("renderer/fade_white.wgsl"),
 		);
 
 		// Create the framebuffer
-		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu, wgpu.surface_size(surface_resource));
+		let msaa_framebuffer = self::create_msaa_framebuffer(&wgpu, wgpu.surface_size(surface_resource));
 
 		Self {
 			pipelines: PanelsPipelines {
@@ -99,6 +100,7 @@ impl PanelsRenderer {
 			uniforms_bind_group_layout,
 			image_bind_group_layout,
 			msaa_framebuffer,
+			wgpu,
 			wgpu_resize_receiver,
 		}
 	}
@@ -130,24 +132,20 @@ impl PanelsRenderer {
 
 	/// Renders all panels
 	#[allow(clippy::too_many_arguments)] // TODO: Refactor
-	pub fn render<S>(
+	pub fn render(
 		&mut self,
-		services: &S,
 		resource: &PanelsResource,
 		cursor_pos: Point2<i32>,
 		queue: &wgpu::Queue,
 		encoder: &mut wgpu::CommandEncoder,
 		surface_view: &wgpu::TextureView,
 		surface_size: PhysicalSize<u32>,
-	) -> Result<(), anyhow::Error>
-	where
-		S: Services<Wgpu>,
-	{
+	) -> Result<(), anyhow::Error> {
 		// Resize out msaa framebuffer if needed
 		let last_resize = std::iter::from_fn(|| self.wgpu_resize_receiver.on_resize()).last();
 		if let Some(size) = last_resize {
 			tracing::debug!("Resizing msaa framebuffer to {}x{}", size.width, size.height);
-			self.msaa_framebuffer = self::create_msaa_framebuffer(services.service::<Wgpu>(), size);
+			self.msaa_framebuffer = self::create_msaa_framebuffer(&self.wgpu, size);
 		}
 
 		// Create the render pass for all panels

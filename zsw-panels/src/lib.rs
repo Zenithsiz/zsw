@@ -120,7 +120,7 @@ impl PanelsShader {
 /// Creates the panels service
 #[must_use]
 pub fn create(
-	wgpu: &Wgpu,
+	wgpu: Wgpu,
 	surface_resource: &mut WgpuSurfaceResource,
 	wgpu_resize_receiver: WgpuResizeReceiver,
 ) -> (PanelsRenderer, PanelsEditor, PanelsResource) {

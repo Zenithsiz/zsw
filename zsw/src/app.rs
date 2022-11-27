@@ -58,7 +58,7 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
 	let (image_loader, image_resizer, image_receiver) = zsw_img::loader::create();
 	let (panels_renderer, panels_editor, panels_resource) =
-		zsw_panels::create(&wgpu, &mut wgpu_surface_resource, wgpu_resize_receiver);
+		zsw_panels::create(wgpu.clone(), &mut wgpu_surface_resource, wgpu_resize_receiver);
 	let (egui_renderer, egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
 	let profiles_manager = zsw_profiles::create();
 	let renderer = Renderer::new(panels_renderer, egui_renderer, input_receiver.clone(), wgpu_renderer);
