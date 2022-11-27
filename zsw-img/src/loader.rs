@@ -177,11 +177,11 @@ pub trait RawImage {
 // TODO: Allow max size for both width and height?
 #[allow(clippy::cast_sign_loss)] // We're sure it's positive
 pub fn resize_image<P: RawImageProvider>(image: &mut Image<P>, max_size: u32) {
-	let width_f32 = image.image.width() as f32;
-	let height_f32 = image.image.height() as f32;
-	let resize_factor = f32::min(max_size as f32 / width_f32, max_size as f32 / height_f32);
-	let resize_width = (width_f32 * resize_factor) as u32;
-	let resize_height = (height_f32 * resize_factor) as u32;
+	let width = image.image.width();
+	let height = image.image.height();
+	let resize_factor = f32::min(max_size as f32 / width as f32, max_size as f32 / height as f32);
+	let resize_width = (width as f32 * resize_factor) as u32;
+	let resize_height = (height as f32 * resize_factor) as u32;
 
 	assert_le!(resize_width, max_size, "Calculated width is too large");
 	assert_le!(resize_height, max_size, "Calculated height is too large");
@@ -191,7 +191,7 @@ pub fn resize_image<P: RawImageProvider>(image: &mut Image<P>, max_size: u32) {
 		.image
 		.resize(resize_width, resize_height, image::imageops::FilterType::Lanczos3);
 	tracing::debug!(
-		"Resized {}: {}x{} to {resize_width}x{resize_height} ({:.2}%)",
+		"Resized {}: {width}x{height} to {}x{} ({:.2}%)",
 		image.name,
 		image.image.width(),
 		image.image.height(),

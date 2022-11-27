@@ -42,6 +42,7 @@ impl PanelState {
 		renderer: &PanelsRenderer,
 		wgpu: &Wgpu,
 		image_receiver: &ImageReceiver<P>,
+		max_image_size: Option<u32>,
 	) {
 		// Next frame's progress
 		let next_progress = self.cur_progress.saturating_add(1).clamp(0, self.panel.duration);
@@ -56,7 +57,7 @@ impl PanelState {
 		// Note: We're only `take`ing the images because we need them by value
 		(self.images, self.cur_progress) = 'update: loop {
 			// Handles a `Result<T, ImageTooBigError>`
-			macro handle_image_too_big_error($image:expr, $res:expr) {
+			macro handle_image_too_big_error($image:expr, $res:expr, $default_panels_images:expr) {
 				match $res {
 					Ok(value) => value,
 					Err(err) => match $image {
@@ -64,7 +65,7 @@ impl PanelState {
 							// Try to resize
 							// Note: If we can't resize, we just instead remove
 							tracing::warn!("Unable to use image {}: {err}", image.name);
-							if let Err(image) = image_receiver.queue_resize(image, err.max_size) {
+							if let Err(image) = image_receiver.queue_resize(image, err.max_image_size) {
 								// Note: If we can't remove, just drop it
 								tracing::warn!("Unable to resize image {}, removing it", image.name);
 								if let Err(image) = image_receiver.queue_remove(image) {
@@ -72,7 +73,9 @@ impl PanelState {
 								}
 							}
 
-							// Then try again
+							// Then reset and try again
+							// TODO: Less error-prone way of doing this?
+							self.images = $default_panels_images;
 							continue 'update;
 						},
 					},
@@ -83,31 +86,45 @@ impl PanelState {
 				// If we're empty, try to get a next image
 				PanelStateImages::Empty => match image_receiver.try_recv() {
 					#[allow(clippy::cast_sign_loss)] // It's positive
-					Some(image) => (
-						PanelStateImages::PrimaryOnly {
-							front: PanelStateImage {
-								image:    handle_image_too_big_error!(image, PanelImage::new(renderer, wgpu, &image)),
-								swap_dir: rand::random(),
+					Some(image) => {
+						let front_image = handle_image_too_big_error!(
+							image,
+							PanelImage::new(renderer, wgpu, &image, max_image_size),
+							PanelStateImages::Empty
+						);
+						(
+							PanelStateImages::PrimaryOnly {
+								front: PanelStateImage {
+									image:    front_image,
+									swap_dir: rand::random(),
+								},
 							},
-						},
-						// Note: Ensure it's below `0.5` to avoid starting during a fade.
-						(rand::random::<f32>() / 2.0 * self.panel.duration as f32) as u64,
-					),
+							// Note: Ensure it's below `0.5` to avoid starting during a fade.
+							(rand::random::<f32>() / 2.0 * self.panel.duration as f32) as u64,
+						)
+					},
 					None => (PanelStateImages::Empty, 0),
 				},
 
 				// If we only have the primary, try to load the next image
 				PanelStateImages::PrimaryOnly { front } => match image_receiver.try_recv() {
-					Some(image) => (
-						PanelStateImages::Both {
-							front,
-							back: PanelStateImage {
-								image:    handle_image_too_big_error!(image, PanelImage::new(renderer, wgpu, &image)),
-								swap_dir: rand::random(),
+					Some(image) => {
+						let back_image = handle_image_too_big_error!(
+							image,
+							PanelImage::new(renderer, wgpu, &image, max_image_size),
+							PanelStateImages::PrimaryOnly { front }
+						);
+						(
+							PanelStateImages::Both {
+								front,
+								back: PanelStateImage {
+									image:    back_image,
+									swap_dir: rand::random(),
+								},
 							},
-						},
-						next_progress,
-					),
+							next_progress,
+						)
+					},
 					None => (PanelStateImages::PrimaryOnly { front }, next_progress),
 				},
 
@@ -116,7 +133,11 @@ impl PanelState {
 					match image_receiver.try_recv() {
 						// Note: We update the front and swap them
 						Some(image) => {
-							handle_image_too_big_error!(image, front.image.update(renderer, wgpu, &image));
+							handle_image_too_big_error!(
+								image,
+								front.image.update(renderer, wgpu, &image, max_image_size),
+								PanelStateImages::Both { front, back }
+							);
 							front.swap_dir = rand::random();
 							(
 								PanelStateImages::Both {

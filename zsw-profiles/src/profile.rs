@@ -12,6 +12,10 @@ pub struct Profile {
 
 	/// All panels
 	pub panels: Vec<Panel>,
+
+	/// Max image size
+	#[serde(default)]
+	pub max_image_size: Option<u32>,
 }
 
 /// Profile panel

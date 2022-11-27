@@ -282,6 +282,18 @@ fn draw_panels<S>(
 {
 	let panels_editor = services.service::<PanelsEditor>();
 
+	// TODO: Decide on number to put here?
+	match panels_editor.max_image_size_mut(panels_resource) {
+		Some(max_image_size) => {
+			egui::Slider::new(max_image_size, 0..=8192).ui(ui);
+		},
+		None =>
+			if ui.button("Add max image size").clicked() {
+				// TODO: What value to default to here?
+				panels_editor.set_max_image_size(panels_resource, Some(4096));
+			},
+	}
+
 	// Draw all panels in their own header
 	for (idx, panel) in panels_editor.panels_mut(panels_resource).iter_mut().enumerate() {
 		ui.collapsing(format!("Panel {idx}"), |ui| {

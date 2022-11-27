@@ -96,9 +96,10 @@ impl PanelsRenderer {
 		resource: &mut PanelsResource,
 		wgpu: &Wgpu,
 		image_receiver: &ImageReceiver<P>,
+		max_image_size: Option<u32>,
 	) -> Result<(), anyhow::Error> {
 		for panel in &mut resource.panels {
-			panel.update(self, wgpu, image_receiver);
+			panel.update(self, wgpu, image_receiver, max_image_size);
 		}
 
 		Ok(())

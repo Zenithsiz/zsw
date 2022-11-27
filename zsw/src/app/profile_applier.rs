@@ -58,11 +58,14 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 		services
 			.panels_editor
 			.replace_panels(panels_resource, profile.panels.iter().map(Self::create_panel));
+		services
+			.panels_editor
+			.set_max_image_size(panels_resource, profile.max_image_size);
 	}
 
 	fn current(&self, services: &Services, panels_resource: &mut zsw_panels::PanelsResource) -> zsw_profiles::Profile {
 		Profile {
-			root_path: match services.playlist_manager.root_path() {
+			root_path:      match services.playlist_manager.root_path() {
 				Some(path) => path,
 				// TODO: What to do here?
 				None => {
@@ -70,12 +73,13 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 					PathBuf::from("<not set>")
 				},
 			},
-			panels:    services
+			panels:         services
 				.panels_editor
 				.panels(panels_resource)
 				.iter()
 				.map(|panel| Self::dump_panel(&panel.panel))
 				.collect(),
+			max_image_size: services.panels_editor.max_image_size(panels_resource),
 		}
 	}
 }

@@ -49,6 +49,22 @@ impl PanelsEditor {
 	pub fn replace_panels(&self, resource: &mut PanelsResource, panels: impl IntoIterator<Item = Panel>) {
 		resource.panels = panels.into_iter().map(PanelState::new).collect();
 	}
+
+	/// Returns the max image size
+	#[must_use]
+	pub fn max_image_size(&self, resource: &PanelsResource) -> Option<u32> {
+		resource.max_image_size
+	}
+
+	/// Sets the max image size
+	pub fn set_max_image_size(&self, resource: &mut PanelsResource, max_image_size: Option<u32>) {
+		resource.max_image_size = max_image_size;
+	}
+
+	/// Returns the max image size mutably
+	pub fn max_image_size_mut<'a>(&self, resource: &'a mut PanelsResource) -> Option<&'a mut u32> {
+		resource.max_image_size.as_mut()
+	}
 }
 
 /// Panels resource
@@ -56,6 +72,9 @@ impl PanelsEditor {
 pub struct PanelsResource {
 	/// All panels with their state
 	panels: Vec<PanelState>,
+
+	/// Max image size
+	max_image_size: Option<u32>,
 }
 
 /// Creates the panels service
@@ -67,6 +86,9 @@ pub fn create(
 	(
 		PanelsRenderer::new(wgpu, surface_resource),
 		PanelsEditor {},
-		PanelsResource { panels: vec![] },
+		PanelsResource {
+			panels:         vec![],
+			max_image_size: None,
+		},
 	)
 }

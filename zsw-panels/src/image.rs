@@ -48,10 +48,11 @@ impl PanelImage {
 		renderer: &PanelsRenderer,
 		wgpu: &Wgpu,
 		image: &Image<P>,
+		max_image_size: Option<u32>,
 	) -> Result<Self, ImageTooBigError> {
 		// Create the texture and sampler
 		let image_size = image.size();
-		let (texture, texture_view) = self::create_image_texture(wgpu, &image.name, &image.image)?;
+		let (texture, texture_view) = self::create_image_texture(wgpu, &image.name, &image.image, max_image_size)?;
 		let texture_sampler = self::create_texture_sampler(wgpu.device());
 
 		// Create the uniforms
@@ -101,9 +102,11 @@ impl PanelImage {
 		renderer: &PanelsRenderer,
 		wgpu: &Wgpu,
 		image: &Image<P>,
+		max_image_size: Option<u32>,
 	) -> Result<(), ImageTooBigError> {
 		// Update our texture
-		(self.texture, self.texture_view) = self::create_image_texture(wgpu, &image.name, &image.image)?;
+		(self.texture, self.texture_view) =
+			self::create_image_texture(wgpu, &image.name, &image.image, max_image_size)?;
 		self.image_bind_group = self::create_image_bind_group(
 			wgpu,
 			renderer.image_bind_group_layout(),
@@ -188,7 +191,7 @@ fn create_image_bind_group(
 /// Error when an image is too large
 #[derive(Clone, Copy, Debug)]
 #[derive(thiserror::Error)]
-#[error("Image was too big: {image_width}x{image_height} max {max_size}x{max_size}")]
+#[error("Image was too big: {image_width}x{image_height} max {max_image_size}x{max_image_size}")]
 pub struct ImageTooBigError {
 	/// Image width
 	pub image_width: u32,
@@ -197,7 +200,7 @@ pub struct ImageTooBigError {
 	pub image_height: u32,
 
 	/// Max size
-	pub max_size: u32,
+	pub max_image_size: u32,
 }
 
 /// Creates the image texture and view
@@ -205,6 +208,7 @@ fn create_image_texture(
 	wgpu: &Wgpu,
 	name: &str,
 	image: &DynamicImage,
+	max_image_size: Option<u32>,
 ) -> Result<(wgpu::Texture, wgpu::TextureView), ImageTooBigError> {
 	// Get the image's format, converting if necessary.
 	let (image, format) = match image {
@@ -225,11 +229,14 @@ fn create_image_texture(
 
 	// If the image is too large, return Err
 	let limits = wgpu.device().limits();
-	if image.width() > limits.max_texture_dimension_2d || image.height() > limits.max_texture_dimension_2d {
+	let max_image_size = max_image_size
+		.unwrap_or(limits.max_texture_dimension_2d)
+		.min(limits.max_texture_dimension_2d);
+	if image.width() > max_image_size || image.height() > max_image_size {
 		return Err(ImageTooBigError {
-			image_width:  image.width(),
+			image_width: image.width(),
 			image_height: image.height(),
-			max_size:     limits.max_texture_dimension_2d,
+			max_image_size,
 		});
 	}
 

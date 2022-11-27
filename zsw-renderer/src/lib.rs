@@ -13,7 +13,7 @@ use {
 	zsw_egui::EguiRenderer,
 	zsw_img::{ImageReceiver, RawImageProvider},
 	zsw_input::InputReceiver,
-	zsw_panels::{PanelsRenderer, PanelsResource},
+	zsw_panels::{PanelsEditor, PanelsRenderer, PanelsResource},
 	zsw_util::{Resources, ResourcesTuple2, Services},
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
@@ -40,7 +40,7 @@ impl Renderer {
 		input_receiver: &mut InputReceiver,
 	) -> !
 	where
-		S: Services<Wgpu> + Services<Window> + Services<ImageReceiver<P>>,
+		S: Services<Wgpu> + Services<Window> + Services<ImageReceiver<P>> + Services<PanelsEditor>,
 		R: Resources<PanelsResource> + ResourcesTuple2<PanelsResource, WgpuSurfaceResource>,
 	{
 		// Duration we're sleeping
@@ -74,16 +74,18 @@ impl Renderer {
 		panels_renderer: &mut PanelsRenderer,
 	) -> Result<(), anyhow::Error>
 	where
-		S: Services<Wgpu> + Services<ImageReceiver<P>>,
+		S: Services<Wgpu> + Services<ImageReceiver<P>> + Services<PanelsEditor>,
 		R: Resources<PanelsResource>,
 	{
 		let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 		// Updates all panels
+		let max_image_size = services.service::<PanelsEditor>().max_image_size(&panels_resource);
 		panels_renderer.update_all(
 			&mut panels_resource,
 			services.service::<Wgpu>(),
 			services.service::<ImageReceiver<P>>(),
+			max_image_size,
 		)
 	}
 
