@@ -41,10 +41,6 @@ pub struct Wgpu {
 	///
 	/// Used on each resize, so we configure the surface with the same texture format each time.
 	surface_texture_format: TextureFormat,
-
-	/// Window
-	// Note: Our surface must outlive the window, so we make sure of it by arcing it
-	_window: Arc<Window>,
 }
 
 #[allow(clippy::unused_self)] // For accessing resources, we should require the service
@@ -69,13 +65,13 @@ impl Wgpu {
 			device,
 			queue,
 			surface_texture_format,
-			_window: window,
 		};
 
 		// Create the surface resource
 		let surface_resource = WgpuSurfaceResource {
 			surface,
 			size: surface_size,
+			_window: window,
 		};
 
 
@@ -272,6 +268,10 @@ pub struct WgpuSurfaceResource {
 	//       is invalid (for example, during scissoring), so we *must*
 	//       ensure this size is the surface's actual size.
 	size: PhysicalSize<u32>,
+
+	/// Window
+	// Note: Our surface must outlive the window, so we make sure of it by arcing it
+	_window: Arc<Window>,
 }
 
 /// Returns the window surface configuration
