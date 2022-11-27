@@ -63,7 +63,7 @@ impl ProfileApplier {
 
 impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 	fn apply(
-		&self,
+		&mut self,
 		profile: &zsw_profiles::Profile,
 		services: &Services,
 		panels_resource: &mut zsw_panels::PanelsResource,
@@ -82,7 +82,11 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 			.set_shader(panels_resource, Self::create_shader(profile.panels_shader));
 	}
 
-	fn current(&self, services: &Services, panels_resource: &mut zsw_panels::PanelsResource) -> zsw_profiles::Profile {
+	fn current(
+		&mut self,
+		services: &Services,
+		panels_resource: &mut zsw_panels::PanelsResource,
+	) -> zsw_profiles::Profile {
 		Profile {
 			root_path:      match services.playlist_manager.root_path() {
 				Some(path) => path,

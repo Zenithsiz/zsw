@@ -24,9 +24,9 @@ use {
 	zsw_wgpu::{Wgpu, WgpuSurfaceResource},
 };
 
-/// Settings window
+/// Settings window state
 #[derive(Debug)]
-pub struct SettingsWindow {
+struct SettingsWindowState {
 	/// If open
 	open: bool,
 
@@ -34,33 +34,49 @@ pub struct SettingsWindow {
 	new_panel_state: NewPanelState,
 }
 
-impl SettingsWindow {
+/// Settings window
+#[derive(Debug)]
+pub struct SettingsWindow<P> {
+	/// Egui painter
+	egui_painter: EguiPainter,
+
+	/// Input receiver
+	input_receiver: InputReceiver,
+
+	/// Profile applier
+	profile_applier: P,
+
+	/// State
+	state: SettingsWindowState,
+}
+
+impl<P> SettingsWindow<P> {
 	/// Creates the settings window
 	#[must_use]
-	pub fn new(window: &Window) -> Self {
+	pub fn new(window: &Window, egui_painter: EguiPainter, input_receiver: InputReceiver, profile_applier: P) -> Self {
 		Self {
-			open:            false,
-			// TODO: Check if it's fine to use the window size here instead of the
-			//       wgpu surface size
-			new_panel_state: NewPanelState::new(window.inner_size()),
+			egui_painter,
+			input_receiver,
+			profile_applier,
+			state: SettingsWindowState {
+				open:            false,
+				// TODO: Check if it's fine to use the window size here instead of the
+				//       wgpu surface size
+				new_panel_state: NewPanelState::new(window.inner_size()),
+			},
 		}
 	}
 
 	/// Runs the setting window
-	pub async fn run<S, R>(
-		&mut self,
-		services: &S,
-		resources: &mut R,
-		egui_painter: &mut EguiPainter,
-		profile_applier: impl ProfileApplier<S>,
-		input_receiver: &mut InputReceiver,
-	) where
+	pub async fn run<S, R>(&mut self, services: &S, resources: &mut R)
+	where
 		S: Services<Wgpu>
 			+ Services<Window>
 			+ Services<PanelsEditor>
 			+ Services<PlaylistManager>
 			+ Services<ProfilesManager>,
 		R: Resources<PanelsResource> + Resources<WgpuSurfaceResource>,
+		P: ProfileApplier<S>,
 	{
 		let wgpu = services.service::<Wgpu>();
 		let window = services.service::<Window>();
@@ -71,16 +87,18 @@ impl SettingsWindow {
 			let mut panels_resource = resources.resource::<PanelsResource>().await;
 
 			// Draw
-			let res = egui_painter
+			let res = self
+				.egui_painter
 				.draw(window, |ctx, frame| {
-					self.draw(
+					Self::draw(
+						&mut self.state,
+						&mut self.input_receiver,
+						&mut self.profile_applier,
 						ctx,
 						frame,
 						surface_size,
 						services,
 						&mut panels_resource,
-						&profile_applier,
-						input_receiver,
 					);
 					mem::drop(panels_resource);
 				})
@@ -96,16 +114,17 @@ impl SettingsWindow {
 
 	/// Draws the settings window
 	fn draw<S>(
-		&mut self,
+		state: &mut SettingsWindowState,
+		input_receiver: &mut InputReceiver,
+		profile_applier: &mut P,
 		ctx: &egui::Context,
 		_frame: &epi::Frame,
 		surface_size: PhysicalSize<u32>,
 		services: &S,
 		panels_resource: &mut PanelsResource,
-		profile_applier: &impl ProfileApplier<S>,
-		input_receiver: &mut InputReceiver,
 	) where
 		S: Services<Window> + Services<PanelsEditor> + Services<PlaylistManager> + Services<ProfilesManager>,
+		P: ProfileApplier<S>,
 	{
 		let window = services.service::<Window>();
 
@@ -122,14 +141,14 @@ impl SettingsWindow {
 
 			// Then set the current position and that we're open
 			settings_window = settings_window.current_pos(egui::pos2(cursor_pos.x, cursor_pos.y));
-			self.open = true;
+			state.open = true;
 		}
 
 		// Then render it
-		settings_window.open(&mut self.open).show(ctx, |ui| {
+		settings_window.open(&mut state.open).show(ctx, |ui| {
 			self::draw_settings_window(
 				ui,
-				&mut self.new_panel_state,
+				&mut state.new_panel_state,
 				surface_size,
 				services,
 				panels_resource,
@@ -146,7 +165,7 @@ fn draw_settings_window<S>(
 	surface_size: PhysicalSize<u32>,
 	services: &S,
 	panels_resource: &mut PanelsResource,
-	profile_applier: &impl ProfileApplier<S>,
+	profile_applier: &mut impl ProfileApplier<S>,
 ) where
 	S: Services<PanelsEditor> + Services<PlaylistManager> + Services<ProfilesManager>,
 {
@@ -167,7 +186,7 @@ fn draw_profile<S>(
 	ui: &mut egui::Ui,
 	services: &S,
 	panels_resource: &mut PanelsResource,
-	profile_applier: &impl ProfileApplier<S>,
+	profile_applier: &mut impl ProfileApplier<S>,
 ) where
 	S: Services<ProfilesManager>,
 {
@@ -515,9 +534,9 @@ pub trait ProfileApplier<S: ServicesBundle> {
 	/// Applies a profile
 	// TODO: Not hardcore `panels_resource` once we remove resources?
 	// TODO: Not pass `services` and have `self` store them instead?
-	fn apply(&self, profile: &Profile, services: &S, panels_resource: &mut PanelsResource);
+	fn apply(&mut self, profile: &Profile, services: &S, panels_resource: &mut PanelsResource);
 
 	/// Retrieves the current profile
 	// TODO: Same TODOs as above
-	fn current(&self, services: &S, panels_resource: &mut PanelsResource) -> Profile;
+	fn current(&mut self, services: &S, panels_resource: &mut PanelsResource) -> Profile;
 }

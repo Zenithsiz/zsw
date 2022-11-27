@@ -57,13 +57,13 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 	let (image_loader, image_resizer, image_receiver) = zsw_img::loader::create();
 	let (panels_renderer, panels_editor, panels_resource) =
 		zsw_panels::create(&wgpu, &mut wgpu_surface_resource, wgpu_resize_receiver);
-	let (egui_renderer, mut egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
+	let (egui_renderer, egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
 	let profiles_manager = zsw_profiles::create();
 	let (mut input_updater, input_receiver) = zsw_input::create();
 	let renderer = Renderer::new(panels_renderer, egui_renderer, input_receiver.clone(), wgpu_renderer);
-	let mut settings_window = SettingsWindow::new(&window);
-	let mut event_handler = EventHandler::new();
 	let profile_applier = ProfileApplier::new();
+	let mut settings_window = SettingsWindow::new(&window, egui_painter, input_receiver, profile_applier.clone());
+	let mut event_handler = EventHandler::new();
 	let image_provider = AppRawImageProvider::new(playlist_receiver);
 
 
@@ -138,8 +138,8 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 		.context("Unable to spawn image resizer tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources, profile_applier, input_receiver] "Settings window runner" => {
-			settings_window.run(&*services, &mut { resources }, &mut egui_painter, profile_applier, &mut { input_receiver })
+		[services, resources] "Settings window runner" => {
+			settings_window.run(&*services, &mut { resources })
 	})
 	.context("Unable to spawn settings window task")?;
 	let renderer_task = spawn_service_runner!(
