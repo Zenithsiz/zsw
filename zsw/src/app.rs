@@ -50,18 +50,17 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 
 	// Create all services and resources
 	// TODO: Execute futures in background and continue initializing
-	let (wgpu, mut wgpu_renderer, wgpu_resize_receiver, mut wgpu_surface_resource) =
-		zsw_wgpu::create(Arc::clone(&window))
-			.await
-			.context("Unable to create renderer")?;
+	let (wgpu, wgpu_renderer, wgpu_resize_receiver, mut wgpu_surface_resource) = zsw_wgpu::create(Arc::clone(&window))
+		.await
+		.context("Unable to create renderer")?;
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
 	let (image_loader, image_resizer, image_receiver) = zsw_img::loader::create();
-	let (mut panels_renderer, panels_editor, panels_resource) =
+	let (panels_renderer, panels_editor, panels_resource) =
 		zsw_panels::create(&wgpu, &mut wgpu_surface_resource, wgpu_resize_receiver);
-	let (mut egui_renderer, mut egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
+	let (egui_renderer, mut egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
 	let profiles_manager = zsw_profiles::create();
-	let (mut input_updater, mut input_receiver) = zsw_input::create();
-	let renderer = Renderer::new();
+	let (mut input_updater, input_receiver) = zsw_input::create();
+	let renderer = Renderer::new(panels_renderer, egui_renderer, input_receiver.clone(), wgpu_renderer);
 	let mut settings_window = SettingsWindow::new(&window);
 	let mut event_handler = EventHandler::new();
 	let profile_applier = ProfileApplier::new();
@@ -76,7 +75,6 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 		playlist_manager,
 		profiles_manager,
 		panels_editor,
-		renderer,
 	});
 	let resources = Resources(Arc::new(ResourcesInner {
 		panels:       Mutex::new(panels_resource),
@@ -146,8 +144,9 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 	.context("Unable to spawn settings window task")?;
 	let renderer_task = spawn_service_runner!(
 		[services, resources] "Renderer" => {
-			services.renderer.run(&*services, &mut { resources }, &mut panels_renderer, &mut egui_renderer, &mut input_receiver, &mut wgpu_renderer)
-	}).context("Unable to spawn renderer task")?;
+			renderer.run(&*services, &mut { resources })
+	})
+	.context("Unable to spawn renderer task")?;
 
 	// Then create the join future
 	let join_handle = async move {

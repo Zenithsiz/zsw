@@ -21,25 +21,39 @@ use {
 /// Renderer
 #[derive(Debug)]
 #[allow(missing_copy_implementations)] // We're a service, we're not supposed to be copy
-pub struct Renderer {}
+pub struct Renderer {
+	/// Panels renderer
+	panels_renderer: PanelsRenderer,
+
+	/// Egui renderer
+	egui_renderer: EguiRenderer,
+
+	/// Input receiver
+	input_receiver: InputReceiver,
+
+	/// Wgpu renderer
+	wgpu_renderer: WgpuRenderer,
+}
 
 impl Renderer {
 	/// Creates a new renderer
 	#[must_use]
-	pub fn new() -> Self {
-		Self {}
+	pub fn new(
+		panels_renderer: PanelsRenderer,
+		egui_renderer: EguiRenderer,
+		input_receiver: InputReceiver,
+		wgpu_renderer: WgpuRenderer,
+	) -> Self {
+		Self {
+			panels_renderer,
+			egui_renderer,
+			input_receiver,
+			wgpu_renderer,
+		}
 	}
 
 	/// Runs the renderer
-	pub async fn run<S, R, P: RawImageProvider>(
-		&self,
-		services: &S,
-		resources: &mut R,
-		panels_renderer: &mut PanelsRenderer,
-		egui_renderer: &mut EguiRenderer,
-		input_receiver: &mut InputReceiver,
-		wgpu_renderer: &mut WgpuRenderer,
-	) -> !
+	pub async fn run<S, R, P: RawImageProvider>(mut self, services: &S, resources: &mut R) -> !
 	where
 		S: Services<Wgpu> + Services<Window> + Services<ImageReceiver<P>> + Services<PanelsEditor>,
 		R: Resources<PanelsResource> + ResourcesTuple2<PanelsResource, WgpuSurfaceResource>,
@@ -51,21 +65,12 @@ impl Renderer {
 			let start_time = Instant::now();
 
 			// Update
-			if let Err(err) = Self::update(services, resources, panels_renderer).await {
+			if let Err(err) = self.update(services, resources).await {
 				tracing::warn!(?err, "Unable to update");
 			}
 
 			// Render
-			if let Err(err) = Self::render(
-				services,
-				resources,
-				panels_renderer,
-				egui_renderer,
-				input_receiver,
-				wgpu_renderer,
-			)
-			.await
-			{
+			if let Err(err) = self.render(services, resources).await {
 				tracing::warn!(?err, "Unable to render");
 			};
 
@@ -78,11 +83,7 @@ impl Renderer {
 	}
 
 	/// Updates all panels
-	async fn update<S, R, P: RawImageProvider>(
-		services: &S,
-		resources: &mut R,
-		panels_renderer: &mut PanelsRenderer,
-	) -> Result<(), anyhow::Error>
+	async fn update<S, R, P: RawImageProvider>(&mut self, services: &S, resources: &mut R) -> Result<(), anyhow::Error>
 	where
 		S: Services<Wgpu> + Services<ImageReceiver<P>> + Services<PanelsEditor>,
 		R: Resources<PanelsResource>,
@@ -91,7 +92,7 @@ impl Renderer {
 
 		// Updates all panels
 		let max_image_size = services.service::<PanelsEditor>().max_image_size(&panels_resource);
-		panels_renderer.update_all(
+		self.panels_renderer.update_all(
 			&mut panels_resource,
 			services.service::<Wgpu>(),
 			services.service::<ImageReceiver<P>>(),
@@ -100,14 +101,7 @@ impl Renderer {
 	}
 
 	/// Renders
-	async fn render<S, R>(
-		services: &S,
-		resources: &mut R,
-		panels_renderer: &mut PanelsRenderer,
-		egui_renderer: &mut EguiRenderer,
-		input_receiver: &mut InputReceiver,
-		wgpu_renderer: &mut WgpuRenderer,
-	) -> Result<(), anyhow::Error>
+	async fn render<S, R>(&mut self, services: &S, resources: &mut R) -> Result<(), anyhow::Error>
 	where
 		S: Services<Wgpu> + Services<Window>,
 		R: ResourcesTuple2<PanelsResource, WgpuSurfaceResource>,
@@ -118,17 +112,19 @@ impl Renderer {
 
 		// Then render
 		let surface_size = wgpu.surface_size(&surface_resource);
-		let mut frame = wgpu_renderer
+		let mut frame = self
+			.wgpu_renderer
 			.start_render(&mut surface_resource)
 			.context("Unable to start render")?;
 
 		// Render the panels
 		{
-			let cursor_pos = input_receiver
+			let cursor_pos = self
+				.input_receiver
 				.cursor_pos()
 				.map_or(Point2::new(0, 0), |pos| Point2::new(pos.x as i32, pos.y as i32));
 
-			panels_renderer
+			self.panels_renderer
 				.render(
 					services,
 					&panels_resource,
@@ -144,7 +140,7 @@ impl Renderer {
 
 		// Render egui
 		// Note: If the egui painter quit, just don't render
-		if let Some((egui_render_pass, egui_output, paint_jobs)) = egui_renderer.render_pass_with_output() {
+		if let Some((egui_render_pass, egui_output, paint_jobs)) = self.egui_renderer.render_pass_with_output() {
 			// Update textures
 			#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 			let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
@@ -175,15 +171,10 @@ impl Renderer {
 				.context("Unable to update textures")?;
 		}
 
-		wgpu_renderer.finish_render(frame, &mut surface_resource, input_receiver);
+		self.wgpu_renderer
+			.finish_render(frame, &mut surface_resource, &mut self.input_receiver);
 		mem::drop(surface_resource);
 
 		Ok(())
-	}
-}
-
-impl Default for Renderer {
-	fn default() -> Self {
-		Self::new()
 	}
 }

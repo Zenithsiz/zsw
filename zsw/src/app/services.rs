@@ -9,7 +9,6 @@ use {
 	zsw_panels::PanelsEditor,
 	zsw_playlist::PlaylistManager,
 	zsw_profiles::ProfilesManager,
-	zsw_renderer::Renderer,
 	zsw_util::ServicesBundle,
 	zsw_wgpu::Wgpu,
 };
@@ -37,9 +36,6 @@ pub struct Services {
 
 	/// Panels editor
 	pub panels_editor: PanelsEditor,
-
-	/// Renderer
-	pub renderer: Renderer,
 }
 
 impl ServicesBundle for Services {}
@@ -52,7 +48,6 @@ impl ServicesBundle for Services {}
 	[ PlaylistManager                 ] [ playlist_manager ];
 	[ ProfilesManager                 ] [ profiles_manager ];
 	[ PanelsEditor                    ] [ panels_editor ];
-	[ Renderer                        ] [ renderer ];
 )]
 impl zsw_util::Services<ty> for Services {
 	fn get(&self) -> &ty {
