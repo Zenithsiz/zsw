@@ -9,7 +9,6 @@ mod event_handler;
 mod image_provider;
 mod profile_applier;
 mod resources;
-mod services;
 
 // Imports
 use {
@@ -18,7 +17,6 @@ use {
 		image_provider::AppRawImageProvider,
 		profile_applier::ProfileApplier,
 		resources::{Resources, ResourcesInner},
-		services::Services,
 	},
 	crate::Config,
 	anyhow::Context,
@@ -61,45 +59,55 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 		zsw_panels::create(wgpu.clone(), &mut wgpu_surface_resource, wgpu_resize_receiver);
 	let (egui_renderer, egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
 	let profiles_manager = zsw_profiles::create();
-	let renderer = Renderer::new(panels_renderer, egui_renderer, input_receiver.clone(), wgpu_renderer);
-	let profile_applier = ProfileApplier::new();
-	let mut settings_window = SettingsWindow::new(&window, egui_painter, input_receiver, profile_applier.clone());
+	let renderer = Renderer::new(
+		panels_renderer,
+		egui_renderer,
+		input_receiver.clone(),
+		wgpu_renderer,
+		wgpu.clone(),
+		Arc::clone(&window),
+		image_receiver,
+		panels_editor.clone(),
+	);
+	let profile_applier = ProfileApplier::new(playlist_manager.clone(), panels_editor.clone());
+	let mut settings_window = SettingsWindow::new(
+		window,
+		egui_painter,
+		input_receiver,
+		profile_applier.clone(),
+		wgpu,
+		panels_editor,
+		playlist_manager,
+		profiles_manager.clone(),
+	);
 	let mut event_handler = EventHandler::new();
 	let image_provider = AppRawImageProvider::new(playlist_receiver);
 
 
-	// Bundle the services and resources
-	let services = Arc::new(Services {
-		window,
-		wgpu,
-		image_receiver,
-		playlist_manager,
-		profiles_manager,
-		panels_editor,
-	});
+	// Bundle the resources
 	let resources = Resources(Arc::new(ResourcesInner {
 		panels:       Mutex::new(panels_resource),
 		wgpu_surface: Mutex::new(wgpu_surface_resource),
 	}));
-	tracing::debug!(?services, ?resources, "Created services and resources");
+	tracing::debug!(?resources, "Created resources");
 
 	// Spawn all
 	let profiles_loader_task = spawn_service_runner!(
-		[services, resources, config, profile_applier] "Profiles loader" => async move {
+		[resources, config, profiles_manager, profile_applier] "Profiles loader" => async move {
 			let mut resources = resources;
 
 			// Load all profiles
 			for profile_path in &config.profiles {
-				if let Err(err) = services.profiles_manager.load(profile_path.clone()) {
+				if let Err(err) = profiles_manager.load(profile_path.clone()) {
 					tracing::warn!("Unable to load profile: {err:?}");
 				}
 			}
 
 			// Apply the first one
-			if let Some((default_profile_path, default_profile)) = services.profiles_manager.first_profile() {
+			if let Some((default_profile_path, default_profile)) = profiles_manager.first_profile() {
 				tracing::info!("Applying default profile {default_profile_path:?}");
 				let mut panels_resource = resources.resource::<PanelsResource>().await;
-				profile_applier.apply(&default_profile, &services, &mut panels_resource);
+				profile_applier.apply(&default_profile, &mut panels_resource);
 			}
 		}
 	)
@@ -139,13 +147,13 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 		.context("Unable to spawn image resizer tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
-		[services, resources] "Settings window runner" => {
-			settings_window.run(&*services, &mut { resources })
+		[resources] "Settings window runner" => {
+			settings_window.run(&mut { resources })
 	})
 	.context("Unable to spawn settings window task")?;
 	let renderer_task = spawn_service_runner!(
-		[services, resources] "Renderer" => {
-			renderer.run(&*services, &mut { resources })
+		[resources] "Renderer" => {
+			renderer.run(&mut { resources })
 	})
 	.context("Unable to spawn renderer task")?;
 
@@ -174,13 +182,7 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 
 	// Run the event loop until exit
 	let _ = event_loop.run_return(|event, _, control_flow| {
-		event_handler.handle_event(
-			&services,
-			event,
-			control_flow,
-			&mut egui_event_handler,
-			&mut input_updater,
-		);
+		event_handler.handle_event(event, control_flow, &mut egui_event_handler, &mut input_updater);
 	});
 
 	// Then join all tasks

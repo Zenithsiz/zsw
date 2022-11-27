@@ -22,7 +22,7 @@ use zsw_wgpu::{Wgpu, WgpuResizeReceiver, WgpuSurfaceResource};
 
 
 /// Panels editor
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 #[allow(missing_copy_implementations)] // It might not in the future
 pub struct PanelsEditor {}
 

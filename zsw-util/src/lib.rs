@@ -20,7 +20,6 @@ mod fetch_update;
 mod lock;
 mod rect;
 mod resource;
-mod service;
 mod thread;
 
 // Exports
@@ -31,7 +30,6 @@ pub use {
 	lock::Lock,
 	rect::Rect,
 	resource::{Resources, ResourcesBundle, ResourcesTuple2},
-	service::{Services, ServicesBundle},
 	thread::ThreadSpawner,
 };
 

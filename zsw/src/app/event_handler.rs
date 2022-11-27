@@ -21,9 +21,8 @@ impl EventHandler {
 
 	/// Handles an event
 	#[allow(clippy::unused_self)] // We might use it in the future
-	pub fn handle_event<S>(
+	pub fn handle_event(
 		&mut self,
-		_services: &S,
 		event: Event<'_, !>,
 		control_flow: &mut EventLoopControlFlow,
 		egui_event_handler: &mut EguiEventHandler,
