@@ -4,7 +4,7 @@
 use {
 	super::Services,
 	std::path::PathBuf,
-	zsw_panels::Panel,
+	zsw_panels::{Panel, PanelsShader},
 	zsw_profiles::{profile, Profile},
 };
 
@@ -43,6 +43,22 @@ impl ProfileApplier {
 			},
 		}
 	}
+
+	/// Converts a `profile::PanelsShader` to a `PanelsShader`
+	fn create_shader(panels_shader: profile::PanelsShader) -> PanelsShader {
+		match panels_shader {
+			profile::PanelsShader::Fade => PanelsShader::Fade,
+			profile::PanelsShader::FadeWhite { strength } => PanelsShader::FadeWhite { strength },
+		}
+	}
+
+	/// Converts a `PanelsShader` to `profile::PanelsShader`
+	fn dump_shader(panels_shader: PanelsShader) -> profile::PanelsShader {
+		match panels_shader {
+			PanelsShader::Fade => profile::PanelsShader::Fade,
+			PanelsShader::FadeWhite { strength } => profile::PanelsShader::FadeWhite { strength },
+		}
+	}
 }
 
 impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
@@ -61,6 +77,9 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 		services
 			.panels_editor
 			.set_max_image_size(panels_resource, profile.max_image_size);
+		services
+			.panels_editor
+			.set_shader(panels_resource, Self::create_shader(profile.panels_shader));
 	}
 
 	fn current(&self, services: &Services, panels_resource: &mut zsw_panels::PanelsResource) -> zsw_profiles::Profile {
@@ -80,6 +99,7 @@ impl zsw_settings_window::ProfileApplier<Services> for ProfileApplier {
 				.map(|panel| Self::dump_panel(&panel.panel))
 				.collect(),
 			max_image_size: services.panels_editor.max_image_size(panels_resource),
+			panels_shader:  Self::dump_shader(services.panels_editor.shader(panels_resource)),
 		}
 	}
 }

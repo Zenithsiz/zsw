@@ -16,6 +16,10 @@ pub struct Profile {
 	/// Max image size
 	#[serde(default)]
 	pub max_image_size: Option<u32>,
+
+	/// Panels shader
+	#[serde(default)]
+	pub panels_shader: PanelsShader,
 }
 
 /// Profile panel
@@ -61,4 +65,16 @@ impl Default for PanelParallax {
 			reverse: zsw_util::default_panel_parallax_reverse(),
 		}
 	}
+}
+
+/// Shader to render with
+#[derive(PartialEq, Clone, Copy, Default, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub enum PanelsShader {
+	/// Fade
+	#[default]
+	Fade,
+
+	/// Fade-white
+	FadeWhite { strength: f32 },
 }

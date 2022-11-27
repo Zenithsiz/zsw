@@ -1,6 +1,7 @@
 {
 	"root_path": "/home/zenithsiz/.wallpaper/active",
 	"max_image_size": 4096,
+	"panels_shader": { "FadeWhite": { "strength": 10 } },
 	"panels": [
 		{
 			"geometry": {
