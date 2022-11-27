@@ -2,3 +2,5 @@ profiles:
   - 'profile.json'
 image_loader_threads: 1
 image_resizer_threads: 1
+tokio_threads: 1
+rayon_threads: 1

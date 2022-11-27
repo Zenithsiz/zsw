@@ -35,11 +35,13 @@ use {
 	std::{
 		fs,
 		io,
+		num::NonZeroUsize,
 		path::Path,
 		sync::{
 			atomic::{self, AtomicUsize},
 			Arc,
 		},
+		thread,
 	},
 };
 
@@ -72,11 +74,17 @@ fn main() -> Result<(), anyhow::Error> {
 	// Note: This is used indirectly in `image` by `jpeg-decoder`
 	rayon::ThreadPoolBuilder::new()
 		.thread_name(|idx| format!("rayon${idx}"))
+		.num_threads(
+			config
+				.rayon_threads
+				.or_else(|| thread::available_parallelism().ok())
+				.map_or(1, NonZeroUsize::get),
+		)
 		.build_global()
 		.context("Unable to build `rayon` global thread pool")?;
 
 	// Create the runtime and enter it
-	let runtime = self::create_runtime()?;
+	let runtime = self::create_runtime(&config)?;
 	let _runtime_enter = runtime.enter();
 
 	// Run the app and restart if we get an error (up to 5 errors)
@@ -99,7 +107,7 @@ fn main() -> Result<(), anyhow::Error> {
 }
 
 /// Creates the tokio runtime
-fn create_runtime() -> Result<tokio::runtime::Runtime, anyhow::Error> {
+fn create_runtime(config: &Config) -> Result<tokio::runtime::Runtime, anyhow::Error> {
 	tokio::runtime::Builder::new_multi_thread()
 		.enable_time()
 		.thread_name_fn(|| {
@@ -107,6 +115,12 @@ fn create_runtime() -> Result<tokio::runtime::Runtime, anyhow::Error> {
 			let id = NEXT_ID.fetch_add(1, atomic::Ordering::AcqRel);
 			format!("tokio${id}")
 		})
+		.worker_threads(
+			config
+				.tokio_threads
+				.or_else(|| thread::available_parallelism().ok())
+				.map_or(1, NonZeroUsize::get),
+		)
 		.build()
 		.context("Unable to create runtime")
 }
