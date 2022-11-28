@@ -58,6 +58,8 @@ impl ProfileApplier {
 		match panels_shader {
 			profile::PanelsShader::Fade => PanelsShader::Fade,
 			profile::PanelsShader::FadeWhite { strength } => PanelsShader::FadeWhite { strength },
+			profile::PanelsShader::FadeOut { strength } => PanelsShader::FadeOut { strength },
+			profile::PanelsShader::FadeIn { strength } => PanelsShader::FadeIn { strength },
 		}
 	}
 
@@ -66,6 +68,8 @@ impl ProfileApplier {
 		match panels_shader {
 			PanelsShader::Fade => profile::PanelsShader::Fade,
 			PanelsShader::FadeWhite { strength } => profile::PanelsShader::FadeWhite { strength },
+			PanelsShader::FadeOut { strength } => profile::PanelsShader::FadeOut { strength },
+			PanelsShader::FadeIn { strength } => profile::PanelsShader::FadeIn { strength },
 		}
 	}
 }

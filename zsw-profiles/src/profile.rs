@@ -77,4 +77,10 @@ pub enum PanelsShader {
 
 	/// Fade-white
 	FadeWhite { strength: f32 },
+
+	/// Fade-out
+	FadeOut { strength: f32 },
+
+	/// Fade-in
+	FadeIn { strength: f32 },
 }

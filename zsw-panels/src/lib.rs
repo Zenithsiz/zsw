@@ -104,6 +104,12 @@ pub enum PanelsShader {
 
 	/// Fade-white
 	FadeWhite { strength: f32 },
+
+	/// Fade-out
+	FadeOut { strength: f32 },
+
+	/// Fade-in
+	FadeIn { strength: f32 },
 }
 
 impl PanelsShader {
@@ -113,6 +119,8 @@ impl PanelsShader {
 		match self {
 			Self::Fade => "Fade",
 			Self::FadeWhite { .. } => "Fade White",
+			Self::FadeOut { .. } => "Fade Out",
+			Self::FadeIn { .. } => "Fade In",
 		}
 	}
 }

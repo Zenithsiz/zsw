@@ -332,11 +332,16 @@ fn draw_panels(
 	ui.vertical(|ui| {
 		ui.label("Shader");
 		let cur_shader = panels_editor.shader_mut(panels_resource);
-		egui::ComboBox::from_label("Select one!")
+		egui::ComboBox::from_id_source(std::ptr::addr_of!(cur_shader))
 			.selected_text(cur_shader.name())
 			.show_ui(ui, |ui| {
 				// TODO: Not have default values here?
-				let shaders = [PanelsShader::Fade, PanelsShader::FadeWhite { strength: 1.0 }];
+				let shaders = [
+					PanelsShader::Fade,
+					PanelsShader::FadeWhite { strength: 1.0 },
+					PanelsShader::FadeOut { strength: 0.2 },
+					PanelsShader::FadeIn { strength: 0.2 },
+				];
 				for shader in shaders {
 					ui.selectable_value(cur_shader, shader, shader.name());
 				}
@@ -348,6 +353,18 @@ fn draw_panels(
 				ui.horizontal(|ui| {
 					ui.label("Strength");
 					egui::Slider::new(strength, 0.0..=20.0).ui(ui);
+				});
+			},
+			PanelsShader::FadeOut { strength } => {
+				ui.horizontal(|ui| {
+					ui.label("Strength");
+					egui::Slider::new(strength, 0.0..=2.0).ui(ui);
+				});
+			},
+			PanelsShader::FadeIn { strength } => {
+				ui.horizontal(|ui| {
+					ui.label("Strength");
+					egui::Slider::new(strength, 0.0..=2.0).ui(ui);
 				});
 			},
 		}

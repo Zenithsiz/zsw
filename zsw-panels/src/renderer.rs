@@ -86,6 +86,18 @@ impl PanelsRenderer {
 			&image_bind_group_layout,
 			include_str!("renderer/fade_white.wgsl"),
 		);
+		let fade_out_pipeline = self::create_render_pipeline(
+			&wgpu,
+			&uniforms_bind_group_layout,
+			&image_bind_group_layout,
+			include_str!("renderer/fade_out.wgsl"),
+		);
+		let fade_in_pipeline = self::create_render_pipeline(
+			&wgpu,
+			&uniforms_bind_group_layout,
+			&image_bind_group_layout,
+			include_str!("renderer/fade_in.wgsl"),
+		);
 
 		// Create the framebuffer
 		let msaa_framebuffer = self::create_msaa_framebuffer(&wgpu, wgpu.surface_size(surface_resource));
@@ -94,6 +106,8 @@ impl PanelsRenderer {
 			pipelines: PanelsPipelines {
 				fade:       fade_render_pipeline,
 				fade_white: fade_white_render_pipeline,
+				fade_out:   fade_out_pipeline,
+				fade_in:    fade_in_pipeline,
 			},
 			vertices,
 			indices,
@@ -188,6 +202,8 @@ impl PanelsRenderer {
 		let pipeline = match resource.shader {
 			PanelsShader::Fade => &self.pipelines.fade,
 			PanelsShader::FadeWhite { .. } => &self.pipelines.fade_white,
+			PanelsShader::FadeOut { .. } => &self.pipelines.fade_out,
+			PanelsShader::FadeIn { .. } => &self.pipelines.fade_in,
 		};
 		render_pass.set_pipeline(pipeline);
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -202,9 +218,12 @@ impl PanelsRenderer {
 			for descriptor in panel.image_descriptors() {
 				// Update the uniforms
 				let uvs_matrix = descriptor.uvs_matrix(cursor_pos);
+				#[allow(clippy::match_same_arms)] // They might differ in the future
 				let extra = match resource.shader {
 					PanelsShader::Fade => [0.0; 3],
 					PanelsShader::FadeWhite { strength } => [strength, 0.0, 0.0],
+					PanelsShader::FadeOut { strength } => [strength, 0.0, 0.0],
+					PanelsShader::FadeIn { strength } => [strength, 0.0, 0.0],
 				};
 				let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha(), extra);
 				let image = descriptor.image();
@@ -229,6 +248,12 @@ pub struct PanelsPipelines {
 
 	/// Fade-white Render pipeline
 	fade_white: wgpu::RenderPipeline,
+
+	/// Fade-out Render pipeline
+	fade_out: wgpu::RenderPipeline,
+
+	/// Fade-in Render pipeline
+	fade_in: wgpu::RenderPipeline,
 }
 
 /// Creates the vertices
