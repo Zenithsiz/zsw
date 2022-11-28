@@ -59,8 +59,7 @@ fn fs_main(in: VertexOutput) -> FragOutput {
 
 	// Sample the color and set the alpha
 	let uvs = uniforms.uvs_matrix * vec4<f32>(in.uvs, 0.0, 1.0);
-	// TODO: Improve this formula? Somewhat fails for blacks
-	out.color = textureSample(texture, texture_sampler, uvs.xy) / pow(uniforms.alpha, uniforms.strength);
+	out.color = textureSample(texture, texture_sampler, uvs.xy) - (pow(uniforms.alpha, uniforms.strength) - 1.0);
 	out.color.a = uniforms.alpha;
 
 	return out;
