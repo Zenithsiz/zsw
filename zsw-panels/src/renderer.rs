@@ -216,20 +216,25 @@ impl PanelsRenderer {
 
 			// Then go through all image descriptors to render
 			for descriptor in panel.image_descriptors() {
-				// Update the uniforms
 				let uvs_matrix = descriptor.uvs_matrix(cursor_pos);
-				#[allow(clippy::match_same_arms)] // They might differ in the future
-				let extra = match resource.shader {
-					PanelsShader::Fade => [0.0; 3],
-					PanelsShader::FadeWhite { strength } => [strength, 0.0, 0.0],
-					PanelsShader::FadeOut { strength } => [strength, 0.0, 0.0],
-					PanelsShader::FadeIn { strength } => [strength, 0.0, 0.0],
+
+				/// Writes uniforms with `$extra` into `descriptor.image().uniforms()`
+				macro write_uniforms($extra:expr) {{
+					let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha(), $extra);
+					queue.write_buffer(descriptor.image().uniforms(), 0, uniforms.as_bytes())
+				}}
+
+				// Update the uniforms
+				//let base = uniform::BaseUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha());
+				match resource.shader {
+					PanelsShader::Fade => write_uniforms!(uniform::FadeExtra {}),
+					PanelsShader::FadeWhite { strength } => write_uniforms!(uniform::FadeWhiteExtra { strength }),
+					PanelsShader::FadeOut { strength } => write_uniforms!(uniform::FadeOutExtra { strength }),
+					PanelsShader::FadeIn { strength } => write_uniforms!(uniform::FadeInExtra { strength }),
 				};
-				let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha(), extra);
-				let image = descriptor.image();
-				queue.write_buffer(image.uniforms(), 0, bytemuck::cast_slice(&[uniforms]));
 
 				// Bind the image and draw
+				let image = descriptor.image();
 				render_pass.set_bind_group(0, image.uniforms_bind_group(), &[]);
 				render_pass.set_bind_group(1, image.image_bind_group(), &[]);
 				render_pass.draw_indexed(0..6, 0, 0..1);

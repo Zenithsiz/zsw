@@ -2,7 +2,6 @@
 
 // Imports
 use {
-	super::PanelUniforms,
 	crate::PanelsRenderer,
 	cgmath::Vector2,
 	image::DynamicImage,
@@ -57,10 +56,10 @@ impl PanelImage {
 
 		// Create the uniforms
 		// Note: Initial value doesn't matter
-		let uniforms = PanelUniforms::default();
 		let uniforms_descriptor = wgpu::util::BufferInitDescriptor {
 			label:    None,
-			contents: bytemuck::cast_slice(std::slice::from_ref(&uniforms)),
+			// TODO: Resize buffer as we go?
+			contents: &[0; 0x100],
 			usage:    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 		};
 		let uniforms = wgpu.device().create_buffer_init(&uniforms_descriptor);
