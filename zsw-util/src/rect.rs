@@ -4,12 +4,11 @@
 use {
 	anyhow::Context,
 	cgmath::{num_traits::Num, Point2, Vector2},
-	std::{error::Error, fmt},
+	std::{borrow::Cow, error::Error, fmt},
 };
 
 /// A rectangle
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)] // TODO: serialize to string
 pub struct Rect<P, S = P> {
 	/// Position
 	pub pos: Point2<P>,
@@ -129,5 +128,24 @@ impl fmt::Display for Rect<i32, u32> {
 		}
 
 		Ok(())
+	}
+}
+
+impl<'de> serde::Deserialize<'de> for Rect<i32, u32> {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		let s = Cow::deserialize(deserializer)?;
+		Self::parse_from_geometry(&s).map_err(serde::de::Error::custom)
+	}
+}
+
+impl serde::Serialize for Rect<i32, u32> {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		serializer.serialize_str(&self.to_string())
 	}
 }
