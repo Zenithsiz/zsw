@@ -3,8 +3,8 @@
 // Imports
 use {
 	anyhow::Context,
-	cgmath::{num_traits::Num, Point2, Vector2},
-	std::{borrow::Cow, error::Error, fmt},
+	cgmath::{Point2, Vector2},
+	std::{borrow::Cow, fmt, str::FromStr},
 };
 
 /// A rectangle
@@ -15,45 +15,6 @@ pub struct Rect<P, S = P> {
 
 	/// Size
 	pub size: Vector2<S>,
-}
-
-impl<P, S> Rect<P, S> {
-	/// Parses a rect from a geometry, `{width}x{height}+{x}+{y}` or `{width}x{height}`
-	#[allow(clippy::missing_errors_doc)] // Fails it not in the specified format
-	pub fn parse_from_geometry(s: &str) -> Result<Self, anyhow::Error>
-	where
-		P: Num,
-		<P as Num>::FromStrRadixErr: 'static + Send + Sync + Error,
-		S: Num,
-		<S as Num>::FromStrRadixErr: 'static + Send + Sync + Error,
-	{
-		// Split at the first `+`, or just use it all, if there's no position
-		let (size, pos) = s
-			.split_once('+')
-			.map_or((s, None), |(height, rest)| (height, Some(rest)));
-
-		// Split at the first `x` to get the width and height
-		let (width, height) = size.split_once('x').context("Unable to find `x` in size")?;
-
-		let size = Vector2::new(
-			S::from_str_radix(width, 10).context("Unable to parse width")?,
-			S::from_str_radix(height, 10).context("Unable to parse height")?,
-		);
-
-		// Optionally get the position if it exists
-		let pos = match pos {
-			Some(s) => {
-				let (x, y) = s.split_once('+').context("Unable to find `+` in position")?;
-				Point2::new(
-					P::from_str_radix(x, 10).context("Unable to parse x")?,
-					P::from_str_radix(y, 10).context("Unable to parse y")?,
-				)
-			},
-			None => Point2::new(P::zero(), P::zero()),
-		};
-
-		Ok(Self { pos, size })
-	}
 }
 
 impl Rect<i32, u32> {
@@ -131,13 +92,46 @@ impl fmt::Display for Rect<i32, u32> {
 	}
 }
 
+impl FromStr for Rect<i32, u32> {
+	type Err = anyhow::Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		// Split at the first `+`, or just use it all, if there's no position
+		let (size, pos) = s
+			.split_once('+')
+			.map_or((s, None), |(height, rest)| (height, Some(rest)));
+
+		// Split at the first `x` to get the width and height
+		let (width, height) = size.split_once('x').context("Unable to find `x` in size")?;
+
+		let size = Vector2::new(
+			width.parse::<u32>().context("Unable to parse width")?,
+			height.parse::<u32>().context("Unable to parse height")?,
+		);
+
+		// Optionally get the position if it exists
+		let pos = match pos {
+			Some(s) => {
+				let (x, y) = s.split_once('+').context("Unable to find `+` in position")?;
+				Point2::new(
+					x.parse::<i32>().context("Unable to parse x")?,
+					y.parse::<i32>().context("Unable to parse y")?,
+				)
+			},
+			None => Point2::new(0, 0),
+		};
+
+		Ok(Self { pos, size })
+	}
+}
+
 impl<'de> serde::Deserialize<'de> for Rect<i32, u32> {
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where
 		D: serde::Deserializer<'de>,
 	{
 		let s = Cow::deserialize(deserializer)?;
-		Self::parse_from_geometry(&s).map_err(serde::de::Error::custom)
+		Self::from_str(&s).map_err(serde::de::Error::custom)
 	}
 }
 
