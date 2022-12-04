@@ -11,26 +11,14 @@
 )]
 #![allow(incomplete_features)]
 
-use std::path::PathBuf;
-
 // Modules
-mod condvar_future;
-mod display_wrapper;
-mod fetch_update;
-mod lock;
 mod rect;
 mod resource;
-mod thread;
 
 // Exports
 pub use {
-	condvar_future::CondvarFuture,
-	display_wrapper::DisplayWrapper,
-	fetch_update::FetchUpdate,
-	lock::Lock,
 	rect::Rect,
 	resource::{Resources, ResourcesBundle, ResourcesTuple2},
-	thread::ThreadSpawner,
 };
 
 // Imports
@@ -40,7 +28,7 @@ use {
 	std::{
 		fs,
 		future::Future,
-		path::Path,
+		path::{Path, PathBuf},
 		time::{Duration, Instant},
 	},
 };
