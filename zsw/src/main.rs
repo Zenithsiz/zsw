@@ -90,7 +90,7 @@ fn main() -> Result<(), anyhow::Error> {
 	// Run the app and restart if we get an error (up to 5 errors)
 	let mut errors = 0;
 	while errors < 5 {
-		match runtime.block_on(app::run(&config)) {
+		match runtime.block_on(app::run(&dirs, &config)) {
 			Ok(()) => {
 				tracing::info!("Application finished");
 				break;

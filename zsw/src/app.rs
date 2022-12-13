@@ -21,6 +21,7 @@ use {
 	crate::Config,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
+	directories::ProjectDirs,
 	futures::lock::Mutex,
 	std::{num::NonZeroUsize, sync::Arc, thread},
 	tokio::task,
@@ -41,7 +42,14 @@ use {
 
 /// Runs the application
 #[allow(clippy::too_many_lines)] // TODO: Refactor
-pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
+pub async fn run(dirs: &ProjectDirs, config: &Arc<Config>) -> Result<(), anyhow::Error> {
+	// Setup paths
+	// TODO: Move this to a unified config?
+	let panels_shader_path = match cfg!(feature = "dev_shaders") {
+		true => "shaders/panels/fade.wgsl".into(),
+		false => dirs.data_dir().join("shaders/panels/fade.wgsl"),
+	};
+
 	// Build the window
 	let (mut event_loop, window) = self::create_window()?;
 	let window = Arc::new(window);
@@ -55,8 +63,13 @@ pub async fn run(config: &Arc<Config>) -> Result<(), anyhow::Error> {
 			.context("Unable to create renderer")?;
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
 	let (image_loader, image_resizer, image_receiver) = zsw_img::loader::create();
-	let (panels_renderer, panels_editor, panels_resource) =
-		zsw_panels::create(wgpu.clone(), &mut wgpu_surface_resource, wgpu_resize_receiver);
+	let (panels_renderer, panels_editor, panels_resource) = zsw_panels::create(
+		wgpu.clone(),
+		&mut wgpu_surface_resource,
+		wgpu_resize_receiver,
+		panels_shader_path,
+	)
+	.context("Unable to create panels service")?;
 	let (egui_renderer, egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu);
 	let profiles_manager = zsw_profiles::create();
 	let renderer = Renderer::new(

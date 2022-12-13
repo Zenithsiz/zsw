@@ -18,7 +18,11 @@ pub use self::{
 };
 
 // Imports
-use zsw_wgpu::{Wgpu, WgpuResizeReceiver, WgpuSurfaceResource};
+use {
+	anyhow::Context,
+	std::path::PathBuf,
+	zsw_wgpu::{Wgpu, WgpuResizeReceiver, WgpuSurfaceResource},
+};
 
 
 /// Panels editor
@@ -126,19 +130,20 @@ impl PanelsShader {
 }
 
 /// Creates the panels service
-#[must_use]
 pub fn create(
 	wgpu: Wgpu,
 	surface_resource: &mut WgpuSurfaceResource,
 	wgpu_resize_receiver: WgpuResizeReceiver,
-) -> (PanelsRenderer, PanelsEditor, PanelsResource) {
-	(
-		PanelsRenderer::new(wgpu, surface_resource, wgpu_resize_receiver),
+	shader_path: PathBuf,
+) -> Result<(PanelsRenderer, PanelsEditor, PanelsResource), anyhow::Error> {
+	Ok((
+		PanelsRenderer::new(wgpu, surface_resource, wgpu_resize_receiver, shader_path)
+			.context("Unable to create panels renderer")?,
 		PanelsEditor {},
 		PanelsResource {
 			panels:         vec![],
 			max_image_size: None,
 			shader:         PanelsShader::Fade,
 		},
-	)
+	))
 }

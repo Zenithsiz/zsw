@@ -20,6 +20,7 @@ cgmath = { version = "0.18.0", features = ["serde"] }
 
 # Util
 duplicate = "0.4.1"
+itertools = "0.10.5"
 
 # Error
 anyhow = "1.0.66"

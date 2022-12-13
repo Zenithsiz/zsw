@@ -7,18 +7,22 @@
 	generators,
 	never_type,
 	type_alias_impl_trait,
-	async_fn_in_trait
+	async_fn_in_trait,
+	if_let_guard,
+	let_chains
 )]
 #![allow(incomplete_features)]
 
 // Modules
 mod rect;
 mod resource;
+mod tpp;
 
 // Exports
 pub use {
 	rect::Rect,
 	resource::{Resources, ResourcesBundle, ResourcesTuple2},
+	tpp::Tpp,
 };
 
 // Imports
