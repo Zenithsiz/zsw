@@ -1,5 +1,9 @@
 //! Uniforms
 
+// Lints
+#![allow(clippy::trailing_empty_array)] // Occurs inside `derive(Pod)`
+
+
 // Imports
 use bytemuck::{Pod, Zeroable};
 
@@ -65,9 +69,6 @@ pub struct PanelUniforms<X: UniformsExtra> {
 
 	/// Extra
 	extra: X,
-
-	/// Padding
-	_pad: X::Pad,
 }
 
 impl<X: UniformsExtra> PanelUniforms<X> {
@@ -87,7 +88,6 @@ impl<X: UniformsExtra> PanelUniforms<X> {
 			front_alpha,
 
 			extra,
-			_pad: X::Pad::zeroed(),
 		}
 	}
 
@@ -99,53 +99,46 @@ impl<X: UniformsExtra> PanelUniforms<X> {
 	}
 }
 
-pub trait UniformsExtra {
-	/// Padding type
-	type Pad: Zeroable + Pod;
-}
+pub trait UniformsExtra: Pod {}
 
 
 /// Fade extra
 #[derive(PartialEq, Eq, Clone, Copy, Default, Debug)]
+#[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeExtra {}
 
-impl UniformsExtra for FadeExtra {
-	type Pad = [u8; 3];
-}
+impl UniformsExtra for FadeExtra {}
 
 /// Fade-white extra
 #[derive(PartialEq, Clone, Copy, Default, Debug)]
+#[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeWhiteExtra {
 	/// Strength
 	pub strength: f32,
 }
 
-impl UniformsExtra for FadeWhiteExtra {
-	type Pad = [u8; 2];
-}
+impl UniformsExtra for FadeWhiteExtra {}
 
 /// Fade-out extra
 #[derive(PartialEq, Clone, Copy, Default, Debug)]
+#[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeOutExtra {
 	/// Strength
 	pub strength: f32,
 }
 
-impl UniformsExtra for FadeOutExtra {
-	type Pad = [u8; 2];
-}
+impl UniformsExtra for FadeOutExtra {}
 
 /// Fade-in extra
 #[derive(PartialEq, Clone, Copy, Default, Debug)]
+#[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeInExtra {
 	/// Strength
 	pub strength: f32,
 }
 
-impl UniformsExtra for FadeInExtra {
-	type Pad = [u8; 2];
-}
+impl UniformsExtra for FadeInExtra {}
