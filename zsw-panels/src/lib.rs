@@ -14,7 +14,7 @@ pub use self::{
 	image::PanelImage,
 	panel::Panel,
 	renderer::{PanelUniforms, PanelVertex, PanelsRenderer},
-	state::{PanelState, PanelStateImage, PanelStateImages},
+	state::{PanelState, PanelStateImageState, PanelStateImagesState},
 };
 
 // Imports
@@ -28,13 +28,16 @@ use {
 /// Panels editor
 #[derive(Clone, Debug)]
 #[allow(missing_copy_implementations)] // It might not in the future
-pub struct PanelsEditor {}
+pub struct PanelsEditor {
+	/// Wgpu
+	wgpu: Wgpu,
+}
 
 #[allow(clippy::unused_self)] // For accessing resources, we should require the service
 impl PanelsEditor {
 	/// Adds a new panel
 	pub fn add_panel(&mut self, resource: &mut PanelsResource, panel: Panel) {
-		resource.panels.push(PanelState::new(panel));
+		resource.panels.push(PanelState::new(resource, &self.wgpu, panel));
 	}
 
 	/// Returns all panels
@@ -51,7 +54,10 @@ impl PanelsEditor {
 
 	/// Replaces all panels
 	pub fn replace_panels(&mut self, resource: &mut PanelsResource, panels: impl IntoIterator<Item = Panel>) {
-		resource.panels = panels.into_iter().map(PanelState::new).collect();
+		resource.panels = panels
+			.into_iter()
+			.map(|panel| PanelState::new(resource, &self.wgpu, panel))
+			.collect();
 	}
 
 	/// Returns the max image size
@@ -98,6 +104,12 @@ pub struct PanelsResource {
 
 	/// Shader to use
 	shader: PanelsShader,
+
+	/// Uniforms bind group layout
+	uniforms_bind_group_layout: wgpu::BindGroupLayout,
+
+	/// Image bind group layout
+	image_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 /// Shader to render with
@@ -136,14 +148,65 @@ pub fn create(
 	wgpu_resize_receiver: WgpuResizeReceiver,
 	shader_path: PathBuf,
 ) -> Result<(PanelsRenderer, PanelsEditor, PanelsResource), anyhow::Error> {
+	let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(&wgpu);
+	let image_bind_group_layout = self::create_image_bind_group_layout(&wgpu);
+
 	Ok((
-		PanelsRenderer::new(wgpu, surface_resource, wgpu_resize_receiver, shader_path)
+		PanelsRenderer::new(wgpu.clone(), surface_resource, wgpu_resize_receiver, shader_path)
 			.context("Unable to create panels renderer")?,
-		PanelsEditor {},
+		PanelsEditor { wgpu },
 		PanelsResource {
-			panels:         vec![],
+			panels: vec![],
 			max_image_size: None,
-			shader:         PanelsShader::Fade,
+			shader: PanelsShader::Fade,
+			uniforms_bind_group_layout,
+			image_bind_group_layout,
 		},
 	))
+}
+
+/// Creates the uniforms bind group layout
+fn create_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+	let descriptor = wgpu::BindGroupLayoutDescriptor {
+		label:   Some("[zsw::panel] Uniform bind group layout"),
+		entries: &[wgpu::BindGroupLayoutEntry {
+			binding:    0,
+			visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+			ty:         wgpu::BindingType::Buffer {
+				ty:                 wgpu::BufferBindingType::Uniform,
+				has_dynamic_offset: false,
+				min_binding_size:   None,
+			},
+			count:      None,
+		}],
+	};
+
+	wgpu.device().create_bind_group_layout(&descriptor)
+}
+
+/// Creates the image bind group layout
+fn create_image_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+	let descriptor = wgpu::BindGroupLayoutDescriptor {
+		label:   Some("[zsw::panel] Image bind group layout"),
+		entries: &[
+			wgpu::BindGroupLayoutEntry {
+				binding:    0,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty:         wgpu::BindingType::Texture {
+					multisampled:   false,
+					view_dimension: wgpu::TextureViewDimension::D2,
+					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+				},
+				count:      None,
+			},
+			wgpu::BindGroupLayoutEntry {
+				binding:    1,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+				count:      None,
+			},
+		],
+	};
+
+	wgpu.device().create_bind_group_layout(&descriptor)
 }

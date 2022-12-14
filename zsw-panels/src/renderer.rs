@@ -48,12 +48,6 @@ pub struct PanelsRenderer {
 	/// Index buffer
 	indices: wgpu::Buffer,
 
-	/// Uniforms bind group layout
-	uniforms_bind_group_layout: wgpu::BindGroupLayout,
-
-	/// Image bind group layout
-	image_bind_group_layout: wgpu::BindGroupLayout,
-
 	/// Msaa frame-buffer
 	msaa_framebuffer: wgpu::TextureView,
 
@@ -78,10 +72,6 @@ impl PanelsRenderer {
 		// Create the vertex buffer
 		let vertices = self::create_vertices(&wgpu);
 
-		// Create the bind group layouts
-		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(&wgpu);
-		let image_bind_group_layout = self::create_image_bind_group_layout(&wgpu);
-
 		// Create the framebuffer
 		let msaa_framebuffer = self::create_msaa_framebuffer(&wgpu, wgpu.surface_size(surface_resource));
 
@@ -91,22 +81,10 @@ impl PanelsRenderer {
 			shader_path,
 			vertices,
 			indices,
-			uniforms_bind_group_layout,
-			image_bind_group_layout,
 			msaa_framebuffer,
 			wgpu,
 			wgpu_resize_receiver,
 		})
-	}
-
-	/// Returns the uniforms' bind group layout
-	pub fn uniforms_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-		&self.uniforms_bind_group_layout
-	}
-
-	/// Returns the image bind group layout
-	pub fn image_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-		&self.image_bind_group_layout
 	}
 
 	/// Updates all panels
@@ -118,7 +96,7 @@ impl PanelsRenderer {
 		max_image_size: Option<u32>,
 	) -> Result<(), anyhow::Error> {
 		for panel in &mut resource.panels {
-			panel.update(self, wgpu, image_receiver, max_image_size);
+			panel.update(wgpu, image_receiver, &resource.image_bind_group_layout, max_image_size);
 		}
 
 		Ok(())
@@ -151,8 +129,8 @@ impl PanelsRenderer {
 				self.shader_tag = Some(cur_shader_tag);
 				let render_pipeline = self::create_render_pipeline(
 					&self.wgpu,
-					&self.uniforms_bind_group_layout,
-					&self.image_bind_group_layout,
+					&resource.uniforms_bind_group_layout,
+					&resource.image_bind_group_layout,
 					cur_shader_tag,
 					&self.shader_path,
 				)
@@ -216,8 +194,8 @@ impl PanelsRenderer {
 
 				/// Writes uniforms with `$extra` into `descriptor.image().uniforms()`
 				macro write_uniforms($extra:expr) {{
-					let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha(), $extra);
-					queue.write_buffer(descriptor.image().uniforms(), 0, uniforms.as_bytes())
+					let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha, $extra);
+					queue.write_buffer(&descriptor.image.uniforms, 0, uniforms.as_bytes())
 				}}
 
 				// Update the uniforms
@@ -229,9 +207,8 @@ impl PanelsRenderer {
 				};
 
 				// Bind the image and draw
-				let image = descriptor.image();
-				render_pass.set_bind_group(0, image.uniforms_bind_group(), &[]);
-				render_pass.set_bind_group(1, image.image_bind_group(), &[]);
+				render_pass.set_bind_group(0, &descriptor.image.uniforms_bind_group, &[]);
+				render_pass.set_bind_group(1, &descriptor.image.image_bind_group, &[]);
 				render_pass.draw_indexed(0..6, 0, 0..1);
 			}
 		}
@@ -261,53 +238,6 @@ fn create_indices(wgpu: &Wgpu) -> wgpu::Buffer {
 	};
 
 	wgpu.device().create_buffer_init(&descriptor)
-}
-
-
-/// Creates the image bind group layout
-fn create_image_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
-	let descriptor = wgpu::BindGroupLayoutDescriptor {
-		label:   Some("[zsw::panel] Image bind group layout"),
-		entries: &[
-			wgpu::BindGroupLayoutEntry {
-				binding:    0,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Texture {
-					multisampled:   false,
-					view_dimension: wgpu::TextureViewDimension::D2,
-					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
-				},
-				count:      None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding:    1,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-				count:      None,
-			},
-		],
-	};
-
-	wgpu.device().create_bind_group_layout(&descriptor)
-}
-
-/// Creates the uniforms bind group layout
-fn create_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
-	let descriptor = wgpu::BindGroupLayoutDescriptor {
-		label:   Some("[zsw::panel] Uniform bind group layout"),
-		entries: &[wgpu::BindGroupLayoutEntry {
-			binding:    0,
-			visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-			ty:         wgpu::BindingType::Buffer {
-				ty:                 wgpu::BufferBindingType::Uniform,
-				has_dynamic_offset: false,
-				min_binding_size:   None,
-			},
-			count:      None,
-		}],
-	};
-
-	wgpu.device().create_bind_group_layout(&descriptor)
 }
 
 /// Creates the render pipeline

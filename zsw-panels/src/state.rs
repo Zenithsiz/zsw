@@ -3,7 +3,7 @@
 // Imports
 use {
 	super::PanelImage,
-	crate::{Panel, PanelsRenderer},
+	crate::{Panel, PanelsResource},
 	cgmath::{Matrix4, Point2, Vector2, Vector3},
 	num_rational::Rational32,
 	std::mem,
@@ -19,7 +19,13 @@ pub struct PanelState {
 	pub panel: Panel,
 
 	/// Images
-	pub images: PanelStateImages,
+	pub images: PanelStateImagesState,
+
+	/// Front image
+	pub front_image: PanelImage,
+
+	/// Back image
+	pub back_image: PanelImage,
 
 	/// Current progress (in frames)
 	pub cur_progress: u64,
@@ -28,10 +34,12 @@ pub struct PanelState {
 impl PanelState {
 	/// Creates a new panel
 	#[must_use]
-	pub const fn new(panel: Panel) -> Self {
+	pub fn new(resource: &PanelsResource, wgpu: &Wgpu, panel: Panel) -> Self {
 		Self {
 			panel,
-			images: PanelStateImages::Empty,
+			images: PanelStateImagesState::Empty,
+			front_image: PanelImage::new(resource, wgpu),
+			back_image: PanelImage::new(resource, wgpu),
 			cur_progress: 0,
 		}
 	}
@@ -39,9 +47,9 @@ impl PanelState {
 	/// Updates this panel's state
 	pub fn update<P: RawImageProvider>(
 		&mut self,
-		renderer: &PanelsRenderer,
 		wgpu: &Wgpu,
 		image_receiver: &ImageReceiver<P>,
+		image_bind_group_layout: &wgpu::BindGroupLayout,
 		max_image_size: Option<u32>,
 	) {
 		// Next frame's progress
@@ -73,29 +81,27 @@ impl PanelState {
 								}
 							}
 
-							// Then reset and try again
-							// TODO: Less error-prone way of doing this?
-							self.images = $default_panels_images;
+							// Then try again
 							continue 'update;
 						},
 					},
 				}
 			}
 
-			break match mem::take(&mut self.images) {
+			break match self.images {
 				// If we're empty, try to get a next image
-				PanelStateImages::Empty => match image_receiver.try_recv() {
+				PanelStateImagesState::Empty => match image_receiver.try_recv() {
 					#[allow(clippy::cast_sign_loss)] // It's positive
 					Some(image) => {
-						let front_image = handle_image_too_big_error!(
+						handle_image_too_big_error!(
 							image,
-							PanelImage::new(renderer, wgpu, &image, max_image_size),
-							PanelStateImages::Empty
+							self.front_image
+								.update(wgpu, &image, image_bind_group_layout, max_image_size),
+							PanelStateImagesState::Empty
 						);
 						(
-							PanelStateImages::PrimaryOnly {
-								front: PanelStateImage {
-									image:    front_image,
+							PanelStateImagesState::PrimaryOnly {
+								front: PanelStateImageState {
 									swap_dir: rand::random(),
 								},
 							},
@@ -103,56 +109,60 @@ impl PanelState {
 							(rand::random::<f32>() / 2.0 * self.panel.duration as f32) as u64,
 						)
 					},
-					None => (PanelStateImages::Empty, 0),
+					None => (PanelStateImagesState::Empty, 0),
 				},
 
 				// If we only have the primary, try to load the next image
-				PanelStateImages::PrimaryOnly { front } => match image_receiver.try_recv() {
+				PanelStateImagesState::PrimaryOnly { front } => match image_receiver.try_recv() {
 					Some(image) => {
-						let back_image = handle_image_too_big_error!(
+						handle_image_too_big_error!(
 							image,
-							PanelImage::new(renderer, wgpu, &image, max_image_size),
-							PanelStateImages::PrimaryOnly { front }
+							self.back_image
+								.update(wgpu, &image, image_bind_group_layout, max_image_size),
+							PanelStateImagesState::PrimaryOnly { front }
 						);
 						(
-							PanelStateImages::Both {
+							PanelStateImagesState::Both {
 								front,
-								back: PanelStateImage {
-									image:    back_image,
+								back: PanelStateImageState {
 									swap_dir: rand::random(),
 								},
 							},
 							next_progress,
 						)
 					},
-					None => (PanelStateImages::PrimaryOnly { front }, next_progress),
+					None => (PanelStateImagesState::PrimaryOnly { front }, next_progress),
 				},
 
 				// If we have both, try to update the progress and swap them if finished
-				PanelStateImages::Both { mut front, back } if finished => {
+				PanelStateImagesState::Both { mut front, back } if finished => {
 					match image_receiver.try_recv() {
-						// Note: We update the front and swap them
+						// If we did, stay with both
 						Some(image) => {
 							handle_image_too_big_error!(
 								image,
-								front.image.update(renderer, wgpu, &image, max_image_size),
-								PanelStateImages::Both { front, back }
+								self.front_image
+									.update(wgpu, &image, image_bind_group_layout, max_image_size),
+								PanelStateImagesState::Both { front, back }
 							);
 							front.swap_dir = rand::random();
+
+							mem::swap(&mut self.front_image, &mut self.back_image);
 							(
-								PanelStateImages::Both {
+								PanelStateImagesState::Both {
 									front: back,
 									back:  front,
 								},
 								swapped_progress,
 							)
 						},
-						None => (PanelStateImages::Both { front, back }, next_progress),
+						// Else stay on the current progress
+						None => (PanelStateImagesState::Both { front, back }, next_progress),
 					}
 				},
 
 				// Else just update the progress
-				state @ PanelStateImages::Both { .. } => (state, next_progress),
+				state @ PanelStateImagesState::Both { .. } => (state, next_progress),
 			};
 		};
 	}
@@ -195,28 +205,31 @@ impl PanelState {
 
 		// Get the images to render
 		let (front, back) = match &self.images {
-			PanelStateImages::Empty => (None, None),
-			PanelStateImages::PrimaryOnly { front, .. } => (
+			PanelStateImagesState::Empty => (None, None),
+			PanelStateImagesState::PrimaryOnly { front, .. } => (
 				Some(PanelStateImageDescriptor {
-					image: front,
+					image: &self.front_image,
+					image_state: front,
 					alpha: 1.0,
 					progress,
 					panel: &self.panel,
 				}),
 				None,
 			),
-			PanelStateImages::Both { front, back } => (
+			PanelStateImagesState::Both { front, back } => (
 				Some(PanelStateImageDescriptor {
-					image: front,
+					image: &self.front_image,
+					image_state: front,
 					alpha: 1.0 - back_alpha,
 					progress,
 					panel: &self.panel,
 				}),
 				Some(PanelStateImageDescriptor {
-					image:    back,
-					alpha:    back_alpha,
-					progress: back_progress,
-					panel:    &self.panel,
+					image:       &self.back_image,
+					image_state: back,
+					alpha:       back_alpha,
+					progress:    back_progress,
+					panel:       &self.panel,
 				}),
 			),
 		};
@@ -228,10 +241,10 @@ impl PanelState {
 	}
 }
 
-/// Images for a panel state
-#[derive(Default, Debug)]
+/// State of all images of a panel
+#[derive(Clone, Copy, Default, Debug)]
 #[allow(clippy::large_enum_variant)] // They'll all progress towards the largest variant
-pub enum PanelStateImages {
+pub enum PanelStateImagesState {
 	/// Empty
 	///
 	/// This means no images have been loaded yet
@@ -243,7 +256,7 @@ pub enum PanelStateImages {
 	/// The primary image is loaded. The back image is still not available
 	PrimaryOnly {
 		/// Image
-		front: PanelStateImage,
+		front: PanelStateImageState,
 	},
 
 	/// Both
@@ -251,19 +264,16 @@ pub enum PanelStateImages {
 	/// Both images are loaded to be faded in between
 	Both {
 		/// Front image
-		front: PanelStateImage,
+		front: PanelStateImageState,
 
 		/// Back image
-		back: PanelStateImage,
+		back: PanelStateImageState,
 	},
 }
 
-/// Single image of a panel state
-#[derive(Debug)]
-pub struct PanelStateImage {
-	/// Image
-	pub image: PanelImage,
-
+/// State of a panel's image
+#[derive(Clone, Copy, Debug)]
+pub struct PanelStateImageState {
 	/// If swapping directions for this image
 	pub swap_dir: bool,
 }
@@ -272,16 +282,19 @@ pub struct PanelStateImage {
 #[derive(Clone, Copy, Debug)]
 pub struct PanelStateImageDescriptor<'a> {
 	/// Image
-	image: &'a PanelStateImage,
+	pub image: &'a PanelImage,
+
+	/// Image state
+	pub image_state: &'a PanelStateImageState,
 
 	/// Alpha
-	alpha: f32,
+	pub alpha: f32,
 
 	/// Progress
-	progress: f32,
+	pub progress: f32,
 
 	/// Panel
-	panel: &'a Panel,
+	pub panel: &'a Panel,
 }
 
 impl<'a> PanelStateImageDescriptor<'a> {
@@ -367,7 +380,7 @@ impl<'a> PanelStateImageDescriptor<'a> {
 	/// This offset serve to scroll the image depending on our progress.
 	fn offset(&self, ratio_uvs: Vector2<f32>) -> Vector2<f32> {
 		// If we're going backwards, invert progress
-		let progress = match self.image.swap_dir {
+		let progress = match self.image_state.swap_dir {
 			true => 1.0 - self.progress,
 			false => self.progress,
 		};
@@ -381,12 +394,7 @@ impl<'a> PanelStateImageDescriptor<'a> {
 	/// This ratio is multiplied by the base uvs to fix the stretching
 	/// that comes from having a square coordinate system [0.0 .. 1.0] x [0.0 .. 1.0]
 	fn ratio(&self) -> Vector2<f32> {
-		let image_size = self
-			.image
-			.image
-			.size()
-			.cast()
-			.expect("Image size didn't fit into an `i32`");
+		let image_size = self.image.size.cast().expect("Image size didn't fit into an `i32`");
 		let panel_size = self
 			.panel
 			.geometry
@@ -418,16 +426,6 @@ impl<'a> PanelStateImageDescriptor<'a> {
 			true => Vector2::new(x_ratio, 1.0),
 			false => Vector2::new(1.0, y_ratio),
 		}
-	}
-
-	/// Returns the alpha
-	pub fn alpha(&self) -> f32 {
-		self.alpha
-	}
-
-	/// Returns the image to render
-	pub fn image(&self) -> &'a PanelImage {
-		&self.image.image
 	}
 }
 

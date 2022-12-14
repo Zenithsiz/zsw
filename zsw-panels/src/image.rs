@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	crate::PanelsRenderer,
+	crate::PanelsResource,
 	cgmath::Vector2,
 	image::DynamicImage,
 	std::borrow::Cow,
@@ -17,41 +17,36 @@ use {
 #[derive(Debug)]
 pub struct PanelImage {
 	/// Texture
-	texture: wgpu::Texture,
+	pub texture: wgpu::Texture,
 
 	/// Texture view
-	texture_view: wgpu::TextureView,
+	pub texture_view: wgpu::TextureView,
 
 	/// Texture sampler
-	texture_sampler: wgpu::Sampler,
+	pub texture_sampler: wgpu::Sampler,
 
 	/// Texture bind group
-	image_bind_group: wgpu::BindGroup,
+	pub image_bind_group: wgpu::BindGroup,
 
 	/// Uniforms
-	uniforms: wgpu::Buffer,
+	pub uniforms: wgpu::Buffer,
 
 	/// Uniforms bind group
-	uniforms_bind_group: wgpu::BindGroup,
+	pub uniforms_bind_group: wgpu::BindGroup,
 
 	/// Image size
-	image_size: Vector2<u32>,
+	pub size: Vector2<u32>,
 
 	/// Name
-	image_name: String,
+	pub name: String,
 }
 
 impl PanelImage {
 	/// Creates a new image
-	pub fn new<P: RawImageProvider>(
-		renderer: &PanelsRenderer,
-		wgpu: &Wgpu,
-		image: &Image<P>,
-		max_image_size: Option<u32>,
-	) -> Result<Self, ImageTooBigError> {
+	#[must_use]
+	pub fn new(resource: &PanelsResource, wgpu: &Wgpu) -> Self {
 		// Create the texture and sampler
-		let image_size = image.size();
-		let (texture, texture_view) = self::create_image_texture(wgpu, &image.name, &image.image, max_image_size)?;
+		let (texture, texture_view) = self::create_empty_image_texture(wgpu);
 		let texture_sampler = self::create_texture_sampler(wgpu.device());
 
 		// Create the uniforms
@@ -66,7 +61,7 @@ impl PanelImage {
 
 		// Create the uniform bind group
 		let uniforms_bind_group_descriptor = wgpu::BindGroupDescriptor {
-			layout:  renderer.uniforms_bind_group_layout(),
+			layout:  &resource.uniforms_bind_group_layout,
 			entries: &[wgpu::BindGroupEntry {
 				binding:  0,
 				resource: uniforms.as_entire_binding(),
@@ -76,73 +71,40 @@ impl PanelImage {
 		let uniforms_bind_group = wgpu.device().create_bind_group(&uniforms_bind_group_descriptor);
 
 		// Create the texture bind group
-		let image_bind_group = self::create_image_bind_group(
-			wgpu,
-			renderer.image_bind_group_layout(),
-			&texture_view,
-			&texture_sampler,
-		);
+		let image_bind_group =
+			self::create_image_bind_group(wgpu, &resource.image_bind_group_layout, &texture_view, &texture_sampler);
 
-		Ok(Self {
+		Self {
 			texture,
 			texture_view,
 			texture_sampler,
 			image_bind_group,
 			uniforms,
 			uniforms_bind_group,
-			image_size,
-			image_name: image.name.clone(),
-		})
+			size: Vector2::new(0, 0),
+			name: String::new(),
+		}
 	}
 
 	/// Updates this image
 	pub fn update<P: RawImageProvider>(
 		&mut self,
-		renderer: &PanelsRenderer,
 		wgpu: &Wgpu,
 		image: &Image<P>,
+		image_bind_group_layout: &wgpu::BindGroupLayout,
 		max_image_size: Option<u32>,
 	) -> Result<(), ImageTooBigError> {
 		// Update our texture
 		(self.texture, self.texture_view) =
 			self::create_image_texture(wgpu, &image.name, &image.image, max_image_size)?;
-		self.image_bind_group = self::create_image_bind_group(
-			wgpu,
-			renderer.image_bind_group_layout(),
-			&self.texture_view,
-			&self.texture_sampler,
-		);
+		self.image_bind_group =
+			self::create_image_bind_group(wgpu, image_bind_group_layout, &self.texture_view, &self.texture_sampler);
 
 		// Then update the image size and name
-		self.image_size = image.size();
-		self.image_name = image.name.clone();
+		self.size = image.size();
+		self.name = image.name.clone();
 
 		Ok(())
-	}
-
-	/// Returns the uniforms buffer
-	pub fn uniforms(&self) -> &wgpu::Buffer {
-		&self.uniforms
-	}
-
-	/// Returns this image's uniforms bind group
-	pub fn uniforms_bind_group(&self) -> &wgpu::BindGroup {
-		&self.uniforms_bind_group
-	}
-
-	/// Returns this image's image bind group
-	pub fn image_bind_group(&self) -> &wgpu::BindGroup {
-		&self.image_bind_group
-	}
-
-	/// Returns the image name
-	pub fn image_name(&self) -> &str {
-		&self.image_name
-	}
-
-	/// Returns the image size
-	pub fn size(&self) -> Vector2<u32> {
-		self.image_size
 	}
 }
 
@@ -200,6 +162,16 @@ pub struct ImageTooBigError {
 
 	/// Max size
 	pub max_image_size: u32,
+}
+
+/// Creates an empty texture
+fn create_empty_image_texture(wgpu: &Wgpu) -> (wgpu::Texture, wgpu::TextureView) {
+	let texture_descriptor =
+		self::texture_descriptor("[zsw::panel] Null image", 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb);
+	let texture = wgpu.device().create_texture(&texture_descriptor);
+	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+	let texture_view = texture.create_view(&texture_view_descriptor);
+	(texture, texture_view)
 }
 
 /// Creates the image texture and view

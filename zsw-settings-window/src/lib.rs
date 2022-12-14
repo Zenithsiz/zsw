@@ -17,7 +17,16 @@ use {
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_egui::EguiPainter,
 	zsw_input::InputReceiver,
-	zsw_panels::{Panel, PanelState, PanelStateImage, PanelStateImages, PanelsEditor, PanelsResource, PanelsShader},
+	zsw_panels::{
+		Panel,
+		PanelImage,
+		PanelState,
+		PanelStateImageState,
+		PanelStateImagesState,
+		PanelsEditor,
+		PanelsResource,
+		PanelsShader,
+	},
 	zsw_playlist::{PlaylistImage, PlaylistManager},
 	zsw_profiles::{Profile, ProfilesManager},
 	zsw_util::{Rect, Resources},
@@ -495,12 +504,13 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 
 		ui.collapsing("Images", |ui| {
 			match &mut self.panel.images {
-				PanelStateImages::Empty => (),
-				PanelStateImages::PrimaryOnly { front } => self::draw_panel_state_images(ui, "Front", front),
-				PanelStateImages::Both { front, back } => {
-					self::draw_panel_state_images(ui, "Front", front);
+				PanelStateImagesState::Empty => (),
+				PanelStateImagesState::PrimaryOnly { front } =>
+					self::draw_panel_state_images(ui, "Front", front, &mut self.panel.front_image),
+				PanelStateImagesState::Both { front, back } => {
+					self::draw_panel_state_images(ui, "Front", front, &mut self.panel.front_image);
 					ui.separator();
-					self::draw_panel_state_images(ui, "Back", back);
+					self::draw_panel_state_images(ui, "Back", back, &mut self.panel.back_image);
 				},
 			};
 		});
@@ -516,13 +526,18 @@ impl<'panel> egui::Widget for PanelWidget<'panel> {
 	}
 }
 
-fn draw_panel_state_images(ui: &mut egui::Ui, kind: &str, image: &mut PanelStateImage) {
+fn draw_panel_state_images(
+	ui: &mut egui::Ui,
+	kind: &str,
+	image_state: &mut PanelStateImageState,
+	image: &mut PanelImage,
+) {
 	ui.horizontal(|ui| {
 		ui.label(kind);
-		ui.label(image.image.image_name());
+		ui.label(&image.name);
 	});
 	ui.horizontal(|ui| {
-		ui.checkbox(&mut image.swap_dir, "Swap direction");
+		ui.checkbox(&mut image_state.swap_dir, "Swap direction");
 	});
 }
 
