@@ -9,9 +9,9 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 
 // Imports
 use {
-	crate::{PanelsResource, PanelsShader},
+	crate::{renderer::uniform::PanelImageUniforms, state::PanelStateImageDescriptor, PanelsResource, PanelsShader},
 	anyhow::Context,
-	cgmath::{Matrix4, Point2, Zero},
+	cgmath::Point2,
 	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -186,18 +186,24 @@ impl PanelsRenderer {
 		// And draw each panel
 		for panel in &resource.panels {
 			// Calculate the position matrix for the panel
-			// TODO: Not default uv matrices
 			let pos_matrix = panel.pos_matrix(surface_size);
-			let (front_descriptor, back_descriptor) = panel.image_descriptors();
-			let front_uvs_matrix = front_descriptor.map_or(Matrix4::zero(), |desc| desc.uvs_matrix(cursor_pos));
-			let back_uvs_matrix = back_descriptor.map_or(Matrix4::zero(), |desc| desc.uvs_matrix(cursor_pos));
 
-			/// Writes uniforms with `$extra` into `descriptor.image().uniforms()`
+			// Create each image's uniforms
+			let (front_descriptor, back_descriptor) = panel.image_descriptors();
+			let create_uniforms = |desc: PanelStateImageDescriptor| {
+				let ratio = desc.ratio();
+				let (parallax_ratio, parallax_offset) = desc.parallax_ratio_offset(ratio, cursor_pos);
+				PanelImageUniforms::new(ratio, desc.progress, parallax_ratio, parallax_offset)
+			};
+			let front_uniforms = front_descriptor.map(create_uniforms).unwrap_or_default();
+			let back_uniforms = back_descriptor.map(create_uniforms).unwrap_or_default();
+
+			/// Writes uniforms with `$extra` into `panel.uniforms`
 			macro write_uniforms($extra:expr) {{
 				let uniforms = PanelUniforms::new(
 					pos_matrix,
-					front_uvs_matrix,
-					back_uvs_matrix,
+					front_uniforms,
+					back_uniforms,
 					panel.front_alpha(),
 					$extra,
 				);

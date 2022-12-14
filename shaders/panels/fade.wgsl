@@ -17,11 +17,18 @@ struct VertexOutput {
 	uvs: vec2<f32>,
 };
 
+struct ImageUniforms {
+	image_ratio: vec2<f32>,
+	progress: f32,
+	parallax_ratio: vec2<f32>,
+	parallax_offset: vec2<f32>,
+}
+
 // Uniforms
 struct Uniforms {
 	pos_matrix: mat4x4<f32>,
-	front_uvs_matrix: mat4x4<f32>,
-	back_uvs_matrix: mat4x4<f32>,
+	front: ImageUniforms,
+	back: ImageUniforms,
 	front_alpha: f32,
 #ifdef FADE
 #elifdef FADE_WHITE
@@ -71,8 +78,16 @@ struct Sampled {
 }
 
 // Samples a texture
-fn sample(texture: texture_2d<f32>, uvs_matrix: mat4x4<f32>, uvs: vec2<f32>, alpha: f32) -> Sampled {
+fn sample(texture: texture_2d<f32>, uvs: vec2<f32>, image_uniforms: ImageUniforms, alpha: f32) -> Sampled {
 	var sampled: Sampled;
+
+	// Apply parallax to the uvs first
+	let mid = vec2<f32>(0.5, 0.5);
+	let uvs = (uvs - mid) * image_uniforms.parallax_ratio + mid + image_uniforms.parallax_offset;
+
+	// Then apply the image ratio and delta
+	let uvs_delta = (vec2<f32>(1.0, 1.0) - image_uniforms.image_ratio) * image_uniforms.progress;
+	let uvs = uvs * image_uniforms.image_ratio + uvs_delta;
 
 	#ifdef FADE
 		sampled.color = textureSample(texture, texture_sampler, uvs);
@@ -80,15 +95,13 @@ fn sample(texture: texture_2d<f32>, uvs_matrix: mat4x4<f32>, uvs: vec2<f32>, alp
 	#elifdef FADE_WHITE
 		sampled.color = textureSample(texture, texture_sampler, uvs);
 		sampled.uvs = uvs;
-
-	// TODO: Refactor both of these to not use the matrix like this
 	#elifdef FADE_OUT
-		let mid = vec2<f32>(uvs_matrix[0][0] / 2.0 + uvs_matrix[3].x, uvs_matrix[1][1] / 2.0 + uvs_matrix[3].y);
+		let mid = vec2<f32>(image_uniforms.image_ratio.x / 2.0 + uvs_delta.x, image_uniforms.image_ratio.y / 2.0 + uvs_delta.y);
 		let new_uvs = (uvs.xy - mid) * pow(alpha, uniforms.strength) + mid;
 		sampled.color = textureSample(texture, texture_sampler, new_uvs);
 		sampled.uvs = new_uvs;
 	#elifdef FADE_IN
-		let mid = vec2<f32>(uvs_matrix[0][0] / 2.0 + uvs_matrix[3].x, uvs_matrix[1][1] / 2.0 + uvs_matrix[3].y);
+		let mid = vec2<f32>(image_uniforms.image_ratio.x / 2.0 + uvs_delta.x, image_uniforms.image_ratio.y / 2.0 + uvs_delta.y);
 		let new_uvs = (uvs.xy - mid) / pow(alpha, uniforms.strength) + mid;
 		sampled.color = textureSample(texture, texture_sampler, new_uvs);
 		sampled.uvs = new_uvs;
@@ -101,12 +114,9 @@ fn sample(texture: texture_2d<f32>, uvs_matrix: mat4x4<f32>, uvs: vec2<f32>, alp
 fn fs_main(in: VertexOutput) -> FragOutput {
 	var out: FragOutput;
 
-	// Sample the color and set the alpha
-	let front_uvs = uniforms.front_uvs_matrix * vec4<f32>(in.uvs, 0.0, 1.0);
-	let back_uvs = uniforms.back_uvs_matrix * vec4<f32>(in.uvs, 0.0, 1.0);
-
-	let front_sample = sample(front_texture, uniforms.front_uvs_matrix, front_uvs.xy,       uniforms.front_alpha);
-	let  back_sample = sample( back_texture, uniforms. back_uvs_matrix,  back_uvs.xy, 1.0 - uniforms.front_alpha);
+	// Sample the color
+	let front_sample = sample(front_texture, in.uvs, uniforms.front,       uniforms.front_alpha);
+	let  back_sample = sample( back_texture, in.uvs, uniforms. back, 1.0 - uniforms.front_alpha);
 
 	#ifdef FADE
 		out.color = mix(back_sample.color, front_sample.color, uniforms.front_alpha);
