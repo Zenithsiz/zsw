@@ -2,7 +2,6 @@
 
 // Imports
 use {
-	crate::PanelsResource,
 	cgmath::Vector2,
 	image::DynamicImage,
 	std::borrow::Cow,
@@ -22,18 +21,6 @@ pub struct PanelImage {
 	/// Texture view
 	pub texture_view: wgpu::TextureView,
 
-	/// Texture sampler
-	pub texture_sampler: wgpu::Sampler,
-
-	/// Texture bind group
-	pub image_bind_group: wgpu::BindGroup,
-
-	/// Uniforms
-	pub uniforms: wgpu::Buffer,
-
-	/// Uniforms bind group
-	pub uniforms_bind_group: wgpu::BindGroup,
-
 	/// Image size
 	pub size: Vector2<u32>,
 
@@ -44,43 +31,13 @@ pub struct PanelImage {
 impl PanelImage {
 	/// Creates a new image
 	#[must_use]
-	pub fn new(resource: &PanelsResource, wgpu: &Wgpu) -> Self {
+	pub fn new(wgpu: &Wgpu) -> Self {
 		// Create the texture and sampler
 		let (texture, texture_view) = self::create_empty_image_texture(wgpu);
-		let texture_sampler = self::create_texture_sampler(wgpu.device());
-
-		// Create the uniforms
-		// Note: Initial value doesn't matter
-		let uniforms_descriptor = wgpu::util::BufferInitDescriptor {
-			label:    None,
-			// TODO: Resize buffer as we go?
-			contents: &[0; 0x100],
-			usage:    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-		};
-		let uniforms = wgpu.device().create_buffer_init(&uniforms_descriptor);
-
-		// Create the uniform bind group
-		let uniforms_bind_group_descriptor = wgpu::BindGroupDescriptor {
-			layout:  &resource.uniforms_bind_group_layout,
-			entries: &[wgpu::BindGroupEntry {
-				binding:  0,
-				resource: uniforms.as_entire_binding(),
-			}],
-			label:   None,
-		};
-		let uniforms_bind_group = wgpu.device().create_bind_group(&uniforms_bind_group_descriptor);
-
-		// Create the texture bind group
-		let image_bind_group =
-			self::create_image_bind_group(wgpu, &resource.image_bind_group_layout, &texture_view, &texture_sampler);
 
 		Self {
 			texture,
 			texture_view,
-			texture_sampler,
-			image_bind_group,
-			uniforms,
-			uniforms_bind_group,
 			size: Vector2::new(0, 0),
 			name: String::new(),
 		}
@@ -91,14 +48,11 @@ impl PanelImage {
 		&mut self,
 		wgpu: &Wgpu,
 		image: &Image<P>,
-		image_bind_group_layout: &wgpu::BindGroupLayout,
 		max_image_size: Option<u32>,
 	) -> Result<(), ImageTooBigError> {
 		// Update our texture
 		(self.texture, self.texture_view) =
 			self::create_image_texture(wgpu, &image.name, &image.image, max_image_size)?;
-		self.image_bind_group =
-			self::create_image_bind_group(wgpu, image_bind_group_layout, &self.texture_view, &self.texture_sampler);
 
 		// Then update the image size and name
 		self.size = image.size();
@@ -108,46 +62,6 @@ impl PanelImage {
 	}
 }
 
-
-/// Creates the texture sampler
-fn create_texture_sampler(device: &wgpu::Device) -> wgpu::Sampler {
-	let descriptor = wgpu::SamplerDescriptor {
-		label: Some("[zsw::panel] Texture sampler"),
-		address_mode_u: wgpu::AddressMode::ClampToEdge,
-		address_mode_v: wgpu::AddressMode::ClampToEdge,
-		address_mode_w: wgpu::AddressMode::ClampToEdge,
-		mag_filter: wgpu::FilterMode::Linear,
-		min_filter: wgpu::FilterMode::Linear,
-		mipmap_filter: wgpu::FilterMode::Linear,
-		..wgpu::SamplerDescriptor::default()
-	};
-	device.create_sampler(&descriptor)
-}
-
-/// Creates the texture bind group
-fn create_image_bind_group(
-	wgpu: &Wgpu,
-	bind_group_layout: &wgpu::BindGroupLayout,
-	view: &wgpu::TextureView,
-	sampler: &wgpu::Sampler,
-) -> wgpu::BindGroup {
-	let descriptor = wgpu::BindGroupDescriptor {
-		layout:  bind_group_layout,
-		entries: &[
-			wgpu::BindGroupEntry {
-				binding:  0,
-				resource: wgpu::BindingResource::TextureView(view),
-			},
-			wgpu::BindGroupEntry {
-				binding:  1,
-				resource: wgpu::BindingResource::Sampler(sampler),
-			},
-		],
-		label:   None,
-	};
-
-	wgpu.device().create_bind_group(&descriptor)
-}
 
 /// Error when an image is too large
 #[derive(Clone, Copy, Debug)]

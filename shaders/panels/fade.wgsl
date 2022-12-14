@@ -20,8 +20,9 @@ struct VertexOutput {
 // Uniforms
 struct Uniforms {
 	pos_matrix: mat4x4<f32>,
-	uvs_matrix: mat4x4<f32>,
-	alpha: f32,
+	front_uvs_matrix: mat4x4<f32>,
+	back_uvs_matrix: mat4x4<f32>,
+	front_alpha: f32,
 #ifdef FADE
 #elifdef FADE_WHITE
 	strength: f32,
@@ -52,42 +53,77 @@ struct FragOutput {
 	color: vec4<f32>,
 };
 
-// Texture
+// Front texture
 @group(1) @binding(0)
-var texture: texture_2d<f32>;
+var front_texture: texture_2d<f32>;
+
+// Back texture
+@group(1) @binding(1)
+var back_texture: texture_2d<f32>;
 
 // Sampler
-@group(1) @binding(1)
+@group(1) @binding(2)
 var texture_sampler: sampler;
+
+struct Sampled {
+	color: vec4<f32>,
+	uvs  : vec2<f32>,
+}
+
+// Samples a texture
+fn sample(texture: texture_2d<f32>, uvs_matrix: mat4x4<f32>, uvs: vec2<f32>, alpha: f32) -> Sampled {
+	var sampled: Sampled;
+
+	#ifdef FADE
+		sampled.color = textureSample(texture, texture_sampler, uvs);
+		sampled.uvs = uvs;
+	#elifdef FADE_WHITE
+		sampled.color = textureSample(texture, texture_sampler, uvs);
+		sampled.uvs = uvs;
+
+	// TODO: Refactor both of these to not use the matrix like this
+	#elifdef FADE_OUT
+		let mid = vec2<f32>(uvs_matrix[0][0] / 2.0 + uvs_matrix[3].x, uvs_matrix[1][1] / 2.0 + uvs_matrix[3].y);
+		let new_uvs = (uvs.xy - mid) * pow(alpha, uniforms.strength) + mid;
+		sampled.color = textureSample(texture, texture_sampler, new_uvs);
+		sampled.uvs = new_uvs;
+	#elifdef FADE_IN
+		let mid = vec2<f32>(uvs_matrix[0][0] / 2.0 + uvs_matrix[3].x, uvs_matrix[1][1] / 2.0 + uvs_matrix[3].y);
+		let new_uvs = (uvs.xy - mid) / pow(alpha, uniforms.strength) + mid;
+		sampled.color = textureSample(texture, texture_sampler, new_uvs);
+		sampled.uvs = new_uvs;
+	#endif
+
+	return sampled;
+}
 
 @fragment
 fn fs_main(in: VertexOutput) -> FragOutput {
 	var out: FragOutput;
 
 	// Sample the color and set the alpha
-	let uvs = uniforms.uvs_matrix * vec4<f32>(in.uvs, 0.0, 1.0);
+	let front_uvs = uniforms.front_uvs_matrix * vec4<f32>(in.uvs, 0.0, 1.0);
+	let back_uvs = uniforms.back_uvs_matrix * vec4<f32>(in.uvs, 0.0, 1.0);
+
+	let front_sample = sample(front_texture, uniforms.front_uvs_matrix, front_uvs.xy,       uniforms.front_alpha);
+	let  back_sample = sample( back_texture, uniforms. back_uvs_matrix,  back_uvs.xy, 1.0 - uniforms.front_alpha);
 
 	#ifdef FADE
-		out.color = textureSample(texture, texture_sampler, uvs.xy);
+		out.color = mix(back_sample.color, front_sample.color, uniforms.front_alpha);
+		out.color.a = 1.0;
 	#elifdef FADE_WHITE
-		out.color = textureSample(texture, texture_sampler, uvs.xy) - (pow(uniforms.alpha, uniforms.strength) - 1.0);
+		out.color = mix(back_sample.color, front_sample.color, uniforms.front_alpha) - (pow(uniforms.front_alpha, uniforms.strength) - 1.0);
+		out.color.a = 1.0;
 	#elifdef FADE_OUT
-		let mid = vec2<f32>(uniforms.uvs_matrix[0][0] / 2.0 + uniforms.uvs_matrix[3].x, uniforms.uvs_matrix[1][1] / 2.0 + uniforms.uvs_matrix[3].y);
-		let new_uvs = (uvs.xy - mid) * pow(uniforms.alpha, uniforms.strength) + mid;
-		out.color = textureSample(texture, texture_sampler, new_uvs);
+		out.color = mix(back_sample.color, front_sample.color, uniforms.front_alpha);
+		//out.color = front_sample.color;
+		out.color.a = 1.0;
 	#elifdef FADE_IN
-		let mid = vec2<f32>(uniforms.uvs_matrix[0][0] / 2.0 + uniforms.uvs_matrix[3].x, uniforms.uvs_matrix[1][1] / 2.0 + uniforms.uvs_matrix[3].y);
-		let new_uvs = (uvs.xy - mid) / pow(uniforms.alpha, uniforms.strength) + mid;
-		out.color = textureSample(texture, texture_sampler, new_uvs);
-	#endif
-
-	out.color.a = uniforms.alpha;
-
-	#ifdef FADE_IN
-		// TODO: Use a background color?
-		if (new_uvs.x < 0.0 || new_uvs.x >= 1.0 || new_uvs.y < 0.0 || new_uvs.y >= 1.0) {
-			out.color.a = 0.0;
-		}
+		// TODO: Use a background color instead of black?
+		let front_contained = front_sample.uvs.x >= 0.0 && front_sample.uvs.x <= 1.0 && front_sample.uvs.y >= 0.0 && front_sample.uvs.y <= 1.0;
+		let  back_contained =  back_sample.uvs.x >= 0.0 &&  back_sample.uvs.x <= 1.0 &&  back_sample.uvs.y >= 0.0 &&  back_sample.uvs.y <= 1.0;
+		out.color = mix(back_sample.color * f32(back_contained), front_sample.color * f32(front_contained), uniforms.front_alpha);
+		out.color.a = 1.0;
 	#endif
 
 	return out;

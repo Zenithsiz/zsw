@@ -11,7 +11,7 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 use {
 	crate::{PanelsResource, PanelsShader},
 	anyhow::Context,
-	cgmath::Point2,
+	cgmath::{Matrix4, Point2, Zero},
 	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -186,31 +186,36 @@ impl PanelsRenderer {
 		// And draw each panel
 		for panel in &resource.panels {
 			// Calculate the position matrix for the panel
+			// TODO: Not default uv matrices
 			let pos_matrix = panel.pos_matrix(surface_size);
+			let (front_descriptor, back_descriptor) = panel.image_descriptors();
+			let front_uvs_matrix = front_descriptor.map_or(Matrix4::zero(), |desc| desc.uvs_matrix(cursor_pos));
+			let back_uvs_matrix = back_descriptor.map_or(Matrix4::zero(), |desc| desc.uvs_matrix(cursor_pos));
 
-			// Then go through all image descriptors to render
-			for descriptor in panel.image_descriptors() {
-				let uvs_matrix = descriptor.uvs_matrix(cursor_pos);
+			/// Writes uniforms with `$extra` into `descriptor.image().uniforms()`
+			macro write_uniforms($extra:expr) {{
+				let uniforms = PanelUniforms::new(
+					pos_matrix,
+					front_uvs_matrix,
+					back_uvs_matrix,
+					panel.front_alpha(),
+					$extra,
+				);
+				queue.write_buffer(&panel.uniforms, 0, uniforms.as_bytes())
+			}}
 
-				/// Writes uniforms with `$extra` into `descriptor.image().uniforms()`
-				macro write_uniforms($extra:expr) {{
-					let uniforms = PanelUniforms::new(pos_matrix, uvs_matrix, descriptor.alpha, $extra);
-					queue.write_buffer(&descriptor.image.uniforms, 0, uniforms.as_bytes())
-				}}
+			// Update the uniforms
+			match resource.shader {
+				PanelsShader::Fade => write_uniforms!(uniform::FadeExtra {}),
+				PanelsShader::FadeWhite { strength } => write_uniforms!(uniform::FadeWhiteExtra { strength }),
+				PanelsShader::FadeOut { strength } => write_uniforms!(uniform::FadeOutExtra { strength }),
+				PanelsShader::FadeIn { strength } => write_uniforms!(uniform::FadeInExtra { strength }),
+			};
 
-				// Update the uniforms
-				match resource.shader {
-					PanelsShader::Fade => write_uniforms!(uniform::FadeExtra {}),
-					PanelsShader::FadeWhite { strength } => write_uniforms!(uniform::FadeWhiteExtra { strength }),
-					PanelsShader::FadeOut { strength } => write_uniforms!(uniform::FadeOutExtra { strength }),
-					PanelsShader::FadeIn { strength } => write_uniforms!(uniform::FadeInExtra { strength }),
-				};
-
-				// Bind the image and draw
-				render_pass.set_bind_group(0, &descriptor.image.uniforms_bind_group, &[]);
-				render_pass.set_bind_group(1, &descriptor.image.image_bind_group, &[]);
-				render_pass.draw_indexed(0..6, 0, 0..1);
-			}
+			// Bind the image and draw
+			render_pass.set_bind_group(0, &panel.uniforms_bind_group, &[]);
+			render_pass.set_bind_group(1, &panel.image_bind_group, &[]);
+			render_pass.draw_indexed(0..6, 0, 0..1);
 		}
 
 		Ok(())

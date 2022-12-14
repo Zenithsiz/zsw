@@ -11,11 +11,14 @@ pub struct PanelUniforms<X: UniformsExtra> {
 	/// Position matrix
 	pub pos_matrix: [[f32; 4]; 4],
 
-	/// Uvs Matrix
-	pub uvs_matrix: [[f32; 4]; 4],
+	/// Front Uvs Matrix
+	pub front_uvs_matrix: [[f32; 4]; 4],
 
-	/// Alpha
-	pub alpha: f32,
+	/// Back Uvs Matrix
+	pub back_uvs_matrix: [[f32; 4]; 4],
+
+	/// Front Alpha
+	pub front_alpha: f32,
 
 	/// Extra
 	pub extra: X,
@@ -28,14 +31,16 @@ impl<X: UniformsExtra> PanelUniforms<X> {
 	/// Creates new panel uniforms
 	pub fn new(
 		pos_matrix: impl Into<[[f32; 4]; 4]>,
-		uvs_matrix: impl Into<[[f32; 4]; 4]>,
-		alpha: f32,
+		front_uvs_matrix: impl Into<[[f32; 4]; 4]>,
+		back_uvs_matrix: impl Into<[[f32; 4]; 4]>,
+		front_alpha: f32,
 		extra: X,
 	) -> Self {
 		Self {
 			pos_matrix: pos_matrix.into(),
-			uvs_matrix: uvs_matrix.into(),
-			alpha,
+			front_uvs_matrix: front_uvs_matrix.into(),
+			back_uvs_matrix: back_uvs_matrix.into(),
+			front_alpha,
 			extra,
 			_pad: X::Pad::zeroed(),
 		}

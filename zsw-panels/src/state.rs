@@ -7,6 +7,7 @@ use {
 	cgmath::{Matrix4, Point2, Vector2, Vector3},
 	num_rational::Rational32,
 	std::mem,
+	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
 	zsw_img::{ImageReceiver, RawImageProvider},
 	zsw_wgpu::Wgpu,
@@ -27,6 +28,18 @@ pub struct PanelState {
 	/// Back image
 	pub back_image: PanelImage,
 
+	/// Texture sampler
+	pub texture_sampler: wgpu::Sampler,
+
+	/// Texture bind group
+	pub image_bind_group: wgpu::BindGroup,
+
+	/// Uniforms
+	pub uniforms: wgpu::Buffer,
+
+	/// Uniforms bind group
+	pub uniforms_bind_group: wgpu::BindGroup,
+
 	/// Current progress (in frames)
 	pub cur_progress: u64,
 }
@@ -35,16 +48,54 @@ impl PanelState {
 	/// Creates a new panel
 	#[must_use]
 	pub fn new(resource: &PanelsResource, wgpu: &Wgpu, panel: Panel) -> Self {
+		// Create the uniforms
+		// Note: Initial value doesn't matter
+		let uniforms_descriptor = wgpu::util::BufferInitDescriptor {
+			label:    None,
+			// TODO: Resize buffer as we go?
+			contents: &[0; 0x100],
+			usage:    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+		};
+		let uniforms = wgpu.device().create_buffer_init(&uniforms_descriptor);
+
+		// Create the uniform bind group
+		let uniforms_bind_group_descriptor = wgpu::BindGroupDescriptor {
+			layout:  &resource.uniforms_bind_group_layout,
+			entries: &[wgpu::BindGroupEntry {
+				binding:  0,
+				resource: uniforms.as_entire_binding(),
+			}],
+			label:   None,
+		};
+		let uniforms_bind_group = wgpu.device().create_bind_group(&uniforms_bind_group_descriptor);
+
+		// Create the textures
+		let front_image = PanelImage::new(wgpu);
+		let back_image = PanelImage::new(wgpu);
+		let texture_sampler = self::create_texture_sampler(wgpu.device());
+		let image_bind_group = self::create_image_bind_group(
+			wgpu,
+			&resource.image_bind_group_layout,
+			&front_image.texture_view,
+			&back_image.texture_view,
+			&texture_sampler,
+		);
+
 		Self {
 			panel,
 			images: PanelStateImagesState::Empty,
-			front_image: PanelImage::new(resource, wgpu),
-			back_image: PanelImage::new(resource, wgpu),
+			front_image,
+			back_image,
+			texture_sampler,
+			image_bind_group,
+			uniforms,
+			uniforms_bind_group,
 			cur_progress: 0,
 		}
 	}
 
 	/// Updates this panel's state
+	#[allow(clippy::too_many_lines)] // TODO: Refactor
 	pub fn update<P: RawImageProvider>(
 		&mut self,
 		wgpu: &Wgpu,
@@ -95,10 +146,18 @@ impl PanelState {
 					Some(image) => {
 						handle_image_too_big_error!(
 							image,
-							self.front_image
-								.update(wgpu, &image, image_bind_group_layout, max_image_size),
+							self.front_image.update(wgpu, &image, max_image_size),
 							PanelStateImagesState::Empty
 						);
+
+						self.image_bind_group = self::create_image_bind_group(
+							wgpu,
+							image_bind_group_layout,
+							&self.front_image.texture_view,
+							&self.back_image.texture_view,
+							&self.texture_sampler,
+						);
+
 						(
 							PanelStateImagesState::PrimaryOnly {
 								front: PanelStateImageState {
@@ -117,10 +176,18 @@ impl PanelState {
 					Some(image) => {
 						handle_image_too_big_error!(
 							image,
-							self.back_image
-								.update(wgpu, &image, image_bind_group_layout, max_image_size),
+							self.back_image.update(wgpu, &image, max_image_size),
 							PanelStateImagesState::PrimaryOnly { front }
 						);
+
+						self.image_bind_group = self::create_image_bind_group(
+							wgpu,
+							image_bind_group_layout,
+							&self.front_image.texture_view,
+							&self.back_image.texture_view,
+							&self.texture_sampler,
+						);
+
 						(
 							PanelStateImagesState::Both {
 								front,
@@ -141,13 +208,20 @@ impl PanelState {
 						Some(image) => {
 							handle_image_too_big_error!(
 								image,
-								self.front_image
-									.update(wgpu, &image, image_bind_group_layout, max_image_size),
+								self.front_image.update(wgpu, &image, max_image_size),
 								PanelStateImagesState::Both { front, back }
 							);
 							front.swap_dir = rand::random();
-
 							mem::swap(&mut self.front_image, &mut self.back_image);
+
+							self.image_bind_group = self::create_image_bind_group(
+								wgpu,
+								image_bind_group_layout,
+								&self.front_image.texture_view,
+								&self.back_image.texture_view,
+								&self.texture_sampler,
+							);
+
 							(
 								PanelStateImagesState::Both {
 									front: back,
@@ -187,30 +261,36 @@ impl PanelState {
 		translation * scaling
 	}
 
+	/// Returns the alpha of the front image
+	pub fn front_alpha(&self) -> f32 {
+		match self.cur_progress {
+			f if f >= self.panel.fade_point =>
+				1.0 - (self.cur_progress - self.panel.fade_point) as f32 /
+					(self.panel.duration - self.panel.fade_point) as f32,
+			_ => 1.0,
+		}
+	}
+
 	/// Returns all image descriptors to render
 	#[must_use]
-	pub fn image_descriptors(&self) -> impl IntoIterator<Item = PanelStateImageDescriptor> + '_ {
-		// Calculate the alpha and progress for the back image
-		let (back_alpha, back_progress) = match self.cur_progress {
-			f if f >= self.panel.fade_point => (
-				(self.cur_progress - self.panel.fade_point) as f32 /
-					(self.panel.duration - self.panel.fade_point) as f32,
+	pub fn image_descriptors(&self) -> (Option<PanelStateImageDescriptor>, Option<PanelStateImageDescriptor>) {
+		// Calculate the progress for the back image
+		let back_progress = match self.cur_progress {
+			f if f >= self.panel.fade_point =>
 				(self.cur_progress - self.panel.fade_point) as f32 / self.panel.duration as f32,
-			),
-			_ => (0.0, 0.0),
+			_ => 0.0,
 		};
 
 		// Progress, clamped to `0.0..1.0`
 		let progress = self.cur_progress as f32 / self.panel.duration as f32;
 
 		// Get the images to render
-		let (front, back) = match &self.images {
+		match &self.images {
 			PanelStateImagesState::Empty => (None, None),
 			PanelStateImagesState::PrimaryOnly { front, .. } => (
 				Some(PanelStateImageDescriptor {
 					image: &self.front_image,
 					image_state: front,
-					alpha: 1.0,
 					progress,
 					panel: &self.panel,
 				}),
@@ -220,24 +300,17 @@ impl PanelState {
 				Some(PanelStateImageDescriptor {
 					image: &self.front_image,
 					image_state: front,
-					alpha: 1.0 - back_alpha,
 					progress,
 					panel: &self.panel,
 				}),
 				Some(PanelStateImageDescriptor {
 					image:       &self.back_image,
 					image_state: back,
-					alpha:       back_alpha,
 					progress:    back_progress,
 					panel:       &self.panel,
 				}),
 			),
-		};
-
-		[front, back]
-			.into_iter()
-			.flatten()
-			.filter(|descriptor| descriptor.alpha != 0.0)
+		}
 	}
 }
 
@@ -286,9 +359,6 @@ pub struct PanelStateImageDescriptor<'a> {
 
 	/// Image state
 	pub image_state: &'a PanelStateImageState,
-
-	/// Alpha
-	pub alpha: f32,
 
 	/// Progress
 	pub progress: f32,
@@ -435,4 +505,49 @@ impl<'a> PanelStateImageDescriptor<'a> {
 //       format, since both may be bigger than `2^24`, check if this is fine.
 fn ratio_as_f32(ratio: Rational32) -> f32 {
 	*ratio.numer() as f32 / *ratio.denom() as f32
+}
+
+/// Creates the texture sampler
+fn create_texture_sampler(device: &wgpu::Device) -> wgpu::Sampler {
+	let descriptor = wgpu::SamplerDescriptor {
+		label: Some("[zsw::panel] Texture sampler"),
+		address_mode_u: wgpu::AddressMode::ClampToEdge,
+		address_mode_v: wgpu::AddressMode::ClampToEdge,
+		address_mode_w: wgpu::AddressMode::ClampToEdge,
+		mag_filter: wgpu::FilterMode::Linear,
+		min_filter: wgpu::FilterMode::Linear,
+		mipmap_filter: wgpu::FilterMode::Linear,
+		..wgpu::SamplerDescriptor::default()
+	};
+	device.create_sampler(&descriptor)
+}
+
+/// Creates the texture bind group
+fn create_image_bind_group(
+	wgpu: &Wgpu,
+	bind_group_layout: &wgpu::BindGroupLayout,
+	front_view: &wgpu::TextureView,
+	back_view: &wgpu::TextureView,
+	sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+	let descriptor = wgpu::BindGroupDescriptor {
+		layout:  bind_group_layout,
+		entries: &[
+			wgpu::BindGroupEntry {
+				binding:  0,
+				resource: wgpu::BindingResource::TextureView(front_view),
+			},
+			wgpu::BindGroupEntry {
+				binding:  1,
+				resource: wgpu::BindingResource::TextureView(back_view),
+			},
+			wgpu::BindGroupEntry {
+				binding:  2,
+				resource: wgpu::BindingResource::Sampler(sampler),
+			},
+		],
+		label:   None,
+	};
+
+	wgpu.device().create_bind_group(&descriptor)
 }
