@@ -153,7 +153,7 @@ impl EguiEventHandler {
 	/// Handles an event
 	pub fn handle_event(&mut self, event: winit::event::Event<'static, !>) {
 		// Note: We don't care if the event won't be handled
-		#[allow(clippy::let_underscore_drop)]
+		#[allow(let_underscore_drop)]
 		let _ = self.event_tx.send(event);
 	}
 }

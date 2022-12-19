@@ -29,14 +29,14 @@ impl Tpp {
 
 	/// Defines a value
 	pub fn define(&mut self, binding: impl Into<String>, value: impl Into<String>) {
-		#[allow(clippy::let_underscore_drop)] // We don't care if the binding already had a value
+		#[allow(let_underscore_drop)] // We don't care if the binding already had a value
 		let _ = self.bindings.insert(binding.into(), value.into());
 	}
 
 	/// Undefines a value
 	pub fn undef(&mut self, binding: impl AsRef<str>) {
 		// TODO: Should we care about it?
-		#[allow(clippy::let_underscore_drop)] // We don't care if the binding already had a value
+		#[allow(let_underscore_drop)] // We don't care if the binding already had a value
 		let _ = self.bindings.remove(binding.as_ref());
 	}
 
