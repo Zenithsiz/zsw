@@ -62,7 +62,7 @@ pub async fn run(dirs: &ProjectDirs, config: &Arc<Config>) -> Result<(), anyhow:
 			.await
 			.context("Unable to create renderer")?;
 	let (playlist_runner, playlist_receiver, playlist_manager) = zsw_playlist::create();
-	let (image_loader, image_resizer, image_receiver) = zsw_img::loader::create();
+	let (image_loader, image_downscaler, image_receiver) = zsw_img::loader::create();
 	let (panels_renderer, panels_editor, panels_resource) = zsw_panels::create(
 		wgpu.clone(),
 		&mut wgpu_surface_resource,
@@ -145,19 +145,19 @@ pub async fn run(dirs: &ProjectDirs, config: &Arc<Config>) -> Result<(), anyhow:
 		})
 		.collect::<Result<Vec<_>, _>>()
 		.context("Unable to spawn image loader tasks")?;
-	let image_resizer_tasks_len = config
-		.image_resizer_threads
+	let image_downscaler_tasks_len = config
+		.image_downscaler_threads
 		.or_else(|| thread::available_parallelism().ok())
 		.map_or(1, NonZeroUsize::get);
-	let image_resizer_tasks = (0..image_resizer_tasks_len)
+	let image_downscaler_tasks = (0..image_downscaler_tasks_len)
 		.map(|idx| {
-			let image_resizer = image_resizer.clone();
+			let image_downscaler = image_downscaler.clone();
 			thread::Builder::new()
-				.name(format!("ImgResizer${idx}"))
-				.spawn(move || image_resizer.run())
+				.name(format!("ImgDownscaler${idx}"))
+				.spawn(move || image_downscaler.run())
 		})
 		.collect::<Result<Vec<_>, _>>()
-		.context("Unable to spawn image resizer tasks")?;
+		.context("Unable to spawn image downscaler tasks")?;
 
 	let settings_window_task = spawn_service_runner!(
 		[resources] "Settings window runner" => {
@@ -182,9 +182,9 @@ pub async fn run(dirs: &ProjectDirs, config: &Arc<Config>) -> Result<(), anyhow:
 			task.join()
 				.map_err(|err| anyhow::anyhow!("Unable to wait for image loader runner: {err:?}"))?;
 		}
-		for task in image_resizer_tasks {
+		for task in image_downscaler_tasks {
 			task.join()
-				.map_err(|err| anyhow::anyhow!("Unable to wait for image resizer runner: {err:?}"))?;
+				.map_err(|err| anyhow::anyhow!("Unable to wait for image downscaler runner: {err:?}"))?;
 		}
 		settings_window_task
 			.await

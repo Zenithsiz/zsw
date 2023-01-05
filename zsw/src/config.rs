@@ -18,9 +18,9 @@ pub struct Config {
 	#[serde(default)]
 	pub image_loader_threads: Option<NonZeroUsize>,
 
-	/// Image resizer threads
+	/// Image downscaler threads
 	#[serde(default)]
-	pub image_resizer_threads: Option<NonZeroUsize>,
+	pub image_downscaler_threads: Option<NonZeroUsize>,
 
 	/// Tokio threads
 	#[serde(default)]
@@ -35,11 +35,11 @@ pub struct Config {
 impl Default for Config {
 	fn default() -> Self {
 		Self {
-			profiles:              vec![],
-			image_loader_threads:  None,
-			image_resizer_threads: None,
-			tokio_threads:         None,
-			rayon_threads:         None,
+			profiles:                 vec![],
+			image_loader_threads:     None,
+			image_downscaler_threads: None,
+			tokio_threads:            None,
+			rayon_threads:            None,
 		}
 	}
 }

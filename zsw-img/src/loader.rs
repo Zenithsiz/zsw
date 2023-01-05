@@ -73,32 +73,32 @@ impl<P: RawImageProvider> ImageLoader<P> {
 	}
 }
 
-/// Image resizer service
+/// Image downscale service
 #[derive(Clone, Debug)]
-pub struct ImageResizer<P: RawImageProvider> {
-	/// Resized image sender
-	resized_image_tx: crossbeam::channel::Sender<Image<P>>,
+pub struct ImageDownscaler<P: RawImageProvider> {
+	/// Downscaled image sender
+	downscaled_image_tx: crossbeam::channel::Sender<Image<P>>,
 
-	/// To resize image receiver
+	/// To downscale image receiver
 	// TODO: Proper type for this instead of tuple
-	to_resize_image_rx: crossbeam::channel::Receiver<(Image<P>, u32)>,
+	to_downscale_image_rx: crossbeam::channel::Receiver<(Image<P>, u32)>,
 }
 
-impl<P: RawImageProvider> ImageResizer<P> {
-	/// Runs this image resizer
+impl<P: RawImageProvider> ImageDownscaler<P> {
+	/// Runs this image downscaler
 	///
-	/// Multiple image resizers may run at the same time
+	/// Multiple image downscalers may run at the same time
 	pub fn run(self) {
 		'run: loop {
 			// Get the next image, or quit if no more
-			let Ok((mut image, max_size)) = self.to_resize_image_rx.recv() else {
+			let Ok((mut image, max_size)) = self.to_downscale_image_rx.recv() else {
 				break;
 			};
 
-			// Resize it and send it
-			self::resize_image(&mut image, max_size);
-			if self.resized_image_tx.send(image).is_err() {
-				tracing::debug!("Quitting image resizer: Receiver quit");
+			// Downscale it and send it
+			self::downscale_image(&mut image, max_size);
+			if self.downscaled_image_tx.send(image).is_err() {
+				tracing::debug!("Quitting image downscaler: Receiver quit");
 				break 'run;
 			}
 		}
@@ -114,8 +114,8 @@ pub struct ImageReceiver<P: RawImageProvider> {
 	/// To remove image sender
 	to_remove_image_tx: crossbeam::channel::Sender<Image<P>>,
 
-	/// To resize image sender
-	to_resize_image_tx: crossbeam::channel::Sender<(Image<P>, u32)>,
+	/// To downscale image sender
+	to_downscale_image_tx: crossbeam::channel::Sender<(Image<P>, u32)>,
 }
 
 impl<P: RawImageProvider> ImageReceiver<P> {
@@ -131,9 +131,11 @@ impl<P: RawImageProvider> ImageReceiver<P> {
 		self.to_remove_image_tx.send(image).map_err(|err| err.0)
 	}
 
-	/// Queues an image to be resized
-	pub fn queue_resize(&self, image: Image<P>, max_size: u32) -> Result<(), Image<P>> {
-		self.to_resize_image_tx.send((image, max_size)).map_err(|err| err.0 .0)
+	/// Queues an image to be downscaled
+	pub fn queue_downscale(&self, image: Image<P>, max_size: u32) -> Result<(), Image<P>> {
+		self.to_downscale_image_tx
+			.send((image, max_size))
+			.map_err(|err| err.0 .0)
 	}
 }
 
@@ -173,29 +175,31 @@ pub trait RawImage {
 	fn into_token(self) -> Self::Token;
 }
 
-/// Resizes an image
+/// Downscales an image
 // TODO: Allow max size for both width and height?
 #[allow(clippy::cast_sign_loss)] // We're sure it's positive
-pub fn resize_image<P: RawImageProvider>(image: &mut Image<P>, max_size: u32) {
+pub fn downscale_image<P: RawImageProvider>(image: &mut Image<P>, max_size: u32) {
 	let width = image.image.width();
 	let height = image.image.height();
-	let resize_factor = f32::min(max_size as f32 / width as f32, max_size as f32 / height as f32);
-	let resize_width = (width as f32 * resize_factor) as u32;
-	let resize_height = (height as f32 * resize_factor) as u32;
+	let downscale_factor = f32::min(max_size as f32 / width as f32, max_size as f32 / height as f32);
+	let downscaled_width = (width as f32 * downscale_factor) as u32;
+	let downscaled_height = (height as f32 * downscale_factor) as u32;
 
-	assert_le!(resize_width, max_size, "Calculated width is too large");
-	assert_le!(resize_height, max_size, "Calculated height is too large");
+	assert_le!(downscaled_width, max_size, "Calculated width is too large");
+	assert_le!(downscaled_height, max_size, "Calculated height is too large");
 
 	// TODO: What filter to use here?
-	image.image = image
-		.image
-		.resize(resize_width, resize_height, image::imageops::FilterType::Lanczos3);
+	image.image = image.image.resize(
+		downscaled_width,
+		downscaled_height,
+		image::imageops::FilterType::Lanczos3,
+	);
 	tracing::debug!(
-		"Resized {}: {width}x{height} to {}x{} ({:.2}%)",
+		"Downscaled {}: {width}x{height} to {}x{} ({:.2}%)",
 		image.name,
 		image.image.width(),
 		image.image.height(),
-		resize_factor * 100.0
+		downscale_factor * 100.0
 	);
 }
 
@@ -222,14 +226,14 @@ fn image_format<R: io::BufRead + io::Seek>(raw_image: &mut R) -> Result<image::I
 
 /// Creates the image loader service
 #[must_use]
-pub fn create<P: RawImageProvider>() -> (ImageLoader<P>, ImageResizer<P>, ImageReceiver<P>) {
+pub fn create<P: RawImageProvider>() -> (ImageLoader<P>, ImageDownscaler<P>, ImageReceiver<P>) {
 	// Create the image channel
 	// Note: We have the lowest possible bound on the receiver due to images being quite big
-	// Note: Since the resizer / remover is on-demand, we use an unbounded buffer to avoid waiting
+	// Note: Since the downscale / remover is on-demand, we use an unbounded buffer to avoid waiting
 	//       queueing requests on receiving the images.
 	// TODO: Make this customizable?
 	let (image_tx, image_rx) = crossbeam::channel::bounded(0);
-	let (to_resize_image_tx, to_resize_image_rx) = crossbeam::channel::unbounded();
+	let (to_downscale_image_tx, to_downscale_image_rx) = crossbeam::channel::unbounded();
 	let (to_remove_image_tx, to_remove_image_rx) = crossbeam::channel::unbounded();
 
 	(
@@ -237,14 +241,14 @@ pub fn create<P: RawImageProvider>() -> (ImageLoader<P>, ImageResizer<P>, ImageR
 			image_tx: image_tx.clone(),
 			to_remove_image_rx,
 		},
-		ImageResizer {
-			resized_image_tx: image_tx,
-			to_resize_image_rx,
+		ImageDownscaler {
+			downscaled_image_tx: image_tx,
+			to_downscale_image_rx,
 		},
 		ImageReceiver {
 			image_rx,
 			to_remove_image_tx,
-			to_resize_image_tx,
+			to_downscale_image_tx,
 		},
 	)
 }
