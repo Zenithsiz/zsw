@@ -219,6 +219,7 @@ fn create_window() -> Result<(EventLoop<!>, Window), anyhow::Error> {
 
 	tracing::debug!(?window_geometry, "Creating window");
 	let window = WindowBuilder::new()
+		.with_title("Zsw")
 		.with_position(PhysicalPosition {
 			x: window_geometry.pos[0],
 			y: window_geometry.pos[1],
