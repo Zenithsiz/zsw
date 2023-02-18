@@ -1,90 +1,42 @@
 [package]
-edition = "2021"
 name = "zsw"
-resolver = "2"
 version = "0.1.0"
+edition = "2021"
 
 [dependencies]
-
-# Zsw
-zsw-egui = { path = "../zsw-egui" }
-zsw-img = { path = "../zsw-img" }
-zsw-input = { path = "../zsw-input" }
-zsw-panels = { path = "../zsw-panels" }
-zsw-playlist = { path = "../zsw-playlist" }
-zsw-profiles = { path = "../zsw-profiles" }
-zsw-renderer = { path = "../zsw-renderer" }
-zsw-settings-window = { path = "../zsw-settings-window" }
-zsw-util = { path = "../zsw-util" }
-zsw-wgpu = { path = "../zsw-wgpu" }
-
-# Windowing
-winit = "0.27.5"
-
-# Rendering
-wgpu = { version = "0.14.0", features = ["serde", "replay"] }
-
-# Gui
+anyhow = "1.0.68"
+async-channel = "1.8.0"
+async-lock = "2.6.0"
+async-walkdir = "0.2.0"
+bytemuck = { version = "1.13.0", features = ["derive"] }
+cgmath = "0.18.0"
+clap = { version = "4.1.6", features = ["derive"] }
+console-subscriber = { version = "0.1.8", optional = true }
+crossbeam = "0.8.2"
+directories = "4.0.1"
+duplicate = "0.4.1"
 egui = { version = "0.19.0", features = ["default_fonts"] }
 egui_wgpu_backend = "0.20.0"
 egui_winit_platform = "0.16.0"
 epi = "0.17.0"
-
-# Async
-async-channel = "1.7.1"
-console-subscriber = { version = "0.1.8", optional = true }
 futures = "0.3.25"
-pollster = "0.2.5"
-tokio = { version = "1.22.0", features = ["full", "tracing"] }
-
-# Serialization
-serde = { version = "1.0.147", features = ["derive"] }
-serde_json = "1.0.88"
-serde_yaml = "0.9.14"
-
-# Math
-cgmath = { version = "0.18.0", features = ["serde"] }
-
-# Image
 image = "0.24.5"
-
-# Random
+include_dir = "0.7.3"
+itertools = "0.10.5"
+num-rational = "0.4.1"
 rand = "0.8.5"
-
-# Error handling
-anyhow = "1.0.66"
-thiserror = "1.0.37"
-
-# Logging
-chrono = "0.4.23"
-fern = { version = "0.6.1", features = ["colored"] }
+rayon = "1.6.1"
+serde = { version = "1.0.152", features = ["derive"] }
+serde_with = "2.2.0"
+serde_yaml = "0.9.17"
+thiserror = "1.0.38"
+tokio = { version = "1.24.2", features = ["full", "tracing"] }
+tokio-stream = { version = "0.1.11", features = ["fs"] }
 tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = [
-	"json",
-	"parking_lot",
-	"env-filter",
-] }
-
-# Cmd
-clap = { version = "4.0.26", features = ["derive"] }
-
-# Util
-bytemuck = { version = "1.12.3", features = ["derive"] }
-#num-rational = "0.4.0"
-duplicate = "0.4.1"
-
-# Filesystem
-# TODO: Use `notify` once issues with it using `std`'s `mpsc` are fixed
-#notify = "4.0.17"
-native-dialog = "0.6.3"
-directories = "4.0.1"
-
-# Threads
-crossbeam = "0.8.2"
-parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
-rayon = "1.6.0"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
+wgpu = "0.14.2"
+winit = "0.27.5"
+zsw-util = { path = "../zsw-util" }
 
 [features]
-
 tokio-console = ["console-subscriber"]
-dev_shaders = []

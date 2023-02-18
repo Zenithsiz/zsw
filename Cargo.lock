@@ -3580,29 +3580,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"
 
 [[package]]
-name = "zsw-util"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-recursion",
- "cgmath",
- "crossbeam",
- "duplicate",
- "extend",
- "futures",
- "image",
- "itertools",
- "parking_lot",
- "pin-project",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tracing",
-]
-
-[[package]]
-name = "zsw2"
+name = "zsw"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -3638,4 +3616,26 @@ dependencies = [
  "wgpu",
  "winit",
  "zsw-util",
+]
+
+[[package]]
+name = "zsw-util"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-recursion",
+ "cgmath",
+ "crossbeam",
+ "duplicate",
+ "extend",
+ "futures",
+ "image",
+ "itertools",
+ "parking_lot",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tracing",
 ]

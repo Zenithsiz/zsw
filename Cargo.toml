@@ -1,19 +1,6 @@
 [workspace]
 
-members = [
-  #"zsw",
-  "zsw2",
-  #"zsw-playlist",
-  #"zsw-img",
-  #"zsw-wgpu",
-  #"zsw-egui",
-  #"zsw-panels",
-  #"zsw-profiles",
-  "zsw-util",
-  #"zsw-settings-window",
-  #"zsw-renderer",
-  #"zsw-input",
-]
+members = ["zsw", "zsw-util"]
 resolver = "2"
 
 # Compile `image` (and some it's dependencies, which actually load images) in release mode,
