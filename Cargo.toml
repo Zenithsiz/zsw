@@ -1,17 +1,18 @@
 [workspace]
 
 members = [
-  "zsw",
-  "zsw-playlist",
-  "zsw-img",
-  "zsw-wgpu",
-  "zsw-egui",
-  "zsw-panels",
-  "zsw-profiles",
+  #"zsw",
+  "zsw2",
+  #"zsw-playlist",
+  #"zsw-img",
+  #"zsw-wgpu",
+  #"zsw-egui",
+  #"zsw-panels",
+  #"zsw-profiles",
   "zsw-util",
-  "zsw-settings-window",
-  "zsw-renderer",
-  "zsw-input",
+  #"zsw-settings-window",
+  #"zsw-renderer",
+  #"zsw-input",
 ]
 resolver = "2"
 

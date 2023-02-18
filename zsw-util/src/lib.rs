@@ -9,20 +9,28 @@
 	type_alias_impl_trait,
 	async_fn_in_trait,
 	if_let_guard,
-	let_chains
+	let_chains,
+	entry_insert,
+	extend_one,
+	poll_ready,
+	async_closure,
+	path_as_mut_os_str
 )]
 #![allow(incomplete_features)]
 
 // Modules
+pub mod meetup;
 mod rect;
 mod resource;
 mod tpp;
+mod tuple_collect_res;
 
 // Exports
 pub use {
 	rect::Rect,
 	resource::{Resources, ResourcesBundle, ResourcesTuple2},
 	tpp::Tpp,
+	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
 };
 
 // Imports
@@ -30,6 +38,7 @@ use {
 	anyhow::Context,
 	image::DynamicImage,
 	std::{
+		ffi::OsStr,
 		fs,
 		future::Future,
 		path::{Path, PathBuf},
@@ -157,49 +166,6 @@ pub fn image_format(image: &DynamicImage) -> &'static str {
 	}
 }
 
-/// Visits all files in `path` recursively
-pub fn visit_dir<P: AsRef<Path>>(path: &P, visitor: &mut impl FnMut(PathBuf)) {
-	let path = path.as_ref();
-
-	// Try to read the directory
-	let dir = match std::fs::read_dir(path) {
-		Ok(dir) => dir,
-		Err(err) => {
-			tracing::warn!(?path, ?err, "Unable to read directory");
-			return;
-		},
-	};
-
-	// Then go through each entry
-	for entry in dir {
-		// Read the entry and file type
-		let entry = match entry {
-			Ok(entry) => entry,
-			Err(err) => {
-				tracing::warn!(?path, ?err, "Unable to read file entry");
-				continue;
-			},
-		};
-		let entry_path = entry.path();
-		let file_type = match entry.file_type() {
-			Ok(file_type) => file_type,
-			Err(err) => {
-				tracing::warn!(?entry_path, ?err, "Unable to read file type",);
-				continue;
-			},
-		};
-
-		match file_type.is_dir() {
-			// Recurse on directories
-			true => self::visit_dir(&entry_path, &mut *visitor),
-
-			// Yield files
-			false => visitor(entry_path),
-		}
-	}
-}
-
-
 // TODO: Move these elsewhere?
 #[must_use]
 pub fn default_panel_parallax_ratio() -> f32 {
@@ -214,4 +180,14 @@ pub fn default_panel_parallax_exp() -> f32 {
 #[must_use]
 pub fn default_panel_parallax_reverse() -> bool {
 	false
+}
+
+/// Appends a string to this path
+#[extend::ext(name = PathAppendExt)]
+pub impl PathBuf {
+	/// Appends a string to this path
+	fn with_appended<S: AsRef<OsStr>>(mut self, s: S) -> Self {
+		self.as_mut_os_string().push(s);
+		self
+	}
 }

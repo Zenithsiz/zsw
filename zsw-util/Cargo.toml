@@ -14,6 +14,10 @@ image = "0.24.5"
 
 # Async
 futures = "0.3.25"
+tokio = "1.24.2"
+async-recursion = "1.0.2"
+pin-project = "1.0.12"
+tokio-stream = { version = "0.1.11", features = ["fs"] }
 
 # Math
 cgmath = { version = "0.18.0", features = ["serde"] }
@@ -21,6 +25,7 @@ cgmath = { version = "0.18.0", features = ["serde"] }
 # Util
 duplicate = "0.4.1"
 itertools = "0.10.5"
+extend = "1.1.2"
 
 # Error
 anyhow = "1.0.66"
