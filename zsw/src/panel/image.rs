@@ -1,15 +1,15 @@
 //! Panel images
 
-use super::PanelsRendererLayouts;
-
 // Imports
 use {
-	super::PlaylistPlayer,
-	crate::wgpu_wrapper::WgpuShared,
-	anyhow::Context,
+	super::{PanelsRendererLayouts, PlaylistPlayer},
+	crate::{
+		image_loader::{ImageReceiver, ImageRequest, ImageRequester},
+		wgpu_wrapper::WgpuShared,
+	},
 	cgmath::Vector2,
 	image::DynamicImage,
-	std::{assert_matches::assert_matches, mem, task::Poll},
+	std::{assert_matches::assert_matches, mem},
 	wgpu::util::DeviceExt,
 };
 
@@ -31,8 +31,8 @@ pub struct PanelImages {
 	/// Texture bind group
 	image_bind_group: wgpu::BindGroup,
 
-	/// Load future
-	load_fut: Option<tokio::task::JoinHandle<Result<DynamicImage, anyhow::Error>>>,
+	/// Image receiver
+	image_receiver: Option<ImageReceiver>,
 }
 
 impl PanelImages {
@@ -57,7 +57,7 @@ impl PanelImages {
 			back: back_image,
 			texture_sampler,
 			image_bind_group,
-			load_fut: None,
+			image_receiver: None,
 		}
 	}
 
@@ -92,18 +92,19 @@ impl PanelImages {
 	}
 
 	/// Swaps out the back with front and sets as only primary loaded
-	pub async fn swap_back(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub fn swap_back(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
 		self.state = ImagesState::PrimaryOnly;
 		mem::swap(&mut self.front, &mut self.back);
 		self.update_image_bind_group(wgpu_shared, renderer_layouts);
 	}
 
 	/// Advances to the next image, if available
-	pub async fn try_advance_next(
+	pub fn try_advance_next(
 		&mut self,
 		playlist_player: &mut PlaylistPlayer,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
+		image_requester: &ImageRequester,
 	) {
 		// If we have both images, don't load next
 		if self.state == ImagesState::Both {
@@ -111,15 +112,15 @@ impl PanelImages {
 		}
 
 		// Else try to load the next one
-		if let Some(image) = self.try_load_next(playlist_player).await {
+		if let Some(image) = self.try_load_next(wgpu_shared, playlist_player, image_requester) {
 			// Then update the respective image and update the state
 			self.state = match self.state {
 				ImagesState::Empty => {
-					self.front.update(wgpu_shared, image).await;
+					self.front.update(wgpu_shared, image);
 					ImagesState::PrimaryOnly
 				},
 				ImagesState::PrimaryOnly => {
-					self.back.update(wgpu_shared, image).await;
+					self.back.update(wgpu_shared, image);
 					ImagesState::Both
 				},
 				// Note: If we were both, we would have quit above
@@ -133,49 +134,62 @@ impl PanelImages {
 	/// Tries to load the next image.
 	///
 	/// If unavailable, schedules it, and returns None.
-	async fn try_load_next(&mut self, playlist_player: &mut PlaylistPlayer) -> Option<DynamicImage> {
-		match self.load_fut.as_mut() {
-			Some(fut) => match futures::poll!(fut) {
-				Poll::Ready(image) => {
-					// Drop the exhausted future
-					self.load_fut = None;
+	fn try_load_next(
+		&mut self,
+		wgpu_shared: &WgpuShared,
+		playlist_player: &mut PlaylistPlayer,
+		image_requester: &ImageRequester,
+	) -> Option<DynamicImage> {
+		match self.image_receiver.as_mut() {
+			Some(image_receiver) => match image_receiver.try_recv() {
+				Some(response) => {
+					// Remove the exhausted receiver
+					self.image_receiver = None;
 
 					// Then check if we got the image
-					match image.expect("Unable to join image loader task") {
+					match response.image_res {
 						// If so, return it
 						Ok(image) => Some(image),
 
-						// Else, log an error and re-schedule it
+						// Else, log an error, remove the image and re-schedule it
 						Err(err) => {
-							tracing::warn!("Unable to load image: {err:?}");
-							self.schedule_load_image(playlist_player);
+							tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
+							playlist_player.remove(&response.request.path);
+							self.schedule_load_image(wgpu_shared, playlist_player, image_requester);
 							None
 						},
 					}
 				},
-				Poll::Pending => None,
+				None => None,
 			},
 			None => {
-				self.schedule_load_image(playlist_player);
+				self.schedule_load_image(wgpu_shared, playlist_player, image_requester);
 				None
 			},
 		}
 	}
 
 	/// Schedules a new image
-	fn schedule_load_image(&mut self, playlist_player: &mut PlaylistPlayer) {
-		let next_image = match playlist_player.next() {
-			Some(next_image) => next_image.to_path_buf(),
+	fn schedule_load_image(
+		&mut self,
+		wgpu_shared: &WgpuShared,
+		playlist_player: &mut PlaylistPlayer,
+		image_requester: &ImageRequester,
+	) {
+		let image_path = match playlist_player.next() {
+			Some(path) => path.to_path_buf(),
 			None => {
 				tracing::trace!("No images left");
 				return;
 			},
 		};
 
-		assert_matches!(self.load_fut, None, "Overrode existing image loading future");
-		self.load_fut = Some(tokio::task::spawn_blocking(move || {
-			tracing::trace!(?next_image, "Loading image");
-			::image::open(&next_image).with_context(|| format!("Unable to load image {next_image:?}"))
+		let wgpu_limits = wgpu_shared.device.limits();
+		assert_matches!(self.image_receiver, None, "Overrode existing image loading future");
+		self.image_receiver = Some(image_requester.request(ImageRequest {
+			path:           image_path,
+			geometries:     vec![],
+			max_image_size: wgpu_limits.max_texture_dimension_2d,
 		}));
 	}
 
@@ -261,10 +275,10 @@ impl PanelImage {
 	}
 
 	/// Updates this image
-	pub async fn update(&mut self, wgpu_shared: &WgpuShared, image: DynamicImage) {
+	pub fn update(&mut self, wgpu_shared: &WgpuShared, image: DynamicImage) {
 		// Update our texture
 		let size = Vector2::new(image.width(), image.height());
-		(self.texture, self.texture_view) = self::create_image_texture(wgpu_shared, image).await;
+		(self.texture, self.texture_view) = self::create_image_texture(wgpu_shared, image);
 
 		// Then update the image size and swap direction
 		self.size = size;
@@ -284,9 +298,9 @@ fn create_empty_image_texture(wgpu_shared: &WgpuShared) -> (wgpu::Texture, wgpu:
 }
 
 /// Creates the image texture and view
-async fn create_image_texture(wgpu_shared: &WgpuShared, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
+fn create_image_texture(wgpu_shared: &WgpuShared, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
 	// Get the image's format, converting if necessary.
-	let (mut image, format) = match image {
+	let (image, format) = match image {
 		// With `rgba8` we can simply use the image
 		image @ DynamicImage::ImageRgba8(_) => (image, wgpu::TextureFormat::Rgba8UnormSrgb),
 
@@ -299,16 +313,15 @@ async fn create_image_texture(wgpu_shared: &WgpuShared, image: DynamicImage) -> 
 		},
 	};
 
-	// If the image is too large, resize it
+	// Note: The image loader should ensure the image is the right size.
 	let limits = wgpu_shared.device.limits();
 	let max_image_size = limits.max_texture_dimension_2d;
-	if image.width() > max_image_size || image.height() > max_image_size {
-		image = tokio::task::spawn_blocking(move || {
-			image.resize(max_image_size, max_image_size, image::imageops::FilterType::Nearest)
-		})
-		.await
-		.expect("Failed to join resize image task");
-	}
+	let image_width = image.width();
+	let image_height = image.height();
+	assert!(
+		image_width <= max_image_size && image_height <= max_image_size,
+		"Loaded image was too big {image_width}x{image_height} (max: {max_image_size})",
+	);
 
 	let texture_descriptor = self::texture_descriptor("[zsw::panel_img] Image", image.width(), image.height(), format);
 	let texture =

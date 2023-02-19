@@ -21,6 +21,7 @@ pub use self::{
 use {
 	self::ser_de::SerPanelGroup,
 	crate::{
+		image_loader::ImageRequester,
 		playlist::{Playlist, PlaylistManager},
 		wgpu_wrapper::WgpuShared,
 	},
@@ -155,19 +156,27 @@ impl Panel {
 	}
 
 	/// Updates this panel's state
-	pub async fn update(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub fn update(
+		&mut self,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+		image_requester: &ImageRequester,
+	) {
 		// If we're at the end of both, swap the back image
 		if self.state.cur_progress >= self.state.duration {
-			self.images.swap_back(wgpu_shared, renderer_layouts).await;
+			self.images.swap_back(wgpu_shared, renderer_layouts);
 			self.state.cur_progress = self.state.back_swapped_progress();
 			return;
 		}
 
 		// Else try to load the next image
 		// Note: If we have both, this will simply return.
-		self.images
-			.try_advance_next(&mut self.playlist_player, wgpu_shared, renderer_layouts)
-			.await;
+		self.images.try_advance_next(
+			&mut self.playlist_player,
+			wgpu_shared,
+			renderer_layouts,
+			image_requester,
+		);
 
 		// Then update the progress, depending on the state
 		self.state.cur_progress = match self.images.state() {

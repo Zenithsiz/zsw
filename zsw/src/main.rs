@@ -20,10 +20,10 @@
 #![allow(incomplete_features)]
 
 // Modules
-mod egui_wrapper;
-//mod image_loader;
 mod args;
 mod config;
+mod egui_wrapper;
+mod image_loader;
 mod logger;
 mod panel;
 mod playlist;
@@ -50,7 +50,7 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::{lock::Mutex, stream::FuturesUnordered, StreamExt},
+	futures::{lock::Mutex, Future},
 	panel::PanelsManager,
 	playlist::PlaylistManager,
 	std::{mem, sync::Arc},
@@ -58,7 +58,7 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		platform::run_return::EventLoopExtRunReturn,
 	},
-	zsw_util::{meetup, TupleCollectRes3},
+	zsw_util::meetup,
 };
 
 
@@ -132,6 +132,8 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		.unwrap_or_else(|| dirs.data_dir().join("panels/"));
 	let panels_manager = PanelsManager::new(panels_path);
 
+	let (image_loader, image_requester) = image_loader::create();
+
 	// Shared state
 	let shared = Shared {
 		window,
@@ -142,6 +144,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 		playlist_manager,
 		panels_manager,
+		image_requester,
 		cur_panel_group: Mutex::new(None),
 		panels_renderer_shader: Mutex::new(panels_renderer_shader),
 	};
@@ -150,13 +153,13 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 	let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
 	let (panels_updater_output_tx, panels_updater_output_rx) = meetup::channel();
 
-	let _load_default_panel_group_task = tokio::spawn({
+	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
 		let default_panel_group = config.default_panel_group.clone();
 		async move {
 			// If we don't have a default, don't do anything
 			let Some(default_panel_group) = &default_panel_group else {
-				return;
+				return Ok(());
 			};
 
 			// Else load the panel group
@@ -173,16 +176,18 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 				Ok(panel_group) => panel_group,
 				Err(err) => {
 					tracing::warn!("Unable to load default panel group: {err:?}");
-					return;
+					return Ok(());
 				},
 			};
 
 			// And set it as the current one
 			*shared.cur_panel_group.lock().await = Some(panel_group);
+
+			Ok(())
 		}
 	});
 
-	let renderer_task = tokio::spawn({
+	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
 		async move {
 			self::renderer(
@@ -197,12 +202,14 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		}
 	});
 
-	let panels_updater_task = tokio::spawn({
+	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
 		async move { self::panels_updater(shared, panels_updater_output_tx).await }
 	});
 
-	let egui_painter_task = tokio::spawn({
+	self::spawn_task("Image loader", async move { image_loader.run().await });
+
+	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
 		async move { self::egui_painter(shared, egui_painter, settings_menu, egui_painter_output_tx).await }
 	});
@@ -211,7 +218,6 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 	let _ = tokio::task::block_in_place(|| {
 		event_loop.run_return(|event, _, control_flow| {
 			*control_flow = winit::event_loop::ControlFlow::Wait;
-			tracing::trace!(?event);
 
 			#[allow(clippy::single_match)] // We'll add more in the future
 			match event {
@@ -229,11 +235,24 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		})
 	});
 
-	futures::try_join!(renderer_task, panels_updater_task, egui_painter_task)
-		.expect("Unable to join tokio task")
-		.collect_result()?;
-
 	Ok(())
+}
+
+/// Spawns a task
+pub fn spawn_task<F, T>(name: impl Into<String>, future: F)
+where
+	F: Future<Output = Result<T, anyhow::Error>> + Send + 'static,
+{
+	let name = name.into();
+
+	#[allow(clippy::let_underscore_future)] // We don't care about the result
+	let _ = tokio::spawn(async move {
+		tracing::debug!(?name, "Spawning task");
+		match future.await {
+			Ok(_) => tracing::debug!(?name, "Task finished"),
+			Err(err) => tracing::debug!(?name, ?err, "Task returned error"),
+		}
+	});
 }
 
 /// Renderer task
@@ -304,15 +323,9 @@ async fn renderer(
 async fn panels_updater(shared: Arc<Shared>, output_tx: meetup::Sender<()>) -> Result<!, anyhow::Error> {
 	loop {
 		if let Some(panel_group) = &mut *shared.cur_panel_group.lock().await {
-			panel_group
-				.panels_mut()
-				.iter_mut()
-				.map(|panel| async {
-					panel.update(&shared.wgpu, &shared.panels_renderer_layout).await;
-				})
-				.collect::<FuturesUnordered<_>>()
-				.collect::<()>()
-				.await;
+			for panel in panel_group.panels_mut() {
+				panel.update(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester);
+			}
 		}
 
 		output_tx.send(()).await;

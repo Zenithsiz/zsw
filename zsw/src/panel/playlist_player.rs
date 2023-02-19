@@ -32,6 +32,12 @@ impl PlaylistPlayer {
 		Ok(Self { items, cur_idx: None })
 	}
 
+	/// Removes an item from the playlist
+	// TODO: Not make this `O(N)`
+	pub fn remove(&mut self, path: &Path) {
+		self.items.retain(|item| item != path);
+	}
+
 	/// Returns the next image to load
 	pub fn next(&mut self) -> Option<&Path> {
 		// Advance the playlist

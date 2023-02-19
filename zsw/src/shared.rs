@@ -3,6 +3,7 @@
 // Imports
 use {
 	crate::{
+		image_loader::ImageRequester,
 		panel::{PanelGroup, PanelsManager, PanelsRendererLayouts, PanelsRendererShader},
 		playlist::PlaylistManager,
 		wgpu_wrapper::WgpuShared,
@@ -26,6 +27,7 @@ pub struct Shared {
 
 	pub playlist_manager: PlaylistManager,
 	pub panels_manager:   PanelsManager,
+	pub image_requester:  ImageRequester,
 
 	// TODO: Make some kind of "locker" for these, to avoid deadlocks
 	pub cur_panel_group:        Mutex<Option<PanelGroup>>,
