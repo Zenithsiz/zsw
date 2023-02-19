@@ -1,6 +1,6 @@
 tokio_worker_threads: 2
 rayon_worker_threads: 2
-panels_dir: null
-playlists_dir: null
+panels_dir: panels/
+playlists_dir: playlists/
 shaders_dir: shaders/
-default_panel_group: test1
+default_panel_group: example1

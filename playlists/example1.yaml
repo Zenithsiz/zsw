@@ -1,0 +1,4 @@
+items:
+  - type: Directory
+    path: '/home/zenithsiz/.wallpaper/active'
+    recursive: true
