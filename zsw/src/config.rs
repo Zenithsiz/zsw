@@ -48,8 +48,13 @@ impl Config {
 			Err(err) => {
 				tracing::warn!("Unable to load config, using default: {err:?}");
 				let config = Self::default();
-				if let Err(err) = config.write(path) {
-					tracing::warn!("Unable to write default config: {err:?}");
+
+				// If the config file doesn't exist, write the default
+				// Note: If we're unable to check for existence, we assume it does exist, so we don't override anything
+				if !std::fs::try_exists(path).unwrap_or(true) {
+					if let Err(err) = config.write(path) {
+						tracing::warn!("Unable to write default config: {err:?}");
+					}
 				}
 
 				config
