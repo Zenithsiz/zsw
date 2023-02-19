@@ -130,9 +130,9 @@ impl PanelGeometry {
 	///
 	/// This ratio is multiplied by the base uvs to fix the stretching
 	/// that comes from having a square coordinate system [0.0 .. 1.0] x [0.0 .. 1.0]
-	pub fn image_ratio(&self, image_size: Vector2<u32>) -> Vector2<f32> {
+	pub fn image_ratio(panel_size: Vector2<u32>, image_size: Vector2<u32>) -> Vector2<f32> {
 		let image_size = image_size.cast().expect("Image size didn't fit into an `i32`");
-		let panel_size = self.geometry.size.cast().expect("Panel size didn't fit into an `i32`");
+		let panel_size = panel_size.cast().expect("Panel size didn't fit into an `i32`");
 
 		// If either the image or our panel have a side with 0, return a square ratio
 		// TODO: Check if this is the right thing to do

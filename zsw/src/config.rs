@@ -4,6 +4,7 @@
 use {
 	anyhow::Context,
 	std::{
+		collections::HashSet,
 		num::NonZeroUsize,
 		path::{Path, PathBuf},
 	},
@@ -32,6 +33,20 @@ pub struct Config {
 	/// Shaders directory
 	#[serde(default)]
 	pub shaders_dir: Option<PathBuf>,
+
+	/// Upscale cache directory
+	#[serde(default)]
+	pub upscale_cache_dir: Option<PathBuf>,
+
+	/// Upscaling command, if any.
+	///
+	/// Will be called with arguments `["-i", <input-file>, "-o", <output-file>, "-s", <integer-power-of-two-scale>]`
+	#[serde(default)]
+	pub upscale_cmd: Option<PathBuf>,
+
+	/// Upscaling excluded (by absolute path)
+	#[serde(default)]
+	pub upscale_exclude: HashSet<PathBuf>,
 
 	/// Default panel group
 	#[serde(default)]
@@ -89,6 +104,9 @@ impl Default for Config {
 			panels_dir:           None,
 			playlists_dir:        None,
 			shaders_dir:          None,
+			upscale_cache_dir:    None,
+			upscale_cmd:          None,
+			upscale_exclude:      HashSet::new(),
 			default_panel_group:  None,
 		}
 	}

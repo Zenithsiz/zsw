@@ -11,7 +11,10 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 use {
 	self::uniform::PanelImageUniforms,
 	super::{PanelGroup, PanelImage},
-	crate::wgpu_wrapper::{FrameRender, WgpuRenderer, WgpuShared},
+	crate::{
+		panel::PanelGeometry,
+		wgpu_wrapper::{FrameRender, WgpuRenderer, WgpuShared},
+	},
 	anyhow::Context,
 	cgmath::Point2,
 	std::path::{Path, PathBuf},
@@ -211,7 +214,7 @@ impl PanelsRenderer {
 				let pos_matrix = geometry.pos_matrix(surface_size);
 
 				let create_uniforms = |image: &PanelImage, progress| {
-					let ratio = geometry.image_ratio(image.size());
+					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, image.size());
 					let (parallax_ratio, parallax_offset) = geometry.parallax_ratio_offset(
 						ratio,
 						cursor_pos,

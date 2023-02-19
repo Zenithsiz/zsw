@@ -19,6 +19,7 @@ pub fn create(worker_threads: Option<NonZeroUsize>) -> Result<tokio::runtime::Ru
 
 	tokio::runtime::Builder::new_multi_thread()
 		.enable_time()
+		.enable_io()
 		.thread_name_fn(|| {
 			static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 			let id = NEXT_ID.fetch_add(1, atomic::Ordering::AcqRel);

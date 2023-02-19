@@ -15,7 +15,9 @@
 	impl_trait_projections,
 	path_file_prefix,
 	entry_insert,
-	fs_try_exists
+	fs_try_exists,
+	let_chains,
+	exit_status_error
 )]
 #![allow(incomplete_features)]
 
@@ -132,7 +134,17 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		.unwrap_or_else(|| dirs.data_dir().join("panels/"));
 	let panels_manager = PanelsManager::new(panels_path);
 
-	let (image_loader, image_requester) = image_loader::create();
+	let upscale_cache_dir = config
+		.upscale_cache_dir
+		.clone()
+		.unwrap_or_else(|| dirs.data_dir().join("upscale_cache/"));
+	let (image_loader, image_requester) = image_loader::create(
+		upscale_cache_dir,
+		config.upscale_cmd.clone(),
+		config.upscale_exclude.clone(),
+	)
+	.await
+	.context("Unable to create image loader")?;
 
 	// Shared state
 	let shared = Shared {

@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::{PanelsRendererLayouts, PlaylistPlayer},
+	super::{PanelGeometry, PanelsRendererLayouts, PlaylistPlayer},
 	crate::{
 		image_loader::{ImageReceiver, ImageRequest, ImageRequester},
 		wgpu_wrapper::WgpuShared,
@@ -105,6 +105,7 @@ impl PanelImages {
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
+		geometries: &[PanelGeometry],
 	) {
 		// If we have both images, don't load next
 		if self.state == ImagesState::Both {
@@ -112,7 +113,7 @@ impl PanelImages {
 		}
 
 		// Else try to load the next one
-		if let Some(image) = self.try_load_next(wgpu_shared, playlist_player, image_requester) {
+		if let Some(image) = self.try_load_next(wgpu_shared, playlist_player, image_requester, geometries) {
 			// Then update the respective image and update the state
 			self.state = match self.state {
 				ImagesState::Empty => {
@@ -139,6 +140,7 @@ impl PanelImages {
 		wgpu_shared: &WgpuShared,
 		playlist_player: &mut PlaylistPlayer,
 		image_requester: &ImageRequester,
+		geometries: &[PanelGeometry],
 	) -> Option<DynamicImage> {
 		match self.image_receiver.as_mut() {
 			Some(image_receiver) => match image_receiver.try_recv() {
@@ -155,7 +157,7 @@ impl PanelImages {
 						Err(err) => {
 							tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
 							playlist_player.remove(&response.request.path);
-							self.schedule_load_image(wgpu_shared, playlist_player, image_requester);
+							self.schedule_load_image(wgpu_shared, playlist_player, image_requester, geometries);
 							None
 						},
 					}
@@ -163,7 +165,7 @@ impl PanelImages {
 				None => None,
 			},
 			None => {
-				self.schedule_load_image(wgpu_shared, playlist_player, image_requester);
+				self.schedule_load_image(wgpu_shared, playlist_player, image_requester, geometries);
 				None
 			},
 		}
@@ -175,6 +177,7 @@ impl PanelImages {
 		wgpu_shared: &WgpuShared,
 		playlist_player: &mut PlaylistPlayer,
 		image_requester: &ImageRequester,
+		geometries: &[PanelGeometry],
 	) {
 		let image_path = match playlist_player.next() {
 			Some(path) => path.to_path_buf(),
@@ -188,7 +191,7 @@ impl PanelImages {
 		assert_matches!(self.image_receiver, None, "Overrode existing image loading future");
 		self.image_receiver = Some(image_requester.request(ImageRequest {
 			path:           image_path,
-			geometries:     vec![],
+			geometries:     geometries.iter().map(|geometry| geometry.geometry).collect(),
 			max_image_size: wgpu_limits.max_texture_dimension_2d,
 		}));
 	}

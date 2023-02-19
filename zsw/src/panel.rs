@@ -176,6 +176,7 @@ impl Panel {
 			wgpu_shared,
 			renderer_layouts,
 			image_requester,
+			&self.geometries,
 		);
 
 		// Then update the progress, depending on the state
