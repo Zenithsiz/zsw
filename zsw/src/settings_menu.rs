@@ -87,11 +87,15 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 		Some(panel_group) =>
 			for (panel_idx, panel) in panel_group.panels_mut().iter_mut().enumerate() {
 				ui.collapsing(format!("Panel {panel_idx}"), |ui| {
-					for (geometry_idx, geometry) in panel.geometries.iter_mut().enumerate() {
-						ui.collapsing(format!("Geometry {geometry_idx}"), |ui| {
-							self::draw_rect(ui, &mut geometry.geometry);
-						});
-					}
+					ui.collapsing("Geometries", |ui| {
+						for (geometry_idx, geometry) in panel.geometries.iter_mut().enumerate() {
+							ui.horizontal(|ui| {
+								ui.label(format!("#{}: ", geometry_idx + 1));
+								self::draw_rect(ui, &mut geometry.geometry);
+							});
+						}
+					});
+
 
 					ui.horizontal(|ui| {
 						ui.label("Cur progress");
