@@ -81,6 +81,7 @@ fn draw_panels_tab(
 }
 
 /// Draws the panels editor
+// TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
 fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 	match panel_group {
 		Some(panel_group) =>
@@ -128,7 +129,11 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 					ui.horizontal(|ui| {
 						ui.label("Skip");
 						if ui.button("🔄").clicked() {
-							panel.state.cur_progress = panel.state.duration;
+							match panel.images.state() {
+								panel::ImagesState::Empty => (),
+								panel::ImagesState::PrimaryOnly => panel.state.cur_progress = panel.state.fade_point,
+								panel::ImagesState::Both => panel.state.cur_progress = panel.state.duration,
+							}
 						}
 					});
 

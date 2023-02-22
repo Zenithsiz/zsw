@@ -163,7 +163,7 @@ impl Panel {
 		image_requester: &ImageRequester,
 	) {
 		// If we're at the end of both, swap the back image
-		if self.state.cur_progress >= self.state.duration {
+		if self.images.state() == ImagesState::Both && self.state.cur_progress >= self.state.duration {
 			self.images.swap_back(wgpu_shared, renderer_layouts);
 			self.state.cur_progress = self.state.back_swapped_progress();
 			return;

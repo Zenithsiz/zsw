@@ -93,9 +93,23 @@ impl PanelImages {
 
 	/// Swaps out the back with front and sets as only primary loaded
 	pub fn swap_back(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
-		self.state = ImagesState::PrimaryOnly;
-		mem::swap(&mut self.front, &mut self.back);
-		self.update_image_bind_group(wgpu_shared, renderer_layouts);
+		match self.state {
+			// If we're empty, there's nothing to swap
+			ImagesState::Empty => (),
+
+			// If we only have the primary, swapping puts us back to empty
+			// Note: Since we're empty, there's no use in swapping the front and back buffers
+			ImagesState::PrimaryOnly => {
+				self.state = ImagesState::Empty;
+			},
+
+			// If we have both, swap the back and front
+			ImagesState::Both => {
+				self.state = ImagesState::PrimaryOnly;
+				mem::swap(&mut self.front, &mut self.back);
+				self.update_image_bind_group(wgpu_shared, renderer_layouts);
+			},
+		}
 	}
 
 	/// Advances to the next image, if available
