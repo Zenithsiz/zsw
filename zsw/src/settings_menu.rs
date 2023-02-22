@@ -125,6 +125,13 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 						ui.checkbox(&mut panel.state.reverse_parallax, "Reverse parallax");
 					});
 
+					ui.horizontal(|ui| {
+						ui.label("Skip");
+						if ui.button("🔄").clicked() {
+							panel.state.cur_progress = panel.state.duration;
+						}
+					});
+
 					ui.collapsing("Images", |ui| {
 						match panel.images.state() {
 							panel::ImagesState::Empty => (),
@@ -137,13 +144,6 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 							},
 						};
 					});
-
-					ui.horizontal(|ui| {
-						ui.label("Skip");
-						if ui.button("🔄").clicked() {
-							panel.state.cur_progress = panel.state.duration;
-						}
-					});
 				});
 			},
 		None => {
@@ -155,7 +155,10 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 /// Draws a panel image
 fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 	let size = image.size();
-	format!("Size: {}x{}", size.x, size.y);
+	if let Some(name) = image.name() {
+		ui.label(format!("Name: {name}"));
+	}
+	ui.label(format!("Size: {}x{}", size.x, size.y));
 	ui.checkbox(image.swap_dir_mut(), "Swap direction");
 }
 

@@ -4,7 +4,7 @@
 use {
 	super::{PanelGeometry, PanelsRendererLayouts, PlaylistPlayer},
 	crate::{
-		image_loader::{ImageReceiver, ImageRequest, ImageRequester},
+		image_loader::{Image, ImageReceiver, ImageRequest, ImageRequester},
 		wgpu_wrapper::WgpuShared,
 	},
 	cgmath::Vector2,
@@ -141,7 +141,7 @@ impl PanelImages {
 		playlist_player: &mut PlaylistPlayer,
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
-	) -> Option<DynamicImage> {
+	) -> Option<Image> {
 		match self.image_receiver.as_mut() {
 			Some(image_receiver) => match image_receiver.try_recv() {
 				Some(response) => {
@@ -245,6 +245,9 @@ pub struct PanelImage {
 
 	/// Swap direction
 	swap_dir: bool,
+
+	/// Image name
+	image_name: Option<String>,
 }
 
 impl PanelImage {
@@ -259,6 +262,7 @@ impl PanelImage {
 			texture_view,
 			size: Vector2::new(0, 0),
 			swap_dir: false,
+			image_name: None,
 		}
 	}
 
@@ -277,11 +281,17 @@ impl PanelImage {
 		&mut self.swap_dir
 	}
 
+	/// Returns the image name, if any
+	pub fn name(&self) -> Option<&str> {
+		self.image_name.as_deref()
+	}
+
 	/// Updates this image
-	pub fn update(&mut self, wgpu_shared: &WgpuShared, image: DynamicImage) {
+	pub fn update(&mut self, wgpu_shared: &WgpuShared, image: Image) {
 		// Update our texture
-		let size = Vector2::new(image.width(), image.height());
-		(self.texture, self.texture_view) = self::create_image_texture(wgpu_shared, image);
+		let size = Vector2::new(image.image.width(), image.image.height());
+		(self.texture, self.texture_view) = self::create_image_texture(wgpu_shared, image.image);
+		self.image_name = Some(image.path.display().to_string());
 
 		// Then update the image size and swap direction
 		self.size = size;

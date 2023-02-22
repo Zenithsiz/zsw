@@ -16,6 +16,16 @@ use {
 	zsw_util::Rect,
 };
 
+/// Image
+#[derive(Debug)]
+pub struct Image {
+	/// Path
+	pub path: PathBuf,
+
+	/// Image
+	pub image: DynamicImage,
+}
+
 /// Request
 #[derive(Debug)]
 pub struct ImageRequest {
@@ -38,7 +48,7 @@ pub struct ImageResponse {
 	pub request: ImageRequest,
 
 	/// Image result
-	pub image_res: Result<DynamicImage, anyhow::Error>,
+	pub image_res: Result<Image, anyhow::Error>,
 }
 
 
@@ -137,7 +147,7 @@ impl ImageLoader {
 		upscale_exclude: &HashSet<PathBuf>,
 		upscale_semaphore: &Semaphore,
 		request: &ImageRequest,
-	) -> Result<DynamicImage, anyhow::Error> {
+	) -> Result<Image, anyhow::Error> {
 		// Default image path
 		let mut image_path = request.path.clone();
 
@@ -182,7 +192,10 @@ impl ImageLoader {
 			tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), ?resize_duration, "Resized image");
 		}
 
-		Ok(image)
+		Ok(Image {
+			path: request.path.clone(),
+			image,
+		})
 	}
 
 	/// Checks if an upscale is required and performs it, if so.
