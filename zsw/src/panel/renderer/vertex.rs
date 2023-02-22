@@ -1,5 +1,8 @@
 //! Panel vertex
 
+// Lints
+#![allow(clippy::trailing_empty_array, clippy::extra_unused_type_parameters)] // Occurs inside `derive(Pod)`
+
 // Imports
 use std::mem;
 

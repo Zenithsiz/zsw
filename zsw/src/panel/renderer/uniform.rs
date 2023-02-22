@@ -1,7 +1,7 @@
 //! Uniforms
 
 // Lints
-#![allow(clippy::trailing_empty_array)] // Occurs inside `derive(Pod)`
+#![allow(clippy::trailing_empty_array, clippy::extra_unused_type_parameters)] // Occurs inside `derive(Pod)`
 
 
 // Imports
