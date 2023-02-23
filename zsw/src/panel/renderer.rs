@@ -332,7 +332,7 @@ fn create_render_pipeline(
 		.create_pipeline_layout(&render_pipeline_layout_descriptor);
 
 	let color_targets = [Some(wgpu::ColorTargetState {
-		format:     *wgpu_renderer.surface_texture_format(),
+		format:     wgpu_renderer.surface_texture_format(),
 		blend:      Some(wgpu::BlendState::ALPHA_BLENDING),
 		write_mask: wgpu::ColorWrites::ALL,
 	})];
@@ -387,7 +387,7 @@ fn create_msaa_framebuffer(
 		mip_level_count: 1,
 		sample_count:    MSAA_SAMPLES,
 		dimension:       wgpu::TextureDimension::D2,
-		format:          *wgpu_renderer.surface_texture_format(),
+		format:          wgpu_renderer.surface_texture_format(),
 		usage:           wgpu::TextureUsages::RENDER_ATTACHMENT,
 		label:           Some("[zsw::panel_renderer] MSAA framebuffer"),
 	};

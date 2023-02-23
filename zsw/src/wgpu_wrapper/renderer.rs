@@ -28,8 +28,7 @@ pub struct WgpuRenderer {
 	_window: Arc<Window>,
 
 	/// Surface texture format
-	// TODO: Use an `AtomicCell` once we need to change it
-	surface_texture_format: Arc<wgpu::TextureFormat>,
+	surface_texture_format: wgpu::TextureFormat,
 }
 
 impl WgpuRenderer {
@@ -42,7 +41,6 @@ impl WgpuRenderer {
 		// Configure the surface and get the preferred texture format and surface size
 		let (surface_texture_format, surface_size) = self::configure_window_surface(&window, &surface, adapter, device)
 			.context("Unable to configure window surface")?;
-		let surface_texture_format = Arc::new(surface_texture_format);
 
 		Ok(Self {
 			surface,
@@ -58,8 +56,8 @@ impl WgpuRenderer {
 	}
 
 	/// Returns the surface texture format
-	pub fn surface_texture_format(&self) -> Arc<wgpu::TextureFormat> {
-		Arc::clone(&self.surface_texture_format)
+	pub fn surface_texture_format(&self) -> wgpu::TextureFormat {
+		self.surface_texture_format
 	}
 
 	/// Starts rendering a frame.
@@ -96,7 +94,7 @@ impl WgpuRenderer {
 		tracing::info!(?size, "Resizing wgpu surface");
 		if size.width > 0 && size.height > 0 {
 			// Update our surface
-			let config = self::window_surface_configuration(*self.surface_texture_format, size);
+			let config = self::window_surface_configuration(self.surface_texture_format, size);
 			self.surface.configure(&shared.device, &config);
 			self.surface_size = size;
 		}
