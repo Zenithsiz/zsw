@@ -33,14 +33,14 @@ pub trait ResourcesBundle {
 /// Resources bundle that can lock `Resource`
 pub trait Resources<R>: ResourcesBundle {
 	/// Resource wrapper
-	type Resource<'a>: Deref<Target = R> + DerefMut
+	type Resource<'res>: Deref<Target = R> + DerefMut
 	where
-		Self: 'a;
+		Self: 'res;
 
 	/// Future type for [`Self::lock`]
-	type LockFuture<'a>: Future<Output = Self::Resource<'a>>
+	type LockFuture<'res>: Future<Output = Self::Resource<'res>>
 	where
-		Self: 'a;
+		Self: 'res;
 
 	/// Locks and retrieves `Resource`
 	fn lock(&mut self) -> Self::LockFuture<'_>;
@@ -49,17 +49,17 @@ pub trait Resources<R>: ResourcesBundle {
 /// Resources 2-tuple
 pub trait ResourcesTuple2<T1, T2>: ResourcesBundle {
 	// Resources
-	type Resources1<'a>: Deref<Target = T1> + DerefMut
+	type Resources1<'res>: Deref<Target = T1> + DerefMut
 	where
-		Self: 'a;
-	type Resources2<'a>: Deref<Target = T2> + DerefMut
+		Self: 'res;
+	type Resources2<'res>: Deref<Target = T2> + DerefMut
 	where
-		Self: 'a;
+		Self: 'res;
 
 	/// Future type for [`Self::lock`]
-	type LockFuture<'a>: Future<Output = (Self::Resources1<'a>, Self::Resources2<'a>)>
+	type LockFuture<'res>: Future<Output = (Self::Resources1<'res>, Self::Resources2<'res>)>
 	where
-		Self: 'a;
+		Self: 'res;
 
 	/// Locks and retrieves `Resources`
 	fn lock(&mut self) -> Self::LockFuture<'_>;
