@@ -301,6 +301,7 @@ async fn renderer(
 			panels_renderer
 				.render(
 					&mut frame,
+					&wgpu_renderer,
 					&shared.wgpu,
 					&shared.panels_renderer_layout,
 					Point2::new(cursor_pos.x as i32, cursor_pos.y as i32),
@@ -327,7 +328,7 @@ async fn renderer(
 		// Resize if we need to
 		if let Some(resize) = shared.last_resize.swap(None) {
 			wgpu_renderer.resize(&shared.wgpu, resize.size);
-			panels_renderer.resize(&shared.wgpu, resize.size);
+			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, resize.size);
 		}
 	}
 }

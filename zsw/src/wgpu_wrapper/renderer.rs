@@ -4,7 +4,7 @@
 use {
 	super::WgpuShared,
 	anyhow::Context,
-	std::{marker::PhantomData, sync::Arc},
+	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
 };
 
@@ -65,6 +65,7 @@ impl WgpuRenderer {
 	/// Starts rendering a frame.
 	///
 	/// Returns the encoder and surface view to render onto
+	// TODO: Ensure it's not called more than once?
 	pub fn start_render(&mut self, shared: &WgpuShared) -> Result<FrameRender, anyhow::Error> {
 		// And then get the surface texture
 		// Note: This can block, so we run it under tokio's block-in-place
@@ -87,7 +88,6 @@ impl WgpuRenderer {
 			surface_texture,
 			surface_view: surface_texture_view,
 			surface_size: self.surface_size,
-			_phantom: PhantomData,
 		})
 	}
 
@@ -105,7 +105,7 @@ impl WgpuRenderer {
 
 /// A frame's rendering
 #[derive(Debug)]
-pub struct FrameRender<'renderer> {
+pub struct FrameRender {
 	/// Encoder
 	pub encoder: wgpu::CommandEncoder,
 
@@ -117,12 +117,9 @@ pub struct FrameRender<'renderer> {
 
 	/// Surface size
 	surface_size: PhysicalSize<u32>,
-
-	/// Phantom data to prevent rendering more than a frame at once
-	_phantom: PhantomData<&'renderer mut ()>,
 }
 
-impl<'renderer> FrameRender<'renderer> {
+impl FrameRender {
 	/// Returns the surface size
 	pub fn surface_size(&self) -> PhysicalSize<u32> {
 		self.surface_size

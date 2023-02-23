@@ -17,10 +17,6 @@ pub struct WgpuShared {
 
 	/// Queue
 	pub queue: wgpu::Queue,
-
-	/// Surface texture format
-	// TODO: Use an `AtomicCell` once we need to change it
-	pub surface_texture_format: Arc<wgpu::TextureFormat>,
 }
 
 /// Creates the wgpu service
@@ -35,14 +31,7 @@ pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), a
 	// Then create the renderer
 	let renderer = WgpuRenderer::new(window, surface, &adapter, &device).context("Unable to create renderer")?;
 
-	Ok((
-		WgpuShared {
-			device,
-			queue,
-			surface_texture_format: renderer.surface_texture_format(),
-		},
-		renderer,
-	))
+	Ok((WgpuShared { device, queue }, renderer))
 }
 
 

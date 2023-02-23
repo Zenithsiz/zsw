@@ -85,7 +85,7 @@ impl PanelsRenderer {
 		let vertices = self::create_vertices(wgpu_shared);
 
 		// Create the framebuffer
-		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu_shared, wgpu_renderer.surface_size());
+		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, wgpu_renderer.surface_size());
 
 		// Create the group layouts
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu_shared);
@@ -94,6 +94,7 @@ impl PanelsRenderer {
 		Ok((
 			Self {
 				render_pipeline: self::create_render_pipeline(
+					wgpu_renderer,
 					wgpu_shared,
 					&uniforms_bind_group_layout,
 					&image_bind_group_layout,
@@ -115,9 +116,9 @@ impl PanelsRenderer {
 	}
 
 	/// Resizes the buffer
-	pub fn resize(&mut self, wgpu_shared: &WgpuShared, size: PhysicalSize<u32>) {
+	pub fn resize(&mut self, wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared, size: PhysicalSize<u32>) {
 		tracing::debug!("Resizing msaa framebuffer to {}x{}", size.width, size.height);
-		self.msaa_framebuffer = self::create_msaa_framebuffer(wgpu_shared, size);
+		self.msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, size);
 	}
 
 	/// Updates the shader.
@@ -141,9 +142,11 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel group
+	#[allow(clippy::too_many_arguments)] // TODO: Refactor
 	pub fn render(
 		&mut self,
 		frame: &mut FrameRender,
+		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
 		cursor_pos: Point2<i32>,
@@ -153,6 +156,7 @@ impl PanelsRenderer {
 		// Update the shader, if requested
 		if self.update_shader(shader.shader) {
 			self.render_pipeline = self::create_render_pipeline(
+				wgpu_renderer,
 				wgpu_shared,
 				&layouts.uniforms_bind_group_layout,
 				&layouts.image_bind_group_layout,
@@ -289,6 +293,7 @@ fn create_indices(wgpu_shared: &WgpuShared) -> wgpu::Buffer {
 
 /// Creates the render pipeline
 fn create_render_pipeline(
+	wgpu_renderer: &WgpuRenderer,
 	wgpu_shared: &WgpuShared,
 	uniforms_bind_group_layout: &wgpu::BindGroupLayout,
 	image_bind_group_layout: &wgpu::BindGroupLayout,
@@ -327,7 +332,7 @@ fn create_render_pipeline(
 		.create_pipeline_layout(&render_pipeline_layout_descriptor);
 
 	let color_targets = [Some(wgpu::ColorTargetState {
-		format:     *wgpu_shared.surface_texture_format,
+		format:     *wgpu_renderer.surface_texture_format(),
 		blend:      Some(wgpu::BlendState::ALPHA_BLENDING),
 		write_mask: wgpu::ColorWrites::ALL,
 	})];
@@ -366,7 +371,11 @@ fn create_render_pipeline(
 }
 
 /// Creates the msaa framebuffer
-fn create_msaa_framebuffer(wgpu_shared: &WgpuShared, size: PhysicalSize<u32>) -> wgpu::TextureView {
+fn create_msaa_framebuffer(
+	wgpu_renderer: &WgpuRenderer,
+	wgpu_shared: &WgpuShared,
+	size: PhysicalSize<u32>,
+) -> wgpu::TextureView {
 	let msaa_texture_extent = wgpu::Extent3d {
 		width:                 size.width,
 		height:                size.height,
@@ -378,7 +387,7 @@ fn create_msaa_framebuffer(wgpu_shared: &WgpuShared, size: PhysicalSize<u32>) ->
 		mip_level_count: 1,
 		sample_count:    MSAA_SAMPLES,
 		dimension:       wgpu::TextureDimension::D2,
-		format:          *wgpu_shared.surface_texture_format,
+		format:          *wgpu_renderer.surface_texture_format(),
 		usage:           wgpu::TextureUsages::RENDER_ATTACHMENT,
 		label:           Some("[zsw::panel_renderer] MSAA framebuffer"),
 	};

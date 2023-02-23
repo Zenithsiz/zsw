@@ -179,7 +179,8 @@ pub fn create(
 	});
 
 	// Create the egui render pass
-	let render_pass = egui_wgpu_backend::RenderPass::new(&wgpu_shared.device, *wgpu_shared.surface_texture_format, 1);
+	let render_pass =
+		egui_wgpu_backend::RenderPass::new(&wgpu_shared.device, *wgpu_renderer.surface_texture_format(), 1);
 
 	let (event_tx, event_rx) = mpsc::unbounded_channel();
 	(
