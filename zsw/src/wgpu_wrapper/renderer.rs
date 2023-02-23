@@ -12,7 +12,7 @@ use {
 #[derive(Debug)]
 pub struct WgpuRenderer {
 	/// Surface
-	pub(super) surface: wgpu::Surface,
+	surface: wgpu::Surface,
 
 	/// Surface size
 	// Note: We keep the size ourselves instead of using the inner
@@ -22,16 +22,44 @@ pub struct WgpuRenderer {
 	//       Wgpu validation code can panic if the size we give it
 	//       is invalid (for example, during scissoring), so we *must*
 	//       ensure this size is the surface's actual size.
-	pub(super) surface_size: PhysicalSize<u32>,
+	surface_size: PhysicalSize<u32>,
 
 	/// Window
-	pub(super) _window: Arc<Window>,
+	_window: Arc<Window>,
+
+	/// Surface texture format
+	// TODO: Use an `AtomicCell` once we need to change it
+	surface_texture_format: Arc<wgpu::TextureFormat>,
 }
 
 impl WgpuRenderer {
+	pub(super) fn new(
+		window: Arc<Window>,
+		surface: wgpu::Surface,
+		adapter: &wgpu::Adapter,
+		device: &wgpu::Device,
+	) -> Result<Self, anyhow::Error> {
+		// Configure the surface and get the preferred texture format and surface size
+		let (surface_texture_format, surface_size) = self::configure_window_surface(&window, &surface, adapter, device)
+			.context("Unable to configure window surface")?;
+		let surface_texture_format = Arc::new(surface_texture_format);
+
+		Ok(Self {
+			surface,
+			surface_size,
+			_window: window,
+			surface_texture_format,
+		})
+	}
+
 	/// Returns the surface size
 	pub fn surface_size(&self) -> PhysicalSize<u32> {
 		self.surface_size
+	}
+
+	/// Returns the surface texture format
+	pub fn surface_texture_format(&self) -> Arc<wgpu::TextureFormat> {
+		Arc::clone(&self.surface_texture_format)
 	}
 
 	/// Starts rendering a frame.
@@ -68,7 +96,7 @@ impl WgpuRenderer {
 		tracing::info!(?size, "Resizing wgpu surface");
 		if size.width > 0 && size.height > 0 {
 			// Update our surface
-			let config = super::window_surface_configuration(shared.surface_texture_format, size);
+			let config = self::window_surface_configuration(*self.surface_texture_format, size);
 			self.surface.configure(&shared.device, &config);
 			self.surface_size = size;
 		}
@@ -108,5 +136,43 @@ impl<'renderer> FrameRender<'renderer> {
 		let _ = tokio::task::block_in_place(|| shared.queue.submit([self.encoder.finish()]));
 		//let _ = shared.queue.submit([self.encoder.finish()]);
 		self.surface_texture.present();
+	}
+}
+
+/// Configures the window surface and returns the preferred surface texture format
+fn configure_window_surface(
+	window: &Window,
+	surface: &wgpu::Surface,
+	adapter: &wgpu::Adapter,
+	device: &wgpu::Device,
+) -> Result<(wgpu::TextureFormat, PhysicalSize<u32>), anyhow::Error> {
+	// Get the format
+	let surface_texture_format = *surface
+		.get_supported_formats(adapter)
+		.first()
+		.context("No supported texture formats for surface found")?;
+	tracing::debug!(?surface_texture_format, "Found preferred surface format");
+
+	// Then configure it
+	let surface_size = window.inner_size();
+	let config = self::window_surface_configuration(surface_texture_format, surface_size);
+	tracing::debug!(?config, "Configuring surface");
+	surface.configure(device, &config);
+
+	Ok((surface_texture_format, surface_size))
+}
+
+/// Returns the window surface configuration
+const fn window_surface_configuration(
+	surface_texture_format: wgpu::TextureFormat,
+	size: PhysicalSize<u32>,
+) -> wgpu::SurfaceConfiguration {
+	wgpu::SurfaceConfiguration {
+		usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
+		format:       surface_texture_format,
+		width:        size.width,
+		height:       size.height,
+		present_mode: wgpu::PresentMode::AutoVsync,
+		alpha_mode:   wgpu::CompositeAlphaMode::Auto,
 	}
 }
