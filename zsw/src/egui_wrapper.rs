@@ -113,7 +113,7 @@ impl EguiPainter {
 				prefer_dark_mode:        None,
 			},
 			output:         app_output,
-			repaint_signal: self.repaint_signal.clone(),
+			repaint_signal: Arc::clone(&self.repaint_signal) as Arc<dyn epi::backend::RepaintSignal>,
 		});
 
 		// Then draw using it

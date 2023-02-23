@@ -5,6 +5,7 @@ warn = [
 	"missing_debug_implementations",
 	"noop_method_call",
 	"unused_results",
+	"clippy::clone_on_ref_ptr",
 ]
 
 deny = [

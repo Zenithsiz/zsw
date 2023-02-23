@@ -17,7 +17,8 @@
 	entry_insert,
 	fs_try_exists,
 	let_chains,
-	exit_status_error
+	exit_status_error,
+	lint_reasons
 )]
 #![allow(incomplete_features)]
 
