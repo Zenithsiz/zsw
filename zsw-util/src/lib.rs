@@ -166,22 +166,6 @@ pub fn image_format(image: &DynamicImage) -> &'static str {
 	}
 }
 
-// TODO: Move these elsewhere?
-#[must_use]
-pub fn default_panel_parallax_ratio() -> f32 {
-	1.0
-}
-
-#[must_use]
-pub fn default_panel_parallax_exp() -> f32 {
-	2.0
-}
-
-#[must_use]
-pub fn default_panel_parallax_reverse() -> bool {
-	false
-}
-
 /// Appends a string to this path
 #[extend::ext(name = PathAppendExt)]
 pub impl PathBuf {
