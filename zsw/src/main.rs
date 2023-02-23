@@ -96,7 +96,7 @@ static SHADERS_DIR: include_dir::Dir<'_> = include_dir::include_dir!("shaders/")
 async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 	let (mut event_loop, window) = window::create().context("Unable to create winit event loop and window")?;
 	let window = Arc::new(window);
-	let (wgpu_renderer, wgpu_shared) = WgpuRenderer::new(Arc::clone(&window))
+	let (wgpu_shared, wgpu_renderer) = wgpu_wrapper::create(Arc::clone(&window))
 		.await
 		.context("Unable to create wgpu renderer")?;
 

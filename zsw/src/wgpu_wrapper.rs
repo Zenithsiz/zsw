@@ -1,9 +1,15 @@
 //! Wgpu wrapper
 
+// Modules
+mod renderer;
+
+// Exports
+pub use renderer::{FrameRender, WgpuRenderer};
+
 // Imports
 use {
 	anyhow::Context,
-	std::{marker::PhantomData, sync::Arc},
+	std::sync::Arc,
 	wgpu::TextureFormat,
 	winit::{dpi::PhysicalSize, window::Window},
 };
@@ -18,137 +24,34 @@ pub struct WgpuShared {
 	pub queue: wgpu::Queue,
 
 	/// Surface texture format
+	// TODO: Move to renderer and keep an `Arc<AtomicCell<TextureFormat>>` or similar here instead
 	pub surface_texture_format: TextureFormat,
 }
 
-/// Wgpu renderer
-#[derive(Debug)]
-pub struct WgpuRenderer {
-	/// Surface
-	surface: wgpu::Surface,
+/// Creates the wgpu service
+pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), anyhow::Error> {
+	// Create the surface and adapter
+	// SAFETY: We keep a reference to the window, to ensure it outlives the surface
+	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
 
-	/// Surface size
-	// Note: We keep the size ourselves instead of using the inner
-	//       window size because the window resizes asynchronously
-	//       from us, so it's possible for the window sizes to be
-	//       wrong relative to the surface size.
-	//       Wgpu validation code can panic if the size we give it
-	//       is invalid (for example, during scissoring), so we *must*
-	//       ensure this size is the surface's actual size.
-	surface_size: PhysicalSize<u32>,
+	// Then create the device and it's queue
+	let (device, queue) = self::create_device(&adapter).await?;
 
-	/// Window
-	_window: Arc<Window>,
-}
+	// Configure the surface and get the preferred texture format and surface size
+	let (surface_texture_format, surface_size) = self::configure_window_surface(&window, &surface, &adapter, &device)?;
 
-impl WgpuRenderer {
-	/// Creates the wgpu renderer
-	pub async fn new(window: Arc<Window>) -> Result<(Self, WgpuShared), anyhow::Error> {
-		// Create the surface and adapter
-		// SAFETY: We keep a reference to the window, to ensure it outlives the surface
-		let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
-
-		// Then create the device and it's queue
-		let (device, queue) = self::create_device(&adapter).await?;
-
-		// Configure the surface and get the preferred texture format and surface size
-		let (surface_texture_format, surface_size) =
-			self::configure_window_surface(&window, &surface, &adapter, &device)?;
-
-		Ok((
-			Self {
-				surface,
-				surface_size,
-				_window: window,
-			},
-			WgpuShared {
-				device,
-				queue,
-				surface_texture_format,
-			},
-		))
-	}
-
-	/// Returns the surface size
-	pub fn surface_size(&self) -> PhysicalSize<u32> {
-		self.surface_size
-	}
-
-	/// Starts rendering a frame.
-	///
-	/// Returns the encoder and surface view to render onto
-	pub fn start_render(&mut self, shared: &WgpuShared) -> Result<FrameRender, anyhow::Error> {
-		// And then get the surface texture
-		// Note: This can block, so we run it under tokio's block-in-place
-		let surface_texture = tokio::task::block_in_place(|| self.surface.get_current_texture())
-			.context("Unable to retrieve current texture")?;
-		let surface_view_descriptor = wgpu::TextureViewDescriptor {
-			label: Some("[zsw] Window surface texture view"),
-			..wgpu::TextureViewDescriptor::default()
-		};
-		let surface_texture_view = surface_texture.texture.create_view(&surface_view_descriptor);
-
-		// Then create an encoder for our frame
-		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
-			label: Some("[zsw] Frame render command encoder"),
-		};
-		let encoder = shared.device.create_command_encoder(&encoder_descriptor);
-
-		Ok(FrameRender {
-			encoder,
-			surface_texture,
-			surface_view: surface_texture_view,
-			surface_size: self.surface_size,
-			_phantom: PhantomData,
-		})
-	}
-
-	/// Performs a resize
-	pub fn resize(&mut self, shared: &WgpuShared, size: PhysicalSize<u32>) {
-		tracing::info!(?size, "Resizing wgpu surface");
-		if size.width > 0 && size.height > 0 {
-			// Update our surface
-			let config = self::window_surface_configuration(shared.surface_texture_format, size);
-			self.surface.configure(&shared.device, &config);
-			self.surface_size = size;
-		}
-	}
-}
-
-/// A frame's rendering
-#[derive(Debug)]
-pub struct FrameRender<'renderer> {
-	/// Encoder
-	pub encoder: wgpu::CommandEncoder,
-
-	/// Surface texture
-	pub surface_texture: wgpu::SurfaceTexture,
-
-	/// Surface view
-	pub surface_view: wgpu::TextureView,
-
-	/// Surface size
-	surface_size: PhysicalSize<u32>,
-
-	/// Phantom data to prevent rendering more than a frame at once
-	_phantom: PhantomData<&'renderer mut ()>,
-}
-
-impl<'renderer> FrameRender<'renderer> {
-	/// Returns the surface size
-	pub fn surface_size(&self) -> PhysicalSize<u32> {
-		self.surface_size
-	}
-
-	/// Finishes rendering this frame
-	pub fn finish(self, shared: &WgpuShared) {
-		// Submit everything to the queue and present the surface's texture
-		// Note: Although not supposed to, `submit` calls can block, so we wrap it
-		//       in a tokio block-in-place
-		let _ = tokio::task::block_in_place(|| shared.queue.submit([self.encoder.finish()]));
-		//let _ = shared.queue.submit([self.encoder.finish()]);
-		self.surface_texture.present();
-	}
+	Ok((
+		WgpuShared {
+			device,
+			queue,
+			surface_texture_format,
+		},
+		WgpuRenderer {
+			surface,
+			surface_size,
+			_window: window,
+		},
+	))
 }
 
 /// Configures the window surface and returns the preferred surface texture format
