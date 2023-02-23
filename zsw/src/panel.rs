@@ -14,7 +14,7 @@ pub use self::{
 	image::{ImagesState, PanelImage, PanelImages},
 	playlist_player::PlaylistPlayer,
 	renderer::{PanelShader, PanelsRenderer, PanelsRendererLayouts, PanelsRendererShader},
-	state::PanelState,
+	state::{PanelParallaxState, PanelState},
 };
 
 // Imports
@@ -68,12 +68,14 @@ impl PanelsManager {
 			.map(async move |panel| {
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
 				let state = PanelState {
-					cur_progress:     0,
-					duration:         panel.state.duration,
-					fade_point:       panel.state.fade_point,
-					parallax_ratio:   panel.state.parallax_ratio,
-					parallax_exp:     panel.state.parallax_exp,
-					reverse_parallax: panel.state.reverse_parallax,
+					cur_progress: 0,
+					duration:     panel.state.duration,
+					fade_point:   panel.state.fade_point,
+					parallax:     PanelParallaxState {
+						ratio:   panel.state.parallax_ratio,
+						exp:     panel.state.parallax_exp,
+						reverse: panel.state.reverse_parallax,
+					},
 				};
 				let playlist = playlist_manager
 					.get(&panel.playlist)

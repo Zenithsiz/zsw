@@ -222,9 +222,9 @@ impl PanelsRenderer {
 					let (parallax_ratio, parallax_offset) = geometry.parallax_ratio_offset(
 						ratio,
 						cursor_pos,
-						panel.state.parallax_ratio,
-						panel.state.parallax_exp,
-						panel.state.reverse_parallax,
+						panel.state.parallax.ratio,
+						panel.state.parallax.exp,
+						panel.state.parallax.reverse,
 					);
 					let progress = match image.swap_dir() {
 						true => 1.0 - progress,

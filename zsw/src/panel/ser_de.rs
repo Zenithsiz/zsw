@@ -33,8 +33,10 @@ pub struct SerPanelGeometry {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SerPanelState {
-	pub duration:         u64,
-	pub fade_point:       u64,
+	pub duration:   u64,
+	pub fade_point: u64,
+
+	// TODO: Move these to a sub-struct?
 	#[serde(default = "default_panel_parallax_ratio")]
 	pub parallax_ratio:   f32,
 	#[serde(default = "default_panel_parallax_exp")]

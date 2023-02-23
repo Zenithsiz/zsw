@@ -12,15 +12,8 @@ pub struct PanelState {
 	/// Fade point (in frames)
 	pub fade_point: u64,
 
-	// TODO: Organize parallax better (maybe in shader?)
-	/// Parallax scale, 0.0 .. 1.0
-	pub parallax_ratio: f32,
-
-	/// Parallax exponentiation
-	pub parallax_exp: f32,
-
-	/// Reverse parallax
-	pub reverse_parallax: bool,
+	/// Parallax
+	pub parallax: PanelParallaxState,
 }
 
 impl PanelState {
@@ -67,4 +60,18 @@ impl PanelState {
 			_ => 1.0,
 		}
 	}
+}
+
+/// Parallax state
+#[derive(Debug)]
+pub struct PanelParallaxState {
+	/// Parallax scale, 0.0 .. 1.0
+	// TODO: Rename to `scale`?
+	pub ratio: f32,
+
+	/// Parallax exponentiation
+	pub exp: f32,
+
+	/// Reverse parallax
+	pub reverse: bool,
 }

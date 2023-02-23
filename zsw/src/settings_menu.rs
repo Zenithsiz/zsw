@@ -117,17 +117,17 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 
 					ui.horizontal(|ui| {
 						ui.label("Parallax ratio");
-						egui::Slider::new(&mut panel.state.parallax_ratio, 0.0..=1.0).ui(ui);
+						egui::Slider::new(&mut panel.state.parallax.ratio, 0.0..=1.0).ui(ui);
 					});
 
 					ui.horizontal(|ui| {
 						ui.label("Parallax exp");
-						egui::Slider::new(&mut panel.state.parallax_exp, 0.0..=4.0).ui(ui);
+						egui::Slider::new(&mut panel.state.parallax.exp, 0.0..=4.0).ui(ui);
 					});
 
 
 					ui.horizontal(|ui| {
-						ui.checkbox(&mut panel.state.reverse_parallax, "Reverse parallax");
+						ui.checkbox(&mut panel.state.parallax.reverse, "Reverse parallax");
 					});
 
 					ui.horizontal(|ui| {
