@@ -98,6 +98,7 @@ impl PanelsManager {
 }
 
 /// Panel group
+#[derive(Debug)]
 pub struct PanelGroup {
 	/// All panels
 	panels: Vec<Panel>,

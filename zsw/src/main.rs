@@ -192,7 +192,10 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 				)
 				.await
 			{
-				Ok(panel_group) => panel_group,
+				Ok(panel_group) => {
+					tracing::debug!(?panel_group, "Loaded default panel group");
+					panel_group
+				},
 				Err(err) => {
 					tracing::warn!("Unable to load default panel group: {err:?}");
 					return Ok(());
