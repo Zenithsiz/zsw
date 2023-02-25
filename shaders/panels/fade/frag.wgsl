@@ -69,19 +69,19 @@ fn fs_main(in: VertexOutputFragInput) -> FragOutput {
 	#match_case    "fade"
 	#match_case_or "fade-out"
 		out.color = mix(back_sample.color, front_sample.color, uniforms.front_alpha);
+		out.color.a = 1.0;
 
 	#match_case "fade-white"
 		out.color = mix(back_sample.color, front_sample.color, uniforms.front_alpha) - (pow(uniforms.front_alpha, uniforms.strength) - 1.0);
+		out.color.a = 1.0;
 
 	#match_case "fade-in"
 		// TODO: Use a background color instead of black?
 		let front_contained = front_sample.uvs.x >= 0.0 && front_sample.uvs.x <= 1.0 && front_sample.uvs.y >= 0.0 && front_sample.uvs.y <= 1.0;
 		let  back_contained =  back_sample.uvs.x >= 0.0 &&  back_sample.uvs.x <= 1.0 &&  back_sample.uvs.y >= 0.0 &&  back_sample.uvs.y <= 1.0;
 		out.color = mix(back_sample.color * f32(back_contained), front_sample.color * f32(front_contained), uniforms.front_alpha);
-
+		out.color.a = f32(front_contained || back_contained);
 	#match_end
-
-	out.color.a = 1.0;
 
 	return out;
 }
