@@ -7,6 +7,7 @@
 use {
 	crate::panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
 	egui::Widget,
+	std::path::Path,
 	winit::dpi::PhysicalPosition,
 	zsw_util::Rect,
 };
@@ -68,7 +69,6 @@ impl SettingsMenu {
 		});
 	}
 }
-
 /// Draws the panels tab
 fn draw_panels_tab(
 	ui: &mut egui::Ui,
@@ -153,6 +153,41 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 							},
 						};
 					});
+
+					ui.collapsing("Playlist player", |ui| {
+						let row_height = ui.text_style_height(&egui::TextStyle::Body);
+
+						ui.collapsing("Next", |ui| {
+							egui::ScrollArea::new([false, true])
+								.auto_shrink([false, true])
+								.stick_to_right(true)
+								.max_height(row_height * 10.0)
+								.show_rows(
+									ui,
+									row_height,
+									panel.playlist_player.peek_next_items().len(),
+									|ui, idx| {
+										for item in
+											panel.playlist_player.peek_next_items().take(idx.end).skip(idx.start)
+										{
+											self::draw_playlist_player_item(ui, item);
+										}
+									},
+								);
+						});
+
+						ui.collapsing("All", |ui| {
+							egui::ScrollArea::new([false, true])
+								.auto_shrink([false, true])
+								.stick_to_right(true)
+								.max_height(row_height * 10.0)
+								.show_rows(ui, row_height, panel.playlist_player.all_items().len(), |ui, idx| {
+									for item in panel.playlist_player.all_items().take(idx.end).skip(idx.start) {
+										self::draw_playlist_player_item(ui, item);
+									}
+								});
+						});
+					});
 				});
 			},
 		None => {
@@ -161,9 +196,24 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 	}
 }
 
+
+/// Draws a playlist player item
+fn draw_playlist_player_item(ui: &mut egui::Ui, item: &Path) {
+	ui.horizontal(|ui| {
+		ui.label("Path: ");
+		// TODO: Not use lossy conversion to display it?
+		if ui.link(item.to_string_lossy()).clicked() {
+			if let Err(err) = opener::open(item) {
+				tracing::warn!(?item, ?err, "Unable to open file");
+			}
+		}
+	});
+}
+
 /// Draws a panel image
 fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 	let size = image.size();
+	// TODO: Not have a name and turn it into a link instead?
 	if let Some(name) = image.name() {
 		ui.label(format!("Name: {name}"));
 	}

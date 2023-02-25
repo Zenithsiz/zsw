@@ -24,6 +24,7 @@ image = "0.24.5"
 include_dir = "0.7.3"
 itertools = "0.10.5"
 num-rational = "0.4.1"
+opener = "0.5.2"
 rand = "0.8.5"
 rayon = "1.6.1"
 serde = { version = "1.0.152", features = ["derive"] }

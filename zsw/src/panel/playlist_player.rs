@@ -6,8 +6,8 @@ use {
 	anyhow::Context,
 	async_walkdir::WalkDir,
 	futures::{stream::FuturesUnordered, TryStreamExt},
-	rand::seq::SliceRandom,
-	std::path::{Path, PathBuf},
+	rand::{rngs::StdRng, seq::SliceRandom, SeedableRng},
+	std::{collections::HashSet, path::Path, sync::Arc},
 	tokio_stream::wrappers::ReadDirStream,
 };
 
@@ -15,65 +15,63 @@ use {
 #[derive(Debug)]
 pub struct PlaylistPlayer {
 	/// All items
-	items: Vec<PathBuf>,
+	items: HashSet<Arc<Path>>,
 
-	/// Current item
-	cur_idx: Option<usize>,
+	/// Current items
+	cur_items: Vec<Arc<Path>>,
+
+	/// Rng
+	rng: StdRng,
 }
 
 impl PlaylistPlayer {
 	/// Creates a new player from a playlist
 	pub async fn new(playlist: &Playlist) -> Result<Self, anyhow::Error> {
-		let mut items = Self::get_playlist_items(playlist)
+		let items = Self::get_playlist_items(playlist)
 			.await
 			.context("Unable to get all playlist items")?;
-		items.shuffle(&mut rand::thread_rng());
+		//
 
-		Ok(Self { items, cur_idx: None })
+		Ok(Self {
+			items,
+			cur_items: vec![],
+			rng: StdRng::from_entropy(),
+		})
 	}
 
 	/// Removes an item from the playlist
-	// TODO: Not make this `O(N)`
 	pub fn remove(&mut self, path: &Path) {
-		self.items.retain(|item| item != path);
+		// We don't care about the removed item
+		let _ = self.items.remove(path);
+	}
+
+	/// Returns an iterator over all items, including consumed ones
+	pub fn all_items(&self) -> impl Iterator<Item = &Arc<Path>> + ExactSizeIterator {
+		self.items.iter()
+	}
+
+	/// Returns an iterator that peeks over the remaining items in this loop.
+	///
+	/// They are ordered from next to last
+	pub fn peek_next_items(&self) -> impl Iterator<Item = &Arc<Path>> + ExactSizeIterator {
+		self.cur_items.iter().rev()
 	}
 
 	/// Returns the next image to load
-	pub fn next(&mut self) -> Option<&Path> {
-		// Advance the playlist
-		self.advance();
-		let cur_idx = self.cur_idx?;
+	pub fn next(&mut self) -> Option<Arc<Path>> {
+		// If we're out of current items, shuffle the items in
+		// Note: If we don't actually have any items, this is essentially a no-op
+		if self.cur_items.is_empty() {
+			self.cur_items.extend(self.items.iter().cloned());
+			self.cur_items.shuffle(&mut self.rng);
+		}
 
-		// Then get the item
-		let item = self.items.get(cur_idx).expect("Current index was invalid");
-		Some(item)
-	}
-
-	/// Advances the playlist.
-	fn advance(&mut self) {
-		// The beginning index
-		let begin_idx = match self.items.len() {
-			0 => None,
-			_ => Some(0),
-		};
-
-		self.cur_idx = match self.cur_idx {
-			// If we had an index, check if the next is valid
-			Some(next_idx) => match self.items.get(next_idx + 1).is_some() {
-				// If so, use the next index
-				true => Some(next_idx + 1),
-
-				// Else go back to the beginning
-				false => begin_idx,
-			},
-
-			// If we had none, go back to the beginning
-			None => begin_idx,
-		};
+		// Then pop the last item
+		self.cur_items.pop()
 	}
 
 	/// Collects all items of a playlist
-	async fn get_playlist_items(playlist: &Playlist) -> Result<Vec<PathBuf>, anyhow::Error> {
+	async fn get_playlist_items(playlist: &Playlist) -> Result<HashSet<Arc<Path>>, anyhow::Error> {
 		let items = playlist
 			.items()
 			.iter()
@@ -122,6 +120,7 @@ impl PlaylistPlayer {
 			.context("Unable to collect all items")?
 			.into_iter()
 			.flatten()
+			.map(Into::into)
 			.collect();
 
 		Ok(items)
