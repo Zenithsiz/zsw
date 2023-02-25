@@ -91,6 +91,7 @@ fn main() -> Result<(), anyhow::Error> {
 	Ok(())
 }
 
+#[cfg(feature = "include-shaders")]
 static SHADERS_DIR: include_dir::Dir<'_> = include_dir::include_dir!("shaders/");
 
 #[allow(clippy::too_many_lines)] // TODO: Separate
@@ -107,10 +108,15 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		.unwrap_or_else(|| dirs.data_dir().join("shaders/"));
 
 	// If the shaders path doesn't exist, write it
+	// TODO: Use a virtual filesystem instead?
 	if !std::fs::try_exists(&shaders_path).context("Unable to check if shaders path exists")? {
+		#[cfg(feature = "include-shaders")]
 		SHADERS_DIR
 			.extract(&shaders_path)
 			.context("Unable to extract shaders directory")?;
+
+		#[cfg(not(feature = "include-shaders"))]
+		tracing::warn!("Shaders directory doesn't exist on the filesystem and not included in the binary");
 	}
 
 	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) = PanelsRenderer::new(
