@@ -170,7 +170,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 										for item in
 											panel.playlist_player.peek_next_items().take(idx.end).skip(idx.start)
 										{
-											self::draw_playlist_player_item(ui, item);
+											self::draw_openable_path(ui, item);
 										}
 									},
 								);
@@ -183,7 +183,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 								.max_height(row_height * 10.0)
 								.show_rows(ui, row_height, panel.playlist_player.all_items().len(), |ui, idx| {
 									for item in panel.playlist_player.all_items().take(idx.end).skip(idx.start) {
-										self::draw_playlist_player_item(ui, item);
+										self::draw_openable_path(ui, item);
 									}
 								});
 						});
@@ -197,14 +197,14 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 }
 
 
-/// Draws a playlist player item
-fn draw_playlist_player_item(ui: &mut egui::Ui, item: &Path) {
+/// Draws an openable path
+fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 	ui.horizontal(|ui| {
 		ui.label("Path: ");
 		// TODO: Not use lossy conversion to display it?
-		if ui.link(item.to_string_lossy()).clicked() {
-			if let Err(err) = opener::open(item) {
-				tracing::warn!(?item, ?err, "Unable to open file");
+		if ui.link(path.to_string_lossy()).clicked() {
+			if let Err(err) = opener::open(path) {
+				tracing::warn!(?path, ?err, "Unable to open file");
 			}
 		}
 	});
@@ -213,9 +213,8 @@ fn draw_playlist_player_item(ui: &mut egui::Ui, item: &Path) {
 /// Draws a panel image
 fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 	let size = image.size();
-	// TODO: Not have a name and turn it into a link instead?
-	if let Some(name) = image.name() {
-		ui.label(format!("Name: {name}"));
+	if let Some(path) = image.path() {
+		self::draw_openable_path(ui, path);
 	}
 	ui.label(format!("Size: {}x{}", size.x, size.y));
 	ui.checkbox(image.swap_dir_mut(), "Swap direction");

@@ -1,5 +1,7 @@
 //! Panel images
 
+use std::path::{Path, PathBuf};
+
 // Imports
 use {
 	super::{PanelGeometry, PanelsRendererLayouts, PlaylistPlayer},
@@ -260,8 +262,8 @@ pub struct PanelImage {
 	/// Swap direction
 	swap_dir: bool,
 
-	/// Image name
-	image_name: Option<String>,
+	/// Image path
+	image_path: Option<PathBuf>,
 }
 
 impl PanelImage {
@@ -276,7 +278,7 @@ impl PanelImage {
 			texture_view,
 			size: Vector2::new(0, 0),
 			swap_dir: false,
-			image_name: None,
+			image_path: None,
 		}
 	}
 
@@ -295,9 +297,9 @@ impl PanelImage {
 		&mut self.swap_dir
 	}
 
-	/// Returns the image name, if any
-	pub fn name(&self) -> Option<&str> {
-		self.image_name.as_deref()
+	/// Returns the image path, if any
+	pub fn path(&self) -> Option<&Path> {
+		self.image_path.as_deref()
 	}
 
 	/// Updates this image
@@ -305,7 +307,7 @@ impl PanelImage {
 		// Update our texture
 		let size = Vector2::new(image.image.width(), image.image.height());
 		(self.texture, self.texture_view) = self::create_image_texture(wgpu_shared, image.image);
-		self.image_name = Some(image.path.display().to_string());
+		self.image_path = Some(image.path);
 
 		// Then update the image size and swap direction
 		self.size = size;
