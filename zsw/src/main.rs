@@ -68,9 +68,6 @@ use {
 fn main() -> Result<(), anyhow::Error> {
 	// Get arguments
 	let args = Args::parse();
-
-	// Initialize logging
-	logger::init(args.log_file.as_deref());
 	tracing::debug!(?args, "Arguments");
 
 	// Create the configuration then load the config
@@ -79,6 +76,10 @@ fn main() -> Result<(), anyhow::Error> {
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.yaml"));
 	let config = Config::get_or_create_default(&config_path);
 	tracing::debug!(?config, ?config_path, "Config");
+
+	// Initialize the logger properly now
+	// TODO: Initialize dummy logger before this to catch all previous logging.
+	logger::init(args.log_file.as_deref().or(config.log_file.as_deref()));
 
 	// Initialize and create everything
 	rayon_init::init(config.rayon_worker_threads).context("Unable to initialize rayon")?;

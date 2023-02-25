@@ -22,6 +22,12 @@ pub struct Config {
 	#[serde(default)]
 	pub rayon_worker_threads: Option<NonZeroUsize>,
 
+	/// Default config file.
+	///
+	/// Will be overridden by command-line arguments
+	#[serde(default)]
+	pub log_file: Option<PathBuf>,
+
 	/// Panels directory
 	#[serde(default)]
 	pub panels_dir: Option<PathBuf>,
@@ -101,6 +107,7 @@ impl Default for Config {
 		Self {
 			tokio_worker_threads: None,
 			rayon_worker_threads: None,
+			log_file:             None,
 			panels_dir:           None,
 			playlists_dir:        None,
 			shaders_dir:          None,
