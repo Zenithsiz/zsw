@@ -1,5 +1,8 @@
 //! Logger
 
+// Modules
+pub mod pre_init;
+
 // Imports
 use {
 	itertools::Itertools,
@@ -12,23 +15,14 @@ use {
 	tracing_subscriber::{prelude::*, EnvFilter},
 };
 
-// Logs to emit after initialization
-#[derive(Default, Debug)]
-struct PostInitLogs {
-	traces:   Vec<String>,
-	warnings: Vec<String>,
-}
 
 /// Initializes the logger
 ///
 /// Logs to both stderr and `log_file`, if any
 pub fn init(log_file: Option<&Path>) {
-	// Warnings to emit after configuring the logger
-	let mut post_init_logs = PostInitLogs::default();
-
 	// Create the terminal layer
-	let term_use_colors = self::colors_enabled(&mut post_init_logs);
-	let term_env = self::get_env_filters(&mut post_init_logs, "RUST_LOG", "info");
+	let term_use_colors = self::colors_enabled();
+	let term_env = self::get_env_filters("RUST_LOG", "info");
 	let term_layer = tracing_subscriber::fmt::layer()
 		.with_ansi(term_use_colors)
 		.pretty()
@@ -44,15 +38,13 @@ pub fn init(log_file: Option<&Path>) {
 		let file = match std::fs::File::create(log_file) {
 			Ok(file) => file,
 			Err(err) => {
-				post_init_logs
-					.warnings
-					.push(format!("Unable to create log file: {err}"));
+				pre_init::warn(format!("Unable to create log file: {err}"));
 				return None;
 			},
 		};
 
 		// Then create the layer
-		let env = self::get_env_filters(&mut post_init_logs, "RUST_FILE_LOG", "debug");
+		let env = self::get_env_filters("RUST_FILE_LOG", "debug");
 		let layer = tracing_subscriber::fmt::layer()
 			.with_writer(file)
 			.with_ansi(false)
@@ -70,18 +62,21 @@ pub fn init(log_file: Option<&Path>) {
 	registry.init();
 	tracing::debug!(?log_file, ?term_use_colors, "Initialized logging");
 
-	// And emit any warnings
-	for warning in post_init_logs.warnings {
-		tracing::warn!("{warning}");
+	// And emit all pre-init warnings
+	for message in pre_init::take_traces() {
+		tracing::trace!("{message}");
 	}
-	for trace in post_init_logs.traces {
-		tracing::trace!("{trace}");
+	for message in pre_init::take_debugs() {
+		tracing::debug!("{message}");
+	}
+	for message in pre_init::take_warnings() {
+		tracing::warn!("{message}");
 	}
 }
 
 /// Returns whether to colors should be enabled for the terminal layer.
 // TODO: Check if we're being piped?
-fn colors_enabled(post_init_logs: &mut PostInitLogs) -> bool {
+fn colors_enabled() -> bool {
 	match env::var("RUST_LOG_COLOR").map(|var| var.to_lowercase()).as_deref() {
 		// By default / `1` / `yes` / `true`, use colors
 		Err(VarError::NotPresent) | Ok("1" | "yes" | "true") => true,
@@ -91,15 +86,13 @@ fn colors_enabled(post_init_logs: &mut PostInitLogs) -> bool {
 
 		// Else don't use colors, but warn
 		Ok(env) => {
-			post_init_logs.warnings.push(format!(
+			pre_init::warn(format!(
 				"Ignoring unknown `RUST_LOG_COLOR` value: {env:?}, expected `0`, `1`, `yes`, `no`, `true`, `false`"
 			));
 			false
 		},
 		Err(VarError::NotUnicode(err)) => {
-			post_init_logs
-				.warnings
-				.push(format!("Ignoring non-utf8 `RUST_LOG_COLOR`: {err:?}"));
+			pre_init::warn(format!("Ignoring non-utf8 `RUST_LOG_COLOR`: {err:?}"));
 			false
 		},
 	}
@@ -109,7 +102,7 @@ fn colors_enabled(post_init_logs: &mut PostInitLogs) -> bool {
 ///
 /// Adds default filters, if not specified
 #[must_use]
-fn get_env_filters(post_init_logs: &mut PostInitLogs, env: &str, default: &str) -> String {
+fn get_env_filters(env: &str, default: &str) -> String {
 	// Default filters
 	let default_filters = [
 		(None, default),
@@ -137,9 +130,7 @@ fn get_env_filters(post_init_logs: &mut PostInitLogs, env: &str, default: &str) 
 		// If there were none, don't use any
 		Err(err) => {
 			if let VarError::NotUnicode(var) = err {
-				post_init_logs
-					.warnings
-					.push(format!("Ignoring non-utf8 env variable {env:?}: {var:?}"));
+				pre_init::warn(format!("Ignoring non-utf8 env variable {env:?}: {var:?}"));
 			}
 
 			HashMap::new()
@@ -161,7 +152,7 @@ fn get_env_filters(post_init_logs: &mut PostInitLogs, env: &str, default: &str) 
 			None => level.to_owned(),
 		})
 		.join(",");
-	post_init_logs.traces.push(format!("Using {env}={var}"));
+	pre_init::trace(format!("Using {env}={var}"));
 
 	var
 }

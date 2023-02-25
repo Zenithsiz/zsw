@@ -68,17 +68,16 @@ use {
 fn main() -> Result<(), anyhow::Error> {
 	// Get arguments
 	let args = Args::parse();
-	tracing::debug!(?args, "Arguments");
+	logger::pre_init::debug(format!("args: {args:?}"));
 
 	// Create the configuration then load the config
 	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
 	std::fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.yaml"));
 	let config = Config::get_or_create_default(&config_path);
-	tracing::debug!(?config, ?config_path, "Config");
+	logger::pre_init::debug(format!("config_path: {config_path:?}, config: {config:?}"));
 
 	// Initialize the logger properly now
-	// TODO: Initialize dummy logger before this to catch all previous logging.
 	logger::init(args.log_file.as_deref().or(config.log_file.as_deref()));
 
 	// Initialize and create everything
