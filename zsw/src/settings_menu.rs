@@ -82,6 +82,7 @@ fn draw_panels_tab(
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
+#[allow(clippy::too_many_lines)] // TODO: Refactor
 fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 	match panel_group {
 		Some(panel_group) =>
@@ -99,9 +100,24 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 					});
 
 					ui.horizontal(|ui| {
+						// Note: We only allow up until the duration - 1 so that you don't get stuck
+						//       skipping images when you hold it at the max value
 						ui.label("Cur progress");
-						let max = panel.state.duration.saturating_sub(1);
-						egui::Slider::new(&mut panel.state.cur_progress, 0..=max).ui(ui);
+						egui::Slider::new(
+							&mut panel.state.cur_progress,
+							0..=panel.state.duration.saturating_sub(1),
+						)
+						.clamp_to_range(true)
+						.ui(ui);
+
+						// Then clamp to the current max
+						// Note: We don't just use this max above so the slider doesn't jitter when the max changes
+						let cur_max = match panel.images.state() {
+							panel::ImagesState::Empty => 0,
+							panel::ImagesState::PrimaryOnly => panel.state.fade_point,
+							panel::ImagesState::Both => panel.state.duration,
+						};
+						panel.state.cur_progress = panel.state.cur_progress.clamp(0, cur_max);
 					});
 
 					ui.horizontal(|ui| {
