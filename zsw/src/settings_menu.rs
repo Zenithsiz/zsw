@@ -87,6 +87,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 		Some(panel_group) =>
 			for (panel_idx, panel) in panel_group.panels_mut().iter_mut().enumerate() {
 				ui.collapsing(format!("Panel {panel_idx}"), |ui| {
+					ui.checkbox(&mut panel.state.paused, "Paused");
+
 					ui.collapsing("Geometries", |ui| {
 						for (geometry_idx, geometry) in panel.geometries.iter_mut().enumerate() {
 							ui.horizontal(|ui| {
@@ -95,7 +97,6 @@ fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 							});
 						}
 					});
-
 
 					ui.horizontal(|ui| {
 						ui.label("Cur progress");

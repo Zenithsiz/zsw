@@ -68,6 +68,7 @@ impl PanelsManager {
 			.map(async move |panel| {
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
 				let state = PanelState {
+					paused:       false,
 					cur_progress: 0,
 					duration:     panel.state.duration,
 					fade_point:   panel.state.fade_point,
@@ -164,6 +165,11 @@ impl Panel {
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
+		// If we're paused, don't update anything
+		if self.state.paused {
+			return;
+		}
+
 		// If we're at the end of both, swap the back image
 		if self.images.state() == ImagesState::Both && self.state.cur_progress >= self.state.duration {
 			self.images.swap_back(wgpu_shared, renderer_layouts);

@@ -3,6 +3,9 @@
 /// Panel state
 #[derive(Debug)]
 pub struct PanelState {
+	/// If paused
+	pub paused: bool,
+
 	/// Current progress (in frames)
 	pub cur_progress: u64,
 
