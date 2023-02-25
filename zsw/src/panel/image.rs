@@ -1,7 +1,5 @@
 //! Panel images
 
-use std::path::{Path, PathBuf};
-
 // Imports
 use {
 	super::{PanelGeometry, PanelsRendererLayouts, PlaylistPlayer},
@@ -11,7 +9,11 @@ use {
 	},
 	cgmath::Vector2,
 	image::DynamicImage,
-	std::{assert_matches::assert_matches, mem},
+	std::{
+		assert_matches::assert_matches,
+		mem,
+		path::{Path, PathBuf},
+	},
 	wgpu::util::DeviceExt,
 };
 

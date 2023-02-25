@@ -40,13 +40,13 @@ mod window;
 // Imports
 use {
 	self::{
+		config::Config,
 		egui_wrapper::{EguiPainter, EguiRenderer},
 		panel::{PanelShader, PanelsRenderer},
 		settings_menu::SettingsMenu,
 		shared::Shared,
 		wgpu_wrapper::WgpuRenderer,
 	},
-	crate::config::Config,
 	anyhow::Context,
 	args::Args,
 	cgmath::Point2,

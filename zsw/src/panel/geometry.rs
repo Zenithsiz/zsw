@@ -1,9 +1,8 @@
 //! Panel geometry
 
-use super::PanelsRendererLayouts;
-
 // Imports
 use {
+	super::PanelsRendererLayouts,
 	crate::wgpu_wrapper::WgpuShared,
 	cgmath::{Matrix4, Point2, Vector2, Vector3},
 	num_rational::Rational32,
