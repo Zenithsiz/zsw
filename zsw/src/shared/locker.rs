@@ -15,3 +15,16 @@ pub trait AsyncMutexLocker<R> {
 	where
 		R: 'locker;
 }
+
+/// Locker of meetup sender of `R`
+pub trait MeetupSenderLocker<R> {
+	/// Next locker
+	type Next<'locker>
+	where
+		Self: 'locker;
+
+	/// Sends the resource `R` to the meetup channel and returns the next locker
+	async fn send_resource<'locker>(&'locker mut self, resource: R) -> Self::Next<'locker>
+	where
+		R: 'locker;
+}

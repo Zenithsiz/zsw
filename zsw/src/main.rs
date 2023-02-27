@@ -234,16 +234,16 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
-		let locker = PanelsUpdaterLocker::new(Arc::clone(&cur_panel_group));
-		async move { self::panels_updater(shared, locker, panels_updater_output_tx).await }
+		let locker = PanelsUpdaterLocker::new(Arc::clone(&cur_panel_group), panels_updater_output_tx);
+		async move { self::panels_updater(shared, locker).await }
 	});
 
 	self::spawn_task("Image loader", async move { image_loader.run().await });
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
-		let locker = EguiPainterLocker::new(cur_panel_group, panels_renderer_shader);
-		async move { self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await }
+		let locker = EguiPainterLocker::new(cur_panel_group, panels_renderer_shader, egui_painter_output_tx);
+		async move { self::egui_painter(shared, locker, egui_painter, settings_menu).await }
 	});
 
 	// Then run the event loop on this thread
@@ -358,11 +358,7 @@ async fn renderer(
 }
 
 /// Panel updater task
-async fn panels_updater(
-	shared: Arc<Shared>,
-	mut locker: PanelsUpdaterLocker,
-	output_tx: meetup::Sender<()>,
-) -> Result<!, anyhow::Error> {
+async fn panels_updater(shared: Arc<Shared>, mut locker: PanelsUpdaterLocker) -> Result<!, anyhow::Error> {
 	loop {
 		{
 			let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
@@ -374,7 +370,7 @@ async fn panels_updater(
 			}
 		}
 
-		output_tx.send(()).await;
+		let _ = locker.send(()).await;
 	}
 }
 
@@ -384,31 +380,32 @@ async fn egui_painter(
 	mut locker: EguiPainterLocker,
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
-	output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, anyhow::Error> {
 	loop {
-		let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>().await;
-		let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
+		let full_output = {
+			let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>().await;
+			let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
 
-		let full_output = egui_painter.draw(&shared.window, |ctx, frame| {
-			settings_menu.draw(
-				ctx,
-				frame,
-				&shared.window,
-				shared.cursor_pos.load(),
-				&mut panel_group,
-				&mut panels_renderer_shader,
-			);
+			egui_painter.draw(&shared.window, |ctx, frame| {
+				settings_menu.draw(
+					ctx,
+					frame,
+					&shared.window,
+					shared.cursor_pos.load(),
+					&mut panel_group,
+					&mut panels_renderer_shader,
+				);
 
-			mem::drop(panel_group);
-			mem::drop(panels_renderer_shader);
+				mem::drop(panel_group);
+				mem::drop(panels_renderer_shader);
 
-			Ok::<_, !>(())
-		})?;
+				Ok::<_, !>(())
+			})?
+		};
 		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
 		let textures_delta = full_output.textures_delta;
 
-		output_tx.send((paint_jobs, textures_delta)).await;
+		let _ = locker.send((paint_jobs, textures_delta)).await;
 	}
 }
 

@@ -1,61 +1,73 @@
 //! Lockers
 
+// TODO: Use more descriptive names than `lock` and `send`?
+
 // Imports
 use {
-	super::locker::AsyncMutexLocker,
+	super::locker::{AsyncMutexLocker, MeetupSenderLocker},
 	crate::panel::{PanelGroup, PanelsRendererShader},
 	futures::lock::{Mutex, MutexGuard},
 	std::sync::Arc,
-	zsw_util::where_assert,
+	zsw_util::{meetup, where_assert},
 };
 
-// Note: `duplicate` is just being used to create aliases here
-#[duplicate::duplicate_item(
-	t0 T0 t1 T1;
+// TODO: Use custom types here, instead of these
+type AsyncMutex0 = Option<PanelGroup>;
+type AsyncMutex1 = PanelsRendererShader;
 
-	[ cur_panel_group        ] [ Option<PanelGroup> ]
-	[ panels_renderer_shader ] [ PanelsRendererShader ];
-)]
+type MeetupSender0 = ();
+type MeetupSender1 = (Vec<egui::ClippedPrimitive>, egui::TexturesDelta);
+
 define_locker! {
 	LoadDefaultPanelGroupLocker {
 		inner;
 		fn new(...) -> Self;
-		fn lock(...) -> ...;
 
 		async_mutex {
-			t0: T0 = 0,
+			fn lock(...) -> ...;
+			async_mutex0: AsyncMutex0 = 0,
 		}
 	}
 
 	RendererLocker {
 		inner;
 		fn new(...) -> Self;
-		fn lock(...) -> ...;
 
 		async_mutex {
-			t0: T0 = 0,
-			t1: T1 = 1,
+			fn lock(...) -> ...;
+			async_mutex0: AsyncMutex0 = 0,
+			async_mutex1: AsyncMutex1 = 1,
 		}
 	}
 
 	PanelsUpdaterLocker {
 		inner;
 		fn new(...) -> Self;
-		fn lock(...) -> ...;
 
 		async_mutex {
-			t0: T0 = 0,
+			fn lock(...) -> ...;
+			async_mutex0: AsyncMutex0 = 0,
+		}
+
+		meetup_sender {
+			fn send(...) -> ...;
+			meetup_sender0: MeetupSender0 = 0,
 		}
 	}
 
 	EguiPainterLocker {
 		inner;
 		fn new(...) -> Self;
-		fn lock(...) -> ...;
 
 		async_mutex {
-			t0: T0 = 0,
-			t1: T1 = 1,
+			fn lock(...) -> ...;
+			async_mutex0: AsyncMutex0 = 0,
+			async_mutex1: AsyncMutex1 = 1,
+		}
+
+		meetup_sender {
+			fn send(...) -> ...;
+			meetup_sender1: MeetupSender1 = 0,
 		}
 	}
 }
@@ -65,10 +77,10 @@ macro define_locker(
 		$LockerName:ident {
 			$inner:ident;
 			fn $new:ident(...) -> Self;
-			fn $lock_async_mutex:ident(...) -> ...;
 
 			$(
 				async_mutex {
+					fn $lock_async_mutex:ident(...) -> ...;
 					$(
 						$async_mutex_name:ident: $async_mutex_ty:ty = $async_mutex_idx:literal
 					),*
@@ -76,6 +88,15 @@ macro define_locker(
 				}
 			)?
 
+			$(
+				meetup_sender {
+					fn $send_meetup_sender:ident(...) -> ...;
+					$(
+						$meetup_sender_name:ident: $meetup_sender_ty:ty = $meetup_sender_idx:literal
+					),*
+					$(,)?
+				}
+			)?
 		}
 	)*
 
@@ -89,6 +110,13 @@ macro define_locker(
 				$(
 					$(
 						$async_mutex_name: Arc<Mutex<$async_mutex_ty>>,
+					)*
+				)?
+
+				// Meetup sender
+				$(
+					$(
+						$meetup_sender_name: meetup::Sender<$meetup_sender_ty>,
 					)*
 				)?
 			}
@@ -106,29 +134,52 @@ macro define_locker(
 				/// Creates a new locker
 				pub fn $new(
 					// Async mutexes
-					$( $( $async_mutex_name: Arc<Mutex<$async_mutex_ty>> ),* )?
+					$( $( $async_mutex_name: Arc<Mutex<$async_mutex_ty>>, )* )?
+
+					// Meetup senders
+					$( $( $meetup_sender_name: meetup::Sender<$meetup_sender_ty>, )* )?
 				) -> Self {
 					// TODO: Don't leak and instead drop it only when dropping when `STATE == 0`.
 					let inner = [< $LockerName Inner >] {
 						// Async mutexes
 						$( $( $async_mutex_name, )* )?
+
+						// Meetup senders
+						$( $( $meetup_sender_name, )* )?
 					};
 					let inner = Box::leak(Box::new(inner));
 
 					Self { $inner: inner }
 				}
 
-				/// Locks the resource `R`
-				#[track_caller]
-				pub async fn $lock_async_mutex<'locker, R>(
-					&'locker mut self,
-				) -> (MutexGuard<'locker, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncMutexLocker<R>,
-					R: 'locker,
-				{
-					self.lock_resource().await
-				}
+				$(
+					/// Locks the async mutex `R`
+					#[track_caller]
+					pub async fn $lock_async_mutex<'locker, R>(
+						&'locker mut self,
+					) -> (MutexGuard<'locker, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
+					where
+						Self: AsyncMutexLocker<R>,
+						R: 'locker,
+					{
+						self.lock_resource().await
+					}
+				)?
+
+				$(
+					/// Sends the resource `R` to it's meetup channel
+					#[track_caller]
+					pub async fn $send_meetup_sender<'locker, R>(
+						&'locker mut self,
+						resource: R,
+					) -> <Self as MeetupSenderLocker<R>>::Next<'locker>
+					where
+						Self: MeetupSenderLocker<R>,
+						R: 'locker,
+					{
+						self.send_resource(resource).await
+					}
+				)?
 			}
 
 			// Async mutexes
@@ -155,6 +206,34 @@ macro define_locker(
 							$inner: self.$inner
 						};
 						(guard, locker)
+					}
+				}
+			)?
+
+			// Meetup senders
+			$(
+				#[duplicate::duplicate_item(
+					ResourceTy field NEXT_STATE;
+					$(
+						[$meetup_sender_ty] [$meetup_sender_name] [{ $meetup_sender_idx + 1 }];
+					)*
+				)]
+				impl<const CUR_STATE: usize> MeetupSenderLocker<ResourceTy> for $LockerName<CUR_STATE>
+				where
+					where_assert!(NEXT_STATE > CUR_STATE):,
+				{
+					type Next<'locker> = $LockerName<NEXT_STATE>;
+
+					#[track_caller]
+					async fn send_resource<'locker>(&'locker mut self, resource: ResourceTy) -> Self::Next<'locker>
+					where
+						ResourceTy: 'locker
+					{
+						self.$inner.field.send(resource).await;
+
+						$LockerName {
+							$inner: self.$inner
+						}
 					}
 				}
 			)?
