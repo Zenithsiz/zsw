@@ -208,7 +208,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 			};
 
 			// And set it as the current one
-			let (mut panel_group, _) = locker.resource::<Option<PanelGroup>>().await;
+			let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
 			*panel_group = Some(loaded_panel_group);
 
 			Ok(())
@@ -316,11 +316,11 @@ async fn renderer(
 			.context("Unable to start frame")?;
 		// Render the panels
 		{
-			let (mut panel_group, mut locker) = locker.resource::<Option<PanelGroup>>().await;
+			let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>().await;
 			if let Some(panel_group) = &mut *panel_group {
 				let cursor_pos = shared.cursor_pos.load();
 
-				let (mut panels_renderer_shader, _) = locker.resource::<PanelsRendererShader>().await;
+				let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
 				panels_renderer
 					.render(
 						&mut frame,
@@ -365,7 +365,7 @@ async fn panels_updater(
 ) -> Result<!, anyhow::Error> {
 	loop {
 		{
-			let (mut panel_group, _) = locker.resource::<Option<PanelGroup>>().await;
+			let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
 
 			if let Some(panel_group) = &mut *panel_group {
 				for panel in panel_group.panels_mut() {
@@ -387,8 +387,8 @@ async fn egui_painter(
 	output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, anyhow::Error> {
 	loop {
-		let (mut panel_group, mut locker) = locker.resource::<Option<PanelGroup>>().await;
-		let (mut panels_renderer_shader, _) = locker.resource::<PanelsRendererShader>().await;
+		let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>().await;
+		let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
 
 		let full_output = egui_painter.draw(&shared.window, |ctx, frame| {
 			settings_menu.draw(

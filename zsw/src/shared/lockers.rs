@@ -20,7 +20,7 @@ define_locker! {
 	LoadDefaultPanelGroupLocker {
 		inner;
 		fn new(...) -> Self;
-		fn resource(...) -> ...;
+		fn lock(...) -> ...;
 
 		t0: T0 = 0,
 	}
@@ -28,7 +28,7 @@ define_locker! {
 	RendererLocker {
 		inner;
 		fn new(...) -> Self;
-		fn resource(...) -> ...;
+		fn lock(...) -> ...;
 
 		t0: T0 = 0,
 		t1: T1 = 1,
@@ -37,7 +37,7 @@ define_locker! {
 	PanelsUpdaterLocker {
 		inner;
 		fn new(...) -> Self;
-		fn resource(...) -> ...;
+		fn lock(...) -> ...;
 
 		t0: T0 = 0,
 	}
@@ -45,7 +45,7 @@ define_locker! {
 	EguiPainterLocker {
 		inner;
 		fn new(...) -> Self;
-		fn resource(...) -> ...;
+		fn lock(...) -> ...;
 
 		t0: T0 = 0,
 		t1: T1 = 1,
@@ -57,7 +57,7 @@ macro define_locker(
 		$LockerName:ident {
 			$inner:ident;
 			fn $new:ident(...) -> Self;
-			fn $resource:ident(...) -> ...;
+			fn $lock_fn:ident(...) -> ...;
 
 			$(
 				$lock_name:ident: $lock_ty:ty = $lock_idx:literal
@@ -98,9 +98,9 @@ macro define_locker(
 					Self { $inner: inner }
 				}
 
-				/// Locks a resource
+				/// Locks the resource `R`
 				#[track_caller]
-				pub async fn $resource<'locker, R>(
+				pub async fn $lock_fn<'locker, R>(
 					&'locker mut self,
 				) -> (Resource<'locker, R>, <Self as Locker<R>>::Next<'locker>)
 				where
