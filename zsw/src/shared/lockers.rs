@@ -18,13 +18,9 @@ use {
 };
 
 // TODO: Use custom types here, instead of these
-type AsyncMutex0 = Option<PanelGroup>;
-type AsyncMutex1 = PanelsRendererShader;
-
-type MeetupSender0 = ();
-type MeetupSender1 = (Vec<egui::ClippedPrimitive>, egui::TexturesDelta);
-
-type AsyncRwLock0 = PlaylistsManager;
+type CurPanelGroup = Option<PanelGroup>;
+type PanelsUpdaterMeetupRenderer = ();
+type EguiPainterMeetupRenderer = (Vec<egui::ClippedPrimitive>, egui::TexturesDelta);
 
 define_locker! {
 	LoadDefaultPanelGroupLocker {
@@ -33,8 +29,8 @@ define_locker! {
 
 		async_mutex {
 			fn lock(...) -> ...;
-			async_mutex0: AsyncMutex0 = [ 0 ] => 1,
-			async_mutex1: AsyncMutex1 = [ 0 ] => 1,
+			cur_panel_group: CurPanelGroup = [ 0 ] => 1,
+			panels_renderer_shader: PanelsRendererShader = [ 0 ] => 1,
 		}
 
 		async_rwlock {
@@ -42,7 +38,7 @@ define_locker! {
 			fn upgradable_read(...) -> ...;
 			fn write(...) -> ...;
 
-			async_rwlock0: AsyncRwLock0 = [ 0 ] => 1,
+			playlists_manager: PlaylistsManager = [ 0 ] => 1,
 		}
 	}
 
@@ -52,8 +48,8 @@ define_locker! {
 
 		async_mutex {
 			fn lock(...) -> ...;
-			async_mutex0: AsyncMutex0 = [ 0   ] => 1,
-			async_mutex1: AsyncMutex1 = [ 0 1 ] => 2,
+			cur_panel_group: CurPanelGroup = [ 0 ] => 1,
+			panels_renderer_shader: PanelsRendererShader = [ 0 1 ] => 2,
 		}
 	}
 
@@ -63,12 +59,12 @@ define_locker! {
 
 		async_mutex {
 			fn lock(...) -> ...;
-			async_mutex0: AsyncMutex0 = [ 0 ] => 1,
+			cur_panel_group: CurPanelGroup = [ 0 ] => 1,
 		}
 
 		meetup_sender {
 			fn send(...) -> ...;
-			meetup_sender0: MeetupSender0 = [ 0 ]
+			panels_updater_meetup_renderer: PanelsUpdaterMeetupRenderer = [ 0 ]
 		}
 	}
 
@@ -78,8 +74,8 @@ define_locker! {
 
 		async_mutex {
 			fn lock(...) -> ...;
-			async_mutex0: AsyncMutex0 = [ 0   ] => 1,
-			async_mutex1: AsyncMutex1 = [ 0 1 ] => 2,
+			cur_panel_group: CurPanelGroup = [ 0 ] => 1,
+			panels_renderer_shader: PanelsRendererShader = [ 0 1 ] => 2,
 		}
 
 		async_rwlock {
@@ -87,12 +83,12 @@ define_locker! {
 			fn upgradable_read(...) -> ...;
 			fn write(...) -> ...;
 
-			async_rwlock0: AsyncRwLock0 = [ 0 1 2 ] => 3,
+			playlists_manager: PlaylistsManager = [ 0 1 2 ] => 3,
 		}
 
 		meetup_sender {
 			fn send(...) -> ...;
-			meetup_sender1: MeetupSender1 = [ 0 ],
+			egui_painter_meetup_renderer: EguiPainterMeetupRenderer = [ 0 ],
 		}
 	}
 }
