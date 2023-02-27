@@ -1,4 +1,68 @@
+# Blocking methods
 disallowed-methods = [
-	"futures::lock::Mutex::lock",
+	# Zsw
 	"zsw_util::meetup::Sender::send",
+	"zsw_util::meetup::Receiver::recv",
+
+	# Futures
+	"futures::lock::BiLock::lock",
+	"futures::lock::Mutex::lock",
+
+	# `async_lock`
+	"async_lock::Mutex::lock",
+	"async_lock::Mutex::lock_arc",
+	"async_lock::RwLock::read",
+	"async_lock::RwLock::upgradable_read",
+	"async_lock::RwLock::write",
+	"async_lock::RwLockUpgradableReadGuard::upgrade",
+	"async_lock::Barrier::wait",
+	"async_lock::Semaphore::acquire",
+	"async_lock::Semaphore::acquire_arc",
+
+	# Std
+	"std::sync::Mutex::lock",
+	"std::sync::RwLock::read",
+	"std::sync::RwLock::write",
+	"std::sync::Barrier::wait",
+	"std::sync::Condvar::wait",
+	"std::sync::Condvar::wait_while",
+	# Note: `Sender::send` doesn't block
+	"std::sync::mpsc::SyncSender::send",
+	"std::sync::mpsc::Receiver::recv",
+	"std::sync::mpsc::Receiver::iter",
+
+	# Tokio
+	"tokio::sync::Mutex::lock",
+	"tokio::sync::RwLock::read",
+	"tokio::sync::RwLock::write",
+	# Note `broadcast::Sender::send` doesn't block
+	"tokio::sync::broadcast::Receiver::recv",
+	"tokio::sync::mpsc::Sender::blocking_send",
+	"tokio::sync::mpsc::Sender::send",
+	"tokio::sync::mpsc::Sender::closed",
+	"tokio::sync::mpsc::Sender::reserve",
+	"tokio::sync::mpsc::Sender::reserve_owned",
+	"tokio::sync::mpsc::Receiver::blocking_recv",
+	"tokio::sync::mpsc::Receiver::recv",
+	"tokio::sync::mpsc::Receiver::closed",
+	# Note: `mpsc::UnboundedSender::send` doesn't block
+	"tokio::sync::mpsc::UnboundedSender::closed",
+	"tokio::sync::mpsc::UnboundedReceiver::blocking_recv",
+	"tokio::sync::mpsc::UnboundedReceiver::recv",
+	"tokio::sync::oneshot::Receiver::blocking_recv",
+	"tokio::sync::oneshot::Sender::closed",
+	# Note: `tokio::sync::oneshot::Sender::send` doesn't block
+	"tokio::sync::watch::Sender::closed",
+	# Note: `tokio::sync::watch::Sender::send` doesn't block
+	"tokio::sync::watch::Receiver::changed",
+	"tokio::sync::Barrier::wait",
+	"tokio::sync::Semaphore::acquire",
+	"tokio::sync::Semaphore::acquire_many",
+	"tokio::sync::Semaphore::acquire_owned",
+	"tokio::sync::Semaphore::acquire_many_owned",
+	"tokio::sync::Notify::notified",
 ]
+
+# Blocking types
+# Note: These types have to be disallowed entirely instead of just their methods due to implementing `Future`
+disallowed-types = ["tokio::sync::oneshot::Receiver"]

@@ -77,6 +77,7 @@ impl ImageRequester {
 #[derive(Debug)]
 pub struct ImageReceiver {
 	/// Return receiver
+	#[allow(clippy::disallowed_types)] // DEADLOCK: We never `await` it, only `try_recv`, which is non-blocking
 	ret_rx: oneshot::Receiver<ImageResponse>,
 }
 
@@ -297,6 +298,7 @@ impl ImageLoader {
 			return Ok(upscaled_image_path);
 		}
 
+		#[allow(clippy::disallowed_methods)] // DEADLOCK: No other locks are acquired while holding the permit
 		let _permit = upscale_semaphore.acquire().await;
 		tracing::trace!(?image_path, ?upscaled_image_path, ?ratio, "Upscaling image");
 		let ((), upscale_duration) = zsw_util::try_measure_async(async {

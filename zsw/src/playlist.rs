@@ -33,6 +33,7 @@ impl PlaylistManager {
 	}
 
 	/// Retrieves a playlist
+	#[allow(clippy::disallowed_methods)] // We only lock it temporarily
 	pub async fn get(&self, name: &str) -> Result<Arc<Playlist>, anyhow::Error> {
 		// Check if it's cached with a read-only lock
 		let cached_playlists = self.cached_playlists.upgradable_read().await;
