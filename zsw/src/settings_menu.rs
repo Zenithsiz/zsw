@@ -44,7 +44,7 @@ impl SettingsMenu {
 		cursor_pos: PhysicalPosition<f64>,
 		panel_group: &mut Option<PanelGroup>,
 		panels_renderer_shader: &mut PanelsRendererShader,
-		playlists_manager: &PlaylistsManager,
+		playlists_manager: &mut PlaylistsManager,
 	) {
 		// Adjust cursor pos to account for the scale factor
 		let scale_factor = window.scale_factor();
@@ -88,24 +88,20 @@ fn draw_panels_tab(
 }
 
 /// Draws the playlists tab
-fn draw_playlists(ui: &mut egui::Ui, playlists_manager: &PlaylistsManager) {
-	for (name, playlist) in playlists_manager.get_all() {
+fn draw_playlists(ui: &mut egui::Ui, playlists_manager: &mut PlaylistsManager) {
+	for (name, playlist) in playlists_manager.get_all_mut() {
 		ui.collapsing(name, |ui| {
-			for item in playlist.items() {
-				match *item {
-					PlaylistItem::Directory {
-						ref path,
-						mut recursive,
-					} => {
+			for item in playlist.items_mut() {
+				match item {
+					PlaylistItem::Directory { path, recursive } => {
 						ui.horizontal(|ui| {
 							ui.label("Dir: ");
 							self::draw_openable_path(ui, path);
 						});
 
-						// TODO: Actually modify the value
-						ui.checkbox(&mut recursive, "Recursive");
+						ui.checkbox(recursive, "Recursive");
 					},
-					PlaylistItem::File { ref path } => {
+					PlaylistItem::File { path } => {
 						ui.horizontal(|ui| {
 							ui.label("File: ");
 							self::draw_openable_path(ui, path);

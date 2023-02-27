@@ -397,7 +397,7 @@ async fn egui_painter(
 		let full_output = {
 			let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>().await;
 			let (mut panels_renderer_shader, mut locker) = locker.lock::<PanelsRendererShader>().await;
-			let (playlists_manager, _) = locker.read::<PlaylistsManager>().await;
+			let (mut playlists_manager, _) = locker.write::<PlaylistsManager>().await;
 
 			egui_painter.draw(&shared.window, |ctx, frame| {
 				settings_menu.draw(
@@ -407,7 +407,7 @@ async fn egui_painter(
 					shared.cursor_pos.load(),
 					&mut panel_group,
 					&mut panels_renderer_shader,
-					&playlists_manager,
+					&mut playlists_manager,
 				);
 
 				mem::drop(panel_group);

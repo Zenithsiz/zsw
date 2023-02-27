@@ -69,9 +69,11 @@ impl PlaylistsManager {
 		self.playlists.get(name)
 	}
 
-	/// Returns an iterator over all playlists
-	pub fn get_all(&self) -> impl Iterator<Item = (&str, &Playlist)> {
-		self.playlists.iter().map(|(name, playlist)| (name.as_str(), playlist))
+	/// Returns an iterator over all playlists mutably
+	pub fn get_all_mut(&mut self) -> impl Iterator<Item = (&str, &mut Playlist)> {
+		self.playlists
+			.iter_mut()
+			.map(|(name, playlist)| (name.as_str(), playlist))
 	}
 }
 
@@ -98,6 +100,11 @@ impl Playlist {
 	/// Returns all items
 	pub fn items(&self) -> &[PlaylistItem] {
 		self.items.as_ref()
+	}
+
+	/// Returns all items mutably
+	pub fn items_mut(&mut self) -> &mut [PlaylistItem] {
+		self.items.as_mut()
 	}
 }
 
