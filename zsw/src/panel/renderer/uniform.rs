@@ -102,6 +102,14 @@ impl<X: UniformsExtra> PanelUniforms<X> {
 pub trait UniformsExtra: Pod {}
 
 
+/// None extra
+#[derive(PartialEq, Eq, Clone, Copy, Default, Debug)]
+#[derive(Zeroable, Pod)]
+#[repr(C)]
+pub struct NoneExtra {}
+
+impl UniformsExtra for NoneExtra {}
+
 /// Fade extra
 #[derive(PartialEq, Eq, Clone, Copy, Default, Debug)]
 #[derive(Zeroable, Pod)]

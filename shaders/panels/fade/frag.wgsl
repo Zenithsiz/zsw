@@ -35,9 +35,9 @@ fn sample(texture: texture_2d<f32>, uvs: vec2<f32>, image_uniforms: ImageUniform
 
 	// Offset it, if necessary
 	#match SHADER
-	#match_case "fade"
-		// Empty
-	#match_case "fade-white"
+	#match_case    "none"
+	#match_case_or "fade"
+	#match_case_or "fade-white"
 		// Empty
 
 	#match_case "fade-out"
@@ -66,6 +66,9 @@ fn fs_main(in: VertexOutputFragInput) -> FragOutput {
 
 	// Then mix the color
 	#match SHADER
+	#match_case    "none"
+		out.color = vec4(0.0);
+
 	#match_case    "fade"
 	#match_case_or "fade-out"
 		out.color = mix(back_sample.color, front_sample.color, uniforms.front_alpha);

@@ -123,13 +123,9 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		tracing::warn!("Shaders directory doesn't exist on the filesystem and not included in the binary");
 	}
 
-	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) = PanelsRenderer::new(
-		&wgpu_renderer,
-		&wgpu_shared,
-		shaders_path.join("panels/fade.wgsl"),
-		PanelShader::FadeOut { strength: 1.5 },
-	)
-	.context("Unable to create panels renderer")?;
+	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) =
+		PanelsRenderer::new(&wgpu_renderer, &wgpu_shared, shaders_path.join("panels/fade.wgsl"))
+			.context("Unable to create panels renderer")?;
 	let (egui_renderer, egui_painter, mut egui_event_handler) =
 		egui_wrapper::create(&window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
@@ -182,8 +178,11 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
-		let mut locker: LoadDefaultPanelGroupLocker =
-			LoadDefaultPanelGroupLocker::new(Arc::clone(&cur_panel_group), Arc::clone(&playlists_manager));
+		let mut locker: LoadDefaultPanelGroupLocker = LoadDefaultPanelGroupLocker::new(
+			Arc::clone(&cur_panel_group),
+			Arc::clone(&panels_renderer_shader),
+			Arc::clone(&playlists_manager),
+		);
 		let default_panel_group = config.default_panel_group.clone();
 		async move {
 			// If we don't have a default, don't do anything
@@ -217,6 +216,10 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 			mem::drop(playlists_manager);
 			let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
 			*panel_group = Some(loaded_panel_group);
+
+			mem::drop(panel_group);
+			let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
+			panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
 
 			Ok(())
 		}

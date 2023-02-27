@@ -34,6 +34,7 @@ define_locker! {
 		async_mutex {
 			fn lock(...) -> ...;
 			async_mutex0: AsyncMutex0 = 0,
+			async_mutex1: AsyncMutex1 = 0,
 		}
 
 		async_rwlock {

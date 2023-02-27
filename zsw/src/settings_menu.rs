@@ -280,6 +280,7 @@ fn draw_shader_select(ui: &mut egui::Ui, panels_renderer_shader: &mut PanelsRend
 		.show_ui(ui, |ui| {
 			// TODO: Not have default values here?
 			let shaders = [
+				PanelShader::None,
 				PanelShader::Fade,
 				PanelShader::FadeWhite { strength: 1.0 },
 				PanelShader::FadeOut { strength: 0.2 },
@@ -291,7 +292,7 @@ fn draw_shader_select(ui: &mut egui::Ui, panels_renderer_shader: &mut PanelsRend
 		});
 
 	match cur_shader {
-		PanelShader::Fade => (),
+		PanelShader::None | PanelShader::Fade => (),
 		PanelShader::FadeWhite { strength } => {
 			ui.horizontal(|ui| {
 				ui.label("Strength");

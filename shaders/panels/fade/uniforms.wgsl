@@ -18,7 +18,8 @@ struct Uniforms {
 
 	// Shader specific uniforms
 	#match SHADER
-	#match_case "fade"
+	#match_case    "none"
+	#match_case_or "fade"
 		// Empty
 
 	#match_case    "fade-white"

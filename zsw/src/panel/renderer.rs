@@ -78,7 +78,6 @@ impl PanelsRenderer {
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		shader_path: PathBuf,
-		shader: PanelShader,
 	) -> Result<(Self, PanelsRendererLayouts, PanelsRendererShader), anyhow::Error> {
 		// Create the index / vertex buffer
 		let indices = self::create_indices(wgpu_shared);
@@ -90,6 +89,9 @@ impl PanelsRenderer {
 		// Create the group layouts
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu_shared);
 		let image_bind_group_layout = self::create_image_bind_group_layout(wgpu_shared);
+
+		// By default use the empty shader
+		let shader = PanelShader::None;
 
 		Ok((
 			Self {
@@ -252,6 +254,7 @@ impl PanelsRenderer {
 
 				// Update the uniforms
 				match self.cur_shader {
+					PanelShader::None => write_uniforms!(uniform::NoneExtra {}),
 					PanelShader::Fade => write_uniforms!(uniform::FadeExtra {}),
 					PanelShader::FadeWhite { strength } => write_uniforms!(uniform::FadeWhiteExtra { strength }),
 					PanelShader::FadeOut { strength } => write_uniforms!(uniform::FadeOutExtra { strength }),
@@ -305,6 +308,7 @@ fn create_render_pipeline(
 	// Parse the shader
 	let mut tpp = Tpp::new();
 	match shader {
+		PanelShader::None => tpp.define("SHADER", "none"),
 		PanelShader::Fade => tpp.define("SHADER", "fade"),
 		PanelShader::FadeWhite { .. } => tpp.define("SHADER", "fade-white"),
 		PanelShader::FadeOut { .. } => tpp.define("SHADER", "fade-out"),
@@ -460,6 +464,7 @@ fn create_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLa
 /// Shader
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum PanelShader {
+	None,
 	Fade,
 	FadeWhite { strength: f32 },
 	FadeOut { strength: f32 },
@@ -469,6 +474,7 @@ impl PanelShader {
 	/// Returns this shader's name
 	pub fn name(self) -> &'static str {
 		match self {
+			Self::None => "None",
 			Self::Fade => "Fade",
 			Self::FadeWhite { .. } => "Fade white",
 			Self::FadeOut { .. } => "Fade out",
