@@ -2,9 +2,9 @@
 
 // Imports
 use {
-	super::{locker::Resource, Locker},
+	super::AsyncMutexLocker,
 	crate::panel::{PanelGroup, PanelsRendererShader},
-	futures::lock::Mutex,
+	futures::lock::{Mutex, MutexGuard},
 	std::sync::Arc,
 	zsw_util::where_assert,
 };
@@ -102,9 +102,9 @@ macro define_locker(
 				#[track_caller]
 				pub async fn $lock_fn<'locker, R>(
 					&'locker mut self,
-				) -> (Resource<'locker, R>, <Self as Locker<R>>::Next<'locker>)
+				) -> (MutexGuard<'locker, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
 				where
-					Self: Locker<R>,
+					Self: AsyncMutexLocker<R>,
 					R: 'locker,
 				{
 					self.lock_resource().await
@@ -117,29 +117,23 @@ macro define_locker(
 					[$lock_ty] [$lock_name] [{ $lock_idx + 1 }];
 				)*
 			)]
-			impl<const CUR_STATE: usize> Locker<ResourceTy> for $LockerName<CUR_STATE>
+			impl<const CUR_STATE: usize> AsyncMutexLocker<ResourceTy> for $LockerName<CUR_STATE>
 			where
 				where_assert!(NEXT_STATE > CUR_STATE):,
 			{
 				type Next<'locker> = $LockerName<NEXT_STATE>;
 
 				#[track_caller]
-				async fn lock_resource<'locker>(&'locker mut self) -> (Resource<ResourceTy>, Self::Next<'locker>)
+				async fn lock_resource<'locker>(&'locker mut self) -> (MutexGuard<ResourceTy>, Self::Next<'locker>)
 				where
 					ResourceTy: 'locker,
 				{
-					#[cfg(feature = "locker-trace")]
-					tracing::trace!(resource = ?std::any::type_name::<ResourceTy>(), backtrace = %std::backtrace::Backtrace::force_capture(), "Locking resource");
 					let guard = self.$inner.field.lock().await;
-
-					#[cfg(feature = "locker-trace")]
-					tracing::trace!(resource = ?std::any::type_name::<ResourceTy>(), backtrace = %std::backtrace::Backtrace::force_capture(), "Locked resource");
-					let resource = Resource::new(guard);
 
 					let locker = $LockerName {
 						$inner: self.$inner
 					};
-					(resource, locker)
+					(guard, locker)
 				}
 			}
 		)*
