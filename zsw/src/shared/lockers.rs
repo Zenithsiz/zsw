@@ -169,73 +169,61 @@ macro define_locker(
 				$(
 					/// Sends the resource `R` to it's meetup channel
 					#[track_caller]
-					pub async fn $send_meetup_sender<'locker, R>(
-						&'locker mut self,
+					pub async fn $send_meetup_sender<R>(
+						&mut self,
 						resource: R,
-					) -> <Self as MeetupSenderLocker<R>>::Next<'locker>
+					)
 					where
-						Self: MeetupSenderLocker<R>,
-						R: 'locker,
+						Self: MeetupSenderLocker<R>
 					{
-						self.send_resource(resource).await
+						self.send_resource(resource).await;
 					}
 				)?
 			}
 
 			// Async mutexes
 			$(
-				#[duplicate::duplicate_item(
-					ResourceTy field NEXT_STATE;
-					$(
-						[$async_mutex_ty] [$async_mutex_name] [{ $async_mutex_idx + 1 }];
-					)*
-				)]
-				impl<const CUR_STATE: usize> AsyncMutexLocker<ResourceTy> for $LockerName<CUR_STATE>
-				where
-					where_assert!(NEXT_STATE > CUR_STATE):,
-				{
-					type Next<'locker> = $LockerName<NEXT_STATE>;
-
-					#[track_caller]
-					async fn lock_resource<'locker>(&'locker mut self) -> (MutexGuard<ResourceTy>, Self::Next<'locker>)
+				$(
+					impl<const CUR_STATE: usize> AsyncMutexLocker<$async_mutex_ty> for $LockerName<CUR_STATE>
 					where
-						ResourceTy: 'locker,
+						// Note: This means that any state up to (including) `$async_mutex_idx` can lock the resource.
+						//       The returned locker will always be at state `$async_mutex_idx + 1`, regardless of where
+						//       it was called from. This ensures that we can never lock mutexes out of order.
+						where_assert!(CUR_STATE <= $async_mutex_idx):,
 					{
-						let guard = self.$inner.field.lock().await;
-						let locker = $LockerName {
-							$inner: self.$inner
-						};
-						(guard, locker)
+						type Next<'locker> = $LockerName<{ $async_mutex_idx + 1 }>;
+
+						#[track_caller]
+						async fn lock_resource<'locker>(&'locker mut self) -> (MutexGuard<$async_mutex_ty>, Self::Next<'locker>)
+						where
+							$async_mutex_ty: 'locker,
+						{
+							let guard = self.$inner.$async_mutex_name.lock().await;
+							let locker = $LockerName {
+								$inner: self.$inner
+							};
+							(guard, locker)
+						}
 					}
-				}
+				)*
 			)?
 
 			// Meetup senders
 			$(
-				#[duplicate::duplicate_item(
-					ResourceTy field NEXT_STATE;
-					$(
-						[$meetup_sender_ty] [$meetup_sender_name] [{ $meetup_sender_idx + 1 }];
-					)*
-				)]
-				impl<const CUR_STATE: usize> MeetupSenderLocker<ResourceTy> for $LockerName<CUR_STATE>
-				where
-					where_assert!(NEXT_STATE > CUR_STATE):,
-				{
-					type Next<'locker> = $LockerName<NEXT_STATE>;
-
-					#[track_caller]
-					async fn send_resource<'locker>(&'locker mut self, resource: ResourceTy) -> Self::Next<'locker>
+				$(
+					impl<const CUR_STATE: usize> MeetupSenderLocker<$meetup_sender_ty> for $LockerName<CUR_STATE>
 					where
-						ResourceTy: 'locker
+						// Note: This means that any state up to (including) `$async_mutex_idx` can send the resource.
+						//       Unlike async mutexes, we only care that a certain mutex isn't locked when this is called,
+						//       so we don't need to return any next locker.
+						where_assert!(CUR_STATE <= $meetup_sender_idx):,
 					{
-						self.$inner.field.send(resource).await;
-
-						$LockerName {
-							$inner: self.$inner
+						#[track_caller]
+						async fn send_resource(&mut self, resource: $meetup_sender_ty) {
+							self.$inner.$meetup_sender_name.send(resource).await;
 						}
 					}
-				}
+				)*
 			)?
 		)*
 	}

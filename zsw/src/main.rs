@@ -370,7 +370,7 @@ async fn panels_updater(shared: Arc<Shared>, mut locker: PanelsUpdaterLocker) ->
 			}
 		}
 
-		let _ = locker.send(()).await;
+		locker.send(()).await;
 	}
 }
 
@@ -405,7 +405,7 @@ async fn egui_painter(
 		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
 		let textures_delta = full_output.textures_delta;
 
-		let _ = locker.send((paint_jobs, textures_delta)).await;
+		locker.send((paint_jobs, textures_delta)).await;
 	}
 }
 
