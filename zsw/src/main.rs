@@ -57,7 +57,7 @@ use {
 	directories::ProjectDirs,
 	futures::{lock::Mutex, Future},
 	panel::{PanelGroup, PanelsManager, PanelsRendererShader},
-	playlist::PlaylistManager,
+	playlist::PlaylistsManager,
 	shared::{EguiPainterLocker, LoadDefaultPanelGroupLocker, PanelsUpdaterLocker, RendererLocker},
 	std::{mem, sync::Arc},
 	winit::{
@@ -137,7 +137,9 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		.playlists_dir
 		.clone()
 		.unwrap_or_else(|| dirs.data_dir().join("playlists/"));
-	let playlist_manager = PlaylistManager::new(playlist_path);
+	let playlists_manager = PlaylistsManager::new(playlist_path)
+		.await
+		.context("Unable to create playlist manager")?;
 	let panels_path = config
 		.panels_dir
 		.clone()
@@ -164,7 +166,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		last_resize: AtomicCell::new(None),
 		// TODO: Not have a default of (0,0)?
 		cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
-		playlist_manager,
+		playlists_manager,
 		panels_manager,
 		image_requester,
 	};
@@ -193,7 +195,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 					default_panel_group,
 					&shared.wgpu,
 					&shared.panels_renderer_layout,
-					&shared.playlist_manager,
+					&shared.playlists_manager,
 				)
 				.await
 			{
@@ -394,6 +396,7 @@ async fn egui_painter(
 					shared.cursor_pos.load(),
 					&mut panel_group,
 					&mut panels_renderer_shader,
+					&shared.playlists_manager,
 				);
 
 				mem::drop(panel_group);

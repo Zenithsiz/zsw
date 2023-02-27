@@ -2,10 +2,14 @@
 
 // Lints
 #![allow(unused_results)] // Egui produces a lot of results we don't need to use
+#![expect(clippy::too_many_lines, clippy::too_many_arguments)] // TODO: Refactor
 
 // Imports
 use {
-	crate::panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
+	crate::{
+		panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
+		playlist::{PlaylistItem, PlaylistsManager},
+	},
 	egui::Widget,
 	std::path::Path,
 	winit::dpi::PhysicalPosition,
@@ -40,6 +44,7 @@ impl SettingsMenu {
 		cursor_pos: PhysicalPosition<f64>,
 		panel_group: &mut Option<PanelGroup>,
 		panels_renderer_shader: &mut PanelsRendererShader,
+		playlists_manager: &PlaylistsManager,
 	) {
 		// Adjust cursor pos to account for the scale factor
 		let scale_factor = window.scale_factor();
@@ -60,11 +65,13 @@ impl SettingsMenu {
 
 			ui.horizontal(|ui| {
 				ui.selectable_value(&mut self.cur_tab, Tab::Panels, "Panels");
+				ui.selectable_value(&mut self.cur_tab, Tab::Playlists, "Playlists");
 			});
 			ui.separator();
 
 			match self.cur_tab {
 				Tab::Panels => self::draw_panels_tab(ui, panel_group, panels_renderer_shader),
+				Tab::Playlists => self::draw_playlists(ui, playlists_manager),
 			}
 		});
 	}
@@ -80,9 +87,39 @@ fn draw_panels_tab(
 	self::draw_shader_select(ui, panels_renderer_shader);
 }
 
+/// Draws the playlists tab
+fn draw_playlists(ui: &mut egui::Ui, playlists_manager: &PlaylistsManager) {
+	for (name, playlist) in playlists_manager.get_all() {
+		ui.collapsing(&*name, |ui| {
+			for item in playlist.items() {
+				match *item {
+					PlaylistItem::Directory {
+						ref path,
+						mut recursive,
+					} => {
+						ui.horizontal(|ui| {
+							ui.label("Dir: ");
+							self::draw_openable_path(ui, path);
+						});
+
+						// TODO: Actually modify the value
+						ui.checkbox(&mut recursive, "Recursive");
+					},
+					PlaylistItem::File { ref path } => {
+						ui.horizontal(|ui| {
+							ui.label("File: ");
+							self::draw_openable_path(ui, path);
+						});
+					},
+				}
+			}
+		});
+	}
+}
+
+
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-#[allow(clippy::too_many_lines)] // TODO: Refactor
 fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
 	match panel_group {
 		Some(panel_group) =>
@@ -297,4 +334,5 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>) {
 #[derive(PartialEq, Debug)]
 enum Tab {
 	Panels,
+	Playlists,
 }

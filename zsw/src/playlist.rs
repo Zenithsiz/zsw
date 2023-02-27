@@ -3,73 +3,89 @@
 // Imports
 use {
 	anyhow::Context,
+	futures::{StreamExt, TryStreamExt},
 	std::{
 		collections::HashMap,
-		path::{Path, PathBuf},
-		sync::Arc,
+		ffi::OsStr,
+		path::PathBuf,
+		sync::{Arc, RwLock},
 	},
-	zsw_util::PathAppendExt,
+	tokio_stream::wrappers::ReadDirStream,
 };
 
-/// Playlist manager
+/// Playlists manager
 #[derive(Debug)]
-pub struct PlaylistManager {
-	/// Base Directory
-	base_dir: PathBuf,
+pub struct PlaylistsManager {
+	/// Base directory
+	// TODO: Allow "refreshing" the playlists using this base directory
+	_base_dir: PathBuf,
 
-	/// Cached playlists
-	// TODO: Not lock whole map while loading a playlist?
-	// TODO: Enforce a max size on this by only allowing X playlists?
-	cached_playlists: async_lock::RwLock<HashMap<String, Arc<Playlist>>>,
+	/// Playlists
+	// Note: We keep all playlists loaded due to them being likely small in both size and quantity.
+	//       Even a playlist with 10k file entries, with an average path of 200 bytes, would only occupy
+	//       ~2 MiB. This is far less than the size of most images we load.
+	playlists: RwLock<HashMap<Arc<str>, Arc<Playlist>>>,
 }
 
-impl PlaylistManager {
+impl PlaylistsManager {
 	/// Creates a playlist manager
-	pub fn new(base_dir: PathBuf) -> Self {
-		Self {
-			base_dir,
-			cached_playlists: async_lock::RwLock::new(HashMap::new()),
-		}
+	pub async fn new(base_dir: PathBuf) -> Result<Self, anyhow::Error> {
+		// Create the playlists directory, if it doesn't exist
+		tokio::fs::create_dir_all(&base_dir)
+			.await
+			.context("Unable to create playlists directory")?;
+
+		// Then read all the playlists
+		let playlists = tokio::fs::read_dir(&base_dir)
+			.await
+			.map(ReadDirStream::new)
+			.context("Unable to read playlists directory")?
+			.then(async move |entry| {
+				// Get the name, if it's a yaml file
+				let entry = entry?;
+				let path = entry.path();
+				let (Some(name), Some("yaml")) = (path.file_prefix().and_then(OsStr::to_str), path.extension().and_then(OsStr::to_str)) else {
+					return Ok(None);
+				};
+
+				// Then read the file
+				tracing::debug!(?name, ?path, "Loading playlist");
+				let playlist_yaml = tokio::fs::read(&path).await.context("Unable to open file")?;
+
+				// And load it
+				let playlist = serde_yaml::from_slice(&playlist_yaml).context("Unable to parse playlist")?;
+
+				Ok::<_, anyhow::Error>(Some((name.to_owned(), playlist)))
+			})
+			.try_collect::<Vec<_>>()
+			.await?
+			.into_iter()
+			.flatten()
+			.map(|(name, playlist)| (name.into(), Arc::new(playlist)))
+			.collect::<HashMap<_, _>>();
+
+		Ok(Self {
+			_base_dir: base_dir,
+			playlists: RwLock::new(playlists),
+		})
 	}
 
 	/// Retrieves a playlist
-	#[allow(clippy::disallowed_methods)] // We only lock it temporarily
-	pub async fn get(&self, name: &str) -> Result<Arc<Playlist>, anyhow::Error> {
-		// Check if it's cached with a read-only lock
-		let cached_playlists = self.cached_playlists.upgradable_read().await;
-		if let Some(playlist) = cached_playlists.get(name) {
-			return Ok(Arc::clone(playlist));
-		}
-
-		// Else upgrade and, before loading it, check again if it was loaded in the meantime
-		let mut cached_playlists = async_lock::RwLockUpgradableReadGuard::upgrade(cached_playlists).await;
-		if let Some(playlist) = cached_playlists.get(name) {
-			return Ok(Arc::clone(playlist));
-		}
-
-		// Else load it
-		let playlist = Self::load(&self.base_dir, name)
-			.await
-			.with_context(|| format!("Unable to load playlist {name:?}"))?;
-
-		let playlist = cached_playlists
-			.entry(name.to_owned())
-			.insert_entry(Arc::new(playlist))
-			.into_mut();
-
-		Ok(Arc::clone(playlist))
+	#[expect(clippy::disallowed_methods)] // DEADLOCK: We don't lock anything else after the lock
+	pub fn get(&self, name: &str) -> Option<Arc<Playlist>> {
+		let playlists = self.playlists.read().expect("Poisoned");
+		let playlist = playlists.get(name)?;
+		Some(Arc::clone(playlist))
 	}
 
-	/// Loads a playlist
-	async fn load(base_dir: &Path, name: &str) -> Result<Playlist, anyhow::Error> {
-		// Try to read the file
-		let path = base_dir.join(name).with_appended(".yaml");
-		tracing::debug!(?name, ?path, "Loading playlist");
-		let playlist_yaml = tokio::fs::read(path).await.context("Unable to open file")?;
-
-		// Then load it
-		let playlist = serde_yaml::from_slice(&playlist_yaml).context("Unable to parse playlist")?;
-		Ok(playlist)
+	/// Retrieves all playlists
+	#[expect(clippy::disallowed_methods)] // DEADLOCK: We don't lock anything else after the lock
+	pub fn get_all(&self) -> Vec<(Arc<str>, Arc<Playlist>)> {
+		let playlists = self.playlists.read().expect("Poisoned");
+		playlists
+			.iter()
+			.map(|(name, playlist)| (Arc::clone(name), Arc::clone(playlist)))
+			.collect()
 	}
 }
 
