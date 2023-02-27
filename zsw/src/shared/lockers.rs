@@ -18,6 +18,7 @@ use {
 )]
 define_locker! {
 	LoadDefaultPanelGroupLocker {
+		inner;
 		fn new(...) -> Self;
 		fn resource(...) -> ...;
 
@@ -25,6 +26,7 @@ define_locker! {
 	}
 
 	RendererLocker {
+		inner;
 		fn new(...) -> Self;
 		fn resource(...) -> ...;
 
@@ -33,6 +35,7 @@ define_locker! {
 	}
 
 	PanelsUpdaterLocker {
+		inner;
 		fn new(...) -> Self;
 		fn resource(...) -> ...;
 
@@ -40,6 +43,7 @@ define_locker! {
 	}
 
 	EguiPainterLocker {
+		inner;
 		fn new(...) -> Self;
 		fn resource(...) -> ...;
 
@@ -51,6 +55,7 @@ define_locker! {
 macro define_locker(
 	$(
 		$LockerName:ident {
+			$inner:ident;
 			fn $new:ident(...) -> Self;
 			fn $resource:ident(...) -> ...;
 
@@ -78,7 +83,7 @@ macro define_locker(
 			/// Multiple lockers should not be created per task
 			#[derive(Debug)]
 			pub struct $LockerName<const STATE: usize = 0> {
-				inner: &'static [< $LockerName Inner >],
+				$inner: &'static [< $LockerName Inner >],
 			}
 
 			impl<const STATE: usize> $LockerName<STATE> {
@@ -90,7 +95,7 @@ macro define_locker(
 					};
 					let inner = Box::leak(Box::new(inner));
 
-					Self { inner }
+					Self { $inner: inner }
 				}
 
 				/// Locks a resource
@@ -125,14 +130,14 @@ macro define_locker(
 				{
 					#[cfg(feature = "locker-trace")]
 					tracing::trace!(resource = ?std::any::type_name::<ResourceTy>(), backtrace = %std::backtrace::Backtrace::force_capture(), "Locking resource");
-					let guard = self.inner.field.lock().await;
+					let guard = self.$inner.field.lock().await;
 
 					#[cfg(feature = "locker-trace")]
 					tracing::trace!(resource = ?std::any::type_name::<ResourceTy>(), backtrace = %std::backtrace::Backtrace::force_capture(), "Locked resource");
 					let resource = Resource::new(guard);
 
 					let locker = $LockerName {
-						inner: self.inner
+						$inner: self.$inner
 					};
 					(resource, locker)
 				}
