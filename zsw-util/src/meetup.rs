@@ -32,6 +32,7 @@ impl<T> Sender<T> {
 	/// Sends a value.
 	///
 	/// Blocks until the value is received
+	#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety by only locking the mutex temporarily
 	pub async fn send(&self, value: T) {
 		let mut value = Some(value);
 		let mut inner_lock_fut = self.inner.lock();
@@ -68,6 +69,7 @@ impl<T> Receiver<T> {
 	/// Receives the next value
 	///
 	/// Blocks until the value is sent
+	#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety by only locking the mutex temporarily
 	pub async fn recv(&self) -> T {
 		let mut inner_lock_fut = self.inner.lock();
 		std::future::poll_fn(|cx| {

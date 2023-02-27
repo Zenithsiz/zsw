@@ -198,6 +198,7 @@ macro define_locker(
 						where
 							$async_mutex_ty: 'locker,
 						{
+							#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
 							let guard = self.$inner.$async_mutex_name.lock().await;
 							let locker = $LockerName {
 								$inner: self.$inner
@@ -220,6 +221,7 @@ macro define_locker(
 					{
 						#[track_caller]
 						async fn send_resource(&mut self, resource: $meetup_sender_ty) {
+							#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
 							self.$inner.$meetup_sender_name.send(resource).await;
 						}
 					}

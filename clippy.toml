@@ -1,1 +1,4 @@
-disallowed-methods = []
+disallowed-methods = [
+	"futures::lock::Mutex::lock",
+	"zsw_util::meetup::Sender::send",
+]
