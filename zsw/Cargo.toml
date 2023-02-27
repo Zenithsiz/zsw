@@ -25,6 +25,7 @@ include_dir = { version = "0.7.3", optional = true }
 itertools = "0.10.5"
 num-rational = "0.4.1"
 opener = "0.5.2"
+paste = "1.0.11"
 rand = "0.8.5"
 rayon = "1.6.1"
 serde = { version = "1.0.152", features = ["derive"] }
