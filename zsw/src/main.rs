@@ -55,10 +55,10 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::Future,
+	futures::{lock::Mutex, Future},
 	panel::{PanelGroup, PanelsManager, PanelsRendererShader},
 	playlist::PlaylistManager,
-	shared::{Locker, Locks},
+	shared::{EguiPainterLocker, LoadDefaultPanelGroupLocker, PanelsUpdaterLocker, RendererLocker},
 	std::{mem, sync::Arc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -169,7 +169,8 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		image_requester,
 	};
 	let shared = Arc::new(shared);
-	let locker = Locker::new(Locks::new(None, panels_renderer_shader, ((),), (((),),)));
+	let cur_panel_group = Arc::new(Mutex::new(None));
+	let panels_renderer_shader = Arc::new(Mutex::new(panels_renderer_shader));
 
 	let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
 	let (panels_updater_output_tx, panels_updater_output_rx) = meetup::channel();
@@ -177,7 +178,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
-		let mut locker = locker.clone_unchecked();
+		let mut locker: LoadDefaultPanelGroupLocker = LoadDefaultPanelGroupLocker::new(Arc::clone(&cur_panel_group));
 		let default_panel_group = config.default_panel_group.clone();
 		async move {
 			// If we don't have a default, don't do anything
@@ -216,7 +217,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		let locker = locker.clone_unchecked();
+		let locker = RendererLocker::new(Arc::clone(&cur_panel_group), Arc::clone(&panels_renderer_shader));
 		async move {
 			self::renderer(
 				shared,
@@ -233,7 +234,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
-		let locker = locker.clone_unchecked();
+		let locker = PanelsUpdaterLocker::new(Arc::clone(&cur_panel_group));
 		async move { self::panels_updater(shared, locker, panels_updater_output_tx).await }
 	});
 
@@ -241,6 +242,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
+		let locker = EguiPainterLocker::new(cur_panel_group, panels_renderer_shader);
 		async move { self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await }
 	});
 
@@ -289,7 +291,7 @@ where
 /// Renderer task
 async fn renderer(
 	shared: Arc<Shared>,
-	mut locker: Locker,
+	mut locker: RendererLocker,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -358,7 +360,7 @@ async fn renderer(
 /// Panel updater task
 async fn panels_updater(
 	shared: Arc<Shared>,
-	mut locker: Locker,
+	mut locker: PanelsUpdaterLocker,
 	output_tx: meetup::Sender<()>,
 ) -> Result<!, anyhow::Error> {
 	loop {
@@ -379,7 +381,7 @@ async fn panels_updater(
 /// Egui painter task
 async fn egui_painter(
 	shared: Arc<Shared>,
-	mut locker: Locker,
+	mut locker: EguiPainterLocker,
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,

@@ -2,9 +2,13 @@
 
 // Modules
 mod locker;
+mod lockers;
 
 // Exports
-pub use self::locker::{Locker, Locks};
+pub use self::{
+	locker::Lockable,
+	lockers::{EguiPainterLocker, LoadDefaultPanelGroupLocker, PanelsUpdaterLocker, RendererLocker},
+};
 
 // Imports
 use {
