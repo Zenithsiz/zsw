@@ -261,6 +261,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 }
 
 /// Spawns a task
+#[track_caller]
 pub fn spawn_task<F, T>(name: impl Into<String>, future: F)
 where
 	F: Future<Output = Result<T, anyhow::Error>> + Send + 'static,
@@ -268,7 +269,7 @@ where
 	let name = name.into();
 
 	#[allow(clippy::let_underscore_future)] // We don't care about the result
-	let _ = tokio::spawn(async move {
+	let _ = tokio::task::Builder::new().name(&name.clone()).spawn(async move {
 		tracing::debug!(?name, "Spawning task");
 		match future.await {
 			Ok(_) => tracing::debug!(?name, "Task finished"),
