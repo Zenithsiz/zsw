@@ -19,8 +19,7 @@
 	let_chains,
 	exit_status_error,
 	lint_reasons,
-	closure_track_caller,
-	generic_const_exprs
+	closure_track_caller
 )]
 #![allow(incomplete_features)]
 
