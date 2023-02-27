@@ -51,7 +51,7 @@ use {
 	},
 	anyhow::Context,
 	args::Args,
-	async_lock::Mutex,
+	async_lock::{Mutex, RwLock},
 	cgmath::Point2,
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
@@ -141,6 +141,8 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 	let playlists_manager = PlaylistsManager::new(playlist_path)
 		.await
 		.context("Unable to create playlist manager")?;
+	let playlists_manager = Arc::new(RwLock::new(playlists_manager));
+
 	let panels_path = config
 		.panels_dir
 		.clone()
@@ -167,7 +169,6 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		last_resize: AtomicCell::new(None),
 		// TODO: Not have a default of (0,0)?
 		cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
-		playlists_manager,
 		panels_manager,
 		image_requester,
 	};
@@ -181,7 +182,8 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
-		let mut locker: LoadDefaultPanelGroupLocker = LoadDefaultPanelGroupLocker::new(Arc::clone(&cur_panel_group));
+		let mut locker: LoadDefaultPanelGroupLocker =
+			LoadDefaultPanelGroupLocker::new(Arc::clone(&cur_panel_group), Arc::clone(&playlists_manager));
 		let default_panel_group = config.default_panel_group.clone();
 		async move {
 			// If we don't have a default, don't do anything
@@ -190,13 +192,14 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 			};
 
 			// Else load the panel group
+			let (playlists_manager, _) = locker.read::<PlaylistsManager>().await;
 			let loaded_panel_group = match shared
 				.panels_manager
 				.load(
 					default_panel_group,
 					&shared.wgpu,
 					&shared.panels_renderer_layout,
-					&shared.playlists_manager,
+					&playlists_manager,
 				)
 				.await
 			{
@@ -211,6 +214,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 			};
 
 			// And set it as the current one
+			mem::drop(playlists_manager);
 			let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
 			*panel_group = Some(loaded_panel_group);
 
@@ -245,7 +249,12 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
-		let locker = EguiPainterLocker::new(cur_panel_group, panels_renderer_shader, egui_painter_output_tx);
+		let locker = EguiPainterLocker::new(
+			cur_panel_group,
+			panels_renderer_shader,
+			playlists_manager,
+			egui_painter_output_tx,
+		);
 		async move { self::egui_painter(shared, locker, egui_painter, settings_menu).await }
 	});
 
@@ -387,7 +396,8 @@ async fn egui_painter(
 	loop {
 		let full_output = {
 			let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>().await;
-			let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
+			let (mut panels_renderer_shader, mut locker) = locker.lock::<PanelsRendererShader>().await;
+			let (playlists_manager, _) = locker.read::<PlaylistsManager>().await;
 
 			egui_painter.draw(&shared.window, |ctx, frame| {
 				settings_menu.draw(
@@ -397,7 +407,7 @@ async fn egui_painter(
 					shared.cursor_pos.load(),
 					&mut panel_group,
 					&mut panels_renderer_shader,
-					&shared.playlists_manager,
+					&playlists_manager,
 				);
 
 				mem::drop(panel_group);

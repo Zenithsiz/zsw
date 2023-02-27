@@ -2,11 +2,16 @@
 
 // TODO: Use more descriptive names than `lock` and `send`?
 
+// Lints
+#![allow(dead_code)] // We define a very generic macro that may expand to functions that aren't needed
+
 // Imports
-#[allow(unused_imports)] // TODO: Remove once we add any rwlocks
 use {
 	super::locker::{AsyncMutexLocker, AsyncRwLockLocker, MeetupSenderLocker},
-	crate::panel::{PanelGroup, PanelsRendererShader},
+	crate::{
+		panel::{PanelGroup, PanelsRendererShader},
+		playlist::PlaylistsManager,
+	},
 	async_lock::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard},
 	std::sync::Arc,
 	zsw_util::{meetup, where_assert},
@@ -19,6 +24,8 @@ type AsyncMutex1 = PanelsRendererShader;
 type MeetupSender0 = ();
 type MeetupSender1 = (Vec<egui::ClippedPrimitive>, egui::TexturesDelta);
 
+type AsyncRwLock0 = PlaylistsManager;
+
 define_locker! {
 	LoadDefaultPanelGroupLocker {
 		inner;
@@ -27,6 +34,14 @@ define_locker! {
 		async_mutex {
 			fn lock(...) -> ...;
 			async_mutex0: AsyncMutex0 = 0,
+		}
+
+		async_rwlock {
+			fn read(...) -> ...;
+			fn upgradable_read(...) -> ...;
+			fn write(...) -> ...;
+
+			async_rwlock0: AsyncRwLock0 = 0,
 		}
 	}
 
@@ -64,6 +79,14 @@ define_locker! {
 			fn lock(...) -> ...;
 			async_mutex0: AsyncMutex0 = 0,
 			async_mutex1: AsyncMutex1 = 1,
+		}
+
+		async_rwlock {
+			fn read(...) -> ...;
+			fn upgradable_read(...) -> ...;
+			fn write(...) -> ...;
+
+			async_rwlock0: AsyncRwLock0 = 2,
 		}
 
 		meetup_sender {
