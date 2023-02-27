@@ -1,7 +1,7 @@
 //! Locker
 
 // Imports
-use futures::lock::MutexGuard;
+use async_lock::{MutexGuard, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
 
 /// Locker of async mutex `R`
 pub trait AsyncMutexLocker<R> {
@@ -12,6 +12,31 @@ pub trait AsyncMutexLocker<R> {
 
 	/// Locks the resource `R` and returns the next locker
 	async fn lock_resource<'locker>(&'locker mut self) -> (MutexGuard<R>, Self::Next<'locker>)
+	where
+		R: 'locker;
+}
+
+/// Locker of async rwlock `R`
+pub trait AsyncRwLockLocker<R> {
+	/// Next locker
+	type Next<'locker>
+	where
+		Self: 'locker;
+
+	/// Locks the resource `R` for read and returns the next locker
+	async fn lock_read_resource<'locker>(&'locker mut self) -> (RwLockReadGuard<R>, Self::Next<'locker>)
+	where
+		R: 'locker;
+
+	/// Locks the resource `R` for upgradable read and returns the next locker
+	async fn lock_upgradable_read_resource<'locker>(
+		&'locker mut self,
+	) -> (RwLockUpgradableReadGuard<R>, Self::Next<'locker>)
+	where
+		R: 'locker;
+
+	/// Locks the resource `R` for write and returns the next locker
+	async fn lock_write_resource<'locker>(&'locker mut self) -> (RwLockWriteGuard<R>, Self::Next<'locker>)
 	where
 		R: 'locker;
 }

@@ -3,10 +3,11 @@
 // TODO: Use more descriptive names than `lock` and `send`?
 
 // Imports
+#[allow(unused_imports)] // TODO: Remove once we add any rwlocks
 use {
-	super::locker::{AsyncMutexLocker, MeetupSenderLocker},
+	super::locker::{AsyncMutexLocker, AsyncRwLockLocker, MeetupSenderLocker},
 	crate::panel::{PanelGroup, PanelsRendererShader},
-	futures::lock::{Mutex, MutexGuard},
+	async_lock::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard},
 	std::sync::Arc,
 	zsw_util::{meetup, where_assert},
 };
@@ -89,6 +90,18 @@ macro define_locker(
 			)?
 
 			$(
+				async_rwlock {
+					fn $lock_async_rwlock_read:ident(...) -> ...;
+					fn $lock_async_rwlock_upgradable_read:ident(...) -> ...;
+					fn $lock_async_rwlock_write:ident(...) -> ...;
+					$(
+						$async_rwlock_name:ident: $async_rwlock_ty:ty = $async_rwlock_idx:literal
+					),*
+					$(,)?
+				}
+			)?
+
+			$(
 				meetup_sender {
 					fn $send_meetup_sender:ident(...) -> ...;
 					$(
@@ -110,6 +123,13 @@ macro define_locker(
 				$(
 					$(
 						$async_mutex_name: Arc<Mutex<$async_mutex_ty>>,
+					)*
+				)?
+
+				// Async rwlocks
+				$(
+					$(
+						$async_rwlock_name: Arc<RwLock<$async_rwlock_ty>>,
 					)*
 				)?
 
@@ -136,6 +156,9 @@ macro define_locker(
 					// Async mutexes
 					$( $( $async_mutex_name: Arc<Mutex<$async_mutex_ty>>, )* )?
 
+					// Async rwlocks
+					$( $( $async_rwlock_name: Arc<RwLock<$async_rwlock_ty>>, )* )?
+
 					// Meetup senders
 					$( $( $meetup_sender_name: meetup::Sender<$meetup_sender_ty>, )* )?
 				) -> Self {
@@ -143,6 +166,9 @@ macro define_locker(
 					let inner = [< $LockerName Inner >] {
 						// Async mutexes
 						$( $( $async_mutex_name, )* )?
+
+						// Async rwlocks
+						$( $( $async_rwlock_name, )* )?
 
 						// Meetup senders
 						$( $( $meetup_sender_name, )* )?
@@ -163,6 +189,44 @@ macro define_locker(
 						R: 'locker,
 					{
 						self.lock_resource().await
+					}
+				)?
+
+				$(
+					/// Locks the async rwlock `R` for reading
+					#[track_caller]
+					pub async fn $lock_async_rwlock_read<'locker, R>(
+						&'locker mut self,
+					) -> (RwLockReadGuard<'locker, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
+					where
+						Self: AsyncRwLockLocker<R>,
+						R: 'locker,
+					{
+						self.lock_read_resource().await
+					}
+
+					/// Locks the async rwlock `R` for an upgradable reading
+					#[track_caller]
+					pub async fn $lock_async_rwlock_upgradable_read<'locker, R>(
+						&'locker mut self,
+					) -> (RwLockUpgradableReadGuard<'locker, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
+					where
+						Self: AsyncRwLockLocker<R>,
+						R: 'locker,
+					{
+						self.lock_upgradable_read_resource().await
+					}
+
+					/// Locks the async rwlock `R` for writing
+					#[track_caller]
+					pub async fn $lock_async_rwlock_write<'locker, R>(
+						&'locker mut self,
+					) -> (RwLockWriteGuard<'locker, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
+					where
+						Self: AsyncRwLockLocker<R>,
+						R: 'locker,
+					{
+						self.lock_write_resource().await
 					}
 				)?
 
@@ -205,6 +269,60 @@ macro define_locker(
 							};
 							(guard, locker)
 						}
+					}
+				)*
+			)?
+
+			// Async rwlocks
+			$(
+				$(
+					impl<const CUR_STATE: usize> AsyncRwLockLocker<$async_rwlock_ty> for $LockerName<CUR_STATE>
+					where
+						// Note: See the note on the similar state in the mutexes section
+						where_assert!(CUR_STATE <= $async_rwlock_idx):,
+					{
+						type Next<'locker> = $LockerName<{ $async_rwlock_idx + 1 }>;
+
+						#[track_caller]
+						async fn lock_read_resource<'locker>(&'locker mut self) -> (RwLockReadGuard<$async_rwlock_ty>, Self::Next<'locker>)
+						where
+							$async_rwlock_ty: 'locker
+						{
+							#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+							let guard = self.$inner.$async_rwlock_name.read().await;
+							let locker = $LockerName {
+								$inner: self.$inner
+							};
+							(guard, locker)
+						}
+
+						#[track_caller]
+						async fn lock_upgradable_read_resource<'locker>(
+							&'locker mut self,
+						) -> (RwLockUpgradableReadGuard<$async_rwlock_ty>, Self::Next<'locker>)
+						where
+							$async_rwlock_ty: 'locker
+							{
+								#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+								let guard = self.$inner.$async_rwlock_name.upgradable_read().await;
+								let locker = $LockerName {
+									$inner: self.$inner
+								};
+								(guard, locker)
+							}
+
+						#[track_caller]
+						async fn lock_write_resource<'locker>(&'locker mut self) -> (RwLockWriteGuard<$async_rwlock_ty>, Self::Next<'locker>)
+						where
+							$async_rwlock_ty: 'locker
+							{
+								#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+								let guard = self.$inner.$async_rwlock_name.write().await;
+								let locker = $LockerName {
+									$inner: self.$inner
+								};
+								(guard, locker)
+							}
 					}
 				)*
 			)?
