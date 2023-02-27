@@ -5,10 +5,7 @@ mod locker;
 mod lockers;
 
 // Exports
-pub use self::{
-	locker::AsyncMutexLocker,
-	lockers::{EguiPainterLocker, LoadDefaultPanelGroupLocker, PanelsUpdaterLocker, RendererLocker},
-};
+pub use self::lockers::{EguiPainterLocker, LoadDefaultPanelGroupLocker, PanelsUpdaterLocker, RendererLocker};
 
 // Imports
 use {

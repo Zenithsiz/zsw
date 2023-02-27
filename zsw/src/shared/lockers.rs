@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::AsyncMutexLocker,
+	super::locker::AsyncMutexLocker,
 	crate::panel::{PanelGroup, PanelsRendererShader},
 	futures::lock::{Mutex, MutexGuard},
 	std::sync::Arc,
@@ -22,7 +22,9 @@ define_locker! {
 		fn new(...) -> Self;
 		fn lock(...) -> ...;
 
-		t0: T0 = 0,
+		async_mutex {
+			t0: T0 = 0,
+		}
 	}
 
 	RendererLocker {
@@ -30,8 +32,10 @@ define_locker! {
 		fn new(...) -> Self;
 		fn lock(...) -> ...;
 
-		t0: T0 = 0,
-		t1: T1 = 1,
+		async_mutex {
+			t0: T0 = 0,
+			t1: T1 = 1,
+		}
 	}
 
 	PanelsUpdaterLocker {
@@ -39,7 +43,9 @@ define_locker! {
 		fn new(...) -> Self;
 		fn lock(...) -> ...;
 
-		t0: T0 = 0,
+		async_mutex {
+			t0: T0 = 0,
+		}
 	}
 
 	EguiPainterLocker {
@@ -47,8 +53,10 @@ define_locker! {
 		fn new(...) -> Self;
 		fn lock(...) -> ...;
 
-		t0: T0 = 0,
-		t1: T1 = 1,
+		async_mutex {
+			t0: T0 = 0,
+			t1: T1 = 1,
+		}
 	}
 }
 
@@ -57,12 +65,17 @@ macro define_locker(
 		$LockerName:ident {
 			$inner:ident;
 			fn $new:ident(...) -> Self;
-			fn $lock_fn:ident(...) -> ...;
+			fn $lock_async_mutex:ident(...) -> ...;
 
 			$(
-				$lock_name:ident: $lock_ty:ty = $lock_idx:literal
-			),*
-			$(,)?
+				async_mutex {
+					$(
+						$async_mutex_name:ident: $async_mutex_ty:ty = $async_mutex_idx:literal
+					),*
+					$(,)?
+				}
+			)?
+
 		}
 	)*
 
@@ -72,9 +85,12 @@ macro define_locker(
 			/// Locker inner
 			#[derive(Debug)]
 			pub struct [< $LockerName Inner >] {
+				// Async mutexes
 				$(
-					$lock_name: Arc<Mutex<$lock_ty>>,
-				)*
+					$(
+						$async_mutex_name: Arc<Mutex<$async_mutex_ty>>,
+					)*
+				)?
 			}
 
 			/// Locker
@@ -88,10 +104,14 @@ macro define_locker(
 
 			impl<const STATE: usize> $LockerName<STATE> {
 				/// Creates a new locker
-				pub fn $new($( $lock_name: Arc<Mutex<$lock_ty>> ),*) -> Self {
+				pub fn $new(
+					// Async mutexes
+					$( $( $async_mutex_name: Arc<Mutex<$async_mutex_ty>> ),* )?
+				) -> Self {
 					// TODO: Don't leak and instead drop it only when dropping when `STATE == 0`.
 					let inner = [< $LockerName Inner >] {
-						$( $lock_name, )*
+						// Async mutexes
+						$( $( $async_mutex_name, )* )?
 					};
 					let inner = Box::leak(Box::new(inner));
 
@@ -100,7 +120,7 @@ macro define_locker(
 
 				/// Locks the resource `R`
 				#[track_caller]
-				pub async fn $lock_fn<'locker, R>(
+				pub async fn $lock_async_mutex<'locker, R>(
 					&'locker mut self,
 				) -> (MutexGuard<'locker, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
 				where
@@ -111,31 +131,33 @@ macro define_locker(
 				}
 			}
 
-			#[duplicate::duplicate_item(
-				ResourceTy field NEXT_STATE;
-				$(
-					[$lock_ty] [$lock_name] [{ $lock_idx + 1 }];
-				)*
-			)]
-			impl<const CUR_STATE: usize> AsyncMutexLocker<ResourceTy> for $LockerName<CUR_STATE>
-			where
-				where_assert!(NEXT_STATE > CUR_STATE):,
-			{
-				type Next<'locker> = $LockerName<NEXT_STATE>;
-
-				#[track_caller]
-				async fn lock_resource<'locker>(&'locker mut self) -> (MutexGuard<ResourceTy>, Self::Next<'locker>)
+			// Async mutexes
+			$(
+				#[duplicate::duplicate_item(
+					ResourceTy field NEXT_STATE;
+					$(
+						[$async_mutex_ty] [$async_mutex_name] [{ $async_mutex_idx + 1 }];
+					)*
+				)]
+				impl<const CUR_STATE: usize> AsyncMutexLocker<ResourceTy> for $LockerName<CUR_STATE>
 				where
-					ResourceTy: 'locker,
+					where_assert!(NEXT_STATE > CUR_STATE):,
 				{
-					let guard = self.$inner.field.lock().await;
+					type Next<'locker> = $LockerName<NEXT_STATE>;
 
-					let locker = $LockerName {
-						$inner: self.$inner
-					};
-					(guard, locker)
+					#[track_caller]
+					async fn lock_resource<'locker>(&'locker mut self) -> (MutexGuard<ResourceTy>, Self::Next<'locker>)
+					where
+						ResourceTy: 'locker,
+					{
+						let guard = self.$inner.field.lock().await;
+						let locker = $LockerName {
+							$inner: self.$inner
+						};
+						(guard, locker)
+					}
 				}
-			}
+			)?
 		)*
 	}
 }
