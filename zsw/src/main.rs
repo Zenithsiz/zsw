@@ -177,51 +177,13 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
-		let mut locker: LoadDefaultPanelGroupLocker = LoadDefaultPanelGroupLocker::new(
+		let locker = LoadDefaultPanelGroupLocker::new(
 			Arc::clone(&cur_panel_group),
 			Arc::clone(&panels_renderer_shader),
 			Arc::clone(&playlists_manager),
 		);
 		let default_panel_group = config.default_panel_group.clone();
-		async move {
-			// If we don't have a default, don't do anything
-			let Some(default_panel_group) = &default_panel_group else {
-				return Ok(());
-			};
-
-			// Else load the panel group
-			let (playlists_manager, _) = locker.read::<PlaylistsManager>().await;
-			let loaded_panel_group = match shared
-				.panels_manager
-				.load(
-					default_panel_group,
-					&shared.wgpu,
-					&shared.panels_renderer_layout,
-					&playlists_manager,
-				)
-				.await
-			{
-				Ok(panel_group) => {
-					tracing::debug!(?panel_group, "Loaded default panel group");
-					panel_group
-				},
-				Err(err) => {
-					tracing::warn!("Unable to load default panel group: {err:?}");
-					return Ok(());
-				},
-			};
-
-			// And set it as the current one
-			mem::drop(playlists_manager);
-			let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
-			*panel_group = Some(loaded_panel_group);
-
-			mem::drop(panel_group);
-			let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
-			panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
-
-			Ok(())
-		}
+		async move { self::load_default_panel_group(default_panel_group, locker, shared).await }
 	});
 
 	self::spawn_task("Renderer", {
@@ -280,6 +242,51 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 			}
 		})
 	});
+
+	Ok(())
+}
+
+/// Loads the default panel group
+async fn load_default_panel_group(
+	default_panel_group: Option<String>,
+	mut locker: LoadDefaultPanelGroupLocker<0>,
+	shared: Arc<Shared>,
+) -> Result<(), anyhow::Error> {
+	// If we don't have a default, don't do anything
+	let Some(default_panel_group) = &default_panel_group else {
+		return Ok(());
+	};
+
+	// Else load the panel group
+	let (playlists_manager, _) = locker.read::<PlaylistsManager>().await;
+	let loaded_panel_group = match shared
+		.panels_manager
+		.load(
+			default_panel_group,
+			&shared.wgpu,
+			&shared.panels_renderer_layout,
+			&playlists_manager,
+		)
+		.await
+	{
+		Ok(panel_group) => {
+			tracing::debug!(?panel_group, "Loaded default panel group");
+			panel_group
+		},
+		Err(err) => {
+			tracing::warn!("Unable to load default panel group: {err:?}");
+			return Ok(());
+		},
+	};
+
+	// And set it as the current one
+	mem::drop(playlists_manager);
+	let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
+	*panel_group = Some(loaded_panel_group);
+
+	mem::drop(panel_group);
+	let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
+	panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
 
 	Ok(())
 }
