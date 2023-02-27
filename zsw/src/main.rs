@@ -18,7 +18,9 @@
 	fs_try_exists,
 	let_chains,
 	exit_status_error,
-	lint_reasons
+	lint_reasons,
+	closure_track_caller,
+	generic_const_exprs
 )]
 #![allow(incomplete_features)]
 
@@ -53,9 +55,10 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::{lock::Mutex, Future},
-	panel::PanelsManager,
+	futures::Future,
+	panel::{PanelGroup, PanelsManager, PanelsRendererShader},
 	playlist::PlaylistManager,
+	shared::{Locker, Locks},
 	std::{mem, sync::Arc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -164,16 +167,17 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		playlist_manager,
 		panels_manager,
 		image_requester,
-		cur_panel_group: Mutex::new(None),
-		panels_renderer_shader: Mutex::new(panels_renderer_shader),
 	};
 	let shared = Arc::new(shared);
+	let locker = Locker::new(Locks::new(None, panels_renderer_shader, ((),), (((),),)));
 
 	let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
 	let (panels_updater_output_tx, panels_updater_output_rx) = meetup::channel();
 
+
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
+		let mut locker = locker.clone_unchecked();
 		let default_panel_group = config.default_panel_group.clone();
 		async move {
 			// If we don't have a default, don't do anything
@@ -182,7 +186,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 			};
 
 			// Else load the panel group
-			let panel_group = match shared
+			let loaded_panel_group = match shared
 				.panels_manager
 				.load(
 					default_panel_group,
@@ -203,7 +207,8 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 			};
 
 			// And set it as the current one
-			*shared.cur_panel_group.lock().await = Some(panel_group);
+			let (mut panel_group, _) = locker.resource::<Option<PanelGroup>>().await;
+			*panel_group = Some(loaded_panel_group);
 
 			Ok(())
 		}
@@ -211,9 +216,11 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
+		let locker = locker.clone_unchecked();
 		async move {
 			self::renderer(
 				shared,
+				locker,
 				wgpu_renderer,
 				panels_renderer,
 				egui_renderer,
@@ -226,14 +233,15 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
-		async move { self::panels_updater(shared, panels_updater_output_tx).await }
+		let locker = locker.clone_unchecked();
+		async move { self::panels_updater(shared, locker, panels_updater_output_tx).await }
 	});
 
 	self::spawn_task("Image loader", async move { image_loader.run().await });
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
-		async move { self::egui_painter(shared, egui_painter, settings_menu, egui_painter_output_tx).await }
+		async move { self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await }
 	});
 
 	// Then run the event loop on this thread
@@ -281,6 +289,7 @@ where
 /// Renderer task
 async fn renderer(
 	shared: Arc<Shared>,
+	mut locker: Locker,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -303,22 +312,25 @@ async fn renderer(
 		let mut frame = wgpu_renderer
 			.start_render(&shared.wgpu)
 			.context("Unable to start frame")?;
-
 		// Render the panels
-		if let Some(panel_group) = &*shared.cur_panel_group.lock().await {
-			let cursor_pos = shared.cursor_pos.load();
-			let mut panels_renderer_shader = shared.panels_renderer_shader.lock().await;
-			panels_renderer
-				.render(
-					&mut frame,
-					&wgpu_renderer,
-					&shared.wgpu,
-					&shared.panels_renderer_layout,
-					Point2::new(cursor_pos.x as i32, cursor_pos.y as i32),
-					panel_group,
-					&mut panels_renderer_shader,
-				)
-				.context("Unable to render panels")?;
+		{
+			let (mut panel_group, mut locker) = locker.resource::<Option<PanelGroup>>().await;
+			if let Some(panel_group) = &mut *panel_group {
+				let cursor_pos = shared.cursor_pos.load();
+
+				let (mut panels_renderer_shader, _) = locker.resource::<PanelsRendererShader>().await;
+				panels_renderer
+					.render(
+						&mut frame,
+						&wgpu_renderer,
+						&shared.wgpu,
+						&shared.panels_renderer_layout,
+						Point2::new(cursor_pos.x as i32, cursor_pos.y as i32),
+						panel_group,
+						&mut panels_renderer_shader,
+					)
+					.context("Unable to render panels")?;
+			}
 		}
 
 		// Render egui
@@ -344,11 +356,19 @@ async fn renderer(
 }
 
 /// Panel updater task
-async fn panels_updater(shared: Arc<Shared>, output_tx: meetup::Sender<()>) -> Result<!, anyhow::Error> {
+async fn panels_updater(
+	shared: Arc<Shared>,
+	mut locker: Locker,
+	output_tx: meetup::Sender<()>,
+) -> Result<!, anyhow::Error> {
 	loop {
-		if let Some(panel_group) = &mut *shared.cur_panel_group.lock().await {
-			for panel in panel_group.panels_mut() {
-				panel.update(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester);
+		{
+			let (mut panel_group, _) = locker.resource::<Option<PanelGroup>>().await;
+
+			if let Some(panel_group) = &mut *panel_group {
+				for panel in panel_group.panels_mut() {
+					panel.update(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester);
+				}
 			}
 		}
 
@@ -359,13 +379,14 @@ async fn panels_updater(shared: Arc<Shared>, output_tx: meetup::Sender<()>) -> R
 /// Egui painter task
 async fn egui_painter(
 	shared: Arc<Shared>,
+	mut locker: Locker,
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, anyhow::Error> {
 	loop {
-		let mut panel_group = shared.cur_panel_group.lock().await;
-		let mut panels_renderer_shader = shared.panels_renderer_shader.lock().await;
+		let (mut panel_group, mut locker) = locker.resource::<Option<PanelGroup>>().await;
+		let (mut panels_renderer_shader, _) = locker.resource::<PanelsRendererShader>().await;
 
 		let full_output = egui_painter.draw(&shared.window, |ctx, frame| {
 			settings_menu.draw(

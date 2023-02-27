@@ -44,3 +44,4 @@ zsw-util = { path = "../zsw-util" }
 default = ["include-shaders"]
 tokio-console = ["dep:console-subscriber"]
 include-shaders = ["dep:include_dir"]
+locker-trace = []

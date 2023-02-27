@@ -175,3 +175,10 @@ pub impl PathBuf {
 		self
 	}
 }
+
+/// Ensures `cond` is true in a `where` clause
+pub macro where_assert($cond:expr) {
+	// Note: If `true`, this expands to `[(); 0]`, which is valid
+	//       If `false`, it expands to `[(); -1]`, which is invalid
+	[(); ($cond as usize) - 1]
+}
