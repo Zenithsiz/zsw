@@ -9,35 +9,42 @@ use {
 	zsw_util::where_assert,
 };
 
+// Note: `duplicate` is just being used to create aliases here
+#[duplicate::duplicate_item(
+	t0 T0 t1 T1;
+
+	[ cur_panel_group        ] [ Option<PanelGroup> ]
+	[ panels_renderer_shader ] [ PanelsRendererShader ];
+)]
 define_locker! {
 	LoadDefaultPanelGroupLocker {
 		fn new(...) -> Self;
 		fn resource(...) -> ...;
 
-		cur_panel_group: Option<PanelGroup> = 0,
+		t0: T0 = 0,
 	}
 
 	RendererLocker {
 		fn new(...) -> Self;
 		fn resource(...) -> ...;
 
-		cur_panel_group: Option<PanelGroup> = 0,
-		panels_renderer_shader: PanelsRendererShader = 1,
+		t0: T0 = 0,
+		t1: T1 = 1,
 	}
 
 	PanelsUpdaterLocker {
 		fn new(...) -> Self;
 		fn resource(...) -> ...;
 
-		cur_panel_group: Option<PanelGroup> = 0,
+		t0: T0 = 0,
 	}
 
 	EguiPainterLocker {
 		fn new(...) -> Self;
 		fn resource(...) -> ...;
 
-		cur_panel_group: Option<PanelGroup> = 0,
-		panels_renderer_shader: PanelsRendererShader = 1,
+		t0: T0 = 0,
+		t1: T1 = 1,
 	}
 }
 
