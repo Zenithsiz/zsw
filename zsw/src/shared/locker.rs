@@ -6,15 +6,15 @@ use {
 	std::ops::{Deref, DerefMut},
 };
 
-/// A lock-able type
-pub trait Lockable<R> {
+/// Locker of resource `R`
+pub trait Locker<R> {
 	/// Next locker
-	type NextLocker<'locker>
+	type Next<'locker>
 	where
 		Self: 'locker;
 
 	/// Locks the resource `R` and returns the next locker
-	async fn lock_resource<'locker>(&'locker mut self) -> (Resource<R>, Self::NextLocker<'locker>)
+	async fn lock_resource<'locker>(&'locker mut self) -> (Resource<R>, Self::Next<'locker>)
 	where
 		R: 'locker;
 }

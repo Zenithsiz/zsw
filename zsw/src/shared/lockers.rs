@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::{locker::Resource, Lockable},
+	super::{locker::Resource, Locker},
 	crate::panel::{PanelGroup, PanelsRendererShader},
 	futures::lock::Mutex,
 	std::sync::Arc,
@@ -84,9 +84,9 @@ macro define_locker(
 			#[track_caller]
 			pub async fn $resource<'locker, R>(
 				&'locker mut self,
-			) -> (Resource<'locker, R>, <Self as Lockable<R>>::NextLocker<'locker>)
+			) -> (Resource<'locker, R>, <Self as Locker<R>>::Next<'locker>)
 			where
-				Self: Lockable<R>,
+				Self: Locker<R>,
 				R: 'locker,
 			{
 				self.lock_resource().await
@@ -99,14 +99,14 @@ macro define_locker(
 				[$lock_ty] [$lock_name] [{ $lock_idx + 1 }];
 			)*
 		)]
-		impl<const CUR_STATE: usize> Lockable<ResourceTy> for $LockerName<CUR_STATE>
+		impl<const CUR_STATE: usize> Locker<ResourceTy> for $LockerName<CUR_STATE>
 		where
 			where_assert!(NEXT_STATE > CUR_STATE):,
 		{
-			type NextLocker<'locker> = $LockerName<NEXT_STATE>;
+			type Next<'locker> = $LockerName<NEXT_STATE>;
 
 			#[track_caller]
-			async fn lock_resource<'locker>(&'locker mut self) -> (Resource<ResourceTy>, Self::NextLocker<'locker>)
+			async fn lock_resource<'locker>(&'locker mut self) -> (Resource<ResourceTy>, Self::Next<'locker>)
 			where
 				ResourceTy: 'locker,
 			{
