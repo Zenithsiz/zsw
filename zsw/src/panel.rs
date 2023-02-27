@@ -82,7 +82,7 @@ impl PanelsManager {
 					.get(&panel.playlist)
 					.context("Unable to load playlist")?;
 
-				Panel::new(wgpu_shared, renderer_layouts, geometries, state, &playlist)
+				Panel::new(wgpu_shared, renderer_layouts, geometries, state, playlist)
 					.await
 					.context("Unable to create panel")
 			})

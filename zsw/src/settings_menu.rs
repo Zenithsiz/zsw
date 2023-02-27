@@ -90,7 +90,7 @@ fn draw_panels_tab(
 /// Draws the playlists tab
 fn draw_playlists(ui: &mut egui::Ui, playlists_manager: &PlaylistsManager) {
 	for (name, playlist) in playlists_manager.get_all() {
-		ui.collapsing(&*name, |ui| {
+		ui.collapsing(name, |ui| {
 			for item in playlist.items() {
 				match *item {
 					PlaylistItem::Directory {

@@ -4,12 +4,7 @@
 use {
 	anyhow::Context,
 	futures::{StreamExt, TryStreamExt},
-	std::{
-		collections::HashMap,
-		ffi::OsStr,
-		path::PathBuf,
-		sync::{Arc, RwLock},
-	},
+	std::{collections::HashMap, ffi::OsStr, path::PathBuf},
 	tokio_stream::wrappers::ReadDirStream,
 };
 
@@ -24,7 +19,7 @@ pub struct PlaylistsManager {
 	// Note: We keep all playlists loaded due to them being likely small in both size and quantity.
 	//       Even a playlist with 10k file entries, with an average path of 200 bytes, would only occupy
 	//       ~2 MiB. This is far less than the size of most images we load.
-	playlists: RwLock<HashMap<Arc<str>, Arc<Playlist>>>,
+	playlists: HashMap<String, Playlist>,
 }
 
 impl PlaylistsManager {
@@ -61,31 +56,22 @@ impl PlaylistsManager {
 			.await?
 			.into_iter()
 			.flatten()
-			.map(|(name, playlist)| (name.into(), Arc::new(playlist)))
 			.collect::<HashMap<_, _>>();
 
 		Ok(Self {
 			_base_dir: base_dir,
-			playlists: RwLock::new(playlists),
+			playlists,
 		})
 	}
 
 	/// Retrieves a playlist
-	#[expect(clippy::disallowed_methods)] // DEADLOCK: We don't lock anything else after the lock
-	pub fn get(&self, name: &str) -> Option<Arc<Playlist>> {
-		let playlists = self.playlists.read().expect("Poisoned");
-		let playlist = playlists.get(name)?;
-		Some(Arc::clone(playlist))
+	pub fn get(&self, name: &str) -> Option<&Playlist> {
+		self.playlists.get(name)
 	}
 
-	/// Retrieves all playlists
-	#[expect(clippy::disallowed_methods)] // DEADLOCK: We don't lock anything else after the lock
-	pub fn get_all(&self) -> Vec<(Arc<str>, Arc<Playlist>)> {
-		let playlists = self.playlists.read().expect("Poisoned");
-		playlists
-			.iter()
-			.map(|(name, playlist)| (Arc::clone(name), Arc::clone(playlist)))
-			.collect()
+	/// Returns an iterator over all playlists
+	pub fn get_all(&self) -> impl Iterator<Item = (&str, &Playlist)> {
+		self.playlists.iter().map(|(name, playlist)| (name.as_str(), playlist))
 	}
 }
 
