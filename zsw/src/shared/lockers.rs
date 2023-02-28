@@ -1,11 +1,5 @@
 //! Lockers
 
-// TODO: Use more descriptive names than `lock` and `send`?
-
-// Lints
-// TODO: Move to each function that we can expect this to happen to
-#![allow(dead_code)] // We define a very generic macro that may expand to functions that aren't needed
-
 // Imports
 use {
 	super::locker::{AsyncMutexLocker, AsyncRwLockLocker, MeetupSenderLocker},
@@ -163,6 +157,7 @@ macro define_locker(
 
 				/// Locks the async mutex `R`
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub async fn $lock_async_mutex<'locker, 'mutex, R>(
 					&'locker mut self,
 					mutex: &'mutex Mutex<R>,
@@ -176,6 +171,7 @@ macro define_locker(
 
 				/// Blockingly locks the async mutex `R`
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub fn $blocking_lock_async_mutex<'locker, 'mutex, R>(
 					&'locker mut self,
 					mutex: &'mutex Mutex<R>,
@@ -189,6 +185,7 @@ macro define_locker(
 
 				/// Locks the async rwlock `R` for reading
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub async fn $lock_async_rwlock_read<'locker, 'rwlock, R>(
 					&'locker mut self,
 					rwlock: &'rwlock RwLock<R>,
@@ -202,6 +199,7 @@ macro define_locker(
 
 				/// Blockingly locks the async rwlock `R` for reading
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub fn $blocking_lock_async_rwlock_read<'locker, 'rwlock, R>(
 					&'locker mut self,
 					rwlock: &'rwlock RwLock<R>,
@@ -215,6 +213,7 @@ macro define_locker(
 
 				/// Locks the async rwlock `R` for an upgradable reading
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub async fn $lock_async_rwlock_upgradable_read<'locker, 'rwlock, R>(
 					&'locker mut self,
 					rwlock: &'rwlock RwLock<R>,
@@ -228,6 +227,7 @@ macro define_locker(
 
 				/// Blockingly locks the async rwlock `R` for an upgradable reading
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub fn $blocking_lock_async_rwlock_upgradable_read<'locker, 'rwlock, R>(
 					&'locker mut self,
 					rwlock: &'rwlock RwLock<R>,
@@ -241,6 +241,7 @@ macro define_locker(
 
 				/// Locks the async rwlock `R` for writing
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub async fn $lock_async_rwlock_write<'locker, 'rwlock, R>(
 					&'locker mut self,
 					rwlock: &'rwlock RwLock<R>,
@@ -254,6 +255,7 @@ macro define_locker(
 
 				/// Blockingly locks the async rwlock `R` for writing
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub async fn $blocking_lock_async_rwlock_write<'locker, 'rwlock, R>(
 					&'locker mut self,
 					rwlock: &'rwlock RwLock<R>,
@@ -267,6 +269,7 @@ macro define_locker(
 
 				/// Sends the resource `R` to it's meetup channel
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub async fn $send_meetup_sender<R>(
 					&mut self,
 					tx: &meetup::Sender<R>,
@@ -280,6 +283,7 @@ macro define_locker(
 
 				/// Blockingly sends the resource `R` to it's meetup channel
 				#[track_caller]
+				#[allow(dead_code)] // Not every locker will use it
 				pub async fn $blocking_send_meetup_sender<R>(
 					&mut self,
 					tx: &meetup::Sender<R>,
