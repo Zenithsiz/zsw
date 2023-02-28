@@ -20,19 +20,6 @@ type EguiPainterMeetupRenderer = (Vec<egui::ClippedPrimitive>, egui::TexturesDel
 define_locker! {
 	fn new(...) -> Self;
 
-	fn lock(...) -> ...;
-	fn blocking_lock(...) -> ...;
-
-	fn read(...) -> ...;
-	fn upgradable_read(...) -> ...;
-	fn write(...) -> ...;
-	fn blocking_read(...) -> ...;
-	fn blocking_upgradable_read(...) -> ...;
-	fn blocking_write(...) -> ...;
-
-	fn send(...) -> ...;
-	fn blocking_send(...) -> ...;
-
 	LoadDefaultPanelGroupLocker {
 		async_mutex {
 			CurPanelGroup = [ 0 ] => 1,
@@ -79,22 +66,6 @@ define_locker! {
 
 macro define_locker(
 	fn $new:ident(...) -> Self;
-
-	// Mutex
-	fn $lock_async_mutex:ident(...) -> ...;
-	fn $blocking_lock_async_mutex:ident(...) -> ...;
-
-	// RwLock
-	fn $lock_async_rwlock_read:ident(...) -> ...;
-	fn $lock_async_rwlock_upgradable_read:ident(...) -> ...;
-	fn $lock_async_rwlock_write:ident(...) -> ...;
-	fn $blocking_lock_async_rwlock_read:ident(...) -> ...;
-	fn $blocking_lock_async_rwlock_upgradable_read:ident(...) -> ...;
-	fn $blocking_lock_async_rwlock_write:ident(...) -> ...;
-
-	// meetup::Sender
-	fn $send_meetup_sender:ident(...) -> ...;
-	fn $blocking_send_meetup_sender:ident(...) -> ...;
 
 	$(
 		$LockerName:ident {
