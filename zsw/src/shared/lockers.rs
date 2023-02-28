@@ -3,6 +3,7 @@
 // TODO: Use more descriptive names than `lock` and `send`?
 
 // Lints
+// TODO: Move to each function that we can expect this to happen to
 #![allow(dead_code)] // We define a very generic macro that may expand to functions that aren't needed
 
 // Imports
@@ -26,12 +27,17 @@ define_locker! {
 	fn new(...) -> Self;
 
 	fn lock(...) -> ...;
+	fn blocking_lock(...) -> ...;
 
 	fn read(...) -> ...;
 	fn upgradable_read(...) -> ...;
 	fn write(...) -> ...;
+	fn blocking_read(...) -> ...;
+	fn blocking_upgradable_read(...) -> ...;
+	fn blocking_write(...) -> ...;
 
 	fn send(...) -> ...;
+	fn blocking_send(...) -> ...;
 
 	LoadDefaultPanelGroupLocker {
 		async_mutex {
@@ -82,14 +88,19 @@ macro define_locker(
 
 	// Mutex
 	fn $lock_async_mutex:ident(...) -> ...;
+	fn $blocking_lock_async_mutex:ident(...) -> ...;
 
 	// RwLock
 	fn $lock_async_rwlock_read:ident(...) -> ...;
 	fn $lock_async_rwlock_upgradable_read:ident(...) -> ...;
 	fn $lock_async_rwlock_write:ident(...) -> ...;
+	fn $blocking_lock_async_rwlock_read:ident(...) -> ...;
+	fn $blocking_lock_async_rwlock_upgradable_read:ident(...) -> ...;
+	fn $blocking_lock_async_rwlock_write:ident(...) -> ...;
 
 	// meetup::Sender
 	fn $send_meetup_sender:ident(...) -> ...;
+	fn $blocking_send_meetup_sender:ident(...) -> ...;
 
 	$(
 		$LockerName:ident {
@@ -163,6 +174,19 @@ macro define_locker(
 					self.lock_resource(mutex).await
 				}
 
+				/// Blockingly locks the async mutex `R`
+				#[track_caller]
+				pub fn $blocking_lock_async_mutex<'locker, 'mutex, R>(
+					&'locker mut self,
+					mutex: &'mutex Mutex<R>,
+				) -> (MutexGuard<'mutex, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
+				where
+					Self: AsyncMutexLocker<R>,
+					R: 'locker,
+				{
+					tokio::runtime::Handle::current().block_on(self.$lock_async_mutex(mutex))
+				}
+
 				/// Locks the async rwlock `R` for reading
 				#[track_caller]
 				pub async fn $lock_async_rwlock_read<'locker, 'rwlock, R>(
@@ -174,6 +198,19 @@ macro define_locker(
 					R: 'locker,
 				{
 					self.lock_read_resource(rwlock).await
+				}
+
+				/// Blockingly locks the async rwlock `R` for reading
+				#[track_caller]
+				pub fn $blocking_lock_async_rwlock_read<'locker, 'rwlock, R>(
+					&'locker mut self,
+					rwlock: &'rwlock RwLock<R>,
+				) -> (RwLockReadGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
+				where
+					Self: AsyncRwLockLocker<R>,
+					R: 'locker,
+				{
+					tokio::runtime::Handle::current().block_on(self.$lock_async_rwlock_read(rwlock))
 				}
 
 				/// Locks the async rwlock `R` for an upgradable reading
@@ -189,6 +226,19 @@ macro define_locker(
 					self.lock_upgradable_read_resource(rwlock).await
 				}
 
+				/// Blockingly locks the async rwlock `R` for an upgradable reading
+				#[track_caller]
+				pub fn $blocking_lock_async_rwlock_upgradable_read<'locker, 'rwlock, R>(
+					&'locker mut self,
+					rwlock: &'rwlock RwLock<R>,
+				) -> (RwLockUpgradableReadGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
+				where
+					Self: AsyncRwLockLocker<R>,
+					R: 'locker,
+				{
+					tokio::runtime::Handle::current().block_on(self.$lock_async_rwlock_upgradable_read(rwlock))
+				}
+
 				/// Locks the async rwlock `R` for writing
 				#[track_caller]
 				pub async fn $lock_async_rwlock_write<'locker, 'rwlock, R>(
@@ -202,6 +252,19 @@ macro define_locker(
 					self.lock_write_resource(rwlock).await
 				}
 
+				/// Blockingly locks the async rwlock `R` for writing
+				#[track_caller]
+				pub async fn $blocking_lock_async_rwlock_write<'locker, 'rwlock, R>(
+					&'locker mut self,
+					rwlock: &'rwlock RwLock<R>,
+				) -> (RwLockWriteGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
+				where
+					Self: AsyncRwLockLocker<R>,
+					R: 'locker,
+				{
+					tokio::runtime::Handle::current().block_on(self.$lock_async_rwlock_write(rwlock))
+				}
+
 				/// Sends the resource `R` to it's meetup channel
 				#[track_caller]
 				pub async fn $send_meetup_sender<R>(
@@ -213,6 +276,19 @@ macro define_locker(
 					Self: MeetupSenderLocker<R>
 				{
 					self.send_resource(tx, resource).await;
+				}
+
+				/// Blockingly sends the resource `R` to it's meetup channel
+				#[track_caller]
+				pub async fn $blocking_send_meetup_sender<R>(
+					&mut self,
+					tx: &meetup::Sender<R>,
+					resource: R,
+				)
+				where
+					Self: MeetupSenderLocker<R>
+				{
+					tokio::runtime::Handle::current().block_on(self.$send_meetup_sender(tx, resource))
 				}
 			}
 
