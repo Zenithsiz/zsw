@@ -3626,6 +3626,7 @@ dependencies = [
  "egui_wgpu_backend",
  "egui_winit_platform",
  "epi",
+ "extend",
  "futures",
  "image",
  "include_dir",

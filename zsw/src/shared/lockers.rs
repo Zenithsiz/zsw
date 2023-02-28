@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::locker::{AsyncMutexLocker, AsyncRwLockLocker, MeetupSenderLocker},
+	super::{AsyncMutexLocker, AsyncRwLockLocker, MeetupSenderLocker},
 	crate::{
 		panel::{PanelGroup, PanelsRendererShader},
 		playlist::PlaylistsManager,
@@ -138,7 +138,7 @@ macro define_locker(
 			#[derive(Debug)]
 			pub struct $LockerName<const STATE: usize = 0>(());
 
-			impl<const STATE: usize> $LockerName<STATE> {
+			impl $LockerName<0> {
 				/// Creates a new locker.
 				///
 				/// Panics if called more than once
@@ -153,146 +153,6 @@ macro define_locker(
 					);
 
 					Self(())
-				}
-
-				/// Locks the async mutex `R`
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub async fn $lock_async_mutex<'locker, 'mutex, R>(
-					&'locker mut self,
-					mutex: &'mutex Mutex<R>,
-				) -> (MutexGuard<'mutex, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncMutexLocker<R>,
-					R: 'locker,
-				{
-					self.lock_resource(mutex).await
-				}
-
-				/// Blockingly locks the async mutex `R`
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub fn $blocking_lock_async_mutex<'locker, 'mutex, R>(
-					&'locker mut self,
-					mutex: &'mutex Mutex<R>,
-				) -> (MutexGuard<'mutex, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncMutexLocker<R>,
-					R: 'locker,
-				{
-					tokio::runtime::Handle::current().block_on(self.$lock_async_mutex(mutex))
-				}
-
-				/// Locks the async rwlock `R` for reading
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub async fn $lock_async_rwlock_read<'locker, 'rwlock, R>(
-					&'locker mut self,
-					rwlock: &'rwlock RwLock<R>,
-				) -> (RwLockReadGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncRwLockLocker<R>,
-					R: 'locker,
-				{
-					self.lock_read_resource(rwlock).await
-				}
-
-				/// Blockingly locks the async rwlock `R` for reading
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub fn $blocking_lock_async_rwlock_read<'locker, 'rwlock, R>(
-					&'locker mut self,
-					rwlock: &'rwlock RwLock<R>,
-				) -> (RwLockReadGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncRwLockLocker<R>,
-					R: 'locker,
-				{
-					tokio::runtime::Handle::current().block_on(self.$lock_async_rwlock_read(rwlock))
-				}
-
-				/// Locks the async rwlock `R` for an upgradable reading
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub async fn $lock_async_rwlock_upgradable_read<'locker, 'rwlock, R>(
-					&'locker mut self,
-					rwlock: &'rwlock RwLock<R>,
-				) -> (RwLockUpgradableReadGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncRwLockLocker<R>,
-					R: 'locker,
-				{
-					self.lock_upgradable_read_resource(rwlock).await
-				}
-
-				/// Blockingly locks the async rwlock `R` for an upgradable reading
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub fn $blocking_lock_async_rwlock_upgradable_read<'locker, 'rwlock, R>(
-					&'locker mut self,
-					rwlock: &'rwlock RwLock<R>,
-				) -> (RwLockUpgradableReadGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncRwLockLocker<R>,
-					R: 'locker,
-				{
-					tokio::runtime::Handle::current().block_on(self.$lock_async_rwlock_upgradable_read(rwlock))
-				}
-
-				/// Locks the async rwlock `R` for writing
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub async fn $lock_async_rwlock_write<'locker, 'rwlock, R>(
-					&'locker mut self,
-					rwlock: &'rwlock RwLock<R>,
-				) -> (RwLockWriteGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncRwLockLocker<R>,
-					R: 'locker,
-				{
-					self.lock_write_resource(rwlock).await
-				}
-
-				/// Blockingly locks the async rwlock `R` for writing
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub async fn $blocking_lock_async_rwlock_write<'locker, 'rwlock, R>(
-					&'locker mut self,
-					rwlock: &'rwlock RwLock<R>,
-				) -> (RwLockWriteGuard<'rwlock, R>, <Self as AsyncRwLockLocker<R>>::Next<'locker>)
-				where
-					Self: AsyncRwLockLocker<R>,
-					R: 'locker,
-				{
-					tokio::runtime::Handle::current().block_on(self.$lock_async_rwlock_write(rwlock))
-				}
-
-				/// Sends the resource `R` to it's meetup channel
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub async fn $send_meetup_sender<R>(
-					&mut self,
-					tx: &meetup::Sender<R>,
-					resource: R,
-				)
-				where
-					Self: MeetupSenderLocker<R>
-				{
-					self.send_resource(tx, resource).await;
-				}
-
-				/// Blockingly sends the resource `R` to it's meetup channel
-				#[track_caller]
-				#[allow(dead_code)] // Not every locker will use it
-				pub async fn $blocking_send_meetup_sender<R>(
-					&mut self,
-					tx: &meetup::Sender<R>,
-					resource: R,
-				)
-				where
-					Self: MeetupSenderLocker<R>
-				{
-					tokio::runtime::Handle::current().block_on(self.$send_meetup_sender(tx, resource))
 				}
 			}
 
