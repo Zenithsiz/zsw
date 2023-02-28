@@ -3,6 +3,7 @@
 // Imports
 use {
 	async_lock::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard},
+	futures::Future,
 	zsw_util::meetup,
 };
 
@@ -86,7 +87,7 @@ pub impl<L> L {
 		Self: AsyncMutexLocker<R>,
 		R: 'locker,
 	{
-		tokio::runtime::Handle::current().block_on(self.mutex_lock(mutex))
+		self::block_on(self.mutex_lock(mutex))
 	}
 
 	/// Locks the async rwlock `R` for reading
@@ -118,7 +119,7 @@ pub impl<L> L {
 		Self: AsyncRwLockLocker<R>,
 		R: 'locker,
 	{
-		tokio::runtime::Handle::current().block_on(self.rwlock_read(rwlock))
+		self::block_on(self.rwlock_read(rwlock))
 	}
 
 	/// Locks the async rwlock `R` for an upgradable reading
@@ -150,7 +151,7 @@ pub impl<L> L {
 		Self: AsyncRwLockLocker<R>,
 		R: 'locker,
 	{
-		tokio::runtime::Handle::current().block_on(self.rwlock_upgradable_read(rwlock))
+		self::block_on(self.rwlock_upgradable_read(rwlock))
 	}
 
 	/// Locks the async rwlock `R` for writing
@@ -182,7 +183,7 @@ pub impl<L> L {
 		Self: AsyncRwLockLocker<R>,
 		R: 'locker,
 	{
-		tokio::runtime::Handle::current().block_on(self.rwlock_write(rwlock))
+		self::block_on(self.rwlock_write(rwlock))
 	}
 
 	/// Sends the resource `R` to it's meetup channel
@@ -200,6 +201,11 @@ pub impl<L> L {
 	where
 		Self: MeetupSenderLocker<R>,
 	{
-		tokio::runtime::Handle::current().block_on(self.meetup_send(tx, resource));
+		self::block_on(self.meetup_send(tx, resource));
 	}
+}
+
+/// Runs a future on the current thread using the `tokio` runtime.
+fn block_on<F: Future>(fut: F) -> F::Output {
+	tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(fut))
 }
