@@ -171,7 +171,7 @@ pub impl<L> L {
 
 	/// Blockingly locks the async rwlock `R` for writing
 	#[track_caller]
-	async fn blocking_rwlock_write<'locker, 'rwlock, R>(
+	fn blocking_rwlock_write<'locker, 'rwlock, R>(
 		&'locker mut self,
 		rwlock: &'rwlock RwLock<R>,
 	) -> (
@@ -196,7 +196,7 @@ pub impl<L> L {
 
 	/// Blockingly sends the resource `R` to it's meetup channel
 	#[track_caller]
-	async fn blocking_meetup_send<R>(&mut self, tx: &meetup::Sender<R>, resource: R)
+	fn blocking_meetup_send<R>(&mut self, tx: &meetup::Sender<R>, resource: R)
 	where
 		Self: MeetupSenderLocker<R>,
 	{
