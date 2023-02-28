@@ -51,11 +51,11 @@ define_locker! {
 	EguiPainterLocker {
 		async_mutex {
 			CurPanelGroup = [ 0 ] => 1,
-			PanelsRendererShader = [ 0 1 ] => 2,
+			PanelsRendererShader = [ 0 ] => 1,
 		}
 
 		async_rwlock {
-			PlaylistsManager = [ 0 1 2 ] => 3,
+			PlaylistsManager = [ 0 ] => 1,
 		}
 
 		meetup_sender {

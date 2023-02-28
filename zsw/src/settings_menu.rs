@@ -2,17 +2,17 @@
 
 // Lints
 #![allow(unused_results)] // Egui produces a lot of results we don't need to use
-#![expect(clippy::too_many_lines, clippy::too_many_arguments)] // TODO: Refactor
+#![expect(clippy::too_many_lines)] // TODO: Refactor
 
 // Imports
 use {
 	crate::{
 		panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
 		playlist::{PlaylistItem, PlaylistsManager},
+		shared::{EguiPainterLocker, LockerExt, Shared},
 	},
 	egui::Widget,
 	std::path::Path,
-	winit::dpi::PhysicalPosition,
 	zsw_util::Rect,
 };
 
@@ -36,19 +36,10 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	pub fn draw(
-		&mut self,
-		ctx: &egui::Context,
-		_frame: &epi::Frame,
-		window: &winit::window::Window,
-		cursor_pos: PhysicalPosition<f64>,
-		panel_group: &mut Option<PanelGroup>,
-		panels_renderer_shader: &mut PanelsRendererShader,
-		playlists_manager: &mut PlaylistsManager,
-	) {
+	pub fn draw(&mut self, ctx: &egui::Context, _frame: &epi::Frame, shared: &Shared, locker: &mut EguiPainterLocker) {
 		// Adjust cursor pos to account for the scale factor
-		let scale_factor = window.scale_factor();
-		let cursor_pos = cursor_pos.to_logical::<f32>(scale_factor);
+		let scale_factor = shared.window.scale_factor();
+		let cursor_pos = shared.cursor_pos.load().to_logical::<f32>(scale_factor);
 
 		// Create the window
 		let mut egui_window = egui::Window::new("Settings");
@@ -70,25 +61,22 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(ui, panel_group, panels_renderer_shader),
-				Tab::Playlists => self::draw_playlists(ui, playlists_manager),
+				Tab::Panels => self::draw_panels_tab(ui, shared, locker),
+				Tab::Playlists => self::draw_playlists(ui, shared, locker),
 			}
 		});
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(
-	ui: &mut egui::Ui,
-	panel_group: &mut Option<PanelGroup>,
-	panels_renderer_shader: &mut PanelsRendererShader,
-) {
-	self::draw_panels_editor(ui, panel_group);
+fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLocker) {
+	self::draw_panels_editor(ui, shared, locker);
 	ui.separator();
-	self::draw_shader_select(ui, panels_renderer_shader);
+	self::draw_shader_select(ui, shared, locker);
 }
 
 /// Draws the playlists tab
-fn draw_playlists(ui: &mut egui::Ui, playlists_manager: &mut PlaylistsManager) {
+fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLocker) {
+	let (mut playlists_manager, _) = locker.blocking_rwlock_write::<PlaylistsManager>(&shared.playlists_manager);
 	for (name, playlist) in playlists_manager.get_all_mut() {
 		ui.collapsing(name, |ui| {
 			for item in playlist.items_mut() {
@@ -116,8 +104,9 @@ fn draw_playlists(ui: &mut egui::Ui, playlists_manager: &mut PlaylistsManager) {
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, panel_group: &mut Option<PanelGroup>) {
-	match panel_group {
+fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLocker) {
+	let (mut panel_group, _) = locker.blocking_mutex_lock::<Option<PanelGroup>>(&shared.cur_panel_group);
+	match &mut *panel_group {
 		Some(panel_group) =>
 			for (panel_idx, panel) in panel_group.panels_mut().iter_mut().enumerate() {
 				ui.collapsing(format!("Panel {panel_idx}"), |ui| {
@@ -271,9 +260,11 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, panels_renderer_shader: &mut PanelsRendererShader) {
+fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLocker) {
 	ui.label("Shader");
 
+	let (mut panels_renderer_shader, _) =
+		locker.blocking_mutex_lock::<PanelsRendererShader>(&shared.panels_renderer_shader);
 	let cur_shader = &mut panels_renderer_shader.shader;
 	egui::ComboBox::from_id_source("Shader selection menu")
 		.selected_text(cur_shader.name())

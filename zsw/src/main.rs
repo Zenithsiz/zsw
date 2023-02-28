@@ -403,30 +403,10 @@ async fn egui_painter(
 	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, anyhow::Error> {
 	loop {
-		let full_output = {
-			let (mut panel_group, mut locker) = locker.mutex_lock::<Option<PanelGroup>>(&shared.cur_panel_group).await;
-			let (mut panels_renderer_shader, mut locker) = locker
-				.mutex_lock::<PanelsRendererShader>(&shared.panels_renderer_shader)
-				.await;
-			let (mut playlists_manager, _) = locker.rwlock_write::<PlaylistsManager>(&shared.playlists_manager).await;
-
-			egui_painter.draw(&shared.window, |ctx, frame| {
-				settings_menu.draw(
-					ctx,
-					frame,
-					&shared.window,
-					shared.cursor_pos.load(),
-					&mut panel_group,
-					&mut panels_renderer_shader,
-					&mut playlists_manager,
-				);
-
-				mem::drop(panel_group);
-				mem::drop(panels_renderer_shader);
-
-				Ok::<_, !>(())
-			})?
-		};
+		let full_output = egui_painter.draw(&shared.window, |ctx, frame| {
+			settings_menu.draw(ctx, frame, &shared, &mut locker);
+			Ok::<_, !>(())
+		})?;
 		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
 		let textures_delta = full_output.textures_delta;
 
