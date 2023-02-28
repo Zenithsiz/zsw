@@ -136,7 +136,6 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 	let playlists_manager = PlaylistsManager::new(playlist_path)
 		.await
 		.context("Unable to create playlist manager")?;
-	let playlists_manager = Arc::new(RwLock::new(playlists_manager));
 
 	let panels_path = config
 		.panels_dir
@@ -166,10 +165,11 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 		panels_manager,
 		image_requester,
+		cur_panel_group: Mutex::new(None),
+		panels_renderer_shader: Mutex::new(panels_renderer_shader),
+		playlists_manager: RwLock::new(playlists_manager),
 	};
 	let shared = Arc::new(shared);
-	let cur_panel_group = Arc::new(Mutex::new(None));
-	let panels_renderer_shader = Arc::new(Mutex::new(panels_renderer_shader));
 
 	let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
 	let (panels_updater_output_tx, panels_updater_output_rx) = meetup::channel();
@@ -177,18 +177,14 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
-		let locker = LoadDefaultPanelGroupLocker::new(
-			Arc::clone(&cur_panel_group),
-			Arc::clone(&panels_renderer_shader),
-			Arc::clone(&playlists_manager),
-		);
+		let locker = LoadDefaultPanelGroupLocker::new();
 		let default_panel_group = config.default_panel_group.clone();
 		async move { self::load_default_panel_group(default_panel_group, locker, shared).await }
 	});
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		let locker = RendererLocker::new(Arc::clone(&cur_panel_group), Arc::clone(&panels_renderer_shader));
+		let locker = RendererLocker::new();
 		async move {
 			self::renderer(
 				shared,
@@ -205,21 +201,16 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
-		let locker = PanelsUpdaterLocker::new(Arc::clone(&cur_panel_group), panels_updater_output_tx);
-		async move { self::panels_updater(shared, locker).await }
+		let locker = PanelsUpdaterLocker::new();
+		async move { self::panels_updater(shared, locker, panels_updater_output_tx).await }
 	});
 
 	self::spawn_task("Image loader", async move { image_loader.run().await });
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
-		let locker = EguiPainterLocker::new(
-			cur_panel_group,
-			panels_renderer_shader,
-			playlists_manager,
-			egui_painter_output_tx,
-		);
-		async move { self::egui_painter(shared, locker, egui_painter, settings_menu).await }
+		let locker = EguiPainterLocker::new();
+		async move { self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await }
 	});
 
 	// Then run the event loop on this thread
@@ -258,7 +249,7 @@ async fn load_default_panel_group(
 	};
 
 	// Else load the panel group
-	let (playlists_manager, _) = locker.read::<PlaylistsManager>().await;
+	let (playlists_manager, _) = locker.read::<PlaylistsManager>(&shared.playlists_manager).await;
 	let loaded_panel_group = match shared
 		.panels_manager
 		.load(
@@ -281,11 +272,13 @@ async fn load_default_panel_group(
 
 	// And set it as the current one
 	mem::drop(playlists_manager);
-	let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
+	let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>(&shared.cur_panel_group).await;
 	*panel_group = Some(loaded_panel_group);
 
 	mem::drop(panel_group);
-	let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
+	let (mut panels_renderer_shader, _) = locker
+		.lock::<PanelsRendererShader>(&shared.panels_renderer_shader)
+		.await;
 	panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
 
 	Ok(())
@@ -337,11 +330,13 @@ async fn renderer(
 			.context("Unable to start frame")?;
 		// Render the panels
 		{
-			let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>().await;
+			let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>(&shared.cur_panel_group).await;
 			if let Some(panel_group) = &mut *panel_group {
 				let cursor_pos = shared.cursor_pos.load();
 
-				let (mut panels_renderer_shader, _) = locker.lock::<PanelsRendererShader>().await;
+				let (mut panels_renderer_shader, _) = locker
+					.lock::<PanelsRendererShader>(&shared.panels_renderer_shader)
+					.await;
 				panels_renderer
 					.render(
 						&mut frame,
@@ -379,10 +374,14 @@ async fn renderer(
 }
 
 /// Panel updater task
-async fn panels_updater(shared: Arc<Shared>, mut locker: PanelsUpdaterLocker) -> Result<!, anyhow::Error> {
+async fn panels_updater(
+	shared: Arc<Shared>,
+	mut locker: PanelsUpdaterLocker,
+	panels_updater_output_tx: meetup::Sender<()>,
+) -> Result<!, anyhow::Error> {
 	loop {
 		{
-			let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>().await;
+			let (mut panel_group, _) = locker.lock::<Option<PanelGroup>>(&shared.cur_panel_group).await;
 
 			if let Some(panel_group) = &mut *panel_group {
 				for panel in panel_group.panels_mut() {
@@ -391,7 +390,7 @@ async fn panels_updater(shared: Arc<Shared>, mut locker: PanelsUpdaterLocker) ->
 			}
 		}
 
-		locker.send(()).await;
+		locker.send(&panels_updater_output_tx, ()).await;
 	}
 }
 
@@ -401,12 +400,15 @@ async fn egui_painter(
 	mut locker: EguiPainterLocker,
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
+	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, anyhow::Error> {
 	loop {
 		let full_output = {
-			let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>().await;
-			let (mut panels_renderer_shader, mut locker) = locker.lock::<PanelsRendererShader>().await;
-			let (mut playlists_manager, _) = locker.write::<PlaylistsManager>().await;
+			let (mut panel_group, mut locker) = locker.lock::<Option<PanelGroup>>(&shared.cur_panel_group).await;
+			let (mut panels_renderer_shader, mut locker) = locker
+				.lock::<PanelsRendererShader>(&shared.panels_renderer_shader)
+				.await;
+			let (mut playlists_manager, _) = locker.write::<PlaylistsManager>(&shared.playlists_manager).await;
 
 			egui_painter.draw(&shared.window, |ctx, frame| {
 				settings_menu.draw(
@@ -428,7 +430,7 @@ async fn egui_painter(
 		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
 		let textures_delta = full_output.textures_delta;
 
-		locker.send((paint_jobs, textures_delta)).await;
+		locker.send(&egui_painter_output_tx, (paint_jobs, textures_delta)).await;
 	}
 }
 

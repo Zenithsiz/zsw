@@ -2,7 +2,7 @@
 
 // Modules
 mod locker;
-mod lockers;
+pub mod lockers;
 
 // Exports
 pub use self::lockers::{EguiPainterLocker, LoadDefaultPanelGroupLocker, PanelsUpdaterLocker, RendererLocker};
@@ -11,10 +11,12 @@ pub use self::lockers::{EguiPainterLocker, LoadDefaultPanelGroupLocker, PanelsUp
 use {
 	crate::{
 		image_loader::ImageRequester,
-		panel::{PanelsManager, PanelsRendererLayouts},
+		panel::{PanelGroup, PanelsManager, PanelsRendererLayouts, PanelsRendererShader},
+		playlist::PlaylistsManager,
 		wgpu_wrapper::WgpuShared,
 		Resize,
 	},
+	async_lock::{Mutex, RwLock},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
 	winit::dpi::PhysicalPosition,
@@ -32,4 +34,8 @@ pub struct Shared {
 
 	pub panels_manager:  PanelsManager,
 	pub image_requester: ImageRequester,
+
+	pub cur_panel_group:        Mutex<Option<PanelGroup>>,
+	pub panels_renderer_shader: Mutex<PanelsRendererShader>,
+	pub playlists_manager:      RwLock<PlaylistsManager>,
 }
