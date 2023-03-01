@@ -23,10 +23,10 @@ define_locker! {
 	LoadDefaultPanelGroupLocker {
 		async_mutex {
 			CurPanelGroup = [ 0 ] => 1,
-			PanelsRendererShader = [ 0 ] => 1,
 		}
 
 		async_rwlock {
+			PanelsRendererShader = [ 0 ] => 1,
 			PlaylistsManager = [ 0 ] => 1,
 		}
 	}
@@ -34,6 +34,9 @@ define_locker! {
 	RendererLocker {
 		async_mutex {
 			CurPanelGroup = [ 0 ] => 1,
+		}
+
+		async_rwlock {
 			PanelsRendererShader = [ 0 1 ] => 2,
 		}
 	}
@@ -51,11 +54,11 @@ define_locker! {
 	EguiPainterLocker {
 		async_mutex {
 			CurPanelGroup = [ 0 ] => 1,
-			PanelsRendererShader = [ 0 ] => 1,
 		}
 
 		async_rwlock {
 			PlaylistsManager = [ 0 ] => 1,
+			PanelsRendererShader = [ 0 ] => 1,
 		}
 
 		meetup_sender {

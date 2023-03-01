@@ -39,6 +39,6 @@ pub struct Shared {
 	pub image_requester: ImageRequester,
 
 	pub cur_panel_group:        Mutex<Option<PanelGroup>>,
-	pub panels_renderer_shader: Mutex<PanelsRendererShader>,
+	pub panels_renderer_shader: RwLock<PanelsRendererShader>,
 	pub playlists_manager:      RwLock<PlaylistsManager>,
 }

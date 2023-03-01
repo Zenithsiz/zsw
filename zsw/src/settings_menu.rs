@@ -264,7 +264,7 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPaint
 	ui.label("Shader");
 
 	let (mut panels_renderer_shader, _) =
-		locker.blocking_mutex_lock::<PanelsRendererShader>(&shared.panels_renderer_shader);
+		locker.blocking_rwlock_write::<PanelsRendererShader>(&shared.panels_renderer_shader);
 	let cur_shader = &mut panels_renderer_shader.shader;
 	egui::ComboBox::from_id_source("Shader selection menu")
 		.selected_text(cur_shader.name())

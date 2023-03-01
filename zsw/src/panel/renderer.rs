@@ -153,7 +153,7 @@ impl PanelsRenderer {
 		layouts: &PanelsRendererLayouts,
 		cursor_pos: Point2<i32>,
 		panel_group: &PanelGroup,
-		shader: &mut PanelsRendererShader,
+		shader: &PanelsRendererShader,
 	) -> Result<(), anyhow::Error> {
 		// Update the shader, if requested
 		if self.update_shader(shader.shader) {

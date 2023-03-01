@@ -166,7 +166,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		panels_manager,
 		image_requester,
 		cur_panel_group: Mutex::new(None),
-		panels_renderer_shader: Mutex::new(panels_renderer_shader),
+		panels_renderer_shader: RwLock::new(panels_renderer_shader),
 		playlists_manager: RwLock::new(playlists_manager),
 	};
 	let shared = Arc::new(shared);
@@ -277,7 +277,7 @@ async fn load_default_panel_group(
 
 	mem::drop(panel_group);
 	let (mut panels_renderer_shader, _) = locker
-		.mutex_lock::<PanelsRendererShader>(&shared.panels_renderer_shader)
+		.rwlock_write::<PanelsRendererShader>(&shared.panels_renderer_shader)
 		.await;
 	panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
 
@@ -334,8 +334,8 @@ async fn renderer(
 			if let Some(panel_group) = &mut *panel_group {
 				let cursor_pos = shared.cursor_pos.load();
 
-				let (mut panels_renderer_shader, _) = locker
-					.mutex_lock::<PanelsRendererShader>(&shared.panels_renderer_shader)
+				let (panels_renderer_shader, _) = locker
+					.rwlock_read::<PanelsRendererShader>(&shared.panels_renderer_shader)
 					.await;
 				panels_renderer
 					.render(
@@ -345,7 +345,7 @@ async fn renderer(
 						&shared.panels_renderer_layout,
 						Point2::new(cursor_pos.x as i32, cursor_pos.y as i32),
 						panel_group,
-						&mut panels_renderer_shader,
+						&panels_renderer_shader,
 					)
 					.context("Unable to render panels")?;
 			}
