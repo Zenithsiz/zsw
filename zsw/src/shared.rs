@@ -15,9 +15,9 @@ use {
 		wgpu_wrapper::WgpuShared,
 		Resize,
 	},
-	async_lock::{Mutex, RwLock},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
+	tokio::sync::{Mutex, RwLock},
 	winit::dpi::PhysicalPosition,
 };
 

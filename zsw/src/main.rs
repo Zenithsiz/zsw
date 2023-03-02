@@ -50,7 +50,6 @@ use {
 	},
 	anyhow::Context,
 	args::Args,
-	async_lock::{Mutex, RwLock},
 	cgmath::Point2,
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
@@ -60,6 +59,7 @@ use {
 	playlist::Playlists,
 	shared::{Locker, LockerExt},
 	std::{mem, sync::Arc},
+	tokio::sync::{Mutex, RwLock},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		platform::run_return::EventLoopExtRunReturn,

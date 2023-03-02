@@ -6,8 +6,7 @@ use {
 		panel::{PanelGroup, PanelsRendererShader},
 		playlist::Playlists,
 	},
-	async_lock::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard},
-	futures::Future,
+	tokio::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard},
 	zsw_util::meetup,
 };
 
@@ -61,6 +60,12 @@ pub trait AsyncMutexLocker<R> {
 	) -> (MutexGuard<'mutex, R>, Self::Next<'locker>)
 	where
 		R: 'locker;
+
+	/// Blockingly locks the resource `R` and returns the next locker
+	fn blocking_lock_resource<'locker, 'mutex>(
+		&'locker mut self,
+		mutex: &'mutex Mutex<R>,
+	) -> (MutexGuard<'mutex, R>, Self::Next<'locker>);
 }
 
 /// Locker of async rwlock `R`
@@ -78,13 +83,11 @@ pub trait AsyncRwLockLocker<R> {
 	where
 		R: 'locker;
 
-	/// Locks the resource `R` for upgradable read and returns the next locker
-	async fn lock_upgradable_read_resource<'locker, 'rwlock>(
+	/// Blockingly locks the resource `R` for read and returns the next locker
+	fn blocking_lock_read_resource<'locker, 'rwlock>(
 		&'locker mut self,
 		rwlock: &'rwlock RwLock<R>,
-	) -> (RwLockUpgradableReadGuard<'rwlock, R>, Self::Next<'locker>)
-	where
-		R: 'locker;
+	) -> (RwLockReadGuard<'rwlock, R>, Self::Next<'locker>);
 
 	/// Locks the resource `R` for write and returns the next locker
 	async fn lock_write_resource<'locker, 'rwlock>(
@@ -93,12 +96,20 @@ pub trait AsyncRwLockLocker<R> {
 	) -> (RwLockWriteGuard<'rwlock, R>, Self::Next<'locker>)
 	where
 		R: 'locker;
+
+	/// Blockingly locks the resource `R` for write and returns the next locker
+	fn blocking_lock_write_resource<'locker, 'rwlock>(
+		&'locker mut self,
+		rwlock: &'rwlock RwLock<R>,
+	) -> (RwLockWriteGuard<'rwlock, R>, Self::Next<'locker>);
 }
 
 /// Locker of meetup sender of `R`
 pub trait MeetupSenderLocker<R> {
 	/// Sends the resource `R` to the meetup channel
 	async fn send_resource(&mut self, tx: &meetup::Sender<R>, resource: R);
+
+	// TODO: Blocking version?
 }
 
 // TODO: Separate into several extension traits for each locker type?
@@ -127,7 +138,7 @@ pub impl<L> L {
 		Self: AsyncMutexLocker<R>,
 		R: 'locker,
 	{
-		self::block_on(self.mutex_lock(mutex))
+		self.blocking_lock_resource(mutex)
 	}
 
 	/// Locks the async rwlock `R` for reading
@@ -159,39 +170,7 @@ pub impl<L> L {
 		Self: AsyncRwLockLocker<R>,
 		R: 'locker,
 	{
-		self::block_on(self.rwlock_read(rwlock))
-	}
-
-	/// Locks the async rwlock `R` for an upgradable reading
-	#[track_caller]
-	async fn rwlock_upgradable_read<'locker, 'rwlock, R>(
-		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
-	) -> (
-		RwLockUpgradableReadGuard<'rwlock, R>,
-		<Self as AsyncRwLockLocker<R>>::Next<'locker>,
-	)
-	where
-		Self: AsyncRwLockLocker<R>,
-		R: 'locker,
-	{
-		self.lock_upgradable_read_resource(rwlock).await
-	}
-
-	/// Blockingly locks the async rwlock `R` for an upgradable reading
-	#[track_caller]
-	fn blocking_rwlock_upgradable_read<'locker, 'rwlock, R>(
-		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
-	) -> (
-		RwLockUpgradableReadGuard<'rwlock, R>,
-		<Self as AsyncRwLockLocker<R>>::Next<'locker>,
-	)
-	where
-		Self: AsyncRwLockLocker<R>,
-		R: 'locker,
-	{
-		self::block_on(self.rwlock_upgradable_read(rwlock))
+		self.blocking_lock_read_resource(rwlock)
 	}
 
 	/// Locks the async rwlock `R` for writing
@@ -223,7 +202,7 @@ pub impl<L> L {
 		Self: AsyncRwLockLocker<R>,
 		R: 'locker,
 	{
-		self::block_on(self.rwlock_write(rwlock))
+		self.blocking_lock_write_resource(rwlock)
 	}
 
 	/// Sends the resource `R` to it's meetup channel
@@ -233,15 +212,6 @@ pub impl<L> L {
 		Self: MeetupSenderLocker<R>,
 	{
 		self.send_resource(tx, resource).await;
-	}
-
-	/// Blockingly sends the resource `R` to it's meetup channel
-	#[track_caller]
-	fn blocking_meetup_send<R>(&mut self, tx: &meetup::Sender<R>, resource: R)
-	where
-		Self: MeetupSenderLocker<R>,
-	{
-		self::block_on(self.meetup_send(tx, resource));
 	}
 }
 
@@ -286,6 +256,18 @@ macro locker_impls(
 					let locker = Locker(());
 					(guard, locker)
 				}
+
+				#[track_caller]
+				fn blocking_lock_resource<'locker, 'mutex>(
+					&'locker mut self,
+					mutex: &'mutex Mutex<$async_mutex_ty>
+				) -> (MutexGuard<'mutex, $async_mutex_ty>, Self::Next<'locker>)
+				{
+					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+					let guard = tokio::task::block_in_place(|| mutex.blocking_lock());
+					let locker = Locker(());
+					(guard, locker)
+				}
 			}
 		)*
 	)*
@@ -311,18 +293,16 @@ macro locker_impls(
 				}
 
 				#[track_caller]
-				async fn lock_upgradable_read_resource<'locker, 'rwlock>(
+				fn blocking_lock_read_resource<'locker, 'rwlock>(
 					&'locker mut self,
 					rwlock: &'rwlock RwLock<$async_rwlock_ty>
-				) -> (RwLockUpgradableReadGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
-				where
-					$async_rwlock_ty: 'locker
-					{
-						#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
-						let guard = rwlock.upgradable_read().await;
-						let locker = Locker(());
-						(guard, locker)
-					}
+				) -> (RwLockReadGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
+				{
+					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+					let guard = tokio::task::block_in_place(|| rwlock.blocking_read());
+					let locker = Locker(());
+					(guard, locker)
+				}
 
 				#[track_caller]
 				async fn lock_write_resource<'locker, 'rwlock>(
@@ -331,12 +311,24 @@ macro locker_impls(
 				) -> (RwLockWriteGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
 				where
 					$async_rwlock_ty: 'locker
-					{
-						#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
-						let guard = rwlock.write().await;
-						let locker = Locker(());
-						(guard, locker)
-					}
+				{
+					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+					let guard = rwlock.write().await;
+					let locker = Locker(());
+					(guard, locker)
+				}
+
+				#[track_caller]
+				fn blocking_lock_write_resource<'locker, 'rwlock>(
+					&'locker mut self,
+					rwlock: &'rwlock RwLock<$async_rwlock_ty>
+				) -> (RwLockWriteGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
+				{
+					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+					let guard = tokio::task::block_in_place(|| rwlock.blocking_write());
+					let locker = Locker(());
+					(guard, locker)
+				}
 			}
 		)*
 	)*
@@ -353,9 +345,4 @@ macro locker_impls(
 			}
 		)*
 	)*
-}
-
-/// Runs a future on the current thread using the `tokio` runtime.
-fn block_on<F: Future>(fut: F) -> F::Output {
-	tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(fut))
 }

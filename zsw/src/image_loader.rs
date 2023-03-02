@@ -4,7 +4,6 @@
 use {
 	crate::panel::PanelGeometry,
 	anyhow::Context,
-	async_lock::Semaphore,
 	cgmath::Vector2,
 	futures::StreamExt,
 	image::DynamicImage,
@@ -12,7 +11,7 @@ use {
 		collections::HashSet,
 		path::{Path, PathBuf},
 	},
-	tokio::sync::oneshot,
+	tokio::sync::{oneshot, Semaphore},
 	zsw_util::Rect,
 };
 
