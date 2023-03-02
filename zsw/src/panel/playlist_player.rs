@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	crate::playlist::{Playlist, PlaylistItem},
+	crate::playlist::{Playlist, PlaylistItemKind},
 	anyhow::Context,
 	async_walkdir::WalkDir,
 	futures::{stream::FuturesUnordered, TryStreamExt},
@@ -76,8 +76,15 @@ impl PlaylistPlayer {
 			.items()
 			.iter()
 			.map(|item| async move {
-				let item = match *item {
-					PlaylistItem::Directory { ref path, recursive } => match recursive {
+				// If not enabled, don't return any items
+				if !item.enabled {
+					tracing::trace!(?item, "Ignoring non-enabled playlist item");
+					return Ok(vec![]);
+				}
+
+				// Else check the kind of item
+				let item = match item.kind {
+					PlaylistItemKind::Directory { ref path, recursive } => match recursive {
 						true => WalkDir::new(path)
 							.filter(async move |entry| match entry.file_type().await.map(|ty| ty.is_dir()) {
 								Err(_) | Ok(true) => async_walkdir::Filtering::Ignore,
@@ -107,7 +114,7 @@ impl PlaylistPlayer {
 								.context("Unable to recursively read directory files")?
 						},
 					},
-					PlaylistItem::File { ref path } => vec![tokio::fs::canonicalize(path)
+					PlaylistItemKind::File { ref path } => vec![tokio::fs::canonicalize(path)
 						.await
 						.context("Unable to canonicalize path")?],
 				};

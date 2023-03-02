@@ -8,7 +8,7 @@
 use {
 	crate::{
 		panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
-		playlist::{PlaylistItem, PlaylistsManager},
+		playlist::{PlaylistItemKind, PlaylistsManager},
 		shared::{Locker, LockerExt, Shared},
 	},
 	egui::Widget,
@@ -80,8 +80,9 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 	for (name, playlist) in playlists_manager.get_all_mut() {
 		ui.collapsing(name, |ui| {
 			for item in playlist.items_mut() {
-				match item {
-					PlaylistItem::Directory { path, recursive } => {
+				ui.checkbox(&mut item.enabled, "Enabled");
+				match &mut item.kind {
+					PlaylistItemKind::Directory { path, recursive } => {
 						ui.horizontal(|ui| {
 							ui.label("Dir: ");
 							self::draw_openable_path(ui, path);
@@ -89,7 +90,7 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 
 						ui.checkbox(recursive, "Recursive");
 					},
-					PlaylistItem::File { path } => {
+					PlaylistItemKind::File { path } => {
 						ui.horizontal(|ui| {
 							ui.label("File: ");
 							self::draw_openable_path(ui, path);
