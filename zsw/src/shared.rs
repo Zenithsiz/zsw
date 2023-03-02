@@ -2,13 +2,9 @@
 
 // Modules
 mod locker;
-pub mod lockers;
 
 // Exports
-pub use self::{
-	locker::{AsyncMutexLocker, AsyncRwLockLocker, LockerExt, MeetupSenderLocker},
-	lockers::Locker,
-};
+pub use self::locker::{AsyncMutexLocker, AsyncRwLockLocker, Locker, LockerExt, MeetupSenderLocker};
 
 // Imports
 use {
