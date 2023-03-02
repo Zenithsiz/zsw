@@ -8,7 +8,6 @@ use {
 		playlist::PlaylistsManager,
 	},
 	async_lock::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard},
-	std::sync::atomic::{self, AtomicBool},
 	zsw_util::meetup,
 };
 
@@ -17,211 +16,143 @@ type CurPanelGroup = Option<PanelGroup>;
 type PanelsUpdaterMeetupRenderer = ();
 type EguiPainterMeetupRenderer = (Vec<egui::ClippedPrimitive>, egui::TexturesDelta);
 
-define_locker! {
-	fn new(...) -> Self;
+/// Locker
+#[derive(Debug)]
+pub struct Locker<const STATE: usize = 0>(());
 
-	LoadDefaultPanelGroupLocker {
-		async_mutex {
-			CurPanelGroup = [ 0 ] => 1,
-		}
-
-		async_rwlock {
-			PanelsRendererShader = [ 0 ] => 1,
-			PlaylistsManager = [ 0 ] => 1,
-		}
-	}
-
-	RendererLocker {
-		async_mutex {
-			CurPanelGroup = [ 0 ] => 1,
-		}
-
-		async_rwlock {
-			PanelsRendererShader = [ 0 1 ] => 2,
-		}
-	}
-
-	PanelsUpdaterLocker {
-		async_mutex {
-			CurPanelGroup = [ 0 ] => 1,
-		}
-
-		meetup_sender {
-			PanelsUpdaterMeetupRenderer = [ 0 ]
-		}
-	}
-
-	EguiPainterLocker {
-		async_mutex {
-			CurPanelGroup = [ 0 ] => 1,
-		}
-
-		async_rwlock {
-			PlaylistsManager = [ 0 ] => 1,
-			PanelsRendererShader = [ 0 ] => 1,
-		}
-
-		meetup_sender {
-			EguiPainterMeetupRenderer = [ 0 ],
-		}
+impl Locker<0> {
+	/// Creates a new locker
+	///
+	/// # Deadlock
+	/// You should not create two lockers per-task
+	// TODO: Make sure two aren't created in the same task?
+	pub fn new() -> Self {
+		Self(())
 	}
 }
 
-macro define_locker(
-	fn $new:ident(...) -> Self;
+locker_impls! {
+	async_mutex {
+		CurPanelGroup = [ 0 ] => 1,
+	}
 
-	$(
-		$LockerName:ident {
+	async_rwlock {
+		PlaylistsManager = [ 0 ] => 1,
+		PanelsRendererShader = [ 0 1 ] => 2,
+	}
 
-			$(
-				async_mutex {
-					$(
-						$async_mutex_ty:ty = [ $( $async_mutex_prev:literal )* ] => $async_mutex_next:literal
-					),*
-					$(,)?
-				}
-			)?
+	meetup_sender {
+		PanelsUpdaterMeetupRenderer = [ 0 ],
+		EguiPainterMeetupRenderer = [ 0 ],
+	}
+}
 
-			$(
-				async_rwlock {
-					$(
-						$async_rwlock_ty:ty = [ $( $async_rwlock_prev:literal )* ] => $async_rwlock_next:literal
-					),*
-					$(,)?
-				}
-			)?
-
-			$(
-				meetup_sender {
-					$(
-						$meetup_sender_ty:ty = [ $( $meetup_sender_prev:literal )* ]
-					),*
-					$(,)?
-				}
-			)?
-		}
-	)*
-
-) {
-	paste::paste! {
+macro locker_impls(
+	async_mutex {
 		$(
-			/// Locker
-			///
-			/// # Thread safety
-			/// Multiple lockers should not be created per task
-			#[derive(Debug)]
-			pub struct $LockerName<const STATE: usize = 0>(());
+			$async_mutex_ty:ty = [ $( $async_mutex_prev:literal )* ] => $async_mutex_next:literal
+		),*
+		$(,)?
+	}
 
-			impl $LockerName<0> {
-				/// Creates a new locker.
-				///
-				/// Panics if called more than once
-				// TODO: Allow escape hatch for when we need to re-boot a task if it panics or something?
-				//       In this case, we'd likely associate it with a task-id so we can make sure that the
-				//       previous task never re-locks again or similar?
-				pub fn $new() -> Self {
-					static CREATED: AtomicBool = AtomicBool::new(false);
-					assert!(
-						!CREATED.swap(true, atomic::Ordering::AcqRel),
-						"Cannot create locker twice"
-					);
+	async_rwlock {
+		$(
+			$async_rwlock_ty:ty = [ $( $async_rwlock_prev:literal )* ] => $async_rwlock_next:literal
+		),*
+		$(,)?
+	}
 
-					Self(())
+	meetup_sender {
+		$(
+			$meetup_sender_ty:ty = [ $( $meetup_sender_prev:literal )* ]
+		),*
+		$(,)?
+	}
+) {
+	// Async mutexes
+	$(
+		$(
+			impl AsyncMutexLocker<$async_mutex_ty> for Locker<$async_mutex_prev> {
+				type Next<'locker> = Locker<$async_mutex_next>;
+
+				#[track_caller]
+				async fn lock_resource<'locker, 'mutex>(
+					&'locker mut self,
+					mutex: &'mutex Mutex<$async_mutex_ty>
+				) -> (MutexGuard<'mutex, $async_mutex_ty>, Self::Next<'locker>)
+				where
+					$async_mutex_ty: 'locker,
+				{
+					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+					let guard = mutex.lock().await;
+					let locker = Locker(());
+					(guard, locker)
 				}
 			}
-
-			// Async mutexes
-			$(
-				$(
-					$(
-						impl AsyncMutexLocker<$async_mutex_ty> for $LockerName<$async_mutex_prev> {
-							type Next<'locker> = $LockerName<$async_mutex_next>;
-
-							#[track_caller]
-							async fn lock_resource<'locker, 'mutex>(
-								&'locker mut self,
-								mutex: &'mutex Mutex<$async_mutex_ty>
-							) -> (MutexGuard<'mutex, $async_mutex_ty>, Self::Next<'locker>)
-							where
-								$async_mutex_ty: 'locker,
-							{
-								#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
-								let guard = mutex.lock().await;
-								let locker = $LockerName(());
-								(guard, locker)
-							}
-						}
-					)*
-				)*
-			)?
-
-			// Async rwlocks
-			$(
-				$(
-					$(
-						impl AsyncRwLockLocker<$async_rwlock_ty> for $LockerName<$async_rwlock_prev> {
-							type Next<'locker> = $LockerName<$async_rwlock_next>;
-
-							#[track_caller]
-							async fn lock_read_resource<'locker, 'rwlock>(
-								&'locker mut self,
-								rwlock: &'rwlock RwLock<$async_rwlock_ty>
-							) -> (RwLockReadGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
-							where
-								$async_rwlock_ty: 'locker
-							{
-								#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
-								let guard = rwlock.read().await;
-								let locker = $LockerName(());
-								(guard, locker)
-							}
-
-							#[track_caller]
-							async fn lock_upgradable_read_resource<'locker, 'rwlock>(
-								&'locker mut self,
-								rwlock: &'rwlock RwLock<$async_rwlock_ty>
-							) -> (RwLockUpgradableReadGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
-							where
-								$async_rwlock_ty: 'locker
-								{
-									#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
-									let guard = rwlock.upgradable_read().await;
-									let locker = $LockerName(());
-									(guard, locker)
-								}
-
-							#[track_caller]
-							async fn lock_write_resource<'locker, 'rwlock>(
-								&'locker mut self,
-								rwlock: &'rwlock RwLock<$async_rwlock_ty>
-							) -> (RwLockWriteGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
-							where
-								$async_rwlock_ty: 'locker
-								{
-									#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
-									let guard = rwlock.write().await;
-									let locker = $LockerName(());
-									(guard, locker)
-								}
-						}
-					)*
-				)*
-			)?
-
-			// Meetup senders
-			$(
-				$(
-					$(
-						impl MeetupSenderLocker<$meetup_sender_ty> for $LockerName<$meetup_sender_prev> {
-							#[track_caller]
-							async fn send_resource(&mut self, tx: &meetup::Sender<$meetup_sender_ty>, resource: $meetup_sender_ty) {
-								#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
-								tx.send(resource).await;
-							}
-						}
-					)*
-				)*
-			)?
 		)*
-	}
+	)*
+
+	// Async rwlocks
+	$(
+		$(
+			impl AsyncRwLockLocker<$async_rwlock_ty> for Locker<$async_rwlock_prev> {
+				type Next<'locker> = Locker<$async_rwlock_next>;
+
+				#[track_caller]
+				async fn lock_read_resource<'locker, 'rwlock>(
+					&'locker mut self,
+					rwlock: &'rwlock RwLock<$async_rwlock_ty>
+				) -> (RwLockReadGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
+				where
+					$async_rwlock_ty: 'locker
+				{
+					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+					let guard = rwlock.read().await;
+					let locker = Locker(());
+					(guard, locker)
+				}
+
+				#[track_caller]
+				async fn lock_upgradable_read_resource<'locker, 'rwlock>(
+					&'locker mut self,
+					rwlock: &'rwlock RwLock<$async_rwlock_ty>
+				) -> (RwLockUpgradableReadGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
+				where
+					$async_rwlock_ty: 'locker
+					{
+						#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+						let guard = rwlock.upgradable_read().await;
+						let locker = Locker(());
+						(guard, locker)
+					}
+
+				#[track_caller]
+				async fn lock_write_resource<'locker, 'rwlock>(
+					&'locker mut self,
+					rwlock: &'rwlock RwLock<$async_rwlock_ty>
+				) -> (RwLockWriteGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
+				where
+					$async_rwlock_ty: 'locker
+					{
+						#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+						let guard = rwlock.write().await;
+						let locker = Locker(());
+						(guard, locker)
+					}
+			}
+		)*
+	)*
+
+	// Meetup senders
+	$(
+		$(
+			impl MeetupSenderLocker<$meetup_sender_ty> for Locker<$meetup_sender_prev> {
+				#[track_caller]
+				async fn send_resource(&mut self, tx: &meetup::Sender<$meetup_sender_ty>, resource: $meetup_sender_ty) {
+					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
+					tx.send(resource).await;
+				}
+			}
+		)*
+	)*
 }

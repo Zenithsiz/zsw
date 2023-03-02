@@ -9,7 +9,7 @@ use {
 	crate::{
 		panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
 		playlist::{PlaylistItem, PlaylistsManager},
-		shared::{EguiPainterLocker, LockerExt, Shared},
+		shared::{Locker, LockerExt, Shared},
 	},
 	egui::Widget,
 	std::path::Path,
@@ -36,7 +36,7 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	pub fn draw(&mut self, ctx: &egui::Context, _frame: &epi::Frame, shared: &Shared, locker: &mut EguiPainterLocker) {
+	pub fn draw(&mut self, ctx: &egui::Context, _frame: &epi::Frame, shared: &Shared, locker: &mut Locker) {
 		// Adjust cursor pos to account for the scale factor
 		let scale_factor = shared.window.scale_factor();
 		let cursor_pos = shared.cursor_pos.load().to_logical::<f32>(scale_factor);
@@ -68,14 +68,14 @@ impl SettingsMenu {
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLocker) {
+fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 	self::draw_panels_editor(ui, shared, locker);
 	ui.separator();
 	self::draw_shader_select(ui, shared, locker);
 }
 
 /// Draws the playlists tab
-fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLocker) {
+fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 	let (mut playlists_manager, _) = locker.blocking_rwlock_write::<PlaylistsManager>(&shared.playlists_manager);
 	for (name, playlist) in playlists_manager.get_all_mut() {
 		ui.collapsing(name, |ui| {
@@ -104,7 +104,7 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLo
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLocker) {
+fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 	let (mut panel_group, _) = locker.blocking_mutex_lock::<Option<PanelGroup>>(&shared.cur_panel_group);
 	match &mut *panel_group {
 		Some(panel_group) =>
@@ -260,7 +260,7 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, locker: &mut EguiPainterLocker) {
+fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 	ui.label("Shader");
 
 	let (mut panels_renderer_shader, _) =

@@ -58,7 +58,7 @@ use {
 	futures::Future,
 	panel::{PanelGroup, PanelsManager, PanelsRendererShader},
 	playlist::PlaylistsManager,
-	shared::{EguiPainterLocker, LoadDefaultPanelGroupLocker, LockerExt, PanelsUpdaterLocker, RendererLocker},
+	shared::{Locker, LockerExt},
 	std::{mem, sync::Arc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -177,14 +177,14 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
-		let locker = LoadDefaultPanelGroupLocker::new();
+		let locker = Locker::new();
 		let default_panel_group = config.default_panel_group.clone();
 		async move { self::load_default_panel_group(default_panel_group, locker, shared).await }
 	});
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		let locker = RendererLocker::new();
+		let locker = Locker::new();
 		async move {
 			self::renderer(
 				shared,
@@ -201,7 +201,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
-		let locker = PanelsUpdaterLocker::new();
+		let locker = Locker::new();
 		async move { self::panels_updater(shared, locker, panels_updater_output_tx).await }
 	});
 
@@ -209,7 +209,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
-		let locker = EguiPainterLocker::new();
+		let locker = Locker::new();
 		async move { self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await }
 	});
 
@@ -240,7 +240,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 /// Loads the default panel group
 async fn load_default_panel_group(
 	default_panel_group: Option<String>,
-	mut locker: LoadDefaultPanelGroupLocker,
+	mut locker: Locker,
 	shared: Arc<Shared>,
 ) -> Result<(), anyhow::Error> {
 	// If we don't have a default, don't do anything
@@ -305,7 +305,7 @@ where
 /// Renderer task
 async fn renderer(
 	shared: Arc<Shared>,
-	mut locker: RendererLocker,
+	mut locker: Locker,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -376,7 +376,7 @@ async fn renderer(
 /// Panel updater task
 async fn panels_updater(
 	shared: Arc<Shared>,
-	mut locker: PanelsUpdaterLocker,
+	mut locker: Locker,
 	panels_updater_output_tx: meetup::Sender<()>,
 ) -> Result<!, anyhow::Error> {
 	loop {
@@ -397,7 +397,7 @@ async fn panels_updater(
 /// Egui painter task
 async fn egui_painter(
 	shared: Arc<Shared>,
-	mut locker: EguiPainterLocker,
+	mut locker: Locker,
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,

@@ -7,7 +7,7 @@ pub mod lockers;
 // Exports
 pub use self::{
 	locker::{AsyncMutexLocker, AsyncRwLockLocker, LockerExt, MeetupSenderLocker},
-	lockers::{EguiPainterLocker, LoadDefaultPanelGroupLocker, PanelsUpdaterLocker, RendererLocker},
+	lockers::Locker,
 };
 
 // Imports
