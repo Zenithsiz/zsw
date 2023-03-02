@@ -51,21 +51,20 @@ pub trait AsyncMutexLocker<R> {
 	/// Next locker
 	type Next<'locker>
 	where
-		Self: 'locker;
-
-	/// Locks the resource `R` and returns the next locker
-	async fn lock_resource<'locker, 'mutex>(
-		&'locker mut self,
-		mutex: &'mutex Mutex<R>,
-	) -> (MutexGuard<'mutex, R>, Self::Next<'locker>)
-	where
+		Self: 'locker,
 		R: 'locker;
 
-	/// Blockingly locks the resource `R` and returns the next locker
-	fn blocking_lock_resource<'locker, 'mutex>(
+	/// Locks the resource `R` and returns the next locker
+	async fn lock_resource<'locker>(
 		&'locker mut self,
-		mutex: &'mutex Mutex<R>,
-	) -> (MutexGuard<'mutex, R>, Self::Next<'locker>);
+		mutex: &'locker Mutex<R>,
+	) -> (MutexGuard<'locker, R>, Self::Next<'locker>);
+
+	/// Blockingly locks the resource `R` and returns the next locker
+	fn blocking_lock_resource<'locker>(
+		&'locker mut self,
+		mutex: &'locker Mutex<R>,
+	) -> (MutexGuard<'locker, R>, Self::Next<'locker>);
 }
 
 /// Locker of async rwlock `R`
@@ -73,35 +72,32 @@ pub trait AsyncRwLockLocker<R> {
 	/// Next locker
 	type Next<'locker>
 	where
-		Self: 'locker;
+		Self: 'locker,
+		R: 'locker;
 
 	/// Locks the resource `R` for read and returns the next locker
-	async fn lock_read_resource<'locker, 'rwlock>(
+	async fn lock_read_resource<'locker>(
 		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
-	) -> (RwLockReadGuard<'rwlock, R>, Self::Next<'locker>)
-	where
-		R: 'locker;
+		rwlock: &'locker RwLock<R>,
+	) -> (RwLockReadGuard<'locker, R>, Self::Next<'locker>);
 
 	/// Blockingly locks the resource `R` for read and returns the next locker
-	fn blocking_lock_read_resource<'locker, 'rwlock>(
+	fn blocking_lock_read_resource<'locker>(
 		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
-	) -> (RwLockReadGuard<'rwlock, R>, Self::Next<'locker>);
+		rwlock: &'locker RwLock<R>,
+	) -> (RwLockReadGuard<'locker, R>, Self::Next<'locker>);
 
 	/// Locks the resource `R` for write and returns the next locker
-	async fn lock_write_resource<'locker, 'rwlock>(
+	async fn lock_write_resource<'locker>(
 		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
-	) -> (RwLockWriteGuard<'rwlock, R>, Self::Next<'locker>)
-	where
-		R: 'locker;
+		rwlock: &'locker RwLock<R>,
+	) -> (RwLockWriteGuard<'locker, R>, Self::Next<'locker>);
 
 	/// Blockingly locks the resource `R` for write and returns the next locker
-	fn blocking_lock_write_resource<'locker, 'rwlock>(
+	fn blocking_lock_write_resource<'locker>(
 		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
-	) -> (RwLockWriteGuard<'rwlock, R>, Self::Next<'locker>);
+		rwlock: &'locker RwLock<R>,
+	) -> (RwLockWriteGuard<'locker, R>, Self::Next<'locker>);
 }
 
 /// Locker of meetup sender of `R`
@@ -117,90 +113,84 @@ pub trait MeetupSenderLocker<R> {
 pub impl<L> L {
 	/// Locks the async mutex `R`
 	#[track_caller]
-	async fn mutex_lock<'locker, 'mutex, R>(
+	async fn mutex_lock<'locker, R>(
 		&'locker mut self,
-		mutex: &'mutex Mutex<R>,
-	) -> (MutexGuard<'mutex, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
+		mutex: &'locker Mutex<R>,
+	) -> (MutexGuard<'locker, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
 	where
 		Self: AsyncMutexLocker<R>,
-		R: 'locker,
 	{
 		self.lock_resource(mutex).await
 	}
 
 	/// Blockingly locks the async mutex `R`
 	#[track_caller]
-	fn blocking_mutex_lock<'locker, 'mutex, R>(
+	fn blocking_mutex_lock<'locker, R>(
 		&'locker mut self,
-		mutex: &'mutex Mutex<R>,
-	) -> (MutexGuard<'mutex, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
+		mutex: &'locker Mutex<R>,
+	) -> (MutexGuard<'locker, R>, <Self as AsyncMutexLocker<R>>::Next<'locker>)
 	where
 		Self: AsyncMutexLocker<R>,
-		R: 'locker,
 	{
 		self.blocking_lock_resource(mutex)
 	}
 
 	/// Locks the async rwlock `R` for reading
 	#[track_caller]
-	async fn rwlock_read<'locker, 'rwlock, R>(
+	async fn rwlock_read<'locker, R>(
 		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
+		rwlock: &'locker RwLock<R>,
 	) -> (
-		RwLockReadGuard<'rwlock, R>,
+		RwLockReadGuard<'locker, R>,
 		<Self as AsyncRwLockLocker<R>>::Next<'locker>,
 	)
 	where
 		Self: AsyncRwLockLocker<R>,
-		R: 'locker,
 	{
 		self.lock_read_resource(rwlock).await
 	}
 
 	/// Blockingly locks the async rwlock `R` for reading
 	#[track_caller]
-	fn blocking_rwlock_read<'locker, 'rwlock, R>(
+	fn blocking_rwlock_read<'locker, R>(
 		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
+		rwlock: &'locker RwLock<R>,
 	) -> (
-		RwLockReadGuard<'rwlock, R>,
+		RwLockReadGuard<'locker, R>,
 		<Self as AsyncRwLockLocker<R>>::Next<'locker>,
 	)
 	where
 		Self: AsyncRwLockLocker<R>,
-		R: 'locker,
 	{
 		self.blocking_lock_read_resource(rwlock)
 	}
 
 	/// Locks the async rwlock `R` for writing
 	#[track_caller]
-	async fn rwlock_write<'locker, 'rwlock, R>(
+	async fn rwlock_write<'locker, R>(
 		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
+		rwlock: &'locker RwLock<R>,
 	) -> (
-		RwLockWriteGuard<'rwlock, R>,
+		RwLockWriteGuard<'locker, R>,
 		<Self as AsyncRwLockLocker<R>>::Next<'locker>,
 	)
 	where
 		Self: AsyncRwLockLocker<R>,
-		R: 'locker,
 	{
 		self.lock_write_resource(rwlock).await
 	}
 
 	/// Blockingly locks the async rwlock `R` for writing
 	#[track_caller]
-	fn blocking_rwlock_write<'locker, 'rwlock, R>(
+	fn blocking_rwlock_write<'locker, R>(
 		&'locker mut self,
-		rwlock: &'rwlock RwLock<R>,
+		rwlock: &'locker RwLock<R>,
 	) -> (
-		RwLockWriteGuard<'rwlock, R>,
+		RwLockWriteGuard<'locker, R>,
 		<Self as AsyncRwLockLocker<R>>::Next<'locker>,
 	)
 	where
 		Self: AsyncRwLockLocker<R>,
-		R: 'locker,
 	{
 		self.blocking_lock_write_resource(rwlock)
 	}
@@ -244,12 +234,10 @@ macro locker_impls(
 				type Next<'locker> = Locker<$async_mutex_next>;
 
 				#[track_caller]
-				async fn lock_resource<'locker, 'mutex>(
+				async fn lock_resource<'locker>(
 					&'locker mut self,
-					mutex: &'mutex Mutex<$async_mutex_ty>
-				) -> (MutexGuard<'mutex, $async_mutex_ty>, Self::Next<'locker>)
-				where
-					$async_mutex_ty: 'locker,
+					mutex: &'locker Mutex<$async_mutex_ty>
+				) -> (MutexGuard<'locker, $async_mutex_ty>, Self::Next<'locker>)
 				{
 					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
 					let guard = mutex.lock().await;
@@ -258,10 +246,10 @@ macro locker_impls(
 				}
 
 				#[track_caller]
-				fn blocking_lock_resource<'locker, 'mutex>(
+				fn blocking_lock_resource<'locker>(
 					&'locker mut self,
-					mutex: &'mutex Mutex<$async_mutex_ty>
-				) -> (MutexGuard<'mutex, $async_mutex_ty>, Self::Next<'locker>)
+					mutex: &'locker Mutex<$async_mutex_ty>
+				) -> (MutexGuard<'locker, $async_mutex_ty>, Self::Next<'locker>)
 				{
 					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
 					let guard = tokio::task::block_in_place(|| mutex.blocking_lock());
@@ -279,12 +267,10 @@ macro locker_impls(
 				type Next<'locker> = Locker<$async_rwlock_next>;
 
 				#[track_caller]
-				async fn lock_read_resource<'locker, 'rwlock>(
+				async fn lock_read_resource<'locker>(
 					&'locker mut self,
-					rwlock: &'rwlock RwLock<$async_rwlock_ty>
-				) -> (RwLockReadGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
-				where
-					$async_rwlock_ty: 'locker
+					rwlock: &'locker RwLock<$async_rwlock_ty>
+				) -> (RwLockReadGuard<'locker, $async_rwlock_ty>, Self::Next<'locker>)
 				{
 					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
 					let guard = rwlock.read().await;
@@ -293,10 +279,10 @@ macro locker_impls(
 				}
 
 				#[track_caller]
-				fn blocking_lock_read_resource<'locker, 'rwlock>(
+				fn blocking_lock_read_resource<'locker>(
 					&'locker mut self,
-					rwlock: &'rwlock RwLock<$async_rwlock_ty>
-				) -> (RwLockReadGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
+					rwlock: &'locker RwLock<$async_rwlock_ty>
+				) -> (RwLockReadGuard<'locker, $async_rwlock_ty>, Self::Next<'locker>)
 				{
 					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
 					let guard = tokio::task::block_in_place(|| rwlock.blocking_read());
@@ -305,12 +291,10 @@ macro locker_impls(
 				}
 
 				#[track_caller]
-				async fn lock_write_resource<'locker, 'rwlock>(
+				async fn lock_write_resource<'locker>(
 					&'locker mut self,
-					rwlock: &'rwlock RwLock<$async_rwlock_ty>
-				) -> (RwLockWriteGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
-				where
-					$async_rwlock_ty: 'locker
+					rwlock: &'locker RwLock<$async_rwlock_ty>
+				) -> (RwLockWriteGuard<'locker, $async_rwlock_ty>, Self::Next<'locker>)
 				{
 					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
 					let guard = rwlock.write().await;
@@ -319,10 +303,10 @@ macro locker_impls(
 				}
 
 				#[track_caller]
-				fn blocking_lock_write_resource<'locker, 'rwlock>(
+				fn blocking_lock_write_resource<'locker>(
 					&'locker mut self,
-					rwlock: &'rwlock RwLock<$async_rwlock_ty>
-				) -> (RwLockWriteGuard<'rwlock, $async_rwlock_ty>, Self::Next<'locker>)
+					rwlock: &'locker RwLock<$async_rwlock_ty>
+				) -> (RwLockWriteGuard<'locker, $async_rwlock_ty>, Self::Next<'locker>)
 				{
 					#[allow(clippy::disallowed_methods)] // DEADLOCK: We ensure thread safety via the locker abstraction
 					let guard = tokio::task::block_in_place(|| rwlock.blocking_write());
