@@ -14,7 +14,11 @@ pub struct PlaylistsManager {
 	/// Base directory
 	// TODO: Allow "refreshing" the playlists using this base directory
 	_base_dir: PathBuf,
+}
 
+/// Playlists
+#[derive(Debug)]
+pub struct Playlists {
 	/// Playlists
 	// Note: We keep all playlists loaded due to them being likely small in both size and quantity.
 	//       Even a playlist with 10k file entries, with an average path of 200 bytes, would only occupy
@@ -22,48 +26,7 @@ pub struct PlaylistsManager {
 	playlists: HashMap<String, Playlist>,
 }
 
-impl PlaylistsManager {
-	/// Creates a playlist manager
-	pub async fn new(base_dir: PathBuf) -> Result<Self, anyhow::Error> {
-		// Create the playlists directory, if it doesn't exist
-		tokio::fs::create_dir_all(&base_dir)
-			.await
-			.context("Unable to create playlists directory")?;
-
-		// Then read all the playlists
-		let playlists = tokio::fs::read_dir(&base_dir)
-			.await
-			.map(ReadDirStream::new)
-			.context("Unable to read playlists directory")?
-			.then(async move |entry| {
-				// Get the name, if it's a yaml file
-				let entry = entry?;
-				let path = entry.path();
-				let (Some(name), Some("yaml")) = (path.file_prefix().and_then(OsStr::to_str), path.extension().and_then(OsStr::to_str)) else {
-					return Ok(None);
-				};
-
-				// Then read the file
-				tracing::debug!(?name, ?path, "Loading playlist");
-				let playlist_yaml = tokio::fs::read(&path).await.context("Unable to open file")?;
-
-				// And load it
-				let playlist = serde_yaml::from_slice(&playlist_yaml).context("Unable to parse playlist")?;
-
-				Ok::<_, anyhow::Error>(Some((name.to_owned(), playlist)))
-			})
-			.try_collect::<Vec<_>>()
-			.await?
-			.into_iter()
-			.flatten()
-			.collect::<HashMap<_, _>>();
-
-		Ok(Self {
-			_base_dir: base_dir,
-			playlists,
-		})
-	}
-
+impl Playlists {
 	/// Retrieves a playlist
 	pub fn get(&self, name: &str) -> Option<&Playlist> {
 		self.playlists.get(name)
@@ -148,4 +111,43 @@ impl PlaylistItemKind {
 	fn default_directory_recursive() -> bool {
 		true
 	}
+}
+
+/// Creates the playlists service
+pub async fn create(base_dir: PathBuf) -> Result<(PlaylistsManager, Playlists), anyhow::Error> {
+	// Create the playlists directory, if it doesn't exist
+	tokio::fs::create_dir_all(&base_dir)
+		.await
+		.context("Unable to create playlists directory")?;
+
+	// Then read all the playlists
+	// TODO: Do this in a separate task *after* creation?
+	let playlists = tokio::fs::read_dir(&base_dir)
+		.await
+		.map(ReadDirStream::new)
+		.context("Unable to read playlists directory")?
+		.then(async move |entry| {
+			// Get the name, if it's a yaml file
+			let entry = entry?;
+			let path = entry.path();
+			let (Some(name), Some("yaml")) = (path.file_prefix().and_then(OsStr::to_str), path.extension().and_then(OsStr::to_str)) else {
+				return Ok(None);
+			};
+
+			// Then read the file
+			tracing::debug!(?name, ?path, "Loading playlist");
+			let playlist_yaml = tokio::fs::read(&path).await.context("Unable to open file")?;
+
+			// And load it
+			let playlist = serde_yaml::from_slice(&playlist_yaml).context("Unable to parse playlist")?;
+
+			Ok::<_, anyhow::Error>(Some((name.to_owned(), playlist)))
+		})
+		.try_collect::<Vec<_>>()
+		.await?
+		.into_iter()
+		.flatten()
+		.collect::<HashMap<_, _>>();
+
+	Ok((PlaylistsManager { _base_dir: base_dir }, Playlists { playlists }))
 }

@@ -22,7 +22,7 @@ use {
 	self::ser_de::SerPanelGroup,
 	crate::{
 		image_loader::ImageRequester,
-		playlist::{Playlist, PlaylistsManager},
+		playlist::{Playlist, Playlists},
 		wgpu_wrapper::WgpuShared,
 	},
 	anyhow::Context,
@@ -50,7 +50,7 @@ impl PanelsManager {
 		name: &str,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
-		playlists_manager: &PlaylistsManager,
+		playlists: &Playlists,
 	) -> Result<PanelGroup, anyhow::Error> {
 		// Try to read the file
 		let path = self.base_dir.join(name).with_appended(".yaml");
@@ -78,9 +78,7 @@ impl PanelsManager {
 						reverse: panel.state.reverse_parallax,
 					},
 				};
-				let playlist = playlists_manager
-					.get(&panel.playlist)
-					.context("Unable to load playlist")?;
+				let playlist = playlists.get(&panel.playlist).context("Unable to load playlist")?;
 
 				Panel::new(wgpu_shared, renderer_layouts, geometries, state, playlist)
 					.await

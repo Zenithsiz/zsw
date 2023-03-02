@@ -8,7 +8,7 @@
 use {
 	crate::{
 		panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
-		playlist::{PlaylistItemKind, PlaylistsManager},
+		playlist::{PlaylistItemKind, Playlists},
 		shared::{Locker, LockerExt, Shared},
 	},
 	egui::Widget,
@@ -76,8 +76,8 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 
 /// Draws the playlists tab
 fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
-	let (mut playlists_manager, _) = locker.blocking_rwlock_write::<PlaylistsManager>(&shared.playlists_manager);
-	for (name, playlist) in playlists_manager.get_all_mut() {
+	let (mut playlists, _) = locker.blocking_rwlock_write::<Playlists>(&shared.playlists);
+	for (name, playlist) in playlists.get_all_mut() {
 		ui.collapsing(name, |ui| {
 			for item in playlist.items_mut() {
 				ui.checkbox(&mut item.enabled, "Enabled");

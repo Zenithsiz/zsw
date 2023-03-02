@@ -57,7 +57,7 @@ use {
 	directories::ProjectDirs,
 	futures::Future,
 	panel::{PanelGroup, PanelsManager, PanelsRendererShader},
-	playlist::PlaylistsManager,
+	playlist::Playlists,
 	shared::{Locker, LockerExt},
 	std::{mem, sync::Arc},
 	winit::{
@@ -133,7 +133,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		.playlists_dir
 		.clone()
 		.unwrap_or_else(|| dirs.data_dir().join("playlists/"));
-	let playlists_manager = PlaylistsManager::new(playlist_path)
+	let (playlists_manager, playlists) = playlist::create(playlist_path)
 		.await
 		.context("Unable to create playlist manager")?;
 
@@ -165,9 +165,10 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 		cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 		panels_manager,
 		image_requester,
+		playlists_manager,
 		cur_panel_group: Mutex::new(None),
 		panels_renderer_shader: RwLock::new(panels_renderer_shader),
-		playlists_manager: RwLock::new(playlists_manager),
+		playlists: RwLock::new(playlists),
 	};
 	let shared = Arc::new(shared);
 
@@ -249,14 +250,14 @@ async fn load_default_panel_group(
 	};
 
 	// Else load the panel group
-	let (playlists_manager, _) = locker.rwlock_read::<PlaylistsManager>(&shared.playlists_manager).await;
+	let (playlists, _) = locker.rwlock_read::<Playlists>(&shared.playlists).await;
 	let loaded_panel_group = match shared
 		.panels_manager
 		.load(
 			default_panel_group,
 			&shared.wgpu,
 			&shared.panels_renderer_layout,
-			&playlists_manager,
+			&playlists,
 		)
 		.await
 	{
@@ -271,7 +272,7 @@ async fn load_default_panel_group(
 	};
 
 	// And set it as the current one
-	mem::drop(playlists_manager);
+	mem::drop(playlists);
 	let (mut panel_group, _) = locker.mutex_lock::<Option<PanelGroup>>(&shared.cur_panel_group).await;
 	*panel_group = Some(loaded_panel_group);
 

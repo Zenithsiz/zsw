@@ -1,11 +1,13 @@
 //! Lockers
 
+// TODO: Move this to the `locker` module.
+
 // Imports
 use {
 	super::{AsyncMutexLocker, AsyncRwLockLocker, MeetupSenderLocker},
 	crate::{
 		panel::{PanelGroup, PanelsRendererShader},
-		playlist::PlaylistsManager,
+		playlist::Playlists,
 	},
 	async_lock::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard},
 	zsw_util::meetup,
@@ -37,7 +39,7 @@ locker_impls! {
 	}
 
 	async_rwlock {
-		PlaylistsManager = [ 0 ] => 1,
+		Playlists = [ 0 ] => 1,
 		PanelsRendererShader = [ 0 1 ] => 2,
 	}
 

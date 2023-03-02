@@ -15,7 +15,7 @@ use {
 	crate::{
 		image_loader::ImageRequester,
 		panel::{PanelGroup, PanelsManager, PanelsRendererLayouts, PanelsRendererShader},
-		playlist::PlaylistsManager,
+		playlist::{Playlists, PlaylistsManager},
 		wgpu_wrapper::WgpuShared,
 		Resize,
 	},
@@ -35,10 +35,11 @@ pub struct Shared {
 	pub last_resize:            AtomicCell<Option<Resize>>,
 	pub cursor_pos:             AtomicCell<PhysicalPosition<f64>>,
 
-	pub panels_manager:  PanelsManager,
-	pub image_requester: ImageRequester,
+	pub panels_manager:    PanelsManager,
+	pub image_requester:   ImageRequester,
+	pub playlists_manager: PlaylistsManager,
 
 	pub cur_panel_group:        Mutex<Option<PanelGroup>>,
 	pub panels_renderer_shader: RwLock<PanelsRendererShader>,
-	pub playlists_manager:      RwLock<PlaylistsManager>,
+	pub playlists:              RwLock<Playlists>,
 }
