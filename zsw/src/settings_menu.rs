@@ -9,7 +9,7 @@ use {
 	crate::{
 		panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
 		playlist::{PlaylistItemKind, Playlists},
-		shared::{Locker, LockerExt, Shared},
+		shared::{Locker, Shared},
 	},
 	egui::Widget,
 	std::path::Path,

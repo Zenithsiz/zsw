@@ -19,7 +19,8 @@
 	let_chains,
 	exit_status_error,
 	lint_reasons,
-	closure_track_caller
+	closure_track_caller,
+	generic_const_exprs
 )]
 #![allow(incomplete_features)]
 
@@ -57,7 +58,7 @@ use {
 	futures::Future,
 	panel::{PanelGroup, PanelsManager, PanelsRendererShader},
 	playlist::Playlists,
-	shared::{Locker, LockerExt},
+	shared::Locker,
 	std::{mem, sync::Arc},
 	tokio::sync::{Mutex, RwLock},
 	winit::{

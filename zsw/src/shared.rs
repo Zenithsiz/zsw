@@ -4,7 +4,7 @@
 mod locker;
 
 // Exports
-pub use self::locker::{AsyncMutexLocker, AsyncRwLockLocker, Locker, LockerExt, MeetupSenderLocker};
+pub use self::locker::Locker;
 
 // Imports
 use {
