@@ -251,7 +251,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
 /// Loads the default panel group
 async fn load_default_panel_group(
 	default_panel_group: Option<String>,
-	mut locker: Locker,
+	mut locker: Locker<'_, 0>,
 	shared: Arc<Shared>,
 ) -> Result<(), anyhow::Error> {
 	// If we don't have a default, don't do anything
@@ -314,7 +314,7 @@ where
 /// Renderer task
 async fn renderer(
 	shared: Arc<Shared>,
-	mut locker: Locker,
+	mut locker: Locker<'_, 0>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -383,7 +383,7 @@ async fn renderer(
 /// Panel updater task
 async fn panels_updater(
 	shared: Arc<Shared>,
-	mut locker: Locker,
+	mut locker: Locker<'_, 0>,
 	panels_updater_output_tx: PanelsUpdaterMeetupSender,
 ) -> Result<!, anyhow::Error> {
 	loop {
@@ -404,7 +404,7 @@ async fn panels_updater(
 /// Egui painter task
 async fn egui_painter(
 	shared: Arc<Shared>,
-	mut locker: Locker,
+	mut locker: Locker<'_, 0>,
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	egui_painter_output_tx: EguiPainterRendererMeetupSender,

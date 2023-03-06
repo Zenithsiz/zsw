@@ -15,23 +15,130 @@ mod rwlock;
 pub use self::{meetup::MeetupSenderResourceExt, mutex::AsyncMutexResourceExt, rwlock::AsyncRwLockResourceExt};
 
 // Imports
-use crate::{
-	panel::{PanelGroup, PanelsRendererShader},
-	playlist::Playlists,
+use {
+	crate::{
+		panel::{PanelGroup, PanelsRendererShader},
+		playlist::Playlists,
+	},
+	std::{
+		ops::{Deref, DerefMut},
+		sync::atomic::{self, AtomicU64},
+	},
 };
+
+/// Current task
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+enum CurTask {
+	/// Thread
+	Thread(std::thread::ThreadId),
+
+	/// Tokio Task
+	TokioTask(tokio::task::Id),
+}
+
+impl CurTask {
+	/// Returns the current task id.
+	///
+	/// If within a tokio task, returns `TokioTask`, else returns the thread id
+	pub fn get() -> Self {
+		if let Some(id) = tokio::task::try_id() {
+			return Self::TokioTask(id);
+		}
+
+		Self::Thread(std::thread::current().id())
+	}
+}
+
+/// Locker inner
+#[derive(Debug)]
+struct LockerInner {
+	/// Locker id
+	id: u64,
+
+	/// Current task
+	///
+	/// Will be `None` if the locker hasn't been used yet.
+	cur_task: Option<CurTask>,
+}
+
+/// Locker inner kind
+#[derive(Debug)]
+enum LockerInnerKind<'locker> {
+	Owned(LockerInner),
+	Borrowed(&'locker mut LockerInner),
+}
+
+impl<'locker> Deref for LockerInnerKind<'locker> {
+	type Target = LockerInner;
+
+	fn deref(&self) -> &Self::Target {
+		match self {
+			LockerInnerKind::Owned(inner) => inner,
+			LockerInnerKind::Borrowed(inner) => inner,
+		}
+	}
+}
+
+impl<'locker> DerefMut for LockerInnerKind<'locker> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		match self {
+			LockerInnerKind::Owned(inner) => inner,
+			LockerInnerKind::Borrowed(inner) => inner,
+		}
+	}
+}
 
 /// Locker
 #[derive(Debug)]
-pub struct Locker<const STATE: usize = 0>(());
+// TODO: Simplify to `Locker(())` on release builds?
+pub struct Locker<'locker, const STATE: usize> {
+	inner: LockerInnerKind<'locker>,
+}
 
-impl Locker<0> {
+impl<'locker> Locker<'locker, 0> {
 	/// Creates a new locker
 	///
 	/// # Deadlock
-	/// You should not create two lockers per-task
-	// TODO: Make sure two aren't created in the same task?
+	/// You must ensure only a single locker exists per-task, under stacked borrows
 	pub fn new() -> Self {
-		Self(())
+		static ID: AtomicU64 = AtomicU64::new(0);
+
+		let id = ID.fetch_add(1, atomic::Ordering::AcqRel);
+		let inner = LockerInner { id, cur_task: None };
+		Self {
+			inner: LockerInnerKind::Owned(inner),
+		}
+	}
+}
+
+impl<'locker, const STATE: usize> Locker<'locker, STATE> {
+	/// Creates the next locker
+	///
+	/// # Deadlock
+	/// You must ensure only a single locker exists per-task, under stacked borrows
+	fn next<const NEXT_STATE: usize>(&mut self) -> Locker<'_, NEXT_STATE> {
+		Locker {
+			inner: LockerInnerKind::Borrowed(&mut self.inner),
+		}
+	}
+
+	/// Ensures the locker hasn't escaped it's initial task
+	fn ensure_same_task(&mut self) {
+		match self.inner.cur_task {
+			Some(task) => {
+				let cur_task = CurTask::get();
+				if cur_task != task {
+					tracing::error!(?task, ?cur_task, "Locker was used in two different tasks");
+				}
+			},
+
+			// If we don't have a current task, set it to the current one
+			None => {
+				let cur_task = CurTask::get();
+				tracing::trace!(locker_id = ?self.inner.id, ?cur_task,"Assigned task to locker");
+				self.inner.cur_task = Some(cur_task);
+			},
+		}
 	}
 }
 

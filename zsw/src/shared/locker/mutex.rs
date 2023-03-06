@@ -23,38 +23,40 @@ pub trait AsyncMutexResource {
 pub impl<R: AsyncMutexResource> R {
 	/// Locks this mutex
 	#[track_caller]
-	async fn lock<'locker, const STATE: usize>(
+	async fn lock<'locker, 'prev_locker, const STATE: usize>(
 		&'locker self,
-		_locker: &'locker mut Locker<STATE>,
+		locker: &'locker mut Locker<'prev_locker, STATE>,
 	) -> (
 		MutexGuard<'locker, R::Inner>,
-		Locker<{ <Locker<STATE> as AsyncMutexLocker<R>>::NEXT_STATE }>,
+		Locker<{ <Locker<'locker, STATE> as AsyncMutexLocker<R>>::NEXT_STATE }>,
 	)
 	where
-		Locker<STATE>: AsyncMutexLocker<R>,
+		Locker<'prev_locker, STATE>: AsyncMutexLocker<R>,
 		R::Inner: 'locker,
-		[(); <Locker<STATE> as AsyncMutexLocker<R>>::NEXT_STATE]:,
+		[(); <Locker<'prev_locker, STATE> as AsyncMutexLocker<R>>::NEXT_STATE]:,
 	{
+		locker.ensure_same_task();
 		let guard = self.as_inner().lock().await;
-		(guard, Locker(()))
+		(guard, locker.next())
 	}
 
 	/// Locks this mutex blockingly
 	#[track_caller]
-	fn blocking_lock<'locker, const STATE: usize>(
+	fn blocking_lock<'locker, 'prev_locker, const STATE: usize>(
 		&'locker self,
-		_locker: &'locker mut Locker<STATE>,
+		locker: &'locker mut Locker<'prev_locker, STATE>,
 	) -> (
 		MutexGuard<'locker, R::Inner>,
-		Locker<{ <Locker<STATE> as AsyncMutexLocker<R>>::NEXT_STATE }>,
+		Locker<{ <Locker<'prev_locker, STATE> as AsyncMutexLocker<R>>::NEXT_STATE }>,
 	)
 	where
-		Locker<STATE>: AsyncMutexLocker<R>,
+		Locker<'prev_locker, STATE>: AsyncMutexLocker<R>,
 		R::Inner: 'locker,
-		[(); <Locker<STATE> as AsyncMutexLocker<R>>::NEXT_STATE]:,
+		[(); <Locker<'prev_locker, STATE> as AsyncMutexLocker<R>>::NEXT_STATE]:,
 	{
-		let guard = self.as_inner().blocking_lock();
-		(guard, Locker(()))
+		locker.ensure_same_task();
+		let guard = tokio::task::block_in_place(|| self.as_inner().blocking_lock());
+		(guard, locker.next())
 	}
 }
 
@@ -94,7 +96,7 @@ pub macro resource_impl(
 
 	$(
 		#[sealed::sealed]
-		impl AsyncMutexLocker<$Name> for Locker<$CUR_STATE> {
+		impl<'locker> AsyncMutexLocker<$Name> for Locker<'locker, $CUR_STATE> {
 			const NEXT_STATE: usize = $NEXT_STATE;
 		}
 	)*

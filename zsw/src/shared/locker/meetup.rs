@@ -21,10 +21,14 @@ pub trait MeetupSenderResource {
 pub impl<R: MeetupSenderResource> R {
 	/// Sends the resource `R` to this meetup channel
 	#[track_caller]
-	async fn send<'locker, const STATE: usize>(&'locker self, _locker: &'locker mut Locker<STATE>, resource: R::Inner)
-	where
-		Locker<STATE>: MeetupSenderLocker<R>,
+	async fn send<'locker, 'prev_locker, const STATE: usize>(
+		&'locker self,
+		locker: &'locker mut Locker<'prev_locker, STATE>,
+		resource: R::Inner,
+	) where
+		Locker<'prev_locker, STATE>: MeetupSenderLocker<R>,
 	{
+		locker.ensure_same_task();
 		self.as_inner().send(resource).await;
 	}
 }
@@ -65,6 +69,6 @@ pub macro resource_impl(
 
 	$(
 		#[sealed::sealed]
-		impl MeetupSenderLocker<$Name> for Locker<$CUR_STATE> {}
+		impl<'locker> MeetupSenderLocker<$Name> for Locker<'locker, $CUR_STATE> {}
 	)*
 }
