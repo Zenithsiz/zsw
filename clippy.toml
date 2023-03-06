@@ -33,8 +33,11 @@ disallowed-methods = [
 
 	# Tokio
 	"tokio::sync::Mutex::lock",
+	"tokio::sync::Mutex::blocking_lock",
 	"tokio::sync::RwLock::read",
+	"tokio::sync::RwLock::blocking_read",
 	"tokio::sync::RwLock::write",
+	"tokio::sync::RwLock::blocking_write",
 	# Note `broadcast::Sender::send` doesn't block
 	"tokio::sync::broadcast::Receiver::recv",
 	"tokio::sync::mpsc::Sender::blocking_send",

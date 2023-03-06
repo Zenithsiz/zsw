@@ -7,9 +7,9 @@
 // Imports
 use {
 	crate::{
-		panel::{self, PanelGroup, PanelImage, PanelShader, PanelsRendererShader},
-		playlist::{PlaylistItemKind, Playlists},
-		shared::{Locker, Shared},
+		panel::{self, PanelImage, PanelShader},
+		playlist::PlaylistItemKind,
+		shared::{AsyncMutexResourceExt, AsyncRwLockResourceExt, Locker, Shared},
 	},
 	egui::Widget,
 	std::path::Path,
@@ -76,7 +76,7 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 
 /// Draws the playlists tab
 fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
-	let (mut playlists, _) = locker.blocking_rwlock_write::<Playlists>(&shared.playlists);
+	let (mut playlists, _) = shared.playlists.blocking_write(locker);
 	for (name, playlist) in playlists.get_all_mut() {
 		ui.collapsing(name, |ui| {
 			for item in playlist.items_mut() {
@@ -106,7 +106,7 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
 fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
-	let (mut panel_group, _) = locker.blocking_mutex_lock::<Option<PanelGroup>>(&shared.cur_panel_group);
+	let (mut panel_group, _) = shared.cur_panel_group.blocking_lock(locker);
 	match &mut *panel_group {
 		Some(panel_group) =>
 			for (panel_idx, panel) in panel_group.panels_mut().iter_mut().enumerate() {
@@ -264,8 +264,7 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker) {
 	ui.label("Shader");
 
-	let (mut panels_renderer_shader, _) =
-		locker.blocking_rwlock_write::<PanelsRendererShader>(&shared.panels_renderer_shader);
+	let (mut panels_renderer_shader, _) = shared.panels_renderer_shader.blocking_write(locker);
 	let cur_shader = &mut panels_renderer_shader.shader;
 	egui::ComboBox::from_id_source("Shader selection menu")
 		.selected_text(cur_shader.name())
