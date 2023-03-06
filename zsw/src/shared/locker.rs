@@ -58,25 +58,25 @@ macro locker_impls(
 	fn $new:ident(...) -> ...;
 
 	async_mutex {
-		$( $async_mutex_name:ident($async_mutex_ty:ty) = [ $( $async_mutex_cur:literal )* ] => $async_mutex_next:literal ),* $(,)?
+		$( $AsyncMutexName:ident($AsyncMutexInner:ty) = [ $( $ASYNC_MUTEX_CUR_STATE:literal )* ] => $ASYNC_MUTEX_NEXT_STATE:literal ),* $(,)?
 	}
 
 	async_rwlock {
-		$( $async_rwlock_name:ident($async_rwlock_ty:ty) = [ $( $async_rwlock_cur:literal )* ] => $async_rwlock_next:literal ),* $(,)?
+		$( $AsyncRwLockName:ident($AsyncRwLockInner:ty) = [ $( $ASYNC_RWLOCK_CUR_STATE:literal )* ] => $ASYNC_RWLOCK_NEXT_STATE:literal ),* $(,)?
 	}
 
 	meetup_sender {
-		$( $meetup_sender_name:ident($meetup_sender_ty:ty) = [ $( $meetup_sender_cur:literal )* ] ),* $(,)?
+		$( $MeetupName:ident($MeetupInner:ty) = [ $( $MEETUP_CUR_STATE:literal )* ] ),* $(,)?
 	}
 ) {
 	$(
 		mutex::resource_impl! {
-			$async_mutex_name($async_mutex_ty);
+			$AsyncMutexName($AsyncMutexInner);
 			fn $new(...) -> ...;
 
 			states {
 				$(
-					$async_mutex_cur => $async_mutex_next,
+					$ASYNC_MUTEX_CUR_STATE => $ASYNC_MUTEX_NEXT_STATE,
 				)*
 			}
 		}
@@ -84,12 +84,12 @@ macro locker_impls(
 
 	$(
 		rwlock::resource_impl! {
-			$async_rwlock_name($async_rwlock_ty);
+			$AsyncRwLockName($AsyncRwLockInner);
 			fn $new(...) -> ...;
 
 			states {
 				$(
-					$async_rwlock_cur => $async_rwlock_next,
+					$ASYNC_RWLOCK_CUR_STATE => $ASYNC_RWLOCK_NEXT_STATE,
 				)*
 			}
 		}
@@ -97,11 +97,11 @@ macro locker_impls(
 
 	$(
 		meetup::resource_impl! {
-			$meetup_sender_name($meetup_sender_ty);
+			$MeetupName($MeetupInner);
 			fn $new(...) -> ...;
 
 			states {
-				$( $meetup_sender_cur, )*
+				$( $MEETUP_CUR_STATE, )*
 			}
 		}
 	)*
