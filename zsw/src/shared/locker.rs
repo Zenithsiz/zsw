@@ -40,17 +40,27 @@ locker_impls! {
 	fn new(...) -> ...;
 
 	async_mutex {
-		CurPanelGroupMutex(Option<PanelGroup>) = [ 0 ] => 1,
+		CurPanelGroupMutex(Option<PanelGroup>) {
+			0 => 1,
+		},
 	}
 
 	async_rwlock {
-		PlaylistsRwLock(Playlists) = [ 0 ] => 1,
-		PanelsRendererShaderRwLock(PanelsRendererShader) = [ 0 1 ] => 2,
+		PlaylistsRwLock(Playlists) {
+			0 => 1,
+		},
+		PanelsRendererShaderRwLock(PanelsRendererShader) {
+			0, 1 => 2,
+		},
 	}
 
 	meetup_sender {
-		PanelsUpdaterMeetupSender(()) = [ 0 ],
-		EguiPainterRendererMeetupSender((Vec<egui::ClippedPrimitive>, egui::TexturesDelta)) = [ 0 ],
+		PanelsUpdaterMeetupSender(()) {
+			0,
+		},
+		EguiPainterRendererMeetupSender((Vec<egui::ClippedPrimitive>, egui::TexturesDelta)) {
+			0,
+		},
 	}
 }
 
@@ -58,15 +68,33 @@ macro locker_impls(
 	fn $new:ident(...) -> ...;
 
 	async_mutex {
-		$( $AsyncMutexName:ident($AsyncMutexInner:ty) = [ $( $ASYNC_MUTEX_CUR_STATE:literal )* ] => $ASYNC_MUTEX_NEXT_STATE:literal ),* $(,)?
+		$(
+			$AsyncMutexName:ident($AsyncMutexInner:ty) {
+				$( $( $ASYNC_MUTEX_CUR_STATE:literal ),* $(,)? => $ASYNC_MUTEX_NEXT_STATE:literal ),*
+				$(,)?
+			}
+		),*
+		$(,)?
 	}
 
 	async_rwlock {
-		$( $AsyncRwLockName:ident($AsyncRwLockInner:ty) = [ $( $ASYNC_RWLOCK_CUR_STATE:literal )* ] => $ASYNC_RWLOCK_NEXT_STATE:literal ),* $(,)?
+		$(
+			$AsyncRwLockName:ident($AsyncRwLockInner:ty) {
+				$( $( $ASYNC_RWLOCK_CUR_STATE:literal ),* $(,)? => $ASYNC_RWLOCK_NEXT_STATE:literal ),*
+				$(,)?
+			}
+		),*
+		$(,)?
 	}
 
 	meetup_sender {
-		$( $MeetupName:ident($MeetupInner:ty) = [ $( $MEETUP_CUR_STATE:literal )* ] ),* $(,)?
+		$(
+			$MeetupName:ident($MeetupInner:ty) {
+				$( $MEETUP_CUR_STATE:literal ),*
+				$(,)?
+			}
+		),*
+		$(,)?
 	}
 ) {
 	$(
@@ -76,7 +104,9 @@ macro locker_impls(
 
 			states {
 				$(
-					$ASYNC_MUTEX_CUR_STATE => $ASYNC_MUTEX_NEXT_STATE,
+					$(
+						$ASYNC_MUTEX_CUR_STATE => $ASYNC_MUTEX_NEXT_STATE,
+					)*
 				)*
 			}
 		}
@@ -89,7 +119,9 @@ macro locker_impls(
 
 			states {
 				$(
-					$ASYNC_RWLOCK_CUR_STATE => $ASYNC_RWLOCK_NEXT_STATE,
+					$(
+						$ASYNC_RWLOCK_CUR_STATE => $ASYNC_RWLOCK_NEXT_STATE,
+					)*
 				)*
 			}
 		}
