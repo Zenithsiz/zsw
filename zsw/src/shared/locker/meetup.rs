@@ -40,7 +40,7 @@ pub trait MeetupSenderLocker<R> {}
 
 /// Creates a meetup resource type
 pub macro resource_impl(
-	$Name:ident($Inner:ty);
+	$Name:ident { $field:ident: $Inner:ty };
 	fn $new:ident(...) -> ...;
 
 	states {
@@ -48,13 +48,15 @@ pub macro resource_impl(
 	}
 ) {
 	#[derive(Debug)]
-	pub struct $Name(meetup::Sender<$Inner>);
+	pub struct $Name {
+		$field: meetup::Sender<$Inner>
+	}
 
 	impl $Name {
 		/// Creates the rwlock
 		// TODO: Not receive a built sender and instead create a `(Sender, Receiver)` pair?
 		pub fn $new(inner: meetup::Sender<$Inner>) -> Self {
-			Self(inner)
+			Self { $field: inner }
 		}
 	}
 
@@ -63,7 +65,7 @@ pub macro resource_impl(
 		type Inner = $Inner;
 
 		fn as_inner(&self) -> &meetup::Sender<Self::Inner> {
-			&self.0
+			&self.$field
 		}
 	}
 

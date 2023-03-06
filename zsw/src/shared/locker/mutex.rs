@@ -68,7 +68,7 @@ pub trait AsyncMutexLocker<R> {
 
 /// Creates a mutex resource type
 pub macro resource_impl(
-	$Name:ident($Inner:ty);
+	$Name:ident { $field:ident: $Inner:ty };
 	fn $new:ident(...) -> ...;
 
 	states {
@@ -76,12 +76,14 @@ pub macro resource_impl(
 	}
 ) {
 	#[derive(Debug)]
-	pub struct $Name(Mutex<$Inner>);
+	pub struct $Name {
+		$field: Mutex<$Inner>
+	}
 
 	impl $Name {
 		/// Creates the mutex
 		pub fn $new(inner: $Inner) -> Self {
-			Self(Mutex::new(inner))
+			Self { $field: Mutex::new(inner) }
 		}
 	}
 
@@ -90,7 +92,7 @@ pub macro resource_impl(
 		type Inner = $Inner;
 
 		fn as_inner(&self) -> &Mutex<Self::Inner> {
-			&self.0
+			&self.$field
 		}
 	}
 

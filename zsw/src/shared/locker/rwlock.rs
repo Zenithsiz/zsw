@@ -107,7 +107,7 @@ pub trait AsyncRwLockLocker<R> {
 
 /// Creates a rwlock resource type
 pub macro resource_impl(
-	$Name:ident($Inner:ty);
+	$Name:ident { $field:ident: $Inner:ty };
 	fn $new:ident(...) -> ...;
 
 	states {
@@ -115,12 +115,14 @@ pub macro resource_impl(
 	}
 ) {
 	#[derive(Debug)]
-	pub struct $Name(RwLock<$Inner>);
+	pub struct $Name {
+		$field: RwLock<$Inner>
+	}
 
 	impl $Name {
 		/// Creates the rwlock
 		pub fn $new(inner: $Inner) -> Self {
-			Self(RwLock::new(inner))
+			Self { $field: RwLock::new(inner) }
 		}
 	}
 
@@ -129,7 +131,7 @@ pub macro resource_impl(
 		type Inner = $Inner;
 
 		fn as_inner(&self) -> &RwLock<Self::Inner> {
-			&self.0
+			&self.$field
 		}
 	}
 

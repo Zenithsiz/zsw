@@ -206,7 +206,7 @@ macro locker_impls(
 ) {
 	$(
 		mutex::resource_impl! {
-			$AsyncMutexName($AsyncMutexInner);
+			$AsyncMutexName { inner: $AsyncMutexInner };
 			fn $new(...) -> ...;
 
 			states {
@@ -221,7 +221,7 @@ macro locker_impls(
 
 	$(
 		rwlock::resource_impl! {
-			$AsyncRwLockName($AsyncRwLockInner);
+			$AsyncRwLockName { inner: $AsyncRwLockInner };
 			fn $new(...) -> ...;
 
 			states {
@@ -236,7 +236,7 @@ macro locker_impls(
 
 	$(
 		meetup::resource_impl! {
-			$MeetupName($MeetupInner);
+			$MeetupName { inner: $MeetupInner };
 			fn $new(...) -> ...;
 
 			states {
