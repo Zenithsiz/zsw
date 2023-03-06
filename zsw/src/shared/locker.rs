@@ -140,23 +140,22 @@ impl<const STATE: usize> Locker<STATE> {
 	}
 }
 
-mod sealed {
-	/// Locker for `tokio::sync::Mutex<R>`
-	pub trait AsyncMutexLocker<R> {
-		const NEXT_STATE: usize;
-	}
-
-	/// Locker for `tokio::sync::RwLock<R>`
-	pub trait AsyncRwLockLocker<R> {
-		const NEXT_STATE: usize;
-	}
-
-	/// Locker for `zsw_util::meetup::Sender<R>`
-	// Note: No `NEXT_STATE`, as we don't keep anything locked.
-	pub trait MeetupSenderLocker<R> {}
+/// Locker for `tokio::sync::Mutex<R>`
+#[sealed::sealed]
+pub trait AsyncMutexLocker<R> {
+	const NEXT_STATE: usize;
 }
-#[allow(clippy::wildcard_imports)] // It just contains the sealed traits
-use sealed::*;
+
+/// Locker for `tokio::sync::RwLock<R>`
+#[sealed::sealed]
+pub trait AsyncRwLockLocker<R> {
+	const NEXT_STATE: usize;
+}
+
+/// Locker for `zsw_util::meetup::Sender<R>`
+// Note: No `NEXT_STATE`, as we don't keep anything locked.
+#[sealed::sealed]
+pub trait MeetupSenderLocker<R> {}
 
 
 locker_impls! {
@@ -190,6 +189,7 @@ macro locker_impls(
 ) {
 	$(
 		$(
+			#[sealed::sealed]
 			impl AsyncMutexLocker<$async_mutex_ty> for Locker<$async_mutex_cur> {
 				const NEXT_STATE: usize = $async_mutex_next;
 			}
@@ -198,6 +198,7 @@ macro locker_impls(
 
 	$(
 		$(
+			#[sealed::sealed]
 			impl AsyncRwLockLocker<$async_rwlock_ty> for Locker<$async_rwlock_cur> {
 				const NEXT_STATE: usize = $async_rwlock_next;
 			}
@@ -206,9 +207,8 @@ macro locker_impls(
 
 	$(
 		$(
-			impl MeetupSenderLocker<$meetup_sender_ty> for Locker<$meetup_sender_cur> {
-
-			}
+			#[sealed::sealed]
+			impl MeetupSenderLocker<$meetup_sender_ty> for Locker<$meetup_sender_cur> { }
 		)*
 	)*
 }
