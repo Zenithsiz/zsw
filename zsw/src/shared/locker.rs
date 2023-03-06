@@ -6,14 +6,18 @@
 	reason = "DEADLOCK: We ensure thread safety via the locker abstraction"
 )]
 
+// Modules
+mod meetup;
+mod mutex;
+mod rwlock;
+
+// Exports
+pub use self::{meetup::MeetupSenderResourceExt, mutex::AsyncMutexResourceExt, rwlock::AsyncRwLockResourceExt};
+
 // Imports
-use {
-	crate::{
-		panel::{PanelGroup, PanelsRendererShader},
-		playlist::Playlists,
-	},
-	tokio::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard},
-	zsw_util::meetup,
+use crate::{
+	panel::{PanelGroup, PanelsRendererShader},
+	playlist::Playlists,
 };
 
 /// Locker
@@ -30,185 +34,6 @@ impl Locker<0> {
 		Self(())
 	}
 }
-
-/// Async mutex `tokio::sync::Mutex<R>` resource
-#[sealed::sealed]
-pub trait AsyncMutexResource {
-	/// Inner type
-	type Inner;
-
-	/// Returns the inner mutex
-	fn as_inner(&self) -> &Mutex<Self::Inner>;
-}
-
-/// Async mutex `tokio::sync::Mutex<R>` resource extension trait
-#[extend::ext(name = AsyncMutexResourceExt)]
-#[sealed::sealed]
-pub impl<R: AsyncMutexResource> R {
-	/// Locks this mutex
-	#[track_caller]
-	async fn lock<'locker, const STATE: usize>(
-		&'locker self,
-		_locker: &'locker mut Locker<STATE>,
-	) -> (
-		MutexGuard<'locker, R::Inner>,
-		Locker<{ <Locker<STATE> as AsyncMutexLocker<R>>::NEXT_STATE }>,
-	)
-	where
-		Locker<STATE>: AsyncMutexLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<STATE> as AsyncMutexLocker<R>>::NEXT_STATE]:,
-	{
-		let guard = self.as_inner().lock().await;
-		(guard, Locker(()))
-	}
-
-	/// Locks this mutex blockingly
-	#[track_caller]
-	fn blocking_lock<'locker, const STATE: usize>(
-		&'locker self,
-		_locker: &'locker mut Locker<STATE>,
-	) -> (
-		MutexGuard<'locker, R::Inner>,
-		Locker<{ <Locker<STATE> as AsyncMutexLocker<R>>::NEXT_STATE }>,
-	)
-	where
-		Locker<STATE>: AsyncMutexLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<STATE> as AsyncMutexLocker<R>>::NEXT_STATE]:,
-	{
-		let guard = self.as_inner().blocking_lock();
-		(guard, Locker(()))
-	}
-}
-
-/// Locker for `tokio::sync::Mutex<R>`
-#[sealed::sealed]
-pub trait AsyncMutexLocker<R> {
-	const NEXT_STATE: usize;
-}
-
-/// Async rwlock `tokio::sync::RwLock<R>` resource
-#[sealed::sealed]
-pub trait AsyncRwLockResource {
-	/// Inner type
-	type Inner;
-
-	/// Returns the inner rwlock
-	fn as_inner(&self) -> &RwLock<Self::Inner>;
-}
-
-/// Async rwlock `tokio::sync::RwLock<R>` resource extension trait
-#[extend::ext(name = AsyncRwLockResourceExt)]
-#[sealed::sealed]
-pub impl<R: AsyncRwLockResource> R {
-	/// Locks this rwlock for reads
-	#[track_caller]
-	async fn read<'locker, const STATE: usize>(
-		&'locker self,
-		_locker: &'locker mut Locker<STATE>,
-	) -> (
-		RwLockReadGuard<'locker, R::Inner>,
-		Locker<{ <Locker<STATE> as AsyncRwLockLocker<R>>::NEXT_STATE }>,
-	)
-	where
-		Locker<STATE>: AsyncRwLockLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<STATE> as AsyncRwLockLocker<R>>::NEXT_STATE]:,
-	{
-		let guard = self.as_inner().read().await;
-		(guard, Locker(()))
-	}
-
-	/// Locks this rwlock for reads blockingly
-	#[track_caller]
-	fn blocking_read<'locker, const STATE: usize>(
-		&'locker self,
-		_locker: &'locker mut Locker<STATE>,
-	) -> (
-		RwLockReadGuard<'locker, R::Inner>,
-		Locker<{ <Locker<STATE> as AsyncRwLockLocker<R>>::NEXT_STATE }>,
-	)
-	where
-		Locker<STATE>: AsyncRwLockLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<STATE> as AsyncRwLockLocker<R>>::NEXT_STATE]:,
-	{
-		let guard = self.as_inner().blocking_read();
-		(guard, Locker(()))
-	}
-
-	/// Locks this rwlock for writes
-	#[track_caller]
-	async fn write<'locker, const STATE: usize>(
-		&'locker self,
-		_locker: &'locker mut Locker<STATE>,
-	) -> (
-		RwLockWriteGuard<'locker, R::Inner>,
-		Locker<{ <Locker<STATE> as AsyncRwLockLocker<R>>::NEXT_STATE }>,
-	)
-	where
-		Locker<STATE>: AsyncRwLockLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<STATE> as AsyncRwLockLocker<R>>::NEXT_STATE]:,
-	{
-		let guard = self.as_inner().write().await;
-		(guard, Locker(()))
-	}
-
-	/// Locks this rwlock for writes blockingly
-	#[track_caller]
-	fn blocking_write<'locker, const STATE: usize>(
-		&'locker self,
-		_locker: &'locker mut Locker<STATE>,
-	) -> (
-		RwLockWriteGuard<'locker, R::Inner>,
-		Locker<{ <Locker<STATE> as AsyncRwLockLocker<R>>::NEXT_STATE }>,
-	)
-	where
-		Locker<STATE>: AsyncRwLockLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<STATE> as AsyncRwLockLocker<R>>::NEXT_STATE]:,
-	{
-		let guard = self.as_inner().blocking_write();
-		(guard, Locker(()))
-	}
-}
-
-/// Locker for `tokio::sync::RwLock<R>`
-#[sealed::sealed]
-pub trait AsyncRwLockLocker<R> {
-	const NEXT_STATE: usize;
-}
-
-/// Meetup sender `zsw_util::meetup::Sender<R>` resource
-#[sealed::sealed]
-pub trait MeetupSenderResource {
-	/// Inner type
-	type Inner;
-
-	/// Returns the inner meetup sender
-	fn as_inner(&self) -> &meetup::Sender<Self::Inner>;
-}
-
-/// Meetup sender `zsw_util::meetup::Sender<R>` resource extension trait
-#[extend::ext(name = MeetupSenderResourceExt)]
-#[sealed::sealed]
-pub impl<R: MeetupSenderResource> R {
-	/// Sends the resource `R` to this meetup channel
-	#[track_caller]
-	async fn send<'locker, const STATE: usize>(&'locker self, _locker: &'locker mut Locker<STATE>, resource: R::Inner)
-	where
-		Locker<STATE>: MeetupSenderLocker<R>,
-	{
-		self.as_inner().send(resource).await;
-	}
-}
-
-/// Locker for `zsw_util::meetup::Sender<R>`
-// Note: No `NEXT_STATE`, as we don't keep anything locked.
-#[sealed::sealed]
-pub trait MeetupSenderLocker<R> {}
 
 
 locker_impls! {
@@ -245,86 +70,39 @@ macro locker_impls(
 	}
 ) {
 	$(
-		#[derive(Debug)]
-		pub struct $async_mutex_name(Mutex<$async_mutex_ty>);
+		mutex::resource_impl! {
+			$async_mutex_name($async_mutex_ty);
+			fn $new(...) -> ...;
 
-		impl $async_mutex_name {
-			/// Creates the mutex
-			pub fn $new(inner: $async_mutex_ty) -> Self {
-				Self(Mutex::new(inner))
+			states {
+				$(
+					$async_mutex_cur => $async_mutex_next,
+				)*
 			}
 		}
-
-		#[sealed::sealed]
-		impl AsyncMutexResource for $async_mutex_name {
-			type Inner = $async_mutex_ty;
-
-			fn as_inner(&self) -> &Mutex<Self::Inner> {
-				&self.0
-			}
-		}
-
-
-		$(
-			#[sealed::sealed]
-			impl AsyncMutexLocker<$async_mutex_name> for Locker<$async_mutex_cur> {
-				const NEXT_STATE: usize = $async_mutex_next;
-			}
-		)*
 	)*
 
 	$(
-		#[derive(Debug)]
-		pub struct $async_rwlock_name(RwLock<$async_rwlock_ty>);
+		rwlock::resource_impl! {
+			$async_rwlock_name($async_rwlock_ty);
+			fn $new(...) -> ...;
 
-		impl $async_rwlock_name {
-			/// Creates the rwlock
-			pub fn $new(inner: $async_rwlock_ty) -> Self {
-				Self(RwLock::new(inner))
+			states {
+				$(
+					$async_rwlock_cur => $async_rwlock_next,
+				)*
 			}
 		}
-
-		#[sealed::sealed]
-		impl AsyncRwLockResource for $async_rwlock_name {
-			type Inner = $async_rwlock_ty;
-
-			fn as_inner(&self) -> &RwLock<Self::Inner> {
-				&self.0
-			}
-		}
-
-		$(
-			#[sealed::sealed]
-			impl AsyncRwLockLocker<$async_rwlock_name> for Locker<$async_rwlock_cur> {
-				const NEXT_STATE: usize = $async_rwlock_next;
-			}
-		)*
 	)*
 
 	$(
-		#[derive(Debug)]
-		pub struct $meetup_sender_name(meetup::Sender<$meetup_sender_ty>);
+		meetup::resource_impl! {
+			$meetup_sender_name($meetup_sender_ty);
+			fn $new(...) -> ...;
 
-		impl $meetup_sender_name {
-			/// Creates the meetup sender
-			// TODO: Not receive a built sender and instead create a `(Sender, Receiver)` pair?
-			pub fn $new(inner: meetup::Sender<$meetup_sender_ty>) -> Self {
-				Self(inner)
+			states {
+				$( $meetup_sender_cur, )*
 			}
 		}
-
-		#[sealed::sealed]
-		impl MeetupSenderResource for $meetup_sender_name {
-			type Inner = $meetup_sender_ty;
-
-			fn as_inner(&self) -> &meetup::Sender<Self::Inner> {
-				&self.0
-			}
-		}
-
-		$(
-			#[sealed::sealed]
-			impl MeetupSenderLocker<$meetup_sender_name> for Locker<$meetup_sender_cur> { }
-		)*
 	)*
 }
