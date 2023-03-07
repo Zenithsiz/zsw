@@ -1,5 +1,8 @@
 //! Playlist
 
+// Modules
+mod ser;
+
 // Imports
 use {
 	anyhow::Context,
@@ -43,7 +46,6 @@ impl Playlists {
 
 /// Playlist
 #[derive(Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Playlist {
 	/// All items
 	items: Vec<PlaylistItem>,
@@ -73,44 +75,26 @@ impl Playlist {
 
 /// Playlist item
 #[derive(Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
 pub struct PlaylistItem {
 	/// Enabled
-	#[serde(default = "PlaylistItem::default_enabled")]
 	pub enabled: bool,
 
 	/// Kind
-	#[serde(flatten)]
 	pub kind: PlaylistItemKind,
 }
 
-impl PlaylistItem {
-	fn default_enabled() -> bool {
-		true
-	}
-}
 /// Playlist item kind
 #[derive(Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
 pub enum PlaylistItemKind {
 	/// Directory
 	Directory {
 		path: PathBuf,
 
-		#[serde(default = "PlaylistItemKind::default_directory_recursive")]
 		recursive: bool,
 	},
 
 	/// File
 	File { path: PathBuf },
-}
-
-impl PlaylistItemKind {
-	fn default_directory_recursive() -> bool {
-		true
-	}
 }
 
 /// Creates the playlists service
@@ -139,7 +123,16 @@ pub async fn create(base_dir: PathBuf) -> Result<(PlaylistsManager, Playlists), 
 			let playlist_yaml = tokio::fs::read(&path).await.context("Unable to open file")?;
 
 			// And load it
-			let playlist = serde_yaml::from_slice(&playlist_yaml).context("Unable to parse playlist")?;
+			let playlist = serde_yaml::from_slice::<ser::Playlist>(&playlist_yaml).context("Unable to parse playlist")?;
+			let playlist = Playlist {
+				items: playlist.items.into_iter().map(|item| PlaylistItem {
+					enabled: item.enabled,
+					kind: match item.kind {
+						ser::PlaylistItemKind::Directory { path, recursive } => PlaylistItemKind::Directory { path, recursive },
+						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path },
+					},
+				}).collect(),
+			};
 
 			Ok::<_, anyhow::Error>(Some((name.to_owned(), playlist)))
 		})
