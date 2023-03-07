@@ -169,6 +169,7 @@ pub impl<I: Iterator> I {
 }
 
 locker_impls! {
+	inner;
 	fn new(...) -> ...;
 
 	async_mutex {
@@ -197,6 +198,7 @@ locker_impls! {
 }
 
 macro locker_impls(
+	$inner:ident;
 	fn $new:ident(...) -> ...;
 
 	async_mutex {
@@ -231,7 +233,7 @@ macro locker_impls(
 ) {
 	$(
 		mutex::resource_impl! {
-			$AsyncMutexName { inner: $AsyncMutexInner };
+			$AsyncMutexName { $inner: $AsyncMutexInner };
 			fn $new(...) -> ...;
 
 			states {
@@ -246,7 +248,7 @@ macro locker_impls(
 
 	$(
 		rwlock::resource_impl! {
-			$AsyncRwLockName { inner: $AsyncRwLockInner };
+			$AsyncRwLockName { $inner: $AsyncRwLockInner };
 			fn $new(...) -> ...;
 
 			states {
@@ -261,7 +263,7 @@ macro locker_impls(
 
 	$(
 		meetup::resource_impl! {
-			$MeetupName { inner: $MeetupInner };
+			$MeetupName { $inner: $MeetupInner };
 			fn $new(...) -> ...;
 
 			states {
