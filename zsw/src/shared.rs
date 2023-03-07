@@ -10,9 +10,12 @@ pub use self::locker::{
 	CurPanelGroupMutex,
 	EguiPainterRendererMeetupSender,
 	Locker,
+	LockerIteratorExt,
 	MeetupSenderResourceExt,
 	PanelsRendererShaderRwLock,
 	PanelsUpdaterMeetupSender,
+	PlaylistItemRwLock,
+	PlaylistRwLock,
 	PlaylistsRwLock,
 };
 

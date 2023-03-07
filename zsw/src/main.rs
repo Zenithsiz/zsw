@@ -263,14 +263,14 @@ async fn load_default_panel_group(
 	};
 
 	// Else load the panel group
-	let (playlists, _) = shared.playlists.read(&mut locker).await;
 	let loaded_panel_group = match shared
 		.panels_manager
 		.load(
 			default_panel_group,
 			&shared.wgpu,
 			&shared.panels_renderer_layout,
-			&playlists,
+			&shared.playlists,
+			&mut locker,
 		)
 		.await
 	{
@@ -285,7 +285,6 @@ async fn load_default_panel_group(
 	};
 
 	// And set it as the current one
-	mem::drop(playlists);
 	let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).await;
 	*panel_group = Some(loaded_panel_group);
 

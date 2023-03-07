@@ -2,10 +2,13 @@
 
 // Imports
 use {
-	crate::playlist::{Playlist, PlaylistItemKind},
+	crate::{
+		playlist::PlaylistItemKind,
+		shared::{AsyncRwLockResourceExt, Locker, LockerIteratorExt, PlaylistRwLock},
+	},
 	anyhow::Context,
 	async_walkdir::WalkDir,
-	futures::{stream::FuturesUnordered, TryStreamExt},
+	futures::TryStreamExt,
 	rand::{rngs::StdRng, seq::SliceRandom, SeedableRng},
 	std::{collections::HashSet, path::Path, sync::Arc},
 	tokio_stream::wrappers::ReadDirStream,
@@ -26,11 +29,10 @@ pub struct PlaylistPlayer {
 
 impl PlaylistPlayer {
 	/// Creates a new player from a playlist
-	pub async fn new(playlist: &Playlist) -> Result<Self, anyhow::Error> {
-		let items = Self::get_playlist_items(playlist)
+	pub async fn new(playlist: &PlaylistRwLock, locker: &mut Locker<'_, 0>) -> Result<Self, anyhow::Error> {
+		let items = Self::get_playlist_items(playlist, locker)
 			.await
 			.context("Unable to get all playlist items")?;
-		//
 
 		Ok(Self {
 			items,
@@ -71,11 +73,17 @@ impl PlaylistPlayer {
 	}
 
 	/// Collects all items of a playlist
-	async fn get_playlist_items(playlist: &Playlist) -> Result<HashSet<Arc<Path>>, anyhow::Error> {
-		let items = playlist
-			.items()
-			.iter()
-			.map(|item| async move {
+	async fn get_playlist_items(
+		playlist: &PlaylistRwLock,
+		locker: &mut Locker<'_, 0>,
+	) -> Result<HashSet<Arc<Path>>, anyhow::Error> {
+		let items = playlist.read(locker).await.0.items();
+
+		let items = items
+			.into_iter()
+			.split_locker_async_unordered(locker, |item, mut locker| async move {
+				let item = item.read(&mut locker).await.0.clone();
+
 				// If not enabled, don't return any items
 				if !item.enabled {
 					tracing::trace!(?item, "Ignoring non-enabled playlist item");
@@ -121,7 +129,6 @@ impl PlaylistPlayer {
 
 				Ok::<_, anyhow::Error>(item)
 			})
-			.collect::<FuturesUnordered<_>>()
 			.try_collect::<Vec<_>>()
 			.await
 			.context("Unable to collect all items")?

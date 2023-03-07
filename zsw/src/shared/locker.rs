@@ -18,7 +18,7 @@ pub use self::{meetup::MeetupSenderResourceExt, mutex::AsyncMutexResourceExt, rw
 use {
 	crate::{
 		panel::{PanelGroup, PanelsRendererShader},
-		playlist::Playlists,
+		playlist::{Playlist, PlaylistItem, Playlists},
 	},
 	futures::{stream::FuturesUnordered, Future, Stream},
 	std::{
@@ -180,6 +180,12 @@ locker_impls! {
 
 	async_rwlock {
 		PlaylistsRwLock(Playlists) {
+			0 => 1,
+		},
+		PlaylistRwLock(Playlist) {
+			0 => 1,
+		},
+		PlaylistItemRwLock(PlaylistItem) {
 			0 => 1,
 		},
 		PanelsRendererShaderRwLock(PanelsRendererShader) {

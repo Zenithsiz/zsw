@@ -76,10 +76,15 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0
 
 /// Draws the playlists tab
 fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0>) {
-	let (mut playlists, _) = shared.playlists.blocking_write(locker);
-	for (name, playlist) in playlists.get_all_mut() {
-		ui.collapsing(name, |ui| {
-			for item in playlist.items_mut() {
+	let playlists = shared.playlists.blocking_read(locker).0.get_all();
+
+	for (name, playlist) in playlists {
+		ui.collapsing(&*name, |ui| {
+			let items = playlist.blocking_read(locker).0.items();
+
+			for item in items {
+				let (mut item, _) = item.blocking_write(locker);
+
 				ui.checkbox(&mut item.enabled, "Enabled");
 				match &mut item.kind {
 					PlaylistItemKind::Directory { path, recursive } => {

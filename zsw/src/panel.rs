@@ -21,11 +21,11 @@ pub use self::{
 use {
 	crate::{
 		image_loader::ImageRequester,
-		playlist::{Playlist, Playlists},
+		shared::{AsyncRwLockResourceExt, Locker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
 		wgpu_wrapper::WgpuShared,
 	},
 	anyhow::Context,
-	futures::{stream::FuturesUnordered, TryStreamExt},
+	futures::TryStreamExt,
 	std::path::PathBuf,
 	zsw_util::{PathAppendExt, Rect},
 };
@@ -49,7 +49,8 @@ impl PanelsManager {
 		name: &str,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
-		playlists: &Playlists,
+		playlists: &PlaylistsRwLock,
+		locker: &mut Locker<'_, 0>,
 	) -> Result<PanelGroup, anyhow::Error> {
 		// Try to read the file
 		let path = self.base_dir.join(name).with_appended(".yaml");
@@ -64,7 +65,7 @@ impl PanelsManager {
 		let panels = panel_group
 			.panels
 			.into_iter()
-			.map(async move |panel| {
+			.split_locker_async_unordered(locker, async move |panel, mut locker| {
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
 				let state = PanelState {
 					paused:       false,
@@ -77,13 +78,17 @@ impl PanelsManager {
 						reverse: panel.state.reverse_parallax,
 					},
 				};
-				let playlist = playlists.get(&panel.playlist).context("Unable to load playlist")?;
+				let playlist = playlists
+					.read(&mut locker)
+					.await
+					.0
+					.get(&panel.playlist)
+					.context("Unable to load playlist")?;
 
-				Panel::new(wgpu_shared, renderer_layouts, geometries, state, playlist)
+				Panel::new(wgpu_shared, renderer_layouts, geometries, state, &playlist, &mut locker)
 					.await
 					.context("Unable to create panel")
 			})
-			.collect::<FuturesUnordered<_>>()
 			.try_collect()
 			.await
 			.context("Unable to create panels")?;
@@ -140,7 +145,8 @@ impl Panel {
 		renderer_layouts: &PanelsRendererLayouts,
 		geometries: Vec<Rect<i32, u32>>,
 		state: PanelState,
-		playlist: &Playlist,
+		playlist: &PlaylistRwLock,
+		locker: &mut Locker<'_, 0>,
 	) -> Result<Self, anyhow::Error> {
 		Ok(Self {
 			geometries: geometries
@@ -148,7 +154,7 @@ impl Panel {
 				.map(|geometry| PanelGeometry::new(wgpu_shared, renderer_layouts, geometry))
 				.collect(),
 			state,
-			playlist_player: PlaylistPlayer::new(playlist)
+			playlist_player: PlaylistPlayer::new(playlist, locker)
 				.await
 				.context("Unable to create playlist player")?,
 			images: PanelImages::new(wgpu_shared, renderer_layouts),

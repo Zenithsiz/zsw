@@ -5,9 +5,15 @@ mod ser;
 
 // Imports
 use {
+	crate::shared::{PlaylistItemRwLock, PlaylistRwLock},
 	anyhow::Context,
 	futures::{StreamExt, TryStreamExt},
-	std::{collections::HashMap, ffi::OsStr, path::PathBuf},
+	std::{
+		collections::HashMap,
+		ffi::OsStr,
+		path::{Path, PathBuf},
+		sync::Arc,
+	},
 	tokio_stream::wrappers::ReadDirStream,
 };
 
@@ -26,20 +32,21 @@ pub struct Playlists {
 	// Note: We keep all playlists loaded due to them being likely small in both size and quantity.
 	//       Even a playlist with 10k file entries, with an average path of 200 bytes, would only occupy
 	//       ~2 MiB. This is far less than the size of most images we load.
-	playlists: HashMap<String, Playlist>,
+	playlists: HashMap<Arc<str>, Arc<PlaylistRwLock>>,
 }
 
 impl Playlists {
 	/// Retrieves a playlist
-	pub fn get(&self, name: &str) -> Option<&Playlist> {
-		self.playlists.get(name)
+	pub fn get(&self, name: &str) -> Option<Arc<PlaylistRwLock>> {
+		self.playlists.get(name).map(Arc::clone)
 	}
 
-	/// Returns an iterator over all playlists mutably
-	pub fn get_all_mut(&mut self) -> impl Iterator<Item = (&str, &mut Playlist)> {
+	/// Returns all items
+	pub fn get_all(&self) -> Vec<(Arc<str>, Arc<PlaylistRwLock>)> {
 		self.playlists
-			.iter_mut()
-			.map(|(name, playlist)| (name.as_str(), playlist))
+			.iter()
+			.map(|(name, playlist)| (Arc::clone(name), Arc::clone(playlist)))
+			.collect()
 	}
 }
 
@@ -48,33 +55,18 @@ impl Playlists {
 #[derive(Debug)]
 pub struct Playlist {
 	/// All items
-	items: Vec<PlaylistItem>,
+	items: Vec<Arc<PlaylistItemRwLock>>,
 }
 
 impl Playlist {
-	/// Creates a new playlist
-	pub fn _new() -> Self {
-		Self { items: vec![] }
-	}
-
-	/// Adds an item to this playlist
-	pub fn _add(&mut self, item: PlaylistItem) {
-		self.items.push(item);
-	}
-
 	/// Returns all items
-	pub fn items(&self) -> &[PlaylistItem] {
-		self.items.as_ref()
-	}
-
-	/// Returns all items mutably
-	pub fn items_mut(&mut self) -> &mut [PlaylistItem] {
-		self.items.as_mut()
+	pub fn items(&self) -> Vec<Arc<PlaylistItemRwLock>> {
+		self.items.clone()
 	}
 }
 
 /// Playlist item
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PlaylistItem {
 	/// Enabled
 	pub enabled: bool,
@@ -84,17 +76,17 @@ pub struct PlaylistItem {
 }
 
 /// Playlist item kind
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum PlaylistItemKind {
 	/// Directory
 	Directory {
-		path: PathBuf,
+		path: Arc<Path>,
 
 		recursive: bool,
 	},
 
 	/// File
-	File { path: PathBuf },
+	File { path: Arc<Path> },
 }
 
 /// Creates the playlists service
@@ -128,13 +120,13 @@ pub async fn create(base_dir: PathBuf) -> Result<(PlaylistsManager, Playlists), 
 				items: playlist.items.into_iter().map(|item| PlaylistItem {
 					enabled: item.enabled,
 					kind: match item.kind {
-						ser::PlaylistItemKind::Directory { path, recursive } => PlaylistItemKind::Directory { path, recursive },
-						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path },
+						ser::PlaylistItemKind::Directory { path, recursive } => PlaylistItemKind::Directory { path: path.into(), recursive },
+						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path: path.into() },
 					},
-				}).collect(),
+				}).map(PlaylistItemRwLock::new).map(Arc::new).collect(),
 			};
 
-			Ok::<_, anyhow::Error>(Some((name.to_owned(), playlist)))
+			Ok::<_, anyhow::Error>(Some((name.to_owned().into(), Arc::new(PlaylistRwLock::new(playlist)))))
 		})
 		.try_collect::<Vec<_>>()
 		.await?
