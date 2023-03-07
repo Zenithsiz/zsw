@@ -20,7 +20,8 @@
 	exit_status_error,
 	lint_reasons,
 	closure_track_caller,
-	generic_const_exprs
+	generic_const_exprs,
+	once_cell
 )]
 #![allow(incomplete_features)]
 

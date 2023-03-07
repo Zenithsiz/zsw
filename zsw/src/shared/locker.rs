@@ -21,8 +21,11 @@ use {
 		playlist::Playlists,
 	},
 	std::{
-		ops::{Deref, DerefMut},
-		sync::atomic::{self, AtomicU64},
+		ops::Deref,
+		sync::{
+			atomic::{self, AtomicU64},
+			OnceLock,
+		},
 	},
 };
 
@@ -58,17 +61,17 @@ struct LockerInner {
 	/// Current task
 	///
 	/// Will be `None` if the locker hasn't been used yet.
-	cur_task: Option<CurTask>,
+	cur_task: OnceLock<CurTask>,
 }
 
 /// Locker inner kind
 #[derive(Debug)]
-enum LockerInnerKind<'locker> {
+enum LockerInnerKind<'prev> {
 	Owned(LockerInner),
-	Borrowed(&'locker mut LockerInner),
+	Borrowed(&'prev LockerInner),
 }
 
-impl<'locker> Deref for LockerInnerKind<'locker> {
+impl<'prev> Deref for LockerInnerKind<'prev> {
 	type Target = LockerInner;
 
 	fn deref(&self) -> &Self::Target {
@@ -79,23 +82,14 @@ impl<'locker> Deref for LockerInnerKind<'locker> {
 	}
 }
 
-impl<'locker> DerefMut for LockerInnerKind<'locker> {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		match self {
-			LockerInnerKind::Owned(inner) => inner,
-			LockerInnerKind::Borrowed(inner) => inner,
-		}
-	}
-}
-
 /// Locker
 #[derive(Debug)]
 // TODO: Simplify to `Locker(())` on release builds?
-pub struct Locker<'locker, const STATE: usize> {
-	inner: LockerInnerKind<'locker>,
+pub struct Locker<'prev, const STATE: usize> {
+	inner: LockerInnerKind<'prev>,
 }
 
-impl<'locker> Locker<'locker, 0> {
+impl<'prev> Locker<'prev, 0> {
 	/// Creates a new locker
 	///
 	/// # Deadlock
@@ -104,40 +98,50 @@ impl<'locker> Locker<'locker, 0> {
 		static ID: AtomicU64 = AtomicU64::new(0);
 
 		let id = ID.fetch_add(1, atomic::Ordering::AcqRel);
-		let inner = LockerInner { id, cur_task: None };
+		let inner = LockerInner {
+			id,
+			cur_task: OnceLock::new(),
+		};
 		Self {
 			inner: LockerInnerKind::Owned(inner),
 		}
 	}
 }
 
-impl<'locker, const STATE: usize> Locker<'locker, STATE> {
+impl<'prev, const STATE: usize> Locker<'prev, STATE> {
+	/// Clones this locker
+	///
+	/// # Deadlock
+	/// You must ensure only a single locker exists per-task, under stacked borrows
+	fn clone(&self) -> Locker<'_, STATE> {
+		Locker {
+			inner: LockerInnerKind::Borrowed(&self.inner),
+		}
+	}
+
 	/// Creates the next locker
 	///
 	/// # Deadlock
 	/// You must ensure only a single locker exists per-task, under stacked borrows
-	fn next<const NEXT_STATE: usize>(&mut self) -> Locker<'_, NEXT_STATE> {
+	fn next<const NEXT_STATE: usize>(&self) -> Locker<'_, NEXT_STATE> {
 		Locker {
-			inner: LockerInnerKind::Borrowed(&mut self.inner),
+			inner: LockerInnerKind::Borrowed(&self.inner),
 		}
 	}
 
 	/// Ensures the locker hasn't escaped it's initial task
-	fn ensure_same_task(&mut self) {
-		match self.inner.cur_task {
-			Some(task) => {
-				let cur_task = CurTask::get();
-				if cur_task != task {
-					tracing::error!(?task, ?cur_task, "Locker was used in two different tasks");
-				}
-			},
+	fn ensure_same_task(&self) {
+		// Get the task, or initialize it
+		let task = self.inner.cur_task.get_or_init(|| {
+			let cur_task = CurTask::get();
+			tracing::trace!(locker_id = ?self.inner.id, ?cur_task,"Assigned task to locker");
+			cur_task
+		});
 
-			// If we don't have a current task, set it to the current one
-			None => {
-				let cur_task = CurTask::get();
-				tracing::trace!(locker_id = ?self.inner.id, ?cur_task,"Assigned task to locker");
-				self.inner.cur_task = Some(cur_task);
-			},
+		// Then check if we're on a different task
+		let cur_task = CurTask::get();
+		if cur_task != *task {
+			tracing::error!(?task, ?cur_task, "Locker was used in two different tasks");
 		}
 	}
 }
