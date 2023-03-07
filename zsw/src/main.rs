@@ -21,7 +21,9 @@
 	lint_reasons,
 	closure_track_caller,
 	generic_const_exprs,
-	once_cell
+	once_cell,
+	return_position_impl_trait_in_trait,
+	associated_type_bounds
 )]
 #![allow(incomplete_features)]
 

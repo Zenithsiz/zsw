@@ -20,6 +20,7 @@ use {
 		panel::{PanelGroup, PanelsRendererShader},
 		playlist::Playlists,
 	},
+	futures::{stream::FuturesUnordered, Future, Stream},
 	std::{
 		ops::Deref,
 		sync::{
@@ -146,6 +147,26 @@ impl<'prev, const STATE: usize> Locker<'prev, STATE> {
 	}
 }
 
+/// Extension method for iterators using lockers
+#[extend::ext(name = LockerIteratorExt)]
+pub impl<I: Iterator> I {
+	/// Splits a locker across this iterator into an unordered stream
+	// TODO: Not require `Send` here.
+	// TODO: Not require `Fut::Output: 'static` and instead make `F` generic over `'cur`.
+	fn split_locker_async_unordered<'prev, 'cur, F, Fut, const STATE: usize>(
+		self,
+		locker: &'cur mut Locker<'prev, STATE>,
+		mut f: F,
+	) -> impl Stream<Item = Fut::Output> + 'cur
+	where
+		F: FnMut(I::Item, Locker<'cur, STATE>) -> Fut + 'cur,
+		Fut: Future<Output: 'static> + 'cur,
+	{
+		let locker = &*locker;
+		self.map(move |item| f(item, locker.clone()))
+			.collect::<FuturesUnordered<_>>()
+	}
+}
 
 locker_impls! {
 	fn new(...) -> ...;
