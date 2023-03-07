@@ -5,7 +5,7 @@ mod geometry;
 mod image;
 mod playlist_player;
 mod renderer;
-mod ser_de;
+mod ser;
 mod state;
 
 // Exports
@@ -19,7 +19,6 @@ pub use self::{
 
 // Imports
 use {
-	self::ser_de::SerPanelGroup,
 	crate::{
 		image_loader::ImageRequester,
 		playlist::{Playlist, Playlists},
@@ -59,7 +58,7 @@ impl PanelsManager {
 
 		// Then parse it
 		let panel_group =
-			serde_yaml::from_slice::<SerPanelGroup>(&panel_group_yaml).context("Unable to parse panel group")?;
+			serde_yaml::from_slice::<ser::PanelGroup>(&panel_group_yaml).context("Unable to parse panel group")?;
 
 		// Finally convert it
 		let panels = panel_group

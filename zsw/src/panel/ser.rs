@@ -6,16 +6,16 @@ use zsw_util::Rect;
 /// Serialized panel group
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct SerPanelGroup {
-	pub panels: Vec<SerPanel>,
+pub struct PanelGroup {
+	pub panels: Vec<Panel>,
 }
 
 /// Serialized panel
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct SerPanel {
-	pub geometries: Vec<SerPanelGeometry>,
-	pub state:      SerPanelState,
+pub struct Panel {
+	pub geometries: Vec<PanelGeometry>,
+	pub state:      PanelState,
 	pub playlist:   String,
 }
 
@@ -23,7 +23,7 @@ pub struct SerPanel {
 #[derive(Debug)]
 #[serde_with::serde_as]
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct SerPanelGeometry {
+pub struct PanelGeometry {
 	#[serde_as(as = "serde_with::DisplayFromStr")]
 	pub geometry: Rect<i32, u32>,
 }
@@ -32,7 +32,7 @@ pub struct SerPanelGeometry {
 /// Serialized panel state
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct SerPanelState {
+pub struct PanelState {
 	pub duration:   u64,
 	pub fade_point: u64,
 
