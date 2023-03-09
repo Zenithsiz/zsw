@@ -11,6 +11,7 @@ pub use self::locker::{
 	EguiPainterRendererMeetupSender,
 	Locker,
 	LockerIteratorExt,
+	LockerStreamExt,
 	MeetupSenderResource,
 	PanelsRendererShaderRwLock,
 	PanelsUpdaterMeetupSender,
