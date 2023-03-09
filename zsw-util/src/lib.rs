@@ -182,3 +182,15 @@ pub macro where_assert($cond:expr) {
 	//       If `false`, it expands to `[(); -1]`, which is invalid
 	[(); ($cond as usize) - 1]
 }
+
+/// Blocks on a future inside a tokio task
+#[extend::ext(name = TokioTaskBlockOn)]
+pub impl<F: Future> F {
+	/// Bocks on this future within a tokio task
+	fn block_on(self) -> F::Output {
+		tokio::task::block_in_place(move || {
+			let handle = tokio::runtime::Handle::current();
+			handle.block_on(self)
+		})
+	}
+}
