@@ -12,7 +12,7 @@ mod mutex;
 mod rwlock;
 
 // Exports
-pub use self::{meetup::MeetupSenderResourceExt, mutex::AsyncMutexResourceExt, rwlock::AsyncRwLockResourceExt};
+pub use self::{meetup::MeetupSenderResource, mutex::AsyncMutexResource, rwlock::AsyncRwLockResource};
 
 // Imports
 use {

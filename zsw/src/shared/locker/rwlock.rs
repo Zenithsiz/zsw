@@ -15,26 +15,23 @@ pub trait AsyncRwLockResource {
 	type Inner;
 
 	/// Returns the inner rwlock
+	#[doc(hidden)]
 	fn as_inner(&self) -> &RwLock<Self::Inner>;
-}
 
-/// Async rwlock resource extension trait
-#[extend::ext(name = AsyncRwLockResourceExt)]
-#[sealed::sealed]
-pub impl<R: AsyncRwLockResource> R {
 	/// Locks this rwlock for reads
 	#[track_caller]
 	async fn read<'locker, 'prev_locker, const STATE: usize>(
 		&'locker self,
 		locker: &'locker mut Locker<'prev_locker, STATE>,
 	) -> (
-		RwLockReadGuard<'locker, R::Inner>,
-		Locker<{ <Locker<'prev_locker, STATE> as AsyncRwLockLocker<R>>::NEXT_STATE }>,
+		RwLockReadGuard<'locker, Self::Inner>,
+		Locker<{ <Locker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
 	)
 	where
-		Locker<'prev_locker, STATE>: AsyncRwLockLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<'prev_locker, STATE> as AsyncRwLockLocker<R>>::NEXT_STATE]:,
+		Self: Sized,
+		Locker<'prev_locker, STATE>: AsyncRwLockLocker<Self>,
+		Self::Inner: 'locker,
+		[(); <Locker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.ensure_same_task();
 		let guard = self.as_inner().read().await;
@@ -47,13 +44,14 @@ pub impl<R: AsyncRwLockResource> R {
 		&'locker self,
 		locker: &'locker mut Locker<'prev_locker, STATE>,
 	) -> (
-		RwLockReadGuard<'locker, R::Inner>,
-		Locker<{ <Locker<'prev_locker, STATE> as AsyncRwLockLocker<R>>::NEXT_STATE }>,
+		RwLockReadGuard<'locker, Self::Inner>,
+		Locker<{ <Locker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
 	)
 	where
-		Locker<'prev_locker, STATE>: AsyncRwLockLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<'prev_locker, STATE> as AsyncRwLockLocker<R>>::NEXT_STATE]:,
+		Self: Sized,
+		Locker<'prev_locker, STATE>: AsyncRwLockLocker<Self>,
+		Self::Inner: 'locker,
+		[(); <Locker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.ensure_same_task();
 		let guard = tokio::task::block_in_place(|| self.as_inner().blocking_read());
@@ -66,13 +64,14 @@ pub impl<R: AsyncRwLockResource> R {
 		&'locker self,
 		locker: &'locker mut Locker<'prev_locker, STATE>,
 	) -> (
-		RwLockWriteGuard<'locker, R::Inner>,
-		Locker<{ <Locker<'prev_locker, STATE> as AsyncRwLockLocker<R>>::NEXT_STATE }>,
+		RwLockWriteGuard<'locker, Self::Inner>,
+		Locker<{ <Locker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
 	)
 	where
-		Locker<'prev_locker, STATE>: AsyncRwLockLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<'prev_locker, STATE> as AsyncRwLockLocker<R>>::NEXT_STATE]:,
+		Self: Sized,
+		Locker<'prev_locker, STATE>: AsyncRwLockLocker<Self>,
+		Self::Inner: 'locker,
+		[(); <Locker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.ensure_same_task();
 		let guard = self.as_inner().write().await;
@@ -85,13 +84,14 @@ pub impl<R: AsyncRwLockResource> R {
 		&'locker self,
 		locker: &'locker mut Locker<'prev_locker, STATE>,
 	) -> (
-		RwLockWriteGuard<'locker, R::Inner>,
-		Locker<{ <Locker<'prev_locker, STATE> as AsyncRwLockLocker<R>>::NEXT_STATE }>,
+		RwLockWriteGuard<'locker, Self::Inner>,
+		Locker<{ <Locker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
 	)
 	where
-		Locker<'prev_locker, STATE>: AsyncRwLockLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<'prev_locker, STATE> as AsyncRwLockLocker<R>>::NEXT_STATE]:,
+		Self: Sized,
+		Locker<'prev_locker, STATE>: AsyncRwLockLocker<Self>,
+		Self::Inner: 'locker,
+		[(); <Locker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.ensure_same_task();
 		let guard = tokio::task::block_in_place(|| self.as_inner().blocking_write());

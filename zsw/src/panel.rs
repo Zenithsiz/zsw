@@ -21,7 +21,7 @@ pub use self::{
 use {
 	crate::{
 		image_loader::ImageRequester,
-		shared::{AsyncRwLockResourceExt, Locker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
+		shared::{AsyncRwLockResource, Locker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
 		wgpu_wrapper::WgpuShared,
 	},
 	anyhow::Context,

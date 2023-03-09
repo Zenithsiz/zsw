@@ -5,13 +5,13 @@ mod locker;
 
 // Exports
 pub use self::locker::{
-	AsyncMutexResourceExt,
-	AsyncRwLockResourceExt,
+	AsyncMutexResource,
+	AsyncRwLockResource,
 	CurPanelGroupMutex,
 	EguiPainterRendererMeetupSender,
 	Locker,
 	LockerIteratorExt,
-	MeetupSenderResourceExt,
+	MeetupSenderResource,
 	PanelsRendererShaderRwLock,
 	PanelsUpdaterMeetupSender,
 	PlaylistItemRwLock,

@@ -4,7 +4,7 @@
 use {
 	crate::{
 		playlist::PlaylistItemKind,
-		shared::{AsyncRwLockResourceExt, Locker, LockerIteratorExt, PlaylistRwLock},
+		shared::{AsyncRwLockResource, Locker, LockerIteratorExt, PlaylistRwLock},
 	},
 	anyhow::Context,
 	async_walkdir::WalkDir,

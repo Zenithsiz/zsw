@@ -12,21 +12,18 @@ pub trait MeetupSenderResource {
 	type Inner;
 
 	/// Returns the inner meetup sender
+	#[doc(hidden)]
 	fn as_inner(&self) -> &meetup::Sender<Self::Inner>;
-}
 
-/// Meetup sender resource extension trait
-#[extend::ext(name = MeetupSenderResourceExt)]
-#[sealed::sealed]
-pub impl<R: MeetupSenderResource> R {
 	/// Sends the resource `R` to this meetup channel
 	#[track_caller]
 	async fn send<'locker, 'prev_locker, const STATE: usize>(
 		&'locker self,
 		locker: &'locker mut Locker<'prev_locker, STATE>,
-		resource: R::Inner,
+		resource: Self::Inner,
 	) where
-		Locker<'prev_locker, STATE>: MeetupSenderLocker<R>,
+		Self: Sized,
+		Locker<'prev_locker, STATE>: MeetupSenderLocker<Self>,
 	{
 		locker.ensure_same_task();
 		self.as_inner().send(resource).await;

@@ -15,25 +15,23 @@ pub trait AsyncMutexResource {
 	type Inner;
 
 	/// Returns the inner mutex
+	#[doc(hidden)]
 	fn as_inner(&self) -> &Mutex<Self::Inner>;
-}
 
-/// Async mutex resource extension trait
-#[extend::ext(name = AsyncMutexResourceExt)]
-pub impl<R: AsyncMutexResource> R {
 	/// Locks this mutex
 	#[track_caller]
 	async fn lock<'locker, 'prev_locker, const STATE: usize>(
 		&'locker self,
 		locker: &'locker mut Locker<'prev_locker, STATE>,
 	) -> (
-		MutexGuard<'locker, R::Inner>,
-		Locker<{ <Locker<'locker, STATE> as AsyncMutexLocker<R>>::NEXT_STATE }>,
+		MutexGuard<'locker, Self::Inner>,
+		Locker<{ <Locker<'locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE }>,
 	)
 	where
-		Locker<'prev_locker, STATE>: AsyncMutexLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<'prev_locker, STATE> as AsyncMutexLocker<R>>::NEXT_STATE]:,
+		Self: Sized,
+		Locker<'prev_locker, STATE>: AsyncMutexLocker<Self>,
+		Self::Inner: 'locker,
+		[(); <Locker<'prev_locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.ensure_same_task();
 		let guard = self.as_inner().lock().await;
@@ -46,13 +44,14 @@ pub impl<R: AsyncMutexResource> R {
 		&'locker self,
 		locker: &'locker mut Locker<'prev_locker, STATE>,
 	) -> (
-		MutexGuard<'locker, R::Inner>,
-		Locker<{ <Locker<'prev_locker, STATE> as AsyncMutexLocker<R>>::NEXT_STATE }>,
+		MutexGuard<'locker, Self::Inner>,
+		Locker<{ <Locker<'prev_locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE }>,
 	)
 	where
-		Locker<'prev_locker, STATE>: AsyncMutexLocker<R>,
-		R::Inner: 'locker,
-		[(); <Locker<'prev_locker, STATE> as AsyncMutexLocker<R>>::NEXT_STATE]:,
+		Self: Sized,
+		Locker<'prev_locker, STATE>: AsyncMutexLocker<Self>,
+		Self::Inner: 'locker,
+		[(); <Locker<'prev_locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.ensure_same_task();
 		let guard = tokio::task::block_in_place(|| self.as_inner().blocking_lock());
