@@ -3,6 +3,7 @@
 // Imports
 use {
 	super::WgpuShared,
+	crate::AppError,
 	anyhow::Context,
 	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
@@ -37,7 +38,7 @@ impl WgpuRenderer {
 		surface: wgpu::Surface,
 		adapter: &wgpu::Adapter,
 		device: &wgpu::Device,
-	) -> Result<Self, anyhow::Error> {
+	) -> Result<Self, AppError> {
 		// Configure the surface and get the preferred texture format and surface size
 		let (surface_texture_format, surface_size) = self::configure_window_surface(&window, &surface, adapter, device)
 			.context("Unable to configure window surface")?;
@@ -64,7 +65,7 @@ impl WgpuRenderer {
 	///
 	/// Returns the encoder and surface view to render onto
 	// TODO: Ensure it's not called more than once?
-	pub fn start_render(&mut self, shared: &WgpuShared) -> Result<FrameRender, anyhow::Error> {
+	pub fn start_render(&mut self, shared: &WgpuShared) -> Result<FrameRender, AppError> {
 		// And then get the surface texture
 		// Note: This can block, so we run it under tokio's block-in-place
 		let surface_texture = tokio::task::block_in_place(|| self.surface.get_current_texture())
@@ -140,7 +141,7 @@ fn configure_window_surface(
 	surface: &wgpu::Surface,
 	adapter: &wgpu::Adapter,
 	device: &wgpu::Device,
-) -> Result<(wgpu::TextureFormat, PhysicalSize<u32>), anyhow::Error> {
+) -> Result<(wgpu::TextureFormat, PhysicalSize<u32>), AppError> {
 	// Get the format
 	let surface_texture_format = *surface
 		.get_supported_formats(adapter)

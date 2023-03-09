@@ -23,6 +23,7 @@ use {
 		image_loader::ImageRequester,
 		shared::{AsyncRwLockResource, Locker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
 		wgpu_wrapper::WgpuShared,
+		AppError,
 	},
 	anyhow::Context,
 	futures::TryStreamExt,
@@ -51,7 +52,7 @@ impl PanelsManager {
 		renderer_layouts: &PanelsRendererLayouts,
 		playlists: &PlaylistsRwLock,
 		locker: &mut Locker<'_, 0>,
-	) -> Result<PanelGroup, anyhow::Error> {
+	) -> Result<PanelGroup, AppError> {
 		// Try to read the file
 		let path = self.base_dir.join(name).with_appended(".yaml");
 		tracing::debug!(?name, ?path, "Loading panel group");
@@ -147,7 +148,7 @@ impl Panel {
 		state: PanelState,
 		playlist: &PlaylistRwLock,
 		locker: &mut Locker<'_, 0>,
-	) -> Result<Self, anyhow::Error> {
+	) -> Result<Self, AppError> {
 		Ok(Self {
 			geometries: geometries
 				.into_iter()

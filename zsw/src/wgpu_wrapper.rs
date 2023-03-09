@@ -7,7 +7,7 @@ mod renderer;
 pub use renderer::{FrameRender, WgpuRenderer};
 
 // Imports
-use {anyhow::Context, std::sync::Arc, winit::window::Window};
+use {crate::AppError, anyhow::Context, std::sync::Arc, winit::window::Window};
 
 /// Wgpu shared
 #[derive(Debug)]
@@ -20,7 +20,7 @@ pub struct WgpuShared {
 }
 
 /// Creates the wgpu service
-pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), anyhow::Error> {
+pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), AppError> {
 	// Create the surface and adapter
 	// SAFETY: `WgpuRenderer` keeps an `Arc<Window>` to ensure it stays alive for as long as the surface
 	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
@@ -36,7 +36,7 @@ pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), a
 
 
 /// Creates the device
-async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), anyhow::Error> {
+async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), AppError> {
 	// Request the device without any features
 	let device_descriptor = wgpu::DeviceDescriptor {
 		label:    Some("[zsw] Device"),
@@ -61,7 +61,7 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 ///
 /// # Safety
 /// The returned surface *must* be dropped before the window.
-async unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, wgpu::Adapter), anyhow::Error> {
+async unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, wgpu::Adapter), AppError> {
 	// Get an instance with any backend
 	let backends = wgpu::Backends::all();
 	tracing::debug!(?backends, "Requesting wgpu instance");

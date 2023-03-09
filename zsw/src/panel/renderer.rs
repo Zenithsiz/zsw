@@ -14,6 +14,7 @@ use {
 	crate::{
 		panel::PanelGeometry,
 		wgpu_wrapper::{FrameRender, WgpuRenderer, WgpuShared},
+		AppError,
 	},
 	anyhow::Context,
 	cgmath::Point2,
@@ -78,7 +79,7 @@ impl PanelsRenderer {
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		shader_path: PathBuf,
-	) -> Result<(Self, PanelsRendererLayouts, PanelsRendererShader), anyhow::Error> {
+	) -> Result<(Self, PanelsRendererLayouts, PanelsRendererShader), AppError> {
 		// Create the index / vertex buffer
 		let indices = self::create_indices(wgpu_shared);
 		let vertices = self::create_vertices(wgpu_shared);
@@ -154,7 +155,7 @@ impl PanelsRenderer {
 		cursor_pos: Point2<i32>,
 		panel_group: &PanelGroup,
 		shader: &PanelsRendererShader,
-	) -> Result<(), anyhow::Error> {
+	) -> Result<(), AppError> {
 		// Update the shader, if requested
 		if self.update_shader(shader.shader) {
 			self.render_pipeline = self::create_render_pipeline(
@@ -302,7 +303,7 @@ fn create_render_pipeline(
 	image_bind_group_layout: &wgpu::BindGroupLayout,
 	shader: PanelShader,
 	shader_path: &Path,
-) -> Result<wgpu::RenderPipeline, anyhow::Error> {
+) -> Result<wgpu::RenderPipeline, AppError> {
 	tracing::debug!(?shader, ?shader_path, "Creating render pipeline for shader");
 
 	// Parse the shader

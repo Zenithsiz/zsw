@@ -5,6 +5,7 @@ use {
 	crate::{
 		playlist::PlaylistItemKind,
 		shared::{AsyncRwLockResource, Locker, LockerIteratorExt, PlaylistRwLock},
+		AppError,
 	},
 	anyhow::Context,
 	async_walkdir::WalkDir,
@@ -29,7 +30,7 @@ pub struct PlaylistPlayer {
 
 impl PlaylistPlayer {
 	/// Creates a new player from a playlist
-	pub async fn new(playlist: &PlaylistRwLock, locker: &mut Locker<'_, 0>) -> Result<Self, anyhow::Error> {
+	pub async fn new(playlist: &PlaylistRwLock, locker: &mut Locker<'_, 0>) -> Result<Self, AppError> {
 		let items = Self::get_playlist_items(playlist, locker)
 			.await
 			.context("Unable to get all playlist items")?;
@@ -76,7 +77,7 @@ impl PlaylistPlayer {
 	async fn get_playlist_items(
 		playlist: &PlaylistRwLock,
 		locker: &mut Locker<'_, 0>,
-	) -> Result<HashSet<Arc<Path>>, anyhow::Error> {
+	) -> Result<HashSet<Arc<Path>>, AppError> {
 		let items = playlist.read(locker).await.0.items();
 
 		let items = items
@@ -127,7 +128,7 @@ impl PlaylistPlayer {
 						.context("Unable to canonicalize path")?],
 				};
 
-				Ok::<_, anyhow::Error>(item)
+				Ok::<_, AppError>(item)
 			})
 			.try_collect::<Vec<_>>()
 			.await

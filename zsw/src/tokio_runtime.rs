@@ -2,6 +2,7 @@
 
 // Imports
 use {
+	crate::AppError,
 	anyhow::Context,
 	std::{
 		num::NonZeroUsize,
@@ -11,7 +12,7 @@ use {
 };
 
 /// Creates the tokio runtime
-pub fn create(worker_threads: Option<NonZeroUsize>) -> Result<tokio::runtime::Runtime, anyhow::Error> {
+pub fn create(worker_threads: Option<NonZeroUsize>) -> Result<tokio::runtime::Runtime, AppError> {
 	let worker_threads = match worker_threads {
 		Some(worker_threads) => worker_threads.get(),
 		None => thread::available_parallelism().map(NonZeroUsize::get).unwrap_or(1),
@@ -28,4 +29,5 @@ pub fn create(worker_threads: Option<NonZeroUsize>) -> Result<tokio::runtime::Ru
 		.worker_threads(worker_threads)
 		.build()
 		.context("Unable to create runtime")
+		.map_err(AppError::Other)
 }

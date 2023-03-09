@@ -5,7 +5,10 @@ mod ser;
 
 // Imports
 use {
-	crate::shared::{PlaylistItemRwLock, PlaylistRwLock},
+	crate::{
+		shared::{PlaylistItemRwLock, PlaylistRwLock},
+		AppError,
+	},
 	anyhow::Context,
 	futures::{StreamExt, TryStreamExt},
 	std::{
@@ -90,7 +93,7 @@ pub enum PlaylistItemKind {
 }
 
 /// Creates the playlists service
-pub async fn create(base_dir: PathBuf) -> Result<(PlaylistsManager, Playlists), anyhow::Error> {
+pub async fn create(base_dir: PathBuf) -> Result<(PlaylistsManager, Playlists), AppError> {
 	// Create the playlists directory, if it doesn't exist
 	tokio::fs::create_dir_all(&base_dir)
 		.await
@@ -104,7 +107,7 @@ pub async fn create(base_dir: PathBuf) -> Result<(PlaylistsManager, Playlists), 
 		.context("Unable to read playlists directory")?
 		.then(async move |entry| {
 			// Get the name, if it's a yaml file
-			let entry = entry?;
+			let entry = entry.map_err(AppError::Io)?;
 			let path = entry.path();
 			let (Some(name), Some("yaml")) = (path.file_prefix().and_then(OsStr::to_str), path.extension().and_then(OsStr::to_str)) else {
 				return Ok(None);
@@ -126,7 +129,7 @@ pub async fn create(base_dir: PathBuf) -> Result<(PlaylistsManager, Playlists), 
 				}).map(PlaylistItemRwLock::new).map(Arc::new).collect(),
 			};
 
-			Ok::<_, anyhow::Error>(Some((name.to_owned().into(), Arc::new(PlaylistRwLock::new(playlist)))))
+			Ok::<_, AppError>(Some((name.to_owned().into(), Arc::new(PlaylistRwLock::new(playlist)))))
 		})
 		.try_collect::<Vec<_>>()
 		.await?

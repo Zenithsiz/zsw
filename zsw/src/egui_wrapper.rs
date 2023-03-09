@@ -2,7 +2,10 @@
 
 // Imports
 use {
-	crate::wgpu_wrapper::{FrameRender, WgpuRenderer, WgpuShared},
+	crate::{
+		wgpu_wrapper::{FrameRender, WgpuRenderer, WgpuShared},
+		AppError,
+	},
 	anyhow::Context,
 	std::{
 		sync::Arc,
@@ -27,7 +30,7 @@ impl EguiRenderer {
 		wgpu_shared: &WgpuShared,
 		paint_jobs: &[egui::ClippedPrimitive],
 		textures_delta: Option<egui::TexturesDelta>,
-	) -> Result<(), anyhow::Error> {
+	) -> Result<(), AppError> {
 		// Update textures
 		let surface_size = frame.surface_size();
 		#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`

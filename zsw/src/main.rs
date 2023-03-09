@@ -31,6 +31,7 @@
 mod args;
 mod config;
 mod egui_wrapper;
+mod error;
 mod image_loader;
 mod logger;
 mod panel;
@@ -41,6 +42,11 @@ mod shared;
 mod tokio_runtime;
 mod wgpu_wrapper;
 mod window;
+
+// "Exports"
+// Note: Required so `rust-analyzer` auto-imports `crate::T` instead of `crate::module::T`.
+//       Even though we don't want them to be crate-public. `pub(crate)` also doesn't work
+pub use self::error::AppError;
 
 // Imports
 use {
@@ -79,7 +85,7 @@ use {
 };
 
 
-fn main() -> Result<(), anyhow::Error> {
+fn main() -> Result<(), AppError> {
 	// Get arguments
 	let args = Args::parse();
 	logger::pre_init::debug(format!("args: {args:?}"));
@@ -109,7 +115,7 @@ fn main() -> Result<(), anyhow::Error> {
 static SHADERS_DIR: include_dir::Dir<'_> = include_dir::include_dir!("shaders/");
 
 #[allow(clippy::too_many_lines)] // TODO: Separate
-async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), anyhow::Error> {
+async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (mut event_loop, window) = window::create().context("Unable to create winit event loop and window")?;
 	let window = Arc::new(window);
 	let (wgpu_shared, wgpu_renderer) = wgpu_wrapper::create(Arc::clone(&window))
@@ -256,7 +262,7 @@ async fn load_default_panel_group(
 	default_panel_group: Option<String>,
 	mut locker: Locker<'_, 0>,
 	shared: Arc<Shared>,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), AppError> {
 	// If we don't have a default, don't do anything
 	let Some(default_panel_group) = &default_panel_group else {
 		return Ok(());
@@ -299,7 +305,7 @@ async fn load_default_panel_group(
 #[track_caller]
 pub fn spawn_task<F, T>(name: impl Into<String>, future: F)
 where
-	F: Future<Output = Result<T, anyhow::Error>> + Send + 'static,
+	F: Future<Output = Result<T, AppError>> + Send + 'static,
 {
 	let name = name.into();
 
@@ -322,7 +328,7 @@ async fn renderer(
 	mut egui_renderer: EguiRenderer,
 	egui_painter_output_rx: meetup::Receiver<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 	panels_updater_output_rx: meetup::Receiver<()>,
-) -> Result<!, anyhow::Error> {
+) -> Result<!, AppError> {
 	let mut egui_paint_jobs = vec![];
 	let mut egui_textures_delta = None;
 	loop {
@@ -387,7 +393,7 @@ async fn panels_updater(
 	shared: Arc<Shared>,
 	mut locker: Locker<'_, 0>,
 	panels_updater_output_tx: PanelsUpdaterMeetupSender,
-) -> Result<!, anyhow::Error> {
+) -> Result<!, AppError> {
 	loop {
 		{
 			let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).await;
@@ -410,7 +416,7 @@ async fn egui_painter(
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	egui_painter_output_tx: EguiPainterRendererMeetupSender,
-) -> Result<!, anyhow::Error> {
+) -> Result<!, AppError> {
 	loop {
 		let full_output = egui_painter.draw(&shared.window, |ctx, frame| {
 			settings_menu.draw(ctx, frame, &shared, &mut locker);

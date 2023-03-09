@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	crate::panel::PanelGeometry,
+	crate::{panel::PanelGeometry, AppError},
 	anyhow::Context,
 	cgmath::Vector2,
 	futures::StreamExt,
@@ -47,7 +47,7 @@ pub struct ImageResponse {
 	pub request: ImageRequest,
 
 	/// Image result
-	pub image_res: Result<Image, anyhow::Error>,
+	pub image_res: Result<Image, AppError>,
 }
 
 
@@ -113,7 +113,7 @@ pub struct ImageLoader {
 
 impl ImageLoader {
 	/// Runs the image loader.
-	pub async fn run(self) -> Result<(), anyhow::Error> {
+	pub async fn run(self) -> Result<(), AppError> {
 		// Accept all requests in parallel
 		self.req_rx
 			.then(|(request, response_tx)| async {
@@ -147,7 +147,7 @@ impl ImageLoader {
 		upscale_exclude: &HashSet<PathBuf>,
 		upscale_semaphore: &Semaphore,
 		request: &ImageRequest,
-	) -> Result<Image, anyhow::Error> {
+	) -> Result<Image, AppError> {
 		// Default image path
 		let mut image_path = request.path.clone();
 
@@ -207,7 +207,7 @@ impl ImageLoader {
 		upscale_cache_dir: &Path,
 		upscale_cmd: Option<&Path>,
 		upscale_semaphore: &Semaphore,
-	) -> Result<Option<PathBuf>, anyhow::Error> {
+	) -> Result<Option<PathBuf>, AppError> {
 		// Get the image size
 		let (image_width, image_height) = tokio::task::spawn_blocking({
 			let image_path = request.path.clone();
@@ -273,7 +273,7 @@ impl ImageLoader {
 		upscale_semaphore: &Semaphore,
 		image_size: Vector2<u32>,
 		minimum_size: Vector2<u32>,
-	) -> Result<PathBuf, anyhow::Error> {
+	) -> Result<PathBuf, AppError> {
 		// Calculate the ratio
 		// Note: Needs to be a power of two for upscaler so we round it up, if necessary
 		#[allow(clippy::cast_sign_loss)] // They're all positive
@@ -340,7 +340,7 @@ pub async fn create(
 	upscale_cache_dir: PathBuf,
 	upscale_cmd: Option<PathBuf>,
 	upscale_exclude: HashSet<PathBuf>,
-) -> Result<(ImageLoader, ImageRequester), anyhow::Error> {
+) -> Result<(ImageLoader, ImageRequester), AppError> {
 	// Create the upscale cache directory
 	tokio::fs::create_dir_all(&upscale_cache_dir)
 		.await

@@ -2,6 +2,7 @@
 
 // Imports
 use {
+	crate::AppError,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	winit::{
@@ -14,7 +15,7 @@ use {
 };
 
 /// Creates the window, as well as the associated event loop
-pub fn create() -> Result<(EventLoop<!>, Window), anyhow::Error> {
+pub fn create() -> Result<(EventLoop<!>, Window), AppError> {
 	// Build the window
 	let event_loop = EventLoopBuilder::with_user_event().build();
 

@@ -2,6 +2,7 @@
 
 // Imports
 use {
+	crate::AppError,
 	anyhow::Context,
 	std::{
 		collections::HashSet,
@@ -84,7 +85,7 @@ impl Config {
 	}
 
 	/// Loads the config
-	fn load(path: &Path) -> Result<Self, anyhow::Error> {
+	fn load(path: &Path) -> Result<Self, AppError> {
 		tracing::debug!(?path, "Loading config");
 
 		let config_yaml = std::fs::read(path).context("Unable to open file")?;
@@ -93,7 +94,7 @@ impl Config {
 	}
 
 	/// Writes the config
-	fn write(&self, path: &Path) -> Result<(), anyhow::Error> {
+	fn write(&self, path: &Path) -> Result<(), AppError> {
 		let config_yaml = serde_yaml::to_string(self).context("Unable to serialize config")?;
 		std::fs::write(path, config_yaml.as_bytes()).context("Unable to write config")?;
 
