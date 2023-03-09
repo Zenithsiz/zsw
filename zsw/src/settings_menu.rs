@@ -13,7 +13,7 @@ use {
 	},
 	egui::Widget,
 	std::path::Path,
-	zsw_util::Rect,
+	zsw_util::{Rect, TokioTaskBlockOn},
 };
 
 /// Settings menu
@@ -76,33 +76,44 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0
 
 /// Draws the playlists tab
 fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0>) {
-	let playlists = shared.playlists.blocking_read(locker).0.get_all();
+	let playlists = shared
+		.playlists_manager
+		.get_all_loaded(&shared.playlists, locker)
+		.block_on();
 
 	for (name, playlist) in playlists {
-		ui.collapsing(&*name, |ui| {
-			let items = playlist.blocking_read(locker).0.items();
+		ui.collapsing(&*name, |ui| match playlist {
+			Some(Ok(playlist)) => {
+				let items = playlist.blocking_read(locker).0.items();
 
-			for item in items {
-				let (mut item, _) = item.blocking_write(locker);
+				for item in items {
+					let (mut item, _) = item.blocking_write(locker);
 
-				ui.checkbox(&mut item.enabled, "Enabled");
-				match &mut item.kind {
-					PlaylistItemKind::Directory { path, recursive } => {
-						ui.horizontal(|ui| {
-							ui.label("Dir: ");
-							self::draw_openable_path(ui, path);
-						});
+					ui.checkbox(&mut item.enabled, "Enabled");
+					match &mut item.kind {
+						PlaylistItemKind::Directory { path, recursive } => {
+							ui.horizontal(|ui| {
+								ui.label("Dir: ");
+								self::draw_openable_path(ui, path);
+							});
 
-						ui.checkbox(recursive, "Recursive");
-					},
-					PlaylistItemKind::File { path } => {
-						ui.horizontal(|ui| {
-							ui.label("File: ");
-							self::draw_openable_path(ui, path);
-						});
-					},
+							ui.checkbox(recursive, "Recursive");
+						},
+						PlaylistItemKind::File { path } => {
+							ui.horizontal(|ui| {
+								ui.label("File: ");
+								self::draw_openable_path(ui, path);
+							});
+						},
+					}
 				}
-			}
+			},
+			Some(Err(err)) => {
+				ui.label(format!("Error: {:?}", anyhow::anyhow!(err)));
+			},
+			None => {
+				ui.label("Loading...");
+			},
 		});
 	}
 }

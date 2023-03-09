@@ -21,7 +21,8 @@ pub use self::{
 use {
 	crate::{
 		image_loader::ImageRequester,
-		shared::{AsyncRwLockResource, Locker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
+		playlist::PlaylistsManager,
+		shared::{Locker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
 		wgpu_wrapper::WgpuShared,
 		AppError,
 	},
@@ -50,6 +51,7 @@ impl PanelsManager {
 		name: &str,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
+		playlists_manager: &PlaylistsManager,
 		playlists: &PlaylistsRwLock,
 		locker: &mut Locker<'_, 0>,
 	) -> Result<PanelGroup, AppError> {
@@ -79,11 +81,9 @@ impl PanelsManager {
 						reverse: panel.state.reverse_parallax,
 					},
 				};
-				let playlist = playlists
-					.read(&mut locker)
+				let playlist = playlists_manager
+					.load(&panel.playlist, playlists, &mut locker)
 					.await
-					.0
-					.get(&panel.playlist)
 					.context("Unable to load playlist")?;
 
 				Panel::new(wgpu_shared, renderer_layouts, geometries, state, &playlist, &mut locker)

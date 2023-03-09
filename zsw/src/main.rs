@@ -23,7 +23,8 @@
 	generic_const_exprs,
 	once_cell,
 	return_position_impl_trait_in_trait,
-	associated_type_bounds
+	associated_type_bounds,
+	hash_raw_entry
 )]
 #![allow(incomplete_features)]
 
@@ -193,6 +194,12 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (panels_updater_output_tx, panels_updater_output_rx) = meetup::channel();
 
 
+	self::spawn_task("Load playlists", {
+		let shared = Arc::clone(&shared);
+		let locker = Locker::new();
+		async move { self::load_playlists(locker, shared).await }
+	});
+
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
 		let locker = Locker::new();
@@ -257,6 +264,16 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Loads the playlists
+async fn load_playlists(mut locker: Locker<'_, 0>, shared: Arc<Shared>) -> Result<(), AppError> {
+	shared
+		.playlists_manager
+		.load_all_default(&shared.playlists, &mut locker)
+		.await
+		.inspect(|()| tracing::info!("Loaded all playlists"))
+		.inspect_err(|err| tracing::warn!(?err, "Unable to load all playlists"))
+}
+
 /// Loads the default panel group
 async fn load_default_panel_group(
 	default_panel_group: Option<String>,
@@ -275,6 +292,7 @@ async fn load_default_panel_group(
 			default_panel_group,
 			&shared.wgpu,
 			&shared.panels_renderer_layout,
+			&shared.playlists_manager,
 			&shared.playlists,
 			&mut locker,
 		)
