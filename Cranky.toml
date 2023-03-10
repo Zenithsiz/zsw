@@ -24,7 +24,6 @@ warn = [
 	"clippy::same_name_method",
 	"clippy::mod_module_files",
 	"clippy::semicolon_inside_block",
-	"clippy::single_char_lifetime_names",
 	"clippy::string_to_string",
 	"clippy::undocumented_unsafe_blocks",
 	"clippy::unnecessary_safety_comment",

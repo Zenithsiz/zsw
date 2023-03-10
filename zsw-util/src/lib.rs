@@ -20,6 +20,7 @@
 
 // Modules
 pub mod meetup;
+mod oob;
 mod rect;
 mod resource;
 mod tpp;
@@ -27,6 +28,7 @@ mod tuple_collect_res;
 
 // Exports
 pub use {
+	oob::Oob,
 	rect::Rect,
 	resource::{Resources, ResourcesBundle, ResourcesTuple2},
 	tpp::Tpp,

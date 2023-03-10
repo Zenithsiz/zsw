@@ -21,13 +21,11 @@ use {
 		playlist::{Playlist, PlaylistItem, Playlists},
 	},
 	futures::{stream::FuturesUnordered, Future, Stream, StreamExt},
-	std::{
-		ops::Deref,
-		sync::{
-			atomic::{self, AtomicU64},
-			OnceLock,
-		},
+	std::sync::{
+		atomic::{self, AtomicU64},
+		OnceLock,
 	},
+	zsw_util::Oob,
 };
 
 /// Current task
@@ -65,29 +63,11 @@ struct LockerInner {
 	cur_task: OnceLock<CurTask>,
 }
 
-/// Locker inner kind
-#[derive(Debug)]
-enum LockerInnerKind<'prev> {
-	Owned(LockerInner),
-	Borrowed(&'prev LockerInner),
-}
-
-impl<'prev> Deref for LockerInnerKind<'prev> {
-	type Target = LockerInner;
-
-	fn deref(&self) -> &Self::Target {
-		match self {
-			LockerInnerKind::Owned(inner) => inner,
-			LockerInnerKind::Borrowed(inner) => inner,
-		}
-	}
-}
-
 /// Locker
 #[derive(Debug)]
 // TODO: Simplify to `Locker(())` on release builds?
 pub struct Locker<'prev, const STATE: usize> {
-	inner: LockerInnerKind<'prev>,
+	inner: Oob<'prev, LockerInner>,
 }
 
 impl<'prev> Locker<'prev, 0> {
@@ -104,7 +84,7 @@ impl<'prev> Locker<'prev, 0> {
 			cur_task: OnceLock::new(),
 		};
 		Self {
-			inner: LockerInnerKind::Owned(inner),
+			inner: Oob::Owned(inner),
 		}
 	}
 }
@@ -116,7 +96,7 @@ impl<'prev, const STATE: usize> Locker<'prev, STATE> {
 	/// You must ensure only a single locker exists per-task, under stacked borrows
 	fn clone(&self) -> Locker<'_, STATE> {
 		Locker {
-			inner: LockerInnerKind::Borrowed(&self.inner),
+			inner: self.inner.to_borrowed(),
 		}
 	}
 
@@ -126,7 +106,7 @@ impl<'prev, const STATE: usize> Locker<'prev, STATE> {
 	/// You must ensure only a single locker exists per-task, under stacked borrows
 	fn next<const NEXT_STATE: usize>(&self) -> Locker<'_, NEXT_STATE> {
 		Locker {
-			inner: LockerInnerKind::Borrowed(&self.inner),
+			inner: self.inner.to_borrowed(),
 		}
 	}
 
