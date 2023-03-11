@@ -196,52 +196,46 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Load playlists", {
 		let shared = Arc::clone(&shared);
-		async move { self::load_playlists(AsyncLocker::new(), shared).await }
+		self::load_playlists(AsyncLocker::new(), shared)
 	});
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
 		let default_panel_group = config.default_panel_group.clone();
-		async move { self::load_default_panel_group(default_panel_group, AsyncLocker::new(), shared).await }
+		self::load_default_panel_group(default_panel_group, AsyncLocker::new(), shared)
 	});
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		async move {
-			self::renderer(
-				shared,
-				AsyncLocker::new(),
-				wgpu_renderer,
-				panels_renderer,
-				egui_renderer,
-				egui_painter_output_rx,
-				panels_updater_output_rx,
-			)
-			.await
-		}
+		self::renderer(
+			shared,
+			AsyncLocker::new(),
+			wgpu_renderer,
+			panels_renderer,
+			egui_renderer,
+			egui_painter_output_rx,
+			panels_updater_output_rx,
+		)
 	});
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
 		let panels_updater_output_tx = PanelsUpdaterMeetupSender::new(panels_updater_output_tx);
-		async move { self::panels_updater(shared, AsyncLocker::new(), panels_updater_output_tx).await }
+		self::panels_updater(shared, AsyncLocker::new(), panels_updater_output_tx)
 	});
 
-	self::spawn_task("Image loader", async move { image_loader.run().await });
+	self::spawn_task("Image loader", image_loader.run());
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
 		let egui_painter_output_tx = EguiPainterRendererMeetupSender::new(egui_painter_output_tx);
-		async move {
-			self::egui_painter(
-				shared,
-				AsyncLocker::new(),
-				egui_painter,
-				settings_menu,
-				egui_painter_output_tx,
-			)
-			.await
-		}
+		self::egui_painter(
+			shared,
+			AsyncLocker::new(),
+			egui_painter,
+			settings_menu,
+			egui_painter_output_tx,
+		)
 	});
 
 	// Then run the event loop on this thread

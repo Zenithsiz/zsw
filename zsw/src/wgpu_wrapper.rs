@@ -23,7 +23,7 @@ pub struct WgpuShared {
 pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), AppError> {
 	// Create the surface and adapter
 	// SAFETY: `WgpuRenderer` keeps an `Arc<Window>` to ensure it stays alive for as long as the surface
-	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window).await? };
+	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window) }.await?;
 
 	// Then create the device and it's queue
 	let (device, queue) = self::create_device(&adapter).await?;
