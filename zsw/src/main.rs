@@ -468,6 +468,31 @@ async fn egui_painter(
 				}
 			}
 
+			// Skip any ctrl-clicked panels
+			// TODO: Deduplicate this with the above and settings menu.
+			if !ctx.is_pointer_over_area() &&
+				ctx.input().pointer.button_clicked(egui::PointerButton::Primary) &&
+				ctx.input().modifiers.ctrl
+			{
+				let cursor_pos = shared.cursor_pos.load();
+				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();
+				if let Some(panel_group) = &mut *panel_group {
+					for panel in panel_group.panels_mut() {
+						for geometry in &panel.geometries {
+							if geometry.geometry.contains(cursor_pos) {
+								match panel.images.state() {
+									panel::ImagesState::Empty => (),
+									panel::ImagesState::PrimaryOnly =>
+										panel.state.cur_progress = panel.state.fade_point,
+									panel::ImagesState::Both => panel.state.cur_progress = panel.state.duration,
+								}
+							}
+						}
+					}
+				}
+			}
+
 			Ok::<_, !>(())
 		})?;
 		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
