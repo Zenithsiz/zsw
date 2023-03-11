@@ -196,32 +196,45 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Load playlists", {
 		let shared = Arc::clone(&shared);
-		self::load_playlists(AsyncLocker::new(), shared)
+		async move {
+			let locker = AsyncLocker::new();
+			self::load_playlists(locker, shared).await
+		}
 	});
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
 		let default_panel_group = config.default_panel_group.clone();
-		self::load_default_panel_group(default_panel_group, AsyncLocker::new(), shared)
+		async move {
+			let locker = AsyncLocker::new();
+			self::load_default_panel_group(default_panel_group, locker, shared).await
+		}
 	});
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		self::renderer(
-			shared,
-			AsyncLocker::new(),
-			wgpu_renderer,
-			panels_renderer,
-			egui_renderer,
-			egui_painter_output_rx,
-			panels_updater_output_rx,
-		)
+		async move {
+			let locker = AsyncLocker::new();
+			self::renderer(
+				shared,
+				locker,
+				wgpu_renderer,
+				panels_renderer,
+				egui_renderer,
+				egui_painter_output_rx,
+				panels_updater_output_rx,
+			)
+			.await
+		}
 	});
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
 		let panels_updater_output_tx = PanelsUpdaterMeetupSender::new(panels_updater_output_tx);
-		self::panels_updater(shared, AsyncLocker::new(), panels_updater_output_tx)
+		async move {
+			let locker = AsyncLocker::new();
+			self::panels_updater(shared, locker, panels_updater_output_tx).await
+		}
 	});
 
 	self::spawn_task("Image loader", image_loader.run());
@@ -229,13 +242,10 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
 		let egui_painter_output_tx = EguiPainterRendererMeetupSender::new(egui_painter_output_tx);
-		self::egui_painter(
-			shared,
-			AsyncLocker::new(),
-			egui_painter,
-			settings_menu,
-			egui_painter_output_tx,
-		)
+		async move {
+			let locker = AsyncLocker::new();
+			self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await
+		}
 	});
 
 	// Then run the event loop on this thread
@@ -243,7 +253,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 		event_loop.run_return(|event, _, control_flow| {
 			*control_flow = winit::event_loop::ControlFlow::Wait;
 
-			#[expect(clippy::single_match)] // We'll add more in the future
+			#[allow(clippy::single_match)] // We'll add more in the future
 			match event {
 				winit::event::Event::WindowEvent { ref event, .. } => match *event {
 					winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
