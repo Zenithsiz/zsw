@@ -57,11 +57,11 @@ use {
 		panel::{PanelShader, PanelsManager, PanelsRenderer},
 		settings_menu::SettingsMenu,
 		shared::{
+			AsyncLocker,
 			AsyncMutexResource,
 			AsyncRwLockResource,
 			CurPanelGroupMutex,
 			EguiPainterRendererMeetupSender,
-			Locker,
 			MeetupSenderResource,
 			PanelsRendererShaderRwLock,
 			PanelsUpdaterMeetupSender,
@@ -196,20 +196,20 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Load playlists", {
 		let shared = Arc::clone(&shared);
-		let locker = Locker::new();
+		let locker = AsyncLocker::new();
 		async move { self::load_playlists(locker, shared).await }
 	});
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
-		let locker = Locker::new();
+		let locker = AsyncLocker::new();
 		let default_panel_group = config.default_panel_group.clone();
 		async move { self::load_default_panel_group(default_panel_group, locker, shared).await }
 	});
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		let locker = Locker::new();
+		let locker = AsyncLocker::new();
 		async move {
 			self::renderer(
 				shared,
@@ -226,7 +226,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
-		let locker = Locker::new();
+		let locker = AsyncLocker::new();
 		let panels_updater_output_tx = PanelsUpdaterMeetupSender::new(panels_updater_output_tx);
 		async move { self::panels_updater(shared, locker, panels_updater_output_tx).await }
 	});
@@ -235,7 +235,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
-		let locker = Locker::new();
+		let locker = AsyncLocker::new();
 		let egui_painter_output_tx = EguiPainterRendererMeetupSender::new(egui_painter_output_tx);
 		async move { self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await }
 	});
@@ -265,7 +265,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 }
 
 /// Loads the playlists
-async fn load_playlists(mut locker: Locker<'_, 0>, shared: Arc<Shared>) -> Result<(), AppError> {
+async fn load_playlists(mut locker: AsyncLocker<'_, 0>, shared: Arc<Shared>) -> Result<(), AppError> {
 	shared
 		.playlists_manager
 		.load_all_default(&shared.playlists, &mut locker)
@@ -277,7 +277,7 @@ async fn load_playlists(mut locker: Locker<'_, 0>, shared: Arc<Shared>) -> Resul
 /// Loads the default panel group
 async fn load_default_panel_group(
 	default_panel_group: Option<String>,
-	mut locker: Locker<'_, 0>,
+	mut locker: AsyncLocker<'_, 0>,
 	shared: Arc<Shared>,
 ) -> Result<(), AppError> {
 	// If we don't have a default, don't do anything
@@ -340,7 +340,7 @@ where
 /// Renderer task
 async fn renderer(
 	shared: Arc<Shared>,
-	mut locker: Locker<'_, 0>,
+	mut locker: AsyncLocker<'_, 0>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -409,7 +409,7 @@ async fn renderer(
 /// Panel updater task
 async fn panels_updater(
 	shared: Arc<Shared>,
-	mut locker: Locker<'_, 0>,
+	mut locker: AsyncLocker<'_, 0>,
 	panels_updater_output_tx: PanelsUpdaterMeetupSender,
 ) -> Result<!, AppError> {
 	loop {
@@ -430,7 +430,7 @@ async fn panels_updater(
 /// Egui painter task
 async fn egui_painter(
 	shared: Arc<Shared>,
-	mut locker: Locker<'_, 0>,
+	mut locker: AsyncLocker<'_, 0>,
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	egui_painter_output_tx: EguiPainterRendererMeetupSender,

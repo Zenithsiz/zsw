@@ -3,7 +3,7 @@
 //! Uses the `meetup` channel.
 
 // Imports
-use {super::Locker, zsw_util::meetup};
+use {super::AsyncLocker, zsw_util::meetup};
 
 /// Meetup sender resource
 #[sealed::sealed(pub(super))]
@@ -19,18 +19,18 @@ pub trait MeetupSenderResource {
 	#[track_caller]
 	async fn send<'locker, 'prev_locker, const STATE: usize>(
 		&'locker self,
-		locker: &'locker mut Locker<'prev_locker, STATE>,
+		locker: &'locker mut AsyncLocker<'prev_locker, STATE>,
 		resource: Self::Inner,
 	) where
 		Self: Sized,
-		Locker<'prev_locker, STATE>: MeetupSenderLocker<Self>,
+		AsyncLocker<'prev_locker, STATE>: MeetupSenderLocker<Self>,
 	{
 		locker.ensure_same_task();
 		self.as_inner().send(resource).await;
 	}
 }
 
-/// Locker for meetup channels
+/// AsyncLocker for meetup channels
 // Note: No `NEXT_STATE`, as we don't keep anything locked.
 #[sealed::sealed(pub(super))]
 pub trait MeetupSenderLocker<R> {}
@@ -68,6 +68,6 @@ pub macro resource_impl(
 
 	$(
 		#[sealed::sealed]
-		impl<'locker> MeetupSenderLocker<$Name> for Locker<'locker, $CUR_STATE> {}
+		impl<'locker> MeetupSenderLocker<$Name> for AsyncLocker<'locker, $CUR_STATE> {}
 	)*
 }

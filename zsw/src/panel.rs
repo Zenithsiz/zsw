@@ -22,7 +22,7 @@ use {
 	crate::{
 		image_loader::ImageRequester,
 		playlist::PlaylistsManager,
-		shared::{Locker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
+		shared::{AsyncLocker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
 		wgpu_wrapper::WgpuShared,
 		AppError,
 	},
@@ -53,7 +53,7 @@ impl PanelsManager {
 		renderer_layouts: &PanelsRendererLayouts,
 		playlists_manager: &PlaylistsManager,
 		playlists: &PlaylistsRwLock,
-		locker: &mut Locker<'_, 0>,
+		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<PanelGroup, AppError> {
 		// Try to read the file
 		let path = self.base_dir.join(name).with_appended(".yaml");
@@ -147,7 +147,7 @@ impl Panel {
 		geometries: Vec<Rect<i32, u32>>,
 		state: PanelState,
 		playlist: &PlaylistRwLock,
-		locker: &mut Locker<'_, 0>,
+		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<Self, AppError> {
 		Ok(Self {
 			geometries: geometries

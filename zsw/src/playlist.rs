@@ -6,7 +6,14 @@ mod ser;
 // Imports
 use {
 	crate::{
-		shared::{AsyncRwLockResource, Locker, LockerStreamExt, PlaylistItemRwLock, PlaylistRwLock, PlaylistsRwLock},
+		shared::{
+			AsyncLocker,
+			AsyncRwLockResource,
+			LockerStreamExt,
+			PlaylistItemRwLock,
+			PlaylistRwLock,
+			PlaylistsRwLock,
+		},
 		AppError,
 	},
 	anyhow::Context,
@@ -36,7 +43,7 @@ impl PlaylistsManager {
 		&self,
 		name: &str,
 		playlists: &PlaylistsRwLock,
-		locker: &mut Locker<'_, 0>,
+		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<Arc<PlaylistRwLock>, AppError> {
 		// Check if the playlist is already loaded
 		{
@@ -102,7 +109,7 @@ impl PlaylistsManager {
 	pub async fn load_all_default(
 		&self,
 		playlists: &PlaylistsRwLock,
-		locker: &mut Locker<'_, 0>,
+		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<(), AppError> {
 		tokio::fs::read_dir(&self.base_dir)
 			.await
@@ -135,7 +142,7 @@ impl PlaylistsManager {
 	pub async fn get_all_loaded(
 		&self,
 		playlists: &PlaylistsRwLock,
-		locker: &mut Locker<'_, 0>,
+		locker: &mut AsyncLocker<'_, 0>,
 	) -> Vec<(Arc<str>, Option<Result<Arc<PlaylistRwLock>, AppError>>)> {
 		let (playlists, _) = playlists.read(locker).await;
 

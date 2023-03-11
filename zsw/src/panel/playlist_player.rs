@@ -4,7 +4,7 @@
 use {
 	crate::{
 		playlist::PlaylistItemKind,
-		shared::{AsyncRwLockResource, Locker, LockerIteratorExt, PlaylistRwLock},
+		shared::{AsyncLocker, AsyncRwLockResource, LockerIteratorExt, PlaylistRwLock},
 		AppError,
 	},
 	anyhow::Context,
@@ -30,7 +30,7 @@ pub struct PlaylistPlayer {
 
 impl PlaylistPlayer {
 	/// Creates a new player from a playlist
-	pub async fn new(playlist: &PlaylistRwLock, locker: &mut Locker<'_, 0>) -> Result<Self, AppError> {
+	pub async fn new(playlist: &PlaylistRwLock, locker: &mut AsyncLocker<'_, 0>) -> Result<Self, AppError> {
 		let items = Self::get_playlist_items(playlist, locker)
 			.await
 			.context("Unable to get all playlist items")?;
@@ -76,7 +76,7 @@ impl PlaylistPlayer {
 	/// Collects all items of a playlist
 	async fn get_playlist_items(
 		playlist: &PlaylistRwLock,
-		locker: &mut Locker<'_, 0>,
+		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<HashSet<Arc<Path>>, AppError> {
 		let items = playlist.read(locker).await.0.items();
 

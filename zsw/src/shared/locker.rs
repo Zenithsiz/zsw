@@ -28,74 +28,51 @@ use {
 	zsw_util::Oob,
 };
 
-/// Current task
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-enum CurTask {
-	/// Thread
-	Thread(std::thread::ThreadId),
-
-	/// Tokio Task
-	TokioTask(tokio::task::Id),
-}
-
-impl CurTask {
-	/// Returns the current task id.
-	///
-	/// If within a tokio task, returns `TokioTask`, else returns the thread id
-	pub fn get() -> Self {
-		if let Some(id) = tokio::task::try_id() {
-			return Self::TokioTask(id);
-		}
-
-		Self::Thread(std::thread::current().id())
-	}
-}
-
-/// Locker inner
+/// Async locker inner
 #[derive(Debug)]
 struct LockerInner {
 	/// Locker id
 	id: u64,
 
-	/// Current task
-	///
-	/// Will be `None` if the locker hasn't been used yet.
-	cur_task: OnceLock<CurTask>,
+	/// Current cell
+	cur_task: OnceLock<tokio::task::Id>,
 }
 
-/// Locker
+/// Async locker.
+///
+/// Ensures two tasks don't deadlock when locking resources.
+// TODO: Simplify to `AsyncLocker(())` on release builds?
 #[derive(Debug)]
-// TODO: Simplify to `Locker(())` on release builds?
-pub struct Locker<'prev, const STATE: usize> {
+pub struct AsyncLocker<'prev, const STATE: usize> {
 	inner: Oob<'prev, LockerInner>,
 }
 
-impl<'prev> Locker<'prev, 0> {
+impl<'prev> AsyncLocker<'prev, 0> {
 	/// Creates a new locker
 	///
 	/// # Deadlock
 	/// You must ensure only a single locker exists per-task, under stacked borrows
 	pub fn new() -> Self {
+		// Create the next id.
 		static ID: AtomicU64 = AtomicU64::new(0);
-
 		let id = ID.fetch_add(1, atomic::Ordering::AcqRel);
-		let inner = LockerInner {
-			id,
-			cur_task: OnceLock::new(),
-		};
+
 		Self {
-			inner: Oob::Owned(inner),
+			inner: Oob::Owned(LockerInner {
+				id,
+				cur_task: OnceLock::new(),
+			}),
 		}
 	}
 }
 
-impl<'prev, const STATE: usize> Locker<'prev, STATE> {
+impl<'prev, const STATE: usize> AsyncLocker<'prev, STATE> {
 	/// Clones this locker
 	///
 	/// # Deadlock
 	/// You must ensure only a single locker exists per-task, under stacked borrows
-	fn clone(&self) -> Locker<'_, STATE> {
-		Locker {
+	fn clone(&self) -> AsyncLocker<'_, STATE> {
+		AsyncLocker {
 			inner: self.inner.to_borrowed(),
 		}
 	}
@@ -104,8 +81,8 @@ impl<'prev, const STATE: usize> Locker<'prev, STATE> {
 	///
 	/// # Deadlock
 	/// You must ensure only a single locker exists per-task, under stacked borrows
-	fn next<const NEXT_STATE: usize>(&self) -> Locker<'_, NEXT_STATE> {
-		Locker {
+	fn next<const NEXT_STATE: usize>(&self) -> AsyncLocker<'_, NEXT_STATE> {
+		AsyncLocker {
 			inner: self.inner.to_borrowed(),
 		}
 	}
@@ -114,15 +91,15 @@ impl<'prev, const STATE: usize> Locker<'prev, STATE> {
 	fn ensure_same_task(&self) {
 		// Get the task, or initialize it
 		let task = self.inner.cur_task.get_or_init(|| {
-			let cur_task = CurTask::get();
+			let cur_task = tokio::task::id();
 			tracing::trace!(locker_id = ?self.inner.id, ?cur_task,"Assigned task to locker");
 			cur_task
 		});
 
 		// Then check if we're on a different task
-		let cur_task = CurTask::get();
+		let cur_task = tokio::task::id();
 		if cur_task != *task {
-			tracing::error!(?task, ?cur_task, "Locker was used in two different tasks");
+			tracing::error!(locker_id = ?self.inner.id, ?task, ?cur_task, "AsyncLocker was used in two different tasks");
 		}
 	}
 }
@@ -135,12 +112,12 @@ pub impl<S: Stream> S {
 	// TODO: Not require `Fut::Output: 'static` and instead make `F` generic over `'cur`.
 	fn split_locker_async_unordered<'prev, 'cur, F, Fut, const STATE: usize>(
 		self,
-		locker: &'cur mut Locker<'prev, STATE>,
+		locker: &'cur mut AsyncLocker<'prev, STATE>,
 		mut f: F,
 	) -> impl Stream<Item = Fut::Output> + 'cur
 	where
 		S: 'cur,
-		F: FnMut(S::Item, Locker<'cur, STATE>) -> Fut + 'cur,
+		F: FnMut(S::Item, AsyncLocker<'cur, STATE>) -> Fut + 'cur,
 		Fut: Future<Output: 'static> + 'cur,
 	{
 		let locker = &*locker;
@@ -157,11 +134,11 @@ pub impl<I: Iterator> I {
 	// TODO: Not require `Fut::Output: 'static` and instead make `F` generic over `'cur`.
 	fn split_locker_async_unordered<'prev, 'cur, F, Fut, const STATE: usize>(
 		self,
-		locker: &'cur mut Locker<'prev, STATE>,
+		locker: &'cur mut AsyncLocker<'prev, STATE>,
 		mut f: F,
 	) -> impl Stream<Item = Fut::Output> + 'cur
 	where
-		F: FnMut(I::Item, Locker<'cur, STATE>) -> Fut + 'cur,
+		F: FnMut(I::Item, AsyncLocker<'cur, STATE>) -> Fut + 'cur,
 		Fut: Future<Output: 'static> + 'cur,
 	{
 		let locker = &*locker;

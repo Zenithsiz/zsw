@@ -9,7 +9,7 @@ use {
 	crate::{
 		panel::{self, PanelImage, PanelShader},
 		playlist::PlaylistItemKind,
-		shared::{AsyncMutexResource, AsyncRwLockResource, Locker, Shared},
+		shared::{AsyncLocker, AsyncMutexResource, AsyncRwLockResource, Shared},
 	},
 	egui::Widget,
 	std::path::Path,
@@ -36,7 +36,7 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	pub fn draw(&mut self, ctx: &egui::Context, _frame: &epi::Frame, shared: &Shared, locker: &mut Locker<'_, 0>) {
+	pub fn draw(&mut self, ctx: &egui::Context, _frame: &epi::Frame, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
 		// Adjust cursor pos to account for the scale factor
 		let scale_factor = shared.window.scale_factor();
 		let cursor_pos = shared.cursor_pos.load().to_logical::<f32>(scale_factor);
@@ -68,14 +68,14 @@ impl SettingsMenu {
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0>) {
+fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
 	self::draw_panels_editor(ui, shared, locker);
 	ui.separator();
 	self::draw_shader_select(ui, shared, locker);
 }
 
 /// Draws the playlists tab
-fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0>) {
+fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
 	let playlists = shared
 		.playlists_manager
 		.get_all_loaded(&shared.playlists, locker)
@@ -84,10 +84,10 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0>
 	for (name, playlist) in playlists {
 		ui.collapsing(&*name, |ui| match playlist {
 			Some(Ok(playlist)) => {
-				let items = playlist.blocking_read(locker).0.items();
+				let items = playlist.read(locker).block_on().0.items();
 
 				for item in items {
-					let (mut item, _) = item.blocking_write(locker);
+					let (mut item, _) = item.write(locker).block_on();
 
 					ui.checkbox(&mut item.enabled, "Enabled");
 					match &mut item.kind {
@@ -121,8 +121,8 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0>
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0>) {
-	let (mut panel_group, _) = shared.cur_panel_group.blocking_lock(locker);
+fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
+	let (mut panel_group, _) = shared.cur_panel_group.lock(locker).block_on();
 	match &mut *panel_group {
 		Some(panel_group) =>
 			for (panel_idx, panel) in panel_group.panels_mut().iter_mut().enumerate() {
@@ -277,10 +277,10 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, locker: &mut Locker<'_, 0>) {
+fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
 	ui.label("Shader");
 
-	let (mut panels_renderer_shader, _) = shared.panels_renderer_shader.blocking_write(locker);
+	let (mut panels_renderer_shader, _) = shared.panels_renderer_shader.write(locker).block_on();
 	let cur_shader = &mut panels_renderer_shader.shader;
 	egui::ComboBox::from_id_source("Shader selection menu")
 		.selected_text(cur_shader.name())
