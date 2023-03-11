@@ -20,23 +20,23 @@ use {
 		panel::{PanelGroup, PanelsRendererShader},
 		playlist::{Playlist, PlaylistItem, Playlists},
 	},
+	dashmap::{mapref::entry::Entry as DashMapEntry, DashMap},
 	futures::{stream::FuturesUnordered, Future, Stream, StreamExt},
-	std::sync::{
-		atomic::{self, AtomicU64},
-		OnceLock,
+	std::{
+		marker::PhantomData,
+		sync::{
+			atomic::{self, AtomicU64},
+			LazyLock,
+		},
 	},
-	zsw_util::Oob,
 };
 
-/// Async locker inner
-#[derive(Debug)]
-struct LockerInner {
-	/// Locker id
-	id: u64,
+/// Async locker id
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
+struct AsyncLockerId(u64);
 
-	/// Current cell
-	cur_task: OnceLock<tokio::task::Id>,
-}
+/// Locker associated to a tokio task.
+static TASK_LOCKER: LazyLock<DashMap<tokio::task::Id, AsyncLockerId>> = LazyLock::new(DashMap::new);
 
 /// Async locker.
 ///
@@ -44,62 +44,83 @@ struct LockerInner {
 // TODO: Simplify to `AsyncLocker(())` on release builds?
 #[derive(Debug)]
 pub struct AsyncLocker<'prev, const STATE: usize> {
-	inner: Oob<'prev, LockerInner>,
+	/// Locker id
+	id: AsyncLockerId,
+
+	/// Locker task
+	// TODO: Add support for "subtasks" for when splitting the locker.
+	task: tokio::task::Id,
+
+	_prev: PhantomData<&'prev Self>,
 }
 
 impl<'prev> AsyncLocker<'prev, 0> {
-	/// Creates a new locker
+	/// Creates a new locker for this task.
 	///
-	/// # Deadlock
-	/// You must ensure only a single locker exists per-task, under stacked borrows
+	/// # Panics
+	/// Panics if two lockers are created in the same task, or if
+	/// created outside of a task.
 	pub fn new() -> Self {
 		// Create the next id.
 		static ID: AtomicU64 = AtomicU64::new(0);
 		let id = ID.fetch_add(1, atomic::Ordering::AcqRel);
+		let id = AsyncLockerId(id);
+
+		// Get the current task
+		let task = tokio::task::id();
+		match TASK_LOCKER.entry(task) {
+			DashMapEntry::Occupied(entry) => {
+				let other_id = entry.get();
+				zsw_util::log_error_panic!(?task, ?id, ?other_id, "Two lockers were created on the same tokio task");
+			},
+			DashMapEntry::Vacant(entry) => {
+				tracing::trace!(?id, ?task, "Assigned task to locker");
+				let _ = entry.insert(id);
+			},
+		};
 
 		Self {
-			inner: Oob::Owned(LockerInner {
-				id,
-				cur_task: OnceLock::new(),
-			}),
+			id,
+			task,
+			_prev: PhantomData,
 		}
 	}
 }
 
 impl<'prev, const STATE: usize> AsyncLocker<'prev, STATE> {
-	/// Clones this locker
+	/// Clones this locker for a sub-task
 	///
 	/// # Deadlock
-	/// You must ensure only a single locker exists per-task, under stacked borrows
+	/// You must ensure each clone of the locker is able to make
+	/// progress on it's own, to avoid deadlocks
 	fn clone(&self) -> AsyncLocker<'_, STATE> {
 		AsyncLocker {
-			inner: self.inner.to_borrowed(),
+			id:    self.id,
+			task:  self.task,
+			_prev: PhantomData,
 		}
 	}
 
 	/// Creates the next locker
 	///
 	/// # Deadlock
-	/// You must ensure only a single locker exists per-task, under stacked borrows
+	/// You must ensure the next state cannot deadlock with the current state.
 	fn next<const NEXT_STATE: usize>(&self) -> AsyncLocker<'_, NEXT_STATE> {
 		AsyncLocker {
-			inner: self.inner.to_borrowed(),
+			id:    self.id,
+			task:  self.task,
+			_prev: PhantomData,
 		}
 	}
 
-	/// Ensures the locker hasn't escaped it's initial task
-	fn ensure_same_task(&self) {
-		// Get the task, or initialize it
-		let task = self.inner.cur_task.get_or_init(|| {
-			let cur_task = tokio::task::id();
-			tracing::trace!(locker_id = ?self.inner.id, ?cur_task,"Assigned task to locker");
-			cur_task
-		});
-
-		// Then check if we're on a different task
+	/// Signals to this locker that we're going to be awaiting.
+	///
+	/// A few invariants will be checked before returning
+	fn start_awaiting(&self) {
+		// If we're on a different task, log error
 		let cur_task = tokio::task::id();
-		if cur_task != *task {
-			tracing::error!(locker_id = ?self.inner.id, ?task, ?cur_task, "AsyncLocker was used in two different tasks");
+		if cur_task != self.task {
+			zsw_util::log_error_panic!(?self.id, ?self.task, ?cur_task, "AsyncLocker was used in two different tasks");
 		}
 	}
 }
@@ -120,6 +141,8 @@ pub impl<S: Stream> S {
 		F: FnMut(S::Item, AsyncLocker<'cur, STATE>) -> Fut + 'cur,
 		Fut: Future<Output: 'static> + 'cur,
 	{
+		// DEADLOCK: Each future in `buffer_unordered` can make progress
+		//           on it's own.
 		let locker = &*locker;
 		self.map(move |item| f(item, locker.clone()))
 			.buffer_unordered(usize::MAX)
@@ -141,6 +164,8 @@ pub impl<I: Iterator> I {
 		F: FnMut(I::Item, AsyncLocker<'cur, STATE>) -> Fut + 'cur,
 		Fut: Future<Output: 'static> + 'cur,
 	{
+		// DEADLOCK: Each future in `FuturesUnordered` can make progress
+		//           on it's own.
 		let locker = &*locker;
 		self.map(move |item| f(item, locker.clone()))
 			.collect::<FuturesUnordered<_>>()

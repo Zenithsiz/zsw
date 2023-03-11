@@ -25,7 +25,7 @@ pub trait MeetupSenderResource {
 		Self: Sized,
 		AsyncLocker<'prev_locker, STATE>: MeetupSenderLocker<Self>,
 	{
-		locker.ensure_same_task();
+		locker.start_awaiting();
 		self.as_inner().send(resource).await;
 	}
 }

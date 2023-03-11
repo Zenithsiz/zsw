@@ -33,7 +33,7 @@ pub trait AsyncRwLockResource {
 		Self::Inner: 'locker,
 		[(); <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
 	{
-		locker.ensure_same_task();
+		locker.start_awaiting();
 		let guard = self.as_inner().read().await;
 		(guard, locker.next())
 	}
@@ -53,7 +53,7 @@ pub trait AsyncRwLockResource {
 		Self::Inner: 'locker,
 		[(); <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
 	{
-		locker.ensure_same_task();
+		locker.start_awaiting();
 		let guard = self.as_inner().write().await;
 		(guard, locker.next())
 	}

@@ -196,3 +196,15 @@ pub impl<F: Future> F {
 		})
 	}
 }
+
+/// Logs an error and panics with the error message
+pub macro log_error_panic( $($rest:tt)* ) {{
+	::tracing::warn!( $($rest)* );
+
+	// TODO: Better way of getting the message as the last argument?
+	let (.., msg) = ( $( stringify!($rest) ),* );
+	let msg = &msg[1..];
+	let msg = &msg[..msg.len() - 1];
+
+	::std::panic!("{msg}");
+}}

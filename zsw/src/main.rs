@@ -196,24 +196,21 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Load playlists", {
 		let shared = Arc::clone(&shared);
-		let locker = AsyncLocker::new();
-		async move { self::load_playlists(locker, shared).await }
+		async move { self::load_playlists(AsyncLocker::new(), shared).await }
 	});
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
-		let locker = AsyncLocker::new();
 		let default_panel_group = config.default_panel_group.clone();
-		async move { self::load_default_panel_group(default_panel_group, locker, shared).await }
+		async move { self::load_default_panel_group(default_panel_group, AsyncLocker::new(), shared).await }
 	});
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		let locker = AsyncLocker::new();
 		async move {
 			self::renderer(
 				shared,
-				locker,
+				AsyncLocker::new(),
 				wgpu_renderer,
 				panels_renderer,
 				egui_renderer,
@@ -226,18 +223,25 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
-		let locker = AsyncLocker::new();
 		let panels_updater_output_tx = PanelsUpdaterMeetupSender::new(panels_updater_output_tx);
-		async move { self::panels_updater(shared, locker, panels_updater_output_tx).await }
+		async move { self::panels_updater(shared, AsyncLocker::new(), panels_updater_output_tx).await }
 	});
 
 	self::spawn_task("Image loader", async move { image_loader.run().await });
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
-		let locker = AsyncLocker::new();
 		let egui_painter_output_tx = EguiPainterRendererMeetupSender::new(egui_painter_output_tx);
-		async move { self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await }
+		async move {
+			self::egui_painter(
+				shared,
+				AsyncLocker::new(),
+				egui_painter,
+				settings_menu,
+				egui_painter_output_tx,
+			)
+			.await
+		}
 	});
 
 	// Then run the event loop on this thread
@@ -329,7 +333,8 @@ where
 
 	#[allow(clippy::let_underscore_future)] // We don't care about the result
 	let _ = tokio::task::Builder::new().name(&name.clone()).spawn(async move {
-		tracing::debug!(?name, "Spawning task");
+		let id = tokio::task::id();
+		tracing::debug!(?name, ?id, "Spawning task");
 		match future.await {
 			Ok(_) => tracing::debug!(?name, "Task finished"),
 			Err(err) => tracing::debug!(?name, ?err, "Task returned error"),

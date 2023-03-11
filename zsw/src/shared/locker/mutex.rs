@@ -33,7 +33,7 @@ pub trait AsyncMutexResource {
 		Self::Inner: 'locker,
 		[(); <AsyncLocker<'prev_locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE]:,
 	{
-		locker.ensure_same_task();
+		locker.start_awaiting();
 		let guard = self.as_inner().lock().await;
 		(guard, locker.next())
 	}
