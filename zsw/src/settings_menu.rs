@@ -39,21 +39,19 @@ impl SettingsMenu {
 	pub fn draw(&mut self, ctx: &egui::Context, _frame: &epi::Frame, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
 		// Adjust cursor pos to account for the scale factor
 		let scale_factor = shared.window.scale_factor();
-		let cursor_pos = shared.cursor_pos.load().to_logical::<f32>(scale_factor);
+		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
 
 		// Create the window
 		let mut egui_window = egui::Window::new("Settings");
 
 		// Open it at the mouse if pressed
-		if ctx.input().pointer.button_clicked(egui::PointerButton::Secondary) {
+		if !ctx.is_pointer_over_area() && ctx.input().pointer.button_clicked(egui::PointerButton::Secondary) {
 			egui_window = egui_window.current_pos(egui::pos2(cursor_pos.x, cursor_pos.y));
 			self.open = true;
 		}
 
 		// Then render it
 		egui_window.open(&mut self.open).show(ctx, |ui| {
-			//egui::TopBottomPanel::top("Settings - Toolbar").show(ctx, add_contents)
-
 			ui.horizontal(|ui| {
 				ui.selectable_value(&mut self.cur_tab, Tab::Panels, "Panels");
 				ui.selectable_value(&mut self.cur_tab, Tab::Playlists, "Playlists");

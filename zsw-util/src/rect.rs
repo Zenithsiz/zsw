@@ -78,6 +78,15 @@ impl Rect<i32, u32> {
 			self.pos.y.checked_add_unsigned(self.size.y / 2).expect("Overflow"),
 		)
 	}
+
+	/// Returns if a point is contained in this rectangle
+	#[must_use]
+	pub fn contains(self, point: Point2<i32>) -> bool {
+		point.x >= self.pos.x &&
+			point.x <= self.pos.x.checked_add_unsigned(self.size.x).expect("Overflow") &&
+			point.y >= self.pos.y &&
+			point.y <= self.pos.y.checked_add_unsigned(self.size.y).expect("Overflow")
+	}
 }
 
 impl fmt::Display for Rect<i32, u32> {

@@ -82,7 +82,7 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		platform::run_return::EventLoopExtRunReturn,
 	},
-	zsw_util::meetup,
+	zsw_util::{meetup, TokioTaskBlockOn},
 };
 
 
@@ -435,7 +435,29 @@ async fn egui_painter(
 ) -> Result<!, AppError> {
 	loop {
 		let full_output = egui_painter.draw(&shared.window, |ctx, frame| {
+			// Draw the settings menu
 			settings_menu.draw(ctx, frame, &shared, &mut locker);
+
+			// Pause any shift-clicked panels
+			if !ctx.is_pointer_over_area() &&
+				ctx.input().pointer.button_clicked(egui::PointerButton::Primary) &&
+				ctx.input().modifiers.shift
+			{
+				let cursor_pos = shared.cursor_pos.load();
+				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();
+				if let Some(panel_group) = &mut *panel_group {
+					for panel in panel_group.panels_mut() {
+						for geometry in &panel.geometries {
+							if geometry.geometry.contains(cursor_pos) {
+								panel.state.paused ^= true;
+								break;
+							}
+						}
+					}
+				}
+			}
+
 			Ok::<_, !>(())
 		})?;
 		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
