@@ -493,6 +493,36 @@ async fn egui_painter(
 				}
 			}
 
+			// Scroll panels
+			// TODO: Deduplicate this with the above and settings menu.
+			if !ctx.is_pointer_over_area() && ctx.input().scroll_delta.y != 0.0 && ctx.input().modifiers.shift {
+				let delta = ctx.input().scroll_delta.y;
+				let cursor_pos = shared.cursor_pos.load();
+				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();
+				if let Some(panel_group) = &mut *panel_group {
+					for panel in panel_group.panels_mut() {
+						let max = match panel.images.state() {
+							panel::ImagesState::Empty => 0,
+							panel::ImagesState::PrimaryOnly => panel.state.fade_point,
+							panel::ImagesState::Both => panel.state.duration,
+						};
+
+						let speed = (panel.state.duration as f32) / 60.0;
+
+						for geometry in &panel.geometries {
+							if geometry.geometry.contains(cursor_pos) {
+								panel.state.cur_progress = panel
+									.state
+									.cur_progress
+									.saturating_add_signed((-delta * speed) as i64)
+									.clamp(0, max);
+							}
+						}
+					}
+				}
+			}
+
 			Ok::<_, !>(())
 		})?;
 		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
