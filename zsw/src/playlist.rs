@@ -199,7 +199,7 @@ pub struct Playlists {
 	// Note: We keep all playlists loaded due to them being likely small in both size and quantity.
 	//       Even a playlist with 10k file entries, with an average path of 200 bytes, would only occupy
 	//       ~2 MiB. This is far less than the size of most images we load.
-	#[allow(clippy::type_complexity)] // TODO: Refactor the whole type
+	#[expect(clippy::type_complexity)] // TODO: Refactor the whole type
 	playlists: HashMap<Arc<str>, Arc<Lazy<Result<Arc<PlaylistRwLock>, Arc<AppError>>, LoadPlaylistFut>>>,
 }
 

@@ -101,7 +101,7 @@ impl<'prev> AsyncLocker<'prev, 0> {
 	}
 }
 
-#[cfg_attr(not(feature = "locker-validation"), allow(clippy::unused_self))] // Only required when validating
+#[cfg_attr(not(feature = "locker-validation"), expect(clippy::unused_self))] // Only required when validating
 impl<'prev, const STATE: usize> AsyncLocker<'prev, STATE> {
 	/// Clones this locker for a sub-task
 	///

@@ -33,7 +33,7 @@ impl EguiRenderer {
 	) -> Result<(), AppError> {
 		// Update textures
 		let surface_size = frame.surface_size();
-		#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
+		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 		let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
 			physical_width:  surface_size.width,
 			physical_height: surface_size.height,
@@ -106,7 +106,7 @@ impl EguiPainter {
 
 		// Create the frame
 		let app_output = epi::backend::AppOutput::default();
-		#[allow(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
+		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 		let egui_frame = epi::Frame::new(epi::backend::FrameData {
 			info:           epi::IntegrationInfo {
 				name:                    "egui",
@@ -146,7 +146,7 @@ impl EguiEventHandler {
 	/// Handles an event
 	pub fn handle_event(&mut self, event: winit::event::Event<'static, !>) {
 		// Note: We don't care if the event won't be handled
-		#[allow(let_underscore_drop)]
+		#[expect(let_underscore_drop)]
 		let _ = self.event_tx.send(event);
 	}
 }

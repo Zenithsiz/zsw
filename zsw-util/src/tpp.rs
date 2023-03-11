@@ -36,20 +36,20 @@ impl Tpp {
 
 	/// Defines a value
 	pub fn define(&mut self, binding: impl Into<String>, value: impl Into<String>) {
-		#[allow(let_underscore_drop)] // We don't care if the binding already had a value
+		#[expect(let_underscore_drop)] // We don't care if the binding already had a value
 		let _ = self.bindings.insert(binding.into(), value.into());
 	}
 
 	/// Undefines a value
 	pub fn undef(&mut self, binding: impl AsRef<str>) {
 		// TODO: Should we care about it?
-		#[allow(let_underscore_drop)] // We don't care if the binding already had a value
+		#[expect(let_underscore_drop)] // We don't care if the binding already had a value
 		let _ = self.bindings.remove(binding.as_ref());
 	}
 
 	/// Processes a file
 	// TODO: Don't clone result once the borrow checker accepts the early return
-	#[allow(clippy::cognitive_complexity)] // TODO: Refactor
+	#[expect(clippy::cognitive_complexity)] // TODO: Refactor
 	pub fn process(&mut self, path: impl AsRef<Path>) -> Result<String, anyhow::Error> {
 		// Open the file and check if we already processed it
 		let path = path.as_ref().canonicalize().context("Unable to canonicalize file")?;

@@ -76,7 +76,7 @@ impl ImageRequester {
 #[derive(Debug)]
 pub struct ImageReceiver {
 	/// Return receiver
-	#[allow(clippy::disallowed_types)] // DEADLOCK: We never `await` it, only `try_recv`, which is non-blocking
+	#[expect(clippy::disallowed_types)] // DEADLOCK: We never `await` it, only `try_recv`, which is non-blocking
 	ret_rx: oneshot::Receiver<ImageResponse>,
 }
 
@@ -276,7 +276,7 @@ impl ImageLoader {
 	) -> Result<PathBuf, AppError> {
 		// Calculate the ratio
 		// Note: Needs to be a power of two for upscaler so we round it up, if necessary
-		#[allow(clippy::cast_sign_loss)] // They're all positive
+		#[expect(clippy::cast_sign_loss)] // They're all positive
 		let ratio = f32::max(
 			minimum_size.x as f32 / image_size.x as f32,
 			minimum_size.y as f32 / image_size.y as f32,
@@ -297,7 +297,7 @@ impl ImageLoader {
 			return Ok(upscaled_image_path);
 		}
 
-		#[allow(clippy::disallowed_methods)] // DEADLOCK: No other locks are acquired while holding the permit
+		#[expect(clippy::disallowed_methods)] // DEADLOCK: No other locks are acquired while holding the permit
 		let _permit = upscale_semaphore.acquire().await;
 		tracing::trace!(?image_path, ?upscaled_image_path, ?ratio, "Upscaling image");
 		let ((), upscale_duration) = zsw_util::try_measure_async(async {
@@ -327,7 +327,7 @@ impl ImageLoader {
 	fn minimum_image_size_for_panel(image_size: Vector2<u32>, panel_size: Vector2<u32>) -> Vector2<u32> {
 		let ratio = PanelGeometry::image_ratio(panel_size, image_size);
 
-		#[allow(clippy::cast_sign_loss)] // The sizes and ratio are positive
+		#[expect(clippy::cast_sign_loss)] // The sizes and ratio are positive
 		Vector2::new(
 			(panel_size.x as f32 / ratio.x).ceil() as u32,
 			(panel_size.y as f32 / ratio.y).ceil() as u32,

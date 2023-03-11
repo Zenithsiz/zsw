@@ -102,7 +102,7 @@ impl Config {
 	}
 }
 
-#[allow(clippy::derivable_impls)] // we want to be explicit with defaults
+#[expect(clippy::derivable_impls)] // we want to be explicit with defaults
 impl Default for Config {
 	fn default() -> Self {
 		Self {

@@ -26,7 +26,7 @@
 	associated_type_bounds,
 	hash_raw_entry
 )]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 // Modules
 mod args;
@@ -115,7 +115,7 @@ fn main() -> Result<(), AppError> {
 #[cfg(feature = "include-shaders")]
 static SHADERS_DIR: include_dir::Dir<'_> = include_dir::include_dir!("shaders/");
 
-#[allow(clippy::too_many_lines)] // TODO: Separate
+#[expect(clippy::too_many_lines)] // TODO: Separate
 async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (mut event_loop, window) = window::create().context("Unable to create winit event loop and window")?;
 	let window = Arc::new(window);
@@ -243,7 +243,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 		event_loop.run_return(|event, _, control_flow| {
 			*control_flow = winit::event_loop::ControlFlow::Wait;
 
-			#[allow(clippy::single_match)] // We'll add more in the future
+			#[expect(clippy::single_match)] // We'll add more in the future
 			match event {
 				winit::event::Event::WindowEvent { ref event, .. } => match *event {
 					winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
@@ -325,7 +325,6 @@ where
 {
 	let name = name.into();
 
-	#[allow(clippy::let_underscore_future)] // We don't care about the result
 	let _ = tokio::task::Builder::new().name(&name.clone()).spawn(async move {
 		let id = tokio::task::id();
 		tracing::debug!(?name, ?id, "Spawning task");

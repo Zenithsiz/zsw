@@ -13,7 +13,7 @@ use Result as R;
 #[extend::ext(name = Name)]
 pub impl<ty, E> (res,) {
 	fn collect_result(self) -> Result<(ty,), E> {
-		#[allow(non_snake_case)] // Simplifies macro
+		#[expect(non_snake_case)] // Simplifies macro
 		let (ty,) = self;
 		Ok((unwrap,))
 	}

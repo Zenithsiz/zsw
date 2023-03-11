@@ -145,7 +145,7 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel group
-	#[allow(clippy::too_many_arguments)] // TODO: Refactor
+	#[expect(clippy::too_many_arguments)] // TODO: Refactor
 	pub fn render(
 		&mut self,
 		frame: &mut FrameRender,

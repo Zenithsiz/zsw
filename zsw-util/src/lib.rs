@@ -14,9 +14,10 @@
 	extend_one,
 	poll_ready,
 	async_closure,
-	path_as_mut_os_str
+	path_as_mut_os_str,
+	lint_reasons
 )]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 // Modules
 pub mod meetup;
