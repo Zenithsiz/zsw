@@ -20,22 +20,26 @@ use {
 		panel::{PanelGroup, PanelsRendererShader},
 		playlist::{Playlist, PlaylistItem, Playlists},
 	},
-	dashmap::{mapref::entry::Entry as DashMapEntry, DashMap},
 	futures::{stream::FuturesUnordered, Future, Stream, StreamExt},
-	std::{
-		marker::PhantomData,
-		sync::{
-			atomic::{self, AtomicU64},
-			LazyLock,
-		},
+	std::marker::PhantomData,
+};
+
+#[cfg(feature = "locker-validation")]
+use {
+	dashmap::{mapref::entry::Entry as DashMapEntry, DashMap},
+	std::sync::{
+		atomic::{self, AtomicU64},
+		LazyLock,
 	},
 };
 
 /// Async locker id
+#[cfg(feature = "locker-validation")]
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 struct AsyncLockerId(u64);
 
 /// Locker associated to a tokio task.
+#[cfg(feature = "locker-validation")]
 static TASK_LOCKER: LazyLock<DashMap<tokio::task::Id, AsyncLockerId>> = LazyLock::new(DashMap::new);
 
 /// Async locker.
@@ -45,10 +49,12 @@ static TASK_LOCKER: LazyLock<DashMap<tokio::task::Id, AsyncLockerId>> = LazyLock
 #[derive(Debug)]
 pub struct AsyncLocker<'prev, const STATE: usize> {
 	/// Locker id
+	#[cfg(feature = "locker-validation")]
 	id: AsyncLockerId,
 
 	/// Locker task
 	// TODO: Add support for "subtasks" for when splitting the locker.
+	#[cfg(feature = "locker-validation")]
 	task: tokio::task::Id,
 
 	_prev: PhantomData<&'prev Self>,
@@ -62,31 +68,40 @@ impl<'prev> AsyncLocker<'prev, 0> {
 	/// created outside of a task.
 	pub fn new() -> Self {
 		// Create the next id.
-		static ID: AtomicU64 = AtomicU64::new(0);
-		let id = ID.fetch_add(1, atomic::Ordering::AcqRel);
-		let id = AsyncLockerId(id);
+		#[cfg(feature = "locker-validation")]
+		let id = {
+			static ID: AtomicU64 = AtomicU64::new(0);
+			let id = ID.fetch_add(1, atomic::Ordering::AcqRel);
+			AsyncLockerId(id)
+		};
 
-		// Get the current task
-		let task = tokio::task::id();
-		match TASK_LOCKER.entry(task) {
+		// Get the current task and check for duplicates
+		#[cfg(feature = "locker-validation")]
+		let task = match TASK_LOCKER.entry(tokio::task::id()) {
 			DashMapEntry::Occupied(entry) => {
+				let task = entry.key();
 				let other_id = entry.get();
 				zsw_util::log_error_panic!(?task, ?id, ?other_id, "Two lockers were created on the same tokio task");
 			},
 			DashMapEntry::Vacant(entry) => {
+				let task = entry.key();
 				tracing::trace!(?id, ?task, "Assigned task to locker");
-				let _ = entry.insert(id);
+				let entry = entry.insert(id);
+				*entry.key()
 			},
 		};
 
 		Self {
+			#[cfg(feature = "locker-validation")]
 			id,
+			#[cfg(feature = "locker-validation")]
 			task,
 			_prev: PhantomData,
 		}
 	}
 }
 
+#[cfg_attr(not(feature = "locker-validation"), allow(clippy::unused_self))] // Only required when validating
 impl<'prev, const STATE: usize> AsyncLocker<'prev, STATE> {
 	/// Clones this locker for a sub-task
 	///
@@ -95,8 +110,10 @@ impl<'prev, const STATE: usize> AsyncLocker<'prev, STATE> {
 	/// progress on it's own, to avoid deadlocks
 	fn clone(&self) -> AsyncLocker<'_, STATE> {
 		AsyncLocker {
-			id:    self.id,
-			task:  self.task,
+			#[cfg(feature = "locker-validation")]
+			id: self.id,
+			#[cfg(feature = "locker-validation")]
+			task: self.task,
 			_prev: PhantomData,
 		}
 	}
@@ -107,8 +124,10 @@ impl<'prev, const STATE: usize> AsyncLocker<'prev, STATE> {
 	/// You must ensure the next state cannot deadlock with the current state.
 	fn next<const NEXT_STATE: usize>(&self) -> AsyncLocker<'_, NEXT_STATE> {
 		AsyncLocker {
-			id:    self.id,
-			task:  self.task,
+			#[cfg(feature = "locker-validation")]
+			id: self.id,
+			#[cfg(feature = "locker-validation")]
+			task: self.task,
 			_prev: PhantomData,
 		}
 	}
@@ -118,9 +137,12 @@ impl<'prev, const STATE: usize> AsyncLocker<'prev, STATE> {
 	/// A few invariants will be checked before returning
 	fn start_awaiting(&self) {
 		// If we're on a different task, log error
-		let cur_task = tokio::task::id();
-		if cur_task != self.task {
-			zsw_util::log_error_panic!(?self.id, ?self.task, ?cur_task, "AsyncLocker was used in two different tasks");
+		#[cfg(feature = "locker-validation")]
+		{
+			let cur_task = tokio::task::id();
+			if cur_task != self.task {
+				zsw_util::log_error_panic!(?self.id, ?self.task, ?cur_task, "AsyncLocker was used in two different tasks");
+			}
 		}
 	}
 }
