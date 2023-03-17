@@ -25,7 +25,7 @@ pub trait AsyncRwLockResource {
 		locker: &'locker mut AsyncLocker<'prev_locker, STATE>,
 	) -> (
 		RwLockReadGuard<'locker, Self::Inner>,
-		AsyncLocker<{ <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
+		AsyncLocker<'locker, { <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
 	)
 	where
 		Self: Sized,
@@ -45,7 +45,7 @@ pub trait AsyncRwLockResource {
 		locker: &'locker mut AsyncLocker<'prev_locker, STATE>,
 	) -> (
 		RwLockWriteGuard<'locker, Self::Inner>,
-		AsyncLocker<{ <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
+		AsyncLocker<'locker, { <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
 	)
 	where
 		Self: Sized,
@@ -97,7 +97,7 @@ pub macro resource_impl(
 
 	$(
 		#[sealed::sealed]
-		impl<'locker> AsyncRwLockLocker<$Name> for AsyncLocker<'locker, $CUR_STATE> {
+		impl AsyncRwLockLocker<$Name> for AsyncLocker<'_, $CUR_STATE> {
 			const NEXT_STATE: usize = $NEXT_STATE;
 		}
 	)*

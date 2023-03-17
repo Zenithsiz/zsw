@@ -60,7 +60,7 @@ pub struct AsyncLocker<'prev, const STATE: usize> {
 	_prev: PhantomData<&'prev Self>,
 }
 
-impl<'prev> AsyncLocker<'prev, 0> {
+impl AsyncLocker<'_, 0> {
 	/// Creates a new locker for this task.
 	///
 	/// # Panics
@@ -102,7 +102,7 @@ impl<'prev> AsyncLocker<'prev, 0> {
 }
 
 #[cfg_attr(not(feature = "locker-validation"), expect(clippy::unused_self))] // Only required when validating
-impl<'prev, const STATE: usize> AsyncLocker<'prev, STATE> {
+impl<const STATE: usize> AsyncLocker<'_, STATE> {
 	/// Clones this locker for a sub-task
 	///
 	/// # Deadlock
@@ -153,9 +153,9 @@ pub impl<S: Stream> S {
 	/// Splits a locker across this stream into an unordered stream
 	// TODO: Not require `Send` here.
 	// TODO: Not require `Fut::Output: 'static` and instead make `F` generic over `'cur`.
-	fn split_locker_async_unordered<'prev, 'cur, F, Fut, const STATE: usize>(
+	fn split_locker_async_unordered<'cur, F, Fut, const STATE: usize>(
 		self,
-		locker: &'cur mut AsyncLocker<'prev, STATE>,
+		locker: &'cur mut AsyncLocker<'_, STATE>,
 		mut f: F,
 	) -> impl Stream<Item = Fut::Output> + 'cur
 	where
@@ -177,9 +177,9 @@ pub impl<I: Iterator> I {
 	/// Splits a locker across this iterator into an unordered stream
 	// TODO: Not require `Send` here.
 	// TODO: Not require `Fut::Output: 'static` and instead make `F` generic over `'cur`.
-	fn split_locker_async_unordered<'prev, 'cur, F, Fut, const STATE: usize>(
+	fn split_locker_async_unordered<'cur, F, Fut, const STATE: usize>(
 		self,
-		locker: &'cur mut AsyncLocker<'prev, STATE>,
+		locker: &'cur mut AsyncLocker<'_, STATE>,
 		mut f: F,
 	) -> impl Stream<Item = Fut::Output> + 'cur
 	where

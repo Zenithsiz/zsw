@@ -25,7 +25,7 @@ pub trait AsyncMutexResource {
 		locker: &'locker mut AsyncLocker<'prev_locker, STATE>,
 	) -> (
 		MutexGuard<'locker, Self::Inner>,
-		AsyncLocker<{ <AsyncLocker<'locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE }>,
+		AsyncLocker<'locker, { <AsyncLocker<'locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE }>,
 	)
 	where
 		Self: Sized,
@@ -77,7 +77,7 @@ pub macro resource_impl(
 
 	$(
 		#[sealed::sealed]
-		impl<'locker> AsyncMutexLocker<$Name> for AsyncLocker<'locker, $CUR_STATE> {
+		impl AsyncMutexLocker<$Name> for AsyncLocker<'_, $CUR_STATE> {
 			const NEXT_STATE: usize = $NEXT_STATE;
 		}
 	)*

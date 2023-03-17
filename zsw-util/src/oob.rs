@@ -14,32 +14,32 @@ pub enum Oob<'a, T> {
 	Borrowed(&'a T),
 }
 
-impl<'a, T> Oob<'a, T> {
+impl<T> Oob<'_, T> {
 	/// Returns a borrowed oob
 	pub fn to_borrowed(&self) -> Oob<'_, T> {
 		Oob::Borrowed(&**self)
 	}
 }
 
-impl<'a, T: PartialOrd> PartialOrd for Oob<'a, T> {
+impl<T: PartialOrd> PartialOrd for Oob<'_, T> {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
 		(**self).partial_cmp(&**other)
 	}
 }
 
-impl<'a, T: Ord> Ord for Oob<'a, T> {
+impl<T: Ord> Ord for Oob<'_, T> {
 	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
 		(**self).cmp(&**other)
 	}
 }
 
-impl<'a, T: PartialEq> PartialEq for Oob<'a, T> {
+impl<T: PartialEq> PartialEq for Oob<'_, T> {
 	fn eq(&self, other: &Self) -> bool {
 		**self == **other
 	}
 }
 
-impl<'a, T> Deref for Oob<'a, T> {
+impl<T> Deref for Oob<'_, T> {
 	type Target = T;
 
 	fn deref(&self) -> &Self::Target {
@@ -50,13 +50,13 @@ impl<'a, T> Deref for Oob<'a, T> {
 	}
 }
 
-impl<'a, T> AsRef<T> for Oob<'a, T> {
+impl<T> AsRef<T> for Oob<'_, T> {
 	fn as_ref(&self) -> &T {
 		self
 	}
 }
 
-impl<'a, T> Borrow<T> for Oob<'a, T> {
+impl<T> Borrow<T> for Oob<'_, T> {
 	fn borrow(&self) -> &T {
 		self
 	}

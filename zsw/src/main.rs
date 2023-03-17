@@ -24,7 +24,9 @@
 	once_cell,
 	return_position_impl_trait_in_trait,
 	associated_type_bounds,
-	hash_raw_entry
+	hash_raw_entry,
+	must_not_suspend,
+	strict_provenance
 )]
 #![expect(incomplete_features)]
 

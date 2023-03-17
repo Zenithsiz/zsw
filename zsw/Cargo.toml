@@ -15,7 +15,6 @@ console-subscriber = { version = "0.1.8", optional = true }
 crossbeam = "0.8.2"
 dashmap = "5.4.0"
 directories = "4.0.1"
-duplicate = "0.4.1"
 egui = { version = "0.19.0", features = ["default_fonts"] }
 egui_wgpu_backend = "0.20.0"
 egui_winit_platform = "0.16.0"
@@ -27,7 +26,6 @@ include_dir = { version = "0.7.3", optional = true }
 itertools = "0.10.5"
 num-rational = "0.4.1"
 opener = "0.5.2"
-paste = "1.0.11"
 rand = "0.8.5"
 rayon = "1.6.1"
 sealed = "0.4.0"

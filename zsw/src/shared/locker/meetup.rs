@@ -68,6 +68,6 @@ pub macro resource_impl(
 
 	$(
 		#[sealed::sealed]
-		impl<'locker> MeetupSenderLocker<$Name> for AsyncLocker<'locker, $CUR_STATE> {}
+		impl MeetupSenderLocker<$Name> for AsyncLocker<'_, $CUR_STATE> {}
 	)*
 }

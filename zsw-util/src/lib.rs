@@ -14,8 +14,9 @@
 	extend_one,
 	poll_ready,
 	async_closure,
-	path_as_mut_os_str,
-	lint_reasons
+	lint_reasons,
+	must_not_suspend,
+	strict_provenance
 )]
 #![expect(incomplete_features)]
 
