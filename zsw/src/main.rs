@@ -450,11 +450,8 @@ async fn egui_painter(
 			// Draw the settings menu
 			settings_menu.draw(ctx, frame, &shared, &mut locker);
 
-			// Pause any shift-clicked panels
-			if !ctx.is_pointer_over_area() &&
-				ctx.input().pointer.button_clicked(egui::PointerButton::Primary) &&
-				ctx.input().modifiers.shift
-			{
+			// Pause any double-clicked panels
+			if !ctx.is_pointer_over_area() && ctx.input().pointer.button_double_clicked(egui::PointerButton::Primary) {
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();
@@ -497,7 +494,7 @@ async fn egui_painter(
 
 			// Scroll panels
 			// TODO: Deduplicate this with the above and settings menu.
-			if !ctx.is_pointer_over_area() && ctx.input().scroll_delta.y != 0.0 && ctx.input().modifiers.shift {
+			if !ctx.is_pointer_over_area() && ctx.input().scroll_delta.y != 0.0 {
 				let delta = ctx.input().scroll_delta.y;
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
@@ -510,7 +507,7 @@ async fn egui_painter(
 							panel::ImagesState::Both => panel.state.duration,
 						};
 
-						let speed = (panel.state.duration as f32) / 60.0;
+						let speed = (panel.state.duration as f32) / 240.0;
 
 						for geometry in &panel.geometries {
 							if geometry.geometry.contains(cursor_pos) {
