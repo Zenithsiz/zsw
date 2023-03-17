@@ -130,7 +130,6 @@ impl FrameRender {
 		// Note: Although not supposed to, `submit` calls can block, so we wrap it
 		//       in a tokio block-in-place
 		let _ = tokio::task::block_in_place(|| shared.queue.submit([self.encoder.finish()]));
-		//let _ = shared.queue.submit([self.encoder.finish()]);
 		self.surface_texture.present();
 	}
 }
