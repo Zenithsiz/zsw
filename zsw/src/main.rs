@@ -405,7 +405,9 @@ async fn renderer(
 
 		// Resize if we need to
 		if let Some(resize) = shared.last_resize.swap(None) {
-			wgpu_renderer.resize(&shared.wgpu, resize.size);
+			wgpu_renderer
+				.resize(&shared.wgpu, resize.size)
+				.context("Unable to resize wgpu")?;
 			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, resize.size);
 		}
 	}
@@ -441,12 +443,14 @@ async fn egui_painter(
 	egui_painter_output_tx: EguiPainterRendererMeetupSender,
 ) -> Result<!, AppError> {
 	loop {
-		let full_output = egui_painter.draw(&shared.window, |ctx, frame| {
+		let full_output = egui_painter.draw(&shared.window, |ctx| {
 			// Draw the settings menu
-			settings_menu.draw(ctx, frame, &shared, &mut locker);
+			settings_menu.draw(ctx, &shared, &mut locker);
 
 			// Pause any double-clicked panels
-			if !ctx.is_pointer_over_area() && ctx.input().pointer.button_double_clicked(egui::PointerButton::Primary) {
+			if !ctx.is_pointer_over_area() &&
+				ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary))
+			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();
@@ -465,8 +469,7 @@ async fn egui_painter(
 			// Skip any ctrl-clicked panels
 			// TODO: Deduplicate this with the above and settings menu.
 			if !ctx.is_pointer_over_area() &&
-				ctx.input().pointer.button_clicked(egui::PointerButton::Primary) &&
-				ctx.input().modifiers.ctrl
+				ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl)
 			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
@@ -489,8 +492,8 @@ async fn egui_painter(
 
 			// Scroll panels
 			// TODO: Deduplicate this with the above and settings menu.
-			if !ctx.is_pointer_over_area() && ctx.input().scroll_delta.y != 0.0 {
-				let delta = ctx.input().scroll_delta.y;
+			if !ctx.is_pointer_over_area() && ctx.input(|input| input.scroll_delta.y != 0.0) {
+				let delta = ctx.input(|input| input.scroll_delta.y);
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();

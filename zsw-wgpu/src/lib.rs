@@ -32,7 +32,7 @@ pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), A
 	let (device, queue) = self::create_device(&adapter).await?;
 
 	// Then create the renderer
-	let renderer = WgpuRenderer::new(window, surface, &adapter, &device).context("Unable to create renderer")?;
+	let renderer = WgpuRenderer::new(window, surface, adapter, &device).context("Unable to create renderer")?;
 
 	Ok((WgpuShared { device, queue }, renderer))
 }
@@ -53,9 +53,9 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 		.context("Unable to request device")?;
 
 	// Configure the device to not panic on errors
-	device.on_uncaptured_error(|err| {
+	device.on_uncaptured_error(Box::new(|err| {
 		tracing::error!("Wgpu error: {err}");
-	});
+	}));
 
 	Ok((device, queue))
 }
@@ -66,16 +66,23 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 /// The returned surface *must* be dropped before the window.
 async unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, wgpu::Adapter), AppError> {
 	// Get an instance with any backend
-	let backends = wgpu::Backends::all();
-	tracing::debug!(?backends, "Requesting wgpu instance");
-	let instance = wgpu::Instance::new(backends);
+	let instance_desc = wgpu::InstanceDescriptor {
+		backends:             wgpu::Backends::all(),
+		dx12_shader_compiler: wgpu::Dx12Compiler::Dxc {
+			dxil_path: None,
+			dxc_path:  None,
+		},
+	};
+	// TODO: Just use `?instance_desc` once it implements `Debug`
+	tracing::debug!(?instance_desc.backends, ?instance_desc.dx12_shader_compiler, "Requesting wgpu instance");
+	let instance = wgpu::Instance::new(instance_desc);
 	tracing::debug!(?instance, "Created wgpu instance");
 
 	// Create the surface
 	tracing::debug!(?window, "Requesting wgpu surface");
 	#[deny(unsafe_op_in_unsafe_fn)]
 	// SAFETY: Caller promises the window outlives the surface
-	let surface = unsafe { instance.create_surface(window) };
+	let surface = unsafe { instance.create_surface(window) }.context("Unable to request surface")?;
 	tracing::debug!(?surface, "Created wgpu surface");
 
 	// Then request the adapter

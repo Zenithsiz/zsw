@@ -24,16 +24,20 @@ struct Sampled {
 // Samples a texture
 fn sample(texture: texture_2d<f32>, uvs: vec2<f32>, image_uniforms: ImageUniforms, alpha: f32) -> Sampled {
 	var sampled: Sampled;
+	var uvs = uvs;
 
 	// Apply parallax to the uvs first
-	let mid = vec2<f32>(0.5, 0.5);
-	let uvs = (uvs - mid) * image_uniforms.parallax_ratio + mid + image_uniforms.parallax_offset;
+	{
+		let mid = vec2<f32>(0.5, 0.5);
+		uvs = (uvs - mid) * image_uniforms.parallax_ratio + mid + image_uniforms.parallax_offset;
+	}
 
 	// Then apply the image ratio and delta
 	let uvs_delta = (vec2<f32>(1.0, 1.0) - image_uniforms.image_ratio) * image_uniforms.progress;
-	let uvs = uvs * image_uniforms.image_ratio + uvs_delta;
+	uvs = uvs * image_uniforms.image_ratio + uvs_delta;
 
 	// Offset it, if necessary
+	{
 	#match SHADER
 	#match_case    "none"
 	#match_case_or "fade"
@@ -42,13 +46,14 @@ fn sample(texture: texture_2d<f32>, uvs: vec2<f32>, image_uniforms: ImageUniform
 
 	#match_case "fade-out"
 		let mid = vec2<f32>(image_uniforms.image_ratio.x / 2.0 + uvs_delta.x, image_uniforms.image_ratio.y / 2.0 + uvs_delta.y);
-		let uvs = (uvs.xy - mid) * pow(alpha, uniforms.strength) + mid;
+		uvs = (uvs.xy - mid) * pow(alpha, uniforms.strength) + mid;
 
 	#match_case "fade-in"
 		let mid = vec2<f32>(image_uniforms.image_ratio.x / 2.0 + uvs_delta.x, image_uniforms.image_ratio.y / 2.0 + uvs_delta.y);
-		let uvs = (uvs.xy - mid) / pow(alpha, uniforms.strength) + mid;
+		uvs = (uvs.xy - mid) / pow(alpha, uniforms.strength) + mid;
 
 	#match_end
+	}
 
 	sampled.color = textureSample(texture, texture_sampler, uvs);
 	sampled.uvs = uvs;

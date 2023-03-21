@@ -12,6 +12,9 @@ use {
 /// Wgpu renderer
 #[derive(Debug)]
 pub struct WgpuRenderer {
+	/// Adapter
+	adapter: wgpu::Adapter,
+
 	/// Surface
 	surface: wgpu::Surface,
 
@@ -28,26 +31,28 @@ pub struct WgpuRenderer {
 	/// Window
 	_window: Arc<Window>,
 
-	/// Surface texture format
-	surface_texture_format: wgpu::TextureFormat,
+	/// Surface config
+	surface_config: wgpu::SurfaceConfiguration,
 }
 
 impl WgpuRenderer {
 	pub(super) fn new(
 		window: Arc<Window>,
 		surface: wgpu::Surface,
-		adapter: &wgpu::Adapter,
+		adapter: wgpu::Adapter,
 		device: &wgpu::Device,
 	) -> Result<Self, AppError> {
 		// Configure the surface and get the preferred texture format and surface size
-		let (surface_texture_format, surface_size) = self::configure_window_surface(&window, &surface, adapter, device)
+		let surface_size = window.inner_size();
+		let surface_config = self::configure_window_surface(&surface, &adapter, device, surface_size)
 			.context("Unable to configure window surface")?;
 
 		Ok(Self {
+			adapter,
 			surface,
 			surface_size,
 			_window: window,
-			surface_texture_format,
+			surface_config,
 		})
 	}
 
@@ -56,9 +61,9 @@ impl WgpuRenderer {
 		self.surface_size
 	}
 
-	/// Returns the surface texture format
-	pub fn surface_texture_format(&self) -> wgpu::TextureFormat {
-		self.surface_texture_format
+	/// Returns the surface config
+	pub fn surface_config(&self) -> &wgpu::SurfaceConfiguration {
+		&self.surface_config
 	}
 
 	/// Starts rendering a frame.
@@ -91,14 +96,17 @@ impl WgpuRenderer {
 	}
 
 	/// Performs a resize
-	pub fn resize(&mut self, shared: &WgpuShared, size: PhysicalSize<u32>) {
+	pub fn resize(&mut self, shared: &WgpuShared, size: PhysicalSize<u32>) -> Result<(), anyhow::Error> {
 		tracing::info!(?size, "Resizing wgpu surface");
-		if size.width > 0 && size.height > 0 {
+		// TODO: Don't ignore resizes to the same size?
+		if size.width > 0 && size.height > 0 && size != self.surface_size {
 			// Update our surface
-			let config = self::window_surface_configuration(self.surface_texture_format, size);
-			self.surface.configure(&shared.device, &config);
+			self.surface_config = self::configure_window_surface(&self.surface, &self.adapter, &shared.device, size)
+				.context("Unable to configure window surface")?;
 			self.surface_size = size;
 		}
+
+		Ok(())
 	}
 }
 
@@ -135,40 +143,25 @@ impl FrameRender {
 	}
 }
 
-/// Configures the window surface and returns the preferred surface texture format
+/// Configures the window surface and returns the configuration
 fn configure_window_surface(
-	window: &Window,
 	surface: &wgpu::Surface,
 	adapter: &wgpu::Adapter,
 	device: &wgpu::Device,
-) -> Result<(wgpu::TextureFormat, PhysicalSize<u32>), AppError> {
+	size: PhysicalSize<u32>,
+) -> Result<wgpu::SurfaceConfiguration, AppError> {
 	// Get the format
-	let surface_texture_format = *surface
-		.get_supported_formats(adapter)
-		.first()
-		.context("No supported texture formats for surface found")?;
-	tracing::debug!(?surface_texture_format, "Found preferred surface format");
+	let mut config = surface
+		.get_default_config(adapter, size.width, size.height)
+		.context("Unable to get surface default config")?;
+	tracing::debug!(?config, "Found surface configuration");
+
+	// Set some options
+	config.present_mode = wgpu::PresentMode::AutoVsync;
+	tracing::debug!(?config, "Updated surface configuration");
 
 	// Then configure it
-	let surface_size = window.inner_size();
-	let config = self::window_surface_configuration(surface_texture_format, surface_size);
-	tracing::debug!(?config, "Configuring surface");
 	surface.configure(device, &config);
 
-	Ok((surface_texture_format, surface_size))
-}
-
-/// Returns the window surface configuration
-const fn window_surface_configuration(
-	surface_texture_format: wgpu::TextureFormat,
-	size: PhysicalSize<u32>,
-) -> wgpu::SurfaceConfiguration {
-	wgpu::SurfaceConfiguration {
-		usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
-		format:       surface_texture_format,
-		width:        size.width,
-		height:       size.height,
-		present_mode: wgpu::PresentMode::AutoVsync,
-		alpha_mode:   wgpu::CompositeAlphaMode::Auto,
-	}
+	Ok(config)
 }

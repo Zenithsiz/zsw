@@ -1,13 +1,14 @@
 //! Winit initialization
 
 // Imports
+#[cfg(target_os = "linux")]
+use winit::platform::x11::{WindowBuilderExtX11, XWindowType};
 use {
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::{EventLoop, EventLoopBuilder},
-		platform::unix::{WindowBuilderExtUnix, XWindowType},
 		window::{Window, WindowBuilder},
 	},
 	zsw_error::AppError,

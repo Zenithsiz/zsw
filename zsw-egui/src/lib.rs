@@ -6,11 +6,8 @@
 // Imports
 use {
 	anyhow::Context,
-	std::{
-		sync::Arc,
-		time::{Duration, Instant},
-	},
 	tokio::sync::mpsc,
+	tracing as _,
 	winit::window::Window,
 	zsw_error::AppError,
 	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
@@ -82,12 +79,6 @@ impl EguiRenderer {
 
 /// Egui drawer
 pub struct EguiPainter {
-	/// Repaint signal
-	repaint_signal: Arc<RepaintSignal>,
-
-	/// Last frame time
-	frame_time: Option<Duration>,
-
 	/// Platform
 	platform: egui_winit_platform::Platform,
 
@@ -98,8 +89,6 @@ pub struct EguiPainter {
 impl std::fmt::Debug for EguiPainter {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("EguiPainter")
-			.field("repaint_signal", &self.repaint_signal)
-			.field("frame_time", &self.frame_time)
 			.field("platform", &"..")
 			.field("event_rx", &self.event_rx)
 			.finish()
@@ -111,38 +100,17 @@ impl EguiPainter {
 	pub fn draw<E>(
 		&mut self,
 		window: &Window,
-		f: impl FnOnce(&egui::Context, &epi::Frame) -> Result<(), E>,
+		f: impl FnOnce(&egui::Context) -> Result<(), E>,
 	) -> Result<egui::FullOutput, E> {
 		// If we have events, handle them before drawing
 		while let Ok(event) = self.event_rx.try_recv() {
 			self.platform.handle_event(&event);
 		}
 
-		// Start the frame
-		let egui_frame_start = Instant::now();
+		// Draw the frame
 		self.platform.begin_frame();
-
-		// Create the frame
-		let app_output = epi::backend::AppOutput::default();
-		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
-		let egui_frame = epi::Frame::new(epi::backend::FrameData {
-			info:           epi::IntegrationInfo {
-				name:                    "egui",
-				web_info:                None,
-				cpu_usage:               self.frame_time.as_ref().map(Duration::as_secs_f32),
-				native_pixels_per_point: Some(window.scale_factor() as f32),
-				prefer_dark_mode:        None,
-			},
-			output:         app_output,
-			repaint_signal: Arc::clone(&self.repaint_signal) as Arc<dyn epi::backend::RepaintSignal>,
-		});
-
-		// Then draw using it
-		let res = f(&self.platform.context(), &egui_frame);
-
-		// Finally end the frame, retrieve the output and create the paint jobs
+		let res = f(&self.platform.context());
 		let output = self.platform.end_frame(Some(window));
-		self.frame_time = Some(egui_frame_start.elapsed());
 
 		res.map(|()| output)
 	}
@@ -169,20 +137,6 @@ impl EguiEventHandler {
 	}
 }
 
-/// Repaint signal
-// Note: We paint egui every frame, so this isn't required currently, but
-//       we should take it into consideration eventually.
-#[derive(Clone, Copy, Debug)]
-struct RepaintSignal;
-
-impl epi::backend::RepaintSignal for RepaintSignal {
-	fn request_repaint(&self) {
-		static IDX: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-		let idx = IDX.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-		tracing::info!("Repaint {idx}!");
-	}
-}
-
 /// Creates the egui service
 pub fn create(
 	window: &Window,
@@ -200,18 +154,12 @@ pub fn create(
 	});
 
 	// Create the egui render pass
-	let render_pass =
-		egui_wgpu_backend::RenderPass::new(&wgpu_shared.device, wgpu_renderer.surface_texture_format(), 1);
+	let render_pass = egui_wgpu_backend::RenderPass::new(&wgpu_shared.device, wgpu_renderer.surface_config().format, 1);
 
 	let (event_tx, event_rx) = mpsc::unbounded_channel();
 	(
 		EguiRenderer { render_pass },
-		EguiPainter {
-			repaint_signal: Arc::new(RepaintSignal),
-			frame_time: None,
-			platform,
-			event_rx,
-		},
+		EguiPainter { platform, event_rx },
 		EguiEventHandler { event_tx },
 	)
 }

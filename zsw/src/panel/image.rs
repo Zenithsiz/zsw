@@ -318,8 +318,10 @@ impl PanelImage {
 
 /// Creates an empty texture
 fn create_empty_image_texture(wgpu_shared: &WgpuShared) -> (wgpu::Texture, wgpu::TextureView) {
+	// TODO: Pass some view formats?
 	let texture_descriptor =
-		self::texture_descriptor("[zsw::panel] Null image", 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb);
+		self::texture_descriptor("[zsw::panel] Null image", 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb, &[
+		]);
 	let texture = wgpu_shared.device.create_texture(&texture_descriptor);
 	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
 	let texture_view = texture.create_view(&texture_view_descriptor);
@@ -352,7 +354,9 @@ fn create_image_texture(wgpu_shared: &WgpuShared, image: DynamicImage) -> (wgpu:
 		"Loaded image was too big {image_width}x{image_height} (max: {max_image_size})",
 	);
 
-	let texture_descriptor = self::texture_descriptor("[zsw::panel_img] Image", image.width(), image.height(), format);
+	// TODO: Pass some view formats?
+	let texture_descriptor =
+		self::texture_descriptor("[zsw::panel_img] Image", image.width(), image.height(), format, &[]);
 	let texture =
 		wgpu_shared
 			.device
@@ -407,12 +411,13 @@ fn create_image_bind_group(
 }
 
 /// Builds the texture descriptor
-fn texture_descriptor(
-	label: &str,
+fn texture_descriptor<'a>(
+	label: &'a str,
 	width: u32,
 	height: u32,
 	format: wgpu::TextureFormat,
-) -> wgpu::TextureDescriptor<'_> {
+	view_formats: &'a [wgpu::TextureFormat],
+) -> wgpu::TextureDescriptor<'a> {
 	wgpu::TextureDescriptor {
 		label: Some(label),
 		size: wgpu::Extent3d {
@@ -425,5 +430,6 @@ fn texture_descriptor(
 		dimension: wgpu::TextureDimension::D2,
 		format,
 		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		view_formats,
 	}
 }

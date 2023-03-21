@@ -8,7 +8,6 @@ anyhow = { workspace = true }
 egui = { workspace = true, features = ["default_fonts"] }
 egui_wgpu_backend = { workspace = true }
 egui_winit_platform = { workspace = true }
-epi = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 winit = { workspace = true }

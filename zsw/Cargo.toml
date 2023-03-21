@@ -16,7 +16,6 @@ crossbeam = { workspace = true }
 dashmap = { workspace = true }
 directories = { workspace = true }
 egui = { workspace = true, features = ["default_fonts"] }
-epi = { workspace = true }
 extend = { workspace = true }
 futures = { workspace = true }
 image = { workspace = true }
@@ -35,7 +34,7 @@ tokio-stream = { workspace = true, features = ["fs"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 wgpu = { workspace = true }
-winit = { workspace = true }
+winit = { workspace = true, features = ["x11"] }
 zsw-error = { path = "../zsw-error" }
 zsw-util = { path = "../zsw-util" }
 zsw-wgpu = { path = "../zsw-wgpu" }
