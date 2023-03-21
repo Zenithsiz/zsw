@@ -62,40 +62,42 @@ impl PlaylistsManager {
 		}
 
 		// Else lock for write and insert the entry
-		let (mut playlists, _) = playlists.write(locker).await;
-		let playlist = match playlists.playlists.raw_entry_mut().from_key(name) {
-			// If it's been inserted to in the meantime, wait on it
-			hash_map::RawEntryMut::Occupied(entry) => Arc::clone(entry.get()),
+		let playlist = {
+			let (mut playlists, _) = playlists.write(locker).await;
+			let entry = playlists.playlists.raw_entry_mut().from_key(name);
+			match entry {
+				// If it's been inserted to in the meantime, wait on it
+				hash_map::RawEntryMut::Occupied(entry) => Arc::clone(entry.get()),
 
-			// Else insert the future to load it
-			hash_map::RawEntryMut::Vacant(entry) => {
-				// The future to load the playlist
-				let load_fut: LoadPlaylistFut = Box::pin({
-					let name = name.to_owned();
-					let path = self.base_dir.join(&name).with_appended(".yaml");
-					async move {
-						tracing::debug!(?name, ?path, "Loading playlist");
-						match Self::load_raw(path).await {
-							Ok(playlist) => {
-								tracing::debug!(?name, ?playlist, "Loaded playlist");
-								Ok(Arc::new(PlaylistRwLock::new(playlist)))
-							},
-							Err(err) => {
-								tracing::warn!(?name, ?err, "Unable to load playlist");
-								Err(Arc::new(err))
-							},
+				// Else insert the future to load it
+				hash_map::RawEntryMut::Vacant(entry) => {
+					// The future to load the playlist
+					let load_fut: LoadPlaylistFut = Box::pin({
+						let name = name.to_owned();
+						let path = self.base_dir.join(&name).with_appended(".yaml");
+						async move {
+							tracing::debug!(?name, ?path, "Loading playlist");
+							match Self::load_raw(path).await {
+								Ok(playlist) => {
+									tracing::debug!(?name, ?playlist, "Loaded playlist");
+									Ok(Arc::new(PlaylistRwLock::new(playlist)))
+								},
+								Err(err) => {
+									tracing::warn!(?name, ?err, "Unable to load playlist");
+									Err(Arc::new(err))
+								},
+							}
 						}
-					}
-				});
+					});
 
-				let lazy = Lazy::new(load_fut);
-				let (_, playlist) = entry.insert(name.into(), Arc::new(lazy));
-				Arc::clone(playlist)
-			},
+					let lazy = Lazy::new(load_fut);
+					let (_, playlist) = entry.insert(name.into(), Arc::new(lazy));
+					Arc::clone(playlist)
+				},
+			}
 		};
 
 		// Finally wait on the playlist
-		mem::drop(playlists);
 		playlist
 			.get_unpin()
 			.await

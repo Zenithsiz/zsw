@@ -3,10 +3,7 @@
 // Imports
 use {
 	super::{PanelGeometry, PanelsRendererLayouts, PlaylistPlayer},
-	crate::{
-		image_loader::{Image, ImageReceiver, ImageRequest, ImageRequester},
-		wgpu_wrapper::WgpuShared,
-	},
+	crate::image_loader::{Image, ImageReceiver, ImageRequest, ImageRequester},
 	cgmath::Vector2,
 	image::DynamicImage,
 	std::{
@@ -15,6 +12,7 @@ use {
 		path::{Path, PathBuf},
 	},
 	wgpu::util::DeviceExt,
+	zsw_wgpu::WgpuShared,
 };
 
 /// Panel images

@@ -11,17 +11,15 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 use {
 	self::uniform::PanelImageUniforms,
 	super::{PanelGroup, PanelImage},
-	crate::{
-		panel::PanelGeometry,
-		wgpu_wrapper::{FrameRender, WgpuRenderer, WgpuShared},
-		AppError,
-	},
+	crate::panel::PanelGeometry,
 	anyhow::Context,
 	cgmath::Point2,
 	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
+	zsw_error::AppError,
 	zsw_util::Tpp,
+	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
 };
 
 /// Panels renderer layouts

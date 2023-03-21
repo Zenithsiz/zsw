@@ -2,13 +2,13 @@
 
 // Imports
 use {
-	crate::AppError,
 	anyhow::Context,
 	std::{
 		collections::HashSet,
 		num::NonZeroUsize,
 		path::{Path, PathBuf},
 	},
+	zsw_error::AppError,
 };
 
 /// Configuration

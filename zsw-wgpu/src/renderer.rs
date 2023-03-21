@@ -3,10 +3,10 @@
 // Imports
 use {
 	super::WgpuShared,
-	crate::AppError,
 	anyhow::Context,
 	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
+	zsw_error::AppError,
 };
 
 /// Wgpu renderer
@@ -120,6 +120,7 @@ pub struct FrameRender {
 
 impl FrameRender {
 	/// Returns the surface size
+	#[must_use]
 	pub fn surface_size(&self) -> PhysicalSize<u32> {
 		self.surface_size
 	}

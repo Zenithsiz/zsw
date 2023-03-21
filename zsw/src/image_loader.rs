@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	crate::{panel::PanelGeometry, AppError},
+	crate::panel::PanelGeometry,
 	anyhow::Context,
 	cgmath::Vector2,
 	futures::StreamExt,
@@ -12,6 +12,7 @@ use {
 		path::{Path, PathBuf},
 	},
 	tokio::sync::{oneshot, Semaphore},
+	zsw_error::AppError,
 	zsw_util::Rect,
 };
 

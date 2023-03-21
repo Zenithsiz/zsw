@@ -2,7 +2,6 @@
 
 // Imports
 use {
-	crate::AppError,
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	winit::{
@@ -11,6 +10,7 @@ use {
 		platform::unix::{WindowBuilderExtUnix, XWindowType},
 		window::{Window, WindowBuilder},
 	},
+	zsw_error::AppError,
 	zsw_util::Rect,
 };
 

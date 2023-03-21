@@ -26,12 +26,12 @@ use {
 		image_loader::ImageRequester,
 		panel::{PanelsManager, PanelsRendererLayouts},
 		playlist::PlaylistsManager,
-		wgpu_wrapper::WgpuShared,
 		Resize,
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
 	winit::dpi::PhysicalPosition,
+	zsw_wgpu::WgpuShared,
 };
 
 /// Shared data

@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["zsw", "zsw-util"]
+members = ["zsw", "zsw-util", "zsw-wgpu", "zsw-error"]
 resolver = "2"
 
 # Compile `image` (and some it's dependencies, which actually load images) in release mode,

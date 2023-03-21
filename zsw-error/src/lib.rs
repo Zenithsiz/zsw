@@ -1,5 +1,8 @@
 //! App error
 
+// Features
+#![feature(must_not_suspend, strict_provenance, never_type)]
+
 // Imports
 use std::{io, sync::Arc};
 

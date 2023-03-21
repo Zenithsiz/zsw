@@ -2,10 +2,6 @@
 
 // Imports
 use {
-	crate::{
-		wgpu_wrapper::{FrameRender, WgpuRenderer, WgpuShared},
-		AppError,
-	},
 	anyhow::Context,
 	std::{
 		sync::Arc,
@@ -13,6 +9,8 @@ use {
 	},
 	tokio::sync::mpsc,
 	winit::window::Window,
+	zsw_error::AppError,
+	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
 };
 
 /// Egui Renderer

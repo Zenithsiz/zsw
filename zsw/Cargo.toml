@@ -32,14 +32,15 @@ sealed = "0.4.0"
 serde = { version = "1.0.152", features = ["derive"] }
 serde_with = "2.2.0"
 serde_yaml = "0.9.17"
-thiserror = "1.0.38"
 tokio = { version = "1.24.2", features = ["full", "tracing"] }
 tokio-stream = { version = "0.1.11", features = ["fs"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 wgpu = "0.14.2"
 winit = "0.27.5"
-zsw-util = { path = "../zsw-util" }
+zsw-error = { version = "0.1.0", path = "../zsw-error" }
+zsw-util = { version = "0.1.0", path = "../zsw-util" }
+zsw-wgpu = { version = "0.1.0", path = "../zsw-wgpu" }
 
 [features]
 

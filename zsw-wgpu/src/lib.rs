@@ -1,5 +1,8 @@
 //! Wgpu wrapper
 
+// Features
+#![feature(must_not_suspend, strict_provenance)]
+
 // Modules
 mod renderer;
 
@@ -7,7 +10,7 @@ mod renderer;
 pub use renderer::{FrameRender, WgpuRenderer};
 
 // Imports
-use {crate::AppError, anyhow::Context, std::sync::Arc, winit::window::Window};
+use {anyhow::Context, std::sync::Arc, winit::window::Window, zsw_error::AppError};
 
 /// Wgpu shared
 #[derive(Debug)]

@@ -4,9 +4,9 @@
 
 // Imports
 use {
-	crate::AppError,
 	anyhow::Context,
 	std::{num::NonZeroUsize, thread},
+	zsw_error::AppError,
 };
 
 pub fn init(worker_threads: Option<NonZeroUsize>) -> Result<(), AppError> {

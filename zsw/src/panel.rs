@@ -23,13 +23,13 @@ use {
 		image_loader::ImageRequester,
 		playlist::PlaylistsManager,
 		shared::{AsyncLocker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
-		wgpu_wrapper::WgpuShared,
 		AppError,
 	},
 	anyhow::Context,
 	futures::TryStreamExt,
 	std::path::PathBuf,
 	zsw_util::{PathAppendExt, Rect},
+	zsw_wgpu::WgpuShared,
 };
 
 /// Panels manager

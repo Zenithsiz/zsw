@@ -34,7 +34,6 @@
 mod args;
 mod config;
 mod egui_wrapper;
-mod error;
 mod image_loader;
 mod logger;
 mod panel;
@@ -43,13 +42,7 @@ mod rayon_init;
 mod settings_menu;
 mod shared;
 mod tokio_runtime;
-mod wgpu_wrapper;
 mod window;
-
-// "Exports"
-// Note: Required so `rust-analyzer` auto-imports `crate::T` instead of `crate::module::T`.
-//       Even though we don't want them to be crate-public. `pub(crate)` also doesn't work
-pub use self::error::AppError;
 
 // Imports
 use {
@@ -70,7 +63,6 @@ use {
 			PlaylistsRwLock,
 			Shared,
 		},
-		wgpu_wrapper::WgpuRenderer,
 	},
 	anyhow::Context,
 	args::Args,
@@ -79,12 +71,14 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::Future,
-	std::{mem, sync::Arc},
+	std::sync::Arc,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		platform::run_return::EventLoopExtRunReturn,
 	},
+	zsw_error::AppError,
 	zsw_util::{meetup, TokioTaskBlockOn},
+	zsw_wgpu::WgpuRenderer,
 };
 
 
@@ -121,7 +115,7 @@ static SHADERS_DIR: include_dir::Dir<'_> = include_dir::include_dir!("shaders/")
 async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (mut event_loop, window) = window::create().context("Unable to create winit event loop and window")?;
 	let window = Arc::new(window);
-	let (wgpu_shared, wgpu_renderer) = wgpu_wrapper::create(Arc::clone(&window))
+	let (wgpu_shared, wgpu_renderer) = zsw_wgpu::create(Arc::clone(&window))
 		.await
 		.context("Unable to create wgpu renderer")?;
 
@@ -319,12 +313,15 @@ async fn load_default_panel_group(
 	};
 
 	// And set it as the current one
-	let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).await;
-	*panel_group = Some(loaded_panel_group);
+	{
+		let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).await;
+		*panel_group = Some(loaded_panel_group);
+	}
 
-	mem::drop(panel_group);
-	let (mut panels_renderer_shader, _) = shared.panels_renderer_shader.write(&mut locker).await;
-	panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
+	{
+		let (mut panels_renderer_shader, _) = shared.panels_renderer_shader.write(&mut locker).await;
+		panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
+	}
 
 	Ok(())
 }
