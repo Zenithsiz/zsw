@@ -248,7 +248,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 		event_loop.run_return(|event, _, control_flow| {
 			*control_flow = winit::event_loop::ControlFlow::Wait;
 
-			#[allow(clippy::single_match)] // We'll add more in the future
+			#[expect(clippy::single_match)] // We'll add more in the future
 			match event {
 				winit::event::Event::WindowEvent { ref event, .. } => match *event {
 					winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),

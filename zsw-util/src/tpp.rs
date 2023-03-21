@@ -241,7 +241,7 @@ struct ProcessedFile {
 
 /// Processor state
 #[derive(Debug)]
-#[allow(variant_size_differences)] // TODO: Check if boxing everything due to stack recursion is worth it?
+#[expect(variant_size_differences)] // TODO: Check if boxing everything due to stack recursion is worth it?
 enum State {
 	Root {
 		include_once: bool,
