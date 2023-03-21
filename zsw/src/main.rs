@@ -26,7 +26,8 @@
 	associated_type_bounds,
 	hash_raw_entry,
 	must_not_suspend,
-	strict_provenance
+	strict_provenance,
+	drain_filter
 )]
 #![expect(incomplete_features)]
 

@@ -213,6 +213,18 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLock
 					ui.collapsing("Playlist player", |ui| {
 						let row_height = ui.text_style_height(&egui::TextStyle::Body);
 
+						ui.collapsing("Prev", |ui| {
+							egui::ScrollArea::new([false, true])
+								.auto_shrink([false, true])
+								.stick_to_right(true)
+								.max_height(row_height * 10.0)
+								.show_rows(ui, row_height, panel.playlist_player.prev_items().len(), |ui, idx| {
+									for item in panel.playlist_player.prev_items().take(idx.end).skip(idx.start) {
+										self::draw_openable_path(ui, item);
+									}
+								});
+						});
+
 						ui.collapsing("Next", |ui| {
 							egui::ScrollArea::new([false, true])
 								.auto_shrink([false, true])
@@ -243,6 +255,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLock
 									}
 								});
 						});
+
+						// TODO: Allow a "Go back" button. Or even a full playlist solution
 					});
 				});
 			},

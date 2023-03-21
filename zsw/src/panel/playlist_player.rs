@@ -21,8 +21,15 @@ pub struct PlaylistPlayer {
 	/// All items
 	items: HashSet<Arc<Path>>,
 
-	/// Current items
-	cur_items: Vec<Arc<Path>>,
+	/// Previous items
+	///
+	/// Last item is newest item
+	prev_items: Vec<Arc<Path>>,
+
+	/// Next items
+	///
+	/// Last item is next item
+	next_items: Vec<Arc<Path>>,
 
 	/// Rng
 	rng: StdRng,
@@ -37,40 +44,53 @@ impl PlaylistPlayer {
 
 		Ok(Self {
 			items,
-			cur_items: vec![],
+			prev_items: vec![],
+			next_items: vec![],
 			rng: StdRng::from_entropy(),
 		})
 	}
 
 	/// Removes an item from the playlist
 	pub fn remove(&mut self, path: &Path) {
-		// We don't care about the removed item
+		// Remove the item from all our playlists
+		// TODO: Not have `O(N)` complexity on prev / next items
 		let _ = self.items.remove(path);
+		let _ = self.prev_items.drain_filter(|item| &**item == path);
+		let _ = self.next_items.drain_filter(|item| &**item == path);
 	}
 
-	/// Returns an iterator over all items, including consumed ones
+	/// Returns an iterator over all items in the playlist
 	pub fn all_items(&self) -> impl Iterator<Item = &Arc<Path>> + ExactSizeIterator {
 		self.items.iter()
+	}
+
+	/// Returns an iterator over all consumed items
+	///
+	/// They are ordered from newest to oldest
+	pub fn prev_items(&self) -> impl Iterator<Item = &Arc<Path>> + ExactSizeIterator {
+		self.prev_items.iter().rev()
 	}
 
 	/// Returns an iterator that peeks over the remaining items in this loop.
 	///
 	/// They are ordered from next to last
 	pub fn peek_next_items(&self) -> impl Iterator<Item = &Arc<Path>> + ExactSizeIterator {
-		self.cur_items.iter().rev()
+		self.next_items.iter().rev()
 	}
 
 	/// Returns the next image to load
 	pub fn next(&mut self) -> Option<Arc<Path>> {
 		// If we're out of current items, shuffle the items in
 		// Note: If we don't actually have any items, this is essentially a no-op
-		if self.cur_items.is_empty() {
-			self.cur_items.extend(self.items.iter().cloned());
-			self.cur_items.shuffle(&mut self.rng);
+		if self.next_items.is_empty() {
+			self.next_items.extend(self.items.iter().cloned());
+			self.next_items.shuffle(&mut self.rng);
 		}
 
 		// Then pop the last item
-		self.cur_items.pop()
+		let item = self.next_items.pop()?;
+		self.prev_items.push(Arc::clone(&item));
+		Some(item)
 	}
 
 	/// Collects all items of a playlist
@@ -80,6 +100,7 @@ impl PlaylistPlayer {
 	) -> Result<HashSet<Arc<Path>>, AppError> {
 		let items = playlist.read(locker).await.0.items();
 
+		// TODO: Give them some order here? At least for non-directory kinds
 		let items = items
 			.into_iter()
 			.split_locker_async_unordered(locker, |item, mut locker| async move {
