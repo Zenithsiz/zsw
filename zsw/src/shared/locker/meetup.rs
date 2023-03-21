@@ -17,13 +17,13 @@ pub trait MeetupSenderResource {
 
 	/// Sends the resource `R` to this meetup channel
 	#[track_caller]
-	async fn send<'locker, 'prev_locker, const STATE: usize>(
+	async fn send<'locker, 'task, const STATE: usize>(
 		&'locker self,
-		locker: &'locker mut AsyncLocker<'prev_locker, STATE>,
+		locker: &'locker mut AsyncLocker<'task, STATE>,
 		resource: Self::Inner,
 	) where
 		Self: Sized,
-		AsyncLocker<'prev_locker, STATE>: MeetupSenderLocker<Self>,
+		AsyncLocker<'task, STATE>: MeetupSenderLocker<Self>,
 	{
 		locker.start_awaiting();
 		self.as_inner().send(resource).await;

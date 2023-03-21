@@ -20,18 +20,18 @@ pub trait AsyncRwLockResource {
 
 	/// Locks this rwlock for reads
 	#[track_caller]
-	async fn read<'locker, 'prev_locker, const STATE: usize>(
+	async fn read<'locker, 'task, const STATE: usize>(
 		&'locker self,
-		locker: &'locker mut AsyncLocker<'prev_locker, STATE>,
+		locker: &'locker mut AsyncLocker<'task, STATE>,
 	) -> (
 		RwLockReadGuard<'locker, Self::Inner>,
-		AsyncLocker<'locker, { <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
+		AsyncLocker<'locker, { <AsyncLocker<'task, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
 	)
 	where
 		Self: Sized,
-		AsyncLocker<'prev_locker, STATE>: AsyncRwLockLocker<Self>,
+		AsyncLocker<'task, STATE>: AsyncRwLockLocker<Self>,
 		Self::Inner: 'locker,
-		[(); <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
+		[(); <AsyncLocker<'task, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.start_awaiting();
 		let guard = self.as_inner().read().await;
@@ -40,18 +40,18 @@ pub trait AsyncRwLockResource {
 
 	/// Locks this rwlock for writes
 	#[track_caller]
-	async fn write<'locker, 'prev_locker, const STATE: usize>(
+	async fn write<'locker, 'task, const STATE: usize>(
 		&'locker self,
-		locker: &'locker mut AsyncLocker<'prev_locker, STATE>,
+		locker: &'locker mut AsyncLocker<'task, STATE>,
 	) -> (
 		RwLockWriteGuard<'locker, Self::Inner>,
-		AsyncLocker<'locker, { <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
+		AsyncLocker<'locker, { <AsyncLocker<'task, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE }>,
 	)
 	where
 		Self: Sized,
-		AsyncLocker<'prev_locker, STATE>: AsyncRwLockLocker<Self>,
+		AsyncLocker<'task, STATE>: AsyncRwLockLocker<Self>,
 		Self::Inner: 'locker,
-		[(); <AsyncLocker<'prev_locker, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
+		[(); <AsyncLocker<'task, STATE> as AsyncRwLockLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.start_awaiting();
 		let guard = self.as_inner().write().await;

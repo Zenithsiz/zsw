@@ -20,18 +20,18 @@ pub trait AsyncMutexResource {
 
 	/// Locks this mutex
 	#[track_caller]
-	async fn lock<'locker, 'prev_locker, const STATE: usize>(
+	async fn lock<'locker, 'task, const STATE: usize>(
 		&'locker self,
-		locker: &'locker mut AsyncLocker<'prev_locker, STATE>,
+		locker: &'locker mut AsyncLocker<'task, STATE>,
 	) -> (
 		MutexGuard<'locker, Self::Inner>,
 		AsyncLocker<'locker, { <AsyncLocker<'locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE }>,
 	)
 	where
 		Self: Sized,
-		AsyncLocker<'prev_locker, STATE>: AsyncMutexLocker<Self>,
+		AsyncLocker<'task, STATE>: AsyncMutexLocker<Self>,
 		Self::Inner: 'locker,
-		[(); <AsyncLocker<'prev_locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE]:,
+		[(); <AsyncLocker<'task, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE]:,
 	{
 		locker.start_awaiting();
 		let guard = self.as_inner().lock().await;

@@ -44,10 +44,28 @@ static TASK_LOCKER: LazyLock<DashMap<tokio::task::Id, AsyncLockerId>> = LazyLock
 
 /// Async locker.
 ///
-/// Ensures two tasks don't deadlock when locking resources.
-// TODO: Simplify to `AsyncLocker(())` on release builds?
+/// Per-task entity to enforce lock order and progression
+///
+/// # Task
+/// A task, for this locker, is defined as an entity capable of doing
+/// work, separate from all other tasks.
+///
+/// e.g. A tokio task is a task. Each entry in a `join!()` future is also
+///      a task, because each branch can make progress without the other branches
+///      affecting it.
+///
+/// # Order
+/// Order is ensured through the `*Resource` traits. These are implemented
+/// in a way that once locked, the locker advances it's state. This new state
+/// can no longer lock that same resource, and some resources are only lockable
+/// at a certain state.
+///
+/// # Lifetime
+/// The `'task` lifetime is associated with the current task. For tokio tasks, this means
+/// that it should be the whole task lifetime. While for e.g. `tokio::join()`, it should be
+/// each branch future.
 #[derive(Debug)]
-pub struct AsyncLocker<'prev, const STATE: usize> {
+pub struct AsyncLocker<'task, const STATE: usize> {
 	/// Locker id
 	#[cfg(feature = "locker-validation")]
 	id: AsyncLockerId,
@@ -57,7 +75,7 @@ pub struct AsyncLocker<'prev, const STATE: usize> {
 	#[cfg(feature = "locker-validation")]
 	task: tokio::task::Id,
 
-	_prev: PhantomData<&'prev Self>,
+	_prev: PhantomData<&'task Self>,
 }
 
 impl AsyncLocker<'_, 0> {
