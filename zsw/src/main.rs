@@ -33,7 +33,6 @@
 // Modules
 mod args;
 mod config;
-mod egui_wrapper;
 mod image_loader;
 mod logger;
 mod panel;
@@ -48,7 +47,6 @@ mod window;
 use {
 	self::{
 		config::Config,
-		egui_wrapper::{EguiPainter, EguiRenderer},
 		panel::{PanelShader, PanelsManager, PanelsRenderer},
 		settings_menu::SettingsMenu,
 		shared::{
@@ -76,6 +74,7 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		platform::run_return::EventLoopExtRunReturn,
 	},
+	zsw_egui::{EguiPainter, EguiRenderer},
 	zsw_error::AppError,
 	zsw_util::{meetup, TokioTaskBlockOn},
 	zsw_wgpu::WgpuRenderer,
@@ -139,8 +138,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) =
 		PanelsRenderer::new(&wgpu_renderer, &wgpu_shared, shaders_path.join("panels/fade.wgsl"))
 			.context("Unable to create panels renderer")?;
-	let (egui_renderer, egui_painter, mut egui_event_handler) =
-		egui_wrapper::create(&window, &wgpu_renderer, &wgpu_shared);
+	let (egui_renderer, egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
 
 	let playlist_path = config

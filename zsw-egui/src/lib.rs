@@ -1,5 +1,8 @@
 //! Egui wrapper
 
+// Features
+#![feature(must_not_suspend, strict_provenance, lint_reasons, never_type)]
+
 // Imports
 use {
 	anyhow::Context,
@@ -17,6 +20,12 @@ use {
 pub struct EguiRenderer {
 	/// Render pass
 	render_pass: egui_wgpu_backend::RenderPass,
+}
+
+impl std::fmt::Debug for EguiRenderer {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("EguiRenderer").field("render_pass", &"..").finish()
+	}
 }
 
 impl EguiRenderer {
@@ -84,6 +93,17 @@ pub struct EguiPainter {
 
 	/// Event receiver
 	event_rx: mpsc::UnboundedReceiver<winit::event::Event<'static, !>>,
+}
+
+impl std::fmt::Debug for EguiPainter {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("EguiPainter")
+			.field("repaint_signal", &self.repaint_signal)
+			.field("frame_time", &self.frame_time)
+			.field("platform", &"..")
+			.field("event_rx", &self.event_rx)
+			.finish()
+	}
 }
 
 impl EguiPainter {

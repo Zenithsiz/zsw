@@ -3687,8 +3687,6 @@ dependencies = [
  "dashmap",
  "directories",
  "egui 0.19.0",
- "egui_wgpu_backend",
- "egui_winit_platform",
  "epi",
  "extend",
  "futures",
@@ -3709,8 +3707,25 @@ dependencies = [
  "tracing-subscriber",
  "wgpu",
  "winit",
+ "zsw-egui",
  "zsw-error",
  "zsw-util",
+ "zsw-wgpu",
+]
+
+[[package]]
+name = "zsw-egui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "egui 0.19.0",
+ "egui_wgpu_backend",
+ "egui_winit_platform",
+ "epi",
+ "tokio",
+ "tracing",
+ "winit",
+ "zsw-error",
  "zsw-wgpu",
 ]
 
