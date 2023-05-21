@@ -16,7 +16,9 @@
 	lint_reasons,
 	must_not_suspend,
 	strict_provenance,
-	impl_trait_in_assoc_type
+	impl_trait_in_assoc_type,
+	try_trait_v2,
+	assert_matches
 )]
 
 // Modules
@@ -26,6 +28,7 @@ mod rect;
 mod resource;
 mod tpp;
 mod tuple_collect_res;
+pub mod unwrap_or_return;
 
 // Exports
 pub use {
@@ -34,6 +37,7 @@ pub use {
 	resource::{Resources, ResourcesBundle, ResourcesTuple2},
 	tpp::Tpp,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
+	unwrap_or_return::{UnwrapOrReturn, UnwrapOrReturnExt},
 };
 
 // Imports

@@ -30,7 +30,7 @@ use {
 	futures::StreamExt,
 	std::{path::Path, sync::Arc},
 	tokio_stream::wrappers::ReadDirStream,
-	zsw_util::Rect,
+	zsw_util::{Rect, UnwrapOrReturnExt},
 	zsw_wgpu::WgpuShared,
 };
 
@@ -147,18 +147,16 @@ impl PanelsManager {
 									Ok(false) => async_walkdir::Filtering::Continue,
 								})
 								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
-									let entry = match entry {
-										Ok(entry) => entry,
-										Err(err) => {
+									let entry = entry
+										.map_err(|err| {
 											tracing::warn!(
 												?playlist_path,
 												?path,
 												?err,
 												"Unable to read directory entry within recursive walk"
 											);
-											return;
-										},
-									};
+										})
+										.unwrap_or_return()?;
 
 									let Some(path) = try_canonicalize_path(&entry.path()).await else {
 										return
@@ -170,32 +168,29 @@ impl PanelsManager {
 								.collect()
 								.await,
 						false => {
-							let dir = match tokio::fs::read_dir(path).await {
-								Ok(dir) => dir,
-								Err(err) => {
+							let dir = tokio::fs::read_dir(path)
+								.await
+								.map_err(|err| {
 									tracing::warn!(
 										?playlist_path,
 										?path,
 										?err,
 										"Unable to read playlist playlist directory"
 									);
-									return;
-								},
-							};
+								})
+								.unwrap_or_return()?;
 							ReadDirStream::new(dir)
 								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
-									let entry = match entry {
-										Ok(entry) => entry,
-										Err(err) => {
+									let entry = entry
+										.map_err(|err| {
 											tracing::warn!(
 												?playlist_path,
 												?path,
 												?err,
-												"Unable to read playlist directory entry of directory"
+												"Unable to read directory entry within recursive walk"
 											);
-											return;
-										},
-									};
+										})
+										.unwrap_or_return()?;
 
 									let Some(path) = try_canonicalize_path(&entry.path()).await else {
 										return
