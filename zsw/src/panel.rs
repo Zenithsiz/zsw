@@ -21,13 +21,15 @@ pub use self::{
 use {
 	crate::{
 		image_loader::ImageRequester,
-		playlist::PlaylistsManager,
-		shared::{AsyncLocker, LockerIteratorExt, PlaylistRwLock, PlaylistsRwLock},
+		playlist::PlaylistItemKind,
+		shared::{AsyncLocker, AsyncRwLockResource, LockerIteratorExt, LockerStreamExt, PlaylistPlayerRwLock, Shared},
 		AppError,
 	},
 	anyhow::Context,
+	async_walkdir::WalkDir,
 	futures::TryStreamExt,
-	std::path::Path,
+	std::{path::Path, sync::Arc},
+	tokio_stream::wrappers::ReadDirStream,
 	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
 };
@@ -43,15 +45,7 @@ impl PanelsManager {
 	}
 
 	/// Loads a panel group from a path
-	pub async fn load(
-		&self,
-		path: &Path,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-		playlists_manager: &PlaylistsManager,
-		playlists: &PlaylistsRwLock,
-		locker: &mut AsyncLocker<'_, 0>,
-	) -> Result<PanelGroup, AppError> {
+	pub async fn load(&self, path: &Path, shared: &Arc<Shared>) -> Result<PanelGroup, AppError> {
 		// Try to read the file
 		tracing::debug!(?path, "Loading panel group");
 		let panel_group_yaml = tokio::fs::read(path).await.context("Unable to open file")?;
@@ -64,7 +58,7 @@ impl PanelsManager {
 		let panels = panel_group
 			.panels
 			.into_iter()
-			.split_locker_async_unordered(locker, async move |panel, mut locker| {
+			.map(|panel| {
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
 				let state = PanelState {
 					paused:       false,
@@ -77,21 +71,131 @@ impl PanelsManager {
 						reverse: panel.state.reverse_parallax,
 					},
 				};
-				let playlist = playlists_manager
-					.load(&panel.playlist, playlists, &mut locker)
-					.await
-					.context("Unable to load playlist")?;
+				let playlist = panel.playlist;
 
-				Panel::new(wgpu_shared, renderer_layouts, geometries, state, &playlist, &mut locker)
-					.await
-					.context("Unable to create panel")
+				let panel = Panel::new(&shared.wgpu, &shared.panels_renderer_layout, geometries, state)
+					.context("Unable to create panel")?;
+
+				#[allow(clippy::let_underscore_future)] // It's a spawned future and we don't care about joining
+				let _ = tokio::spawn({
+					let playlist_player = Arc::clone(&panel.playlist_player);
+					let shared = Arc::clone(shared);
+					async move {
+						// DEADLOCK: This is a new task
+						let mut locker = AsyncLocker::new();
+						match Self::load_playlist_into(&playlist_player, &playlist, &shared, &mut locker).await {
+							Ok(()) => tracing::debug!(?playlist, "Loaded playlist"),
+							Err(err) => tracing::debug!(?playlist, ?err, "Unable to load playlist"),
+						}
+					}
+				});
+
+				Ok::<_, AppError>(panel)
 			})
-			.try_collect()
-			.await
+			.collect::<Result<Vec<_>, _>>()
 			.context("Unable to create panels")?;
 		let panel_group = PanelGroup::new(panels);
 
 		Ok(panel_group)
+	}
+
+	/// Loads `playlist` into `playlist_player`.
+	async fn load_playlist_into(
+		playlist_player: &PlaylistPlayerRwLock,
+		playlist: &Path,
+		shared: &Shared,
+		locker: &mut AsyncLocker<'_, 0>,
+	) -> Result<(), AppError> {
+		let playlist_items = {
+			let playlist = shared
+				.playlists_manager
+				.load(playlist, &shared.playlists, locker)
+				.await
+				.context("Unable to load playlist")?;
+			let (playlist, _) = playlist.read(locker).await;
+			playlist.items()
+		};
+
+		playlist_items
+			.into_iter()
+			.split_locker_async_unordered(locker, |item, mut locker| async move {
+				let item = {
+					let (item, _) = item.read(&mut locker).await;
+					item.clone()
+				};
+
+				// If not enabled, skip it
+				if !item.enabled {
+					tracing::trace!(?item, "Ignoring non-enabled playlist item");
+					return Ok(());
+				}
+
+				// Else check the kind of item
+				match item.kind {
+					PlaylistItemKind::Directory { ref path, recursive } => match recursive {
+						true => WalkDir::new(path)
+							.filter(async move |entry| match entry.file_type().await.map(|ty| ty.is_dir()) {
+								Err(_) | Ok(true) => async_walkdir::Filtering::Ignore,
+								Ok(false) => async_walkdir::Filtering::Continue,
+							})
+							.map_err(anyhow::Error::new)
+							.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
+								let path = tokio::fs::canonicalize(entry?.path())
+									.await
+									.context("Unable to canonicalize path")?;
+
+								let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+								playlist_player.add(path.into());
+
+								Ok::<_, AppError>(())
+							})
+							.try_collect()
+							.await
+							.context("Unable to recursively read directory files")?,
+						false => {
+							let dir = tokio::fs::read_dir(path).await.context("Unable to read directory")?;
+							ReadDirStream::new(dir)
+								.map_err(anyhow::Error::new)
+								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
+									let path = tokio::fs::canonicalize(entry?.path())
+										.await
+										.context("Unable to canonicalize path")?;
+
+									let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+									playlist_player.add(path.into());
+
+									Ok::<_, AppError>(())
+								})
+								.try_collect()
+								.await
+								.context("Unable to read directory files")?;
+						},
+					},
+					PlaylistItemKind::File { ref path } => {
+						let path = tokio::fs::canonicalize(path)
+							.await
+							.context("Unable to canonicalize path")?;
+
+						let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+						playlist_player.add(path.into());
+					},
+				}
+
+				Ok::<_, AppError>(())
+			})
+			.try_collect::<()>()
+			.await
+			.context("Unable to load all items")?;
+
+		// Once we're finished, clear the backlog to ensure we get proper random items after this
+		// Note: If we didn't do this, the first few items would always be in the order we get them
+		//       from the file system
+		{
+			let (mut playlist_player, _) = playlist_player.write(locker).await;
+			playlist_player.clear_backlog();
+		}
+
+		Ok(())
 	}
 }
 
@@ -129,7 +233,7 @@ pub struct Panel {
 	pub state: PanelState,
 
 	/// Playlist player
-	pub playlist_player: PlaylistPlayer,
+	pub playlist_player: Arc<PlaylistPlayerRwLock>,
 
 	/// Images
 	pub images: PanelImages,
@@ -137,13 +241,11 @@ pub struct Panel {
 
 impl Panel {
 	/// Creates a new panel
-	pub async fn new(
+	pub fn new(
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		geometries: Vec<Rect<i32, u32>>,
 		state: PanelState,
-		playlist: &PlaylistRwLock,
-		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<Self, AppError> {
 		Ok(Self {
 			geometries: geometries
@@ -151,19 +253,18 @@ impl Panel {
 				.map(|geometry| PanelGeometry::new(wgpu_shared, renderer_layouts, geometry))
 				.collect(),
 			state,
-			playlist_player: PlaylistPlayer::new(playlist, locker)
-				.await
-				.context("Unable to create playlist player")?,
+			playlist_player: Arc::new(PlaylistPlayerRwLock::new(PlaylistPlayer::new())),
 			images: PanelImages::new(wgpu_shared, renderer_layouts),
 		})
 	}
 
 	/// Updates this panel's state
-	pub fn update(
+	pub async fn update(
 		&mut self,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
+		locker: &mut AsyncLocker<'_, 1>,
 	) {
 		// If we're paused, don't update anything
 		if self.state.paused {
@@ -179,13 +280,16 @@ impl Panel {
 
 		// Else try to load the next image
 		// Note: If we have both, this will simply return.
-		self.images.try_advance_next(
-			&mut self.playlist_player,
-			wgpu_shared,
-			renderer_layouts,
-			image_requester,
-			&self.geometries,
-		);
+		self.images
+			.try_advance_next(
+				&self.playlist_player,
+				wgpu_shared,
+				renderer_layouts,
+				image_requester,
+				&self.geometries,
+				locker,
+			)
+			.await;
 
 		// Then update the progress, depending on the state
 		self.state.cur_progress = match self.images.state() {

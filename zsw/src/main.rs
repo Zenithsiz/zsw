@@ -261,18 +261,7 @@ async fn load_default_panel_group(
 	};
 
 	// Else load the panel group
-	let loaded_panel_group = match shared
-		.panels_manager
-		.load(
-			default_panel_group,
-			&shared.wgpu,
-			&shared.panels_renderer_layout,
-			&shared.playlists_manager,
-			&shared.playlists,
-			&mut locker,
-		)
-		.await
-	{
+	let loaded_panel_group = match shared.panels_manager.load(default_panel_group, &shared).await {
 		Ok(panel_group) => {
 			tracing::debug!(?panel_group, "Loaded default panel group");
 			panel_group
@@ -394,11 +383,18 @@ async fn panels_updater(
 ) -> Result<!, AppError> {
 	loop {
 		{
-			let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).await;
+			let (mut panel_group, mut locker) = shared.cur_panel_group.lock(&mut locker).await;
 
 			if let Some(panel_group) = &mut *panel_group {
 				for panel in panel_group.panels_mut() {
-					panel.update(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester);
+					panel
+						.update(
+							&shared.wgpu,
+							&shared.panels_renderer_layout,
+							&shared.image_requester,
+							&mut locker,
+						)
+						.await;
 				}
 			}
 		}

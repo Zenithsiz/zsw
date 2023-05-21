@@ -160,7 +160,7 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLoc
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
 fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
-	let (mut panel_group, _) = shared.cur_panel_group.lock(locker).block_on();
+	let (mut panel_group, mut locker) = shared.cur_panel_group.lock(locker).block_on();
 	match &mut *panel_group {
 		Some(panel_group) =>
 			for (panel_idx, panel) in panel_group.panels_mut().iter_mut().enumerate() {
@@ -248,7 +248,10 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLock
 						};
 					});
 
+					#[expect(clippy::significant_drop_in_scrutinee)] // False positive, we're not locking anything
 					ui.collapsing("Playlist player", |ui| {
+						let (playlist_player, _) = panel.playlist_player.write(&mut locker).block_on();
+
 						let row_height = ui.text_style_height(&egui::TextStyle::Body);
 
 						ui.collapsing("Prev", |ui| {
@@ -256,8 +259,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLock
 								.auto_shrink([false, true])
 								.stick_to_right(true)
 								.max_height(row_height * 10.0)
-								.show_rows(ui, row_height, panel.playlist_player.prev_items().len(), |ui, idx| {
-									for item in panel.playlist_player.prev_items().take(idx.end).skip(idx.start) {
+								.show_rows(ui, row_height, playlist_player.prev_items().len(), |ui, idx| {
+									for item in playlist_player.prev_items().take(idx.end).skip(idx.start) {
 										self::draw_openable_path(ui, item);
 									}
 								});
@@ -268,18 +271,11 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLock
 								.auto_shrink([false, true])
 								.stick_to_right(true)
 								.max_height(row_height * 10.0)
-								.show_rows(
-									ui,
-									row_height,
-									panel.playlist_player.peek_next_items().len(),
-									|ui, idx| {
-										for item in
-											panel.playlist_player.peek_next_items().take(idx.end).skip(idx.start)
-										{
-											self::draw_openable_path(ui, item);
-										}
-									},
-								);
+								.show_rows(ui, row_height, playlist_player.peek_next_items().len(), |ui, idx| {
+									for item in playlist_player.peek_next_items().take(idx.end).skip(idx.start) {
+										self::draw_openable_path(ui, item);
+									}
+								});
 						});
 
 						ui.collapsing("All", |ui| {
@@ -287,8 +283,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLock
 								.auto_shrink([false, true])
 								.stick_to_right(true)
 								.max_height(row_height * 10.0)
-								.show_rows(ui, row_height, panel.playlist_player.all_items().len(), |ui, idx| {
-									for item in panel.playlist_player.all_items().take(idx.end).skip(idx.start) {
+								.show_rows(ui, row_height, playlist_player.all_items().len(), |ui, idx| {
+									for item in playlist_player.all_items().take(idx.end).skip(idx.start) {
 										self::draw_openable_path(ui, item);
 									}
 								});

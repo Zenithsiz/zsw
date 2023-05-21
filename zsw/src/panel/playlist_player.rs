@@ -2,17 +2,8 @@
 
 // Imports
 use {
-	crate::{
-		playlist::PlaylistItemKind,
-		shared::{AsyncLocker, AsyncRwLockResource, LockerIteratorExt, PlaylistRwLock},
-		AppError,
-	},
-	anyhow::Context,
-	async_walkdir::WalkDir,
-	futures::TryStreamExt,
 	rand::{rngs::StdRng, seq::SliceRandom, SeedableRng},
 	std::{collections::HashSet, path::Path, sync::Arc},
-	tokio_stream::wrappers::ReadDirStream,
 };
 
 /// Playlist player
@@ -36,18 +27,20 @@ pub struct PlaylistPlayer {
 }
 
 impl PlaylistPlayer {
-	/// Creates a new player from a playlist
-	pub async fn new(playlist: &PlaylistRwLock, locker: &mut AsyncLocker<'_, 0>) -> Result<Self, AppError> {
-		let items = Self::get_playlist_items(playlist, locker)
-			.await
-			.context("Unable to get all playlist items")?;
-
-		Ok(Self {
-			items,
+	/// Creates a new, empty, player
+	pub fn new() -> Self {
+		Self {
+			items:      HashSet::new(),
 			prev_items: vec![],
 			next_items: vec![],
-			rng: StdRng::from_entropy(),
-		})
+			rng:        StdRng::from_entropy(),
+		}
+	}
+
+	/// Adds an item to the playlist
+	pub fn add(&mut self, path: Arc<Path>) {
+		// TODO: Should we care if the item was already in?
+		let _ = self.items.insert(path);
 	}
 
 	/// Removes an item from the playlist
@@ -57,6 +50,12 @@ impl PlaylistPlayer {
 		let _ = self.items.remove(path);
 		let _ = self.prev_items.drain_filter(|item| &**item == path);
 		let _ = self.next_items.drain_filter(|item| &**item == path);
+	}
+
+	/// Clears the current backlog
+	// TODO: Better wording than backlog: deck, remaining items?
+	pub fn clear_backlog(&mut self) {
+		self.next_items.clear();
 	}
 
 	/// Returns an iterator over all items in the playlist
@@ -91,74 +90,5 @@ impl PlaylistPlayer {
 		let item = self.next_items.pop()?;
 		self.prev_items.push(Arc::clone(&item));
 		Some(item)
-	}
-
-	/// Collects all items of a playlist
-	async fn get_playlist_items(
-		playlist: &PlaylistRwLock,
-		locker: &mut AsyncLocker<'_, 0>,
-	) -> Result<HashSet<Arc<Path>>, AppError> {
-		let items = playlist.read(locker).await.0.items();
-
-		// TODO: Give them some order here? At least for non-directory kinds
-		let items = items
-			.into_iter()
-			.split_locker_async_unordered(locker, |item, mut locker| async move {
-				let item = item.read(&mut locker).await.0.clone();
-
-				// If not enabled, don't return any items
-				if !item.enabled {
-					tracing::trace!(?item, "Ignoring non-enabled playlist item");
-					return Ok(vec![]);
-				}
-
-				// Else check the kind of item
-				let item = match item.kind {
-					PlaylistItemKind::Directory { ref path, recursive } => match recursive {
-						true => WalkDir::new(path)
-							.filter(async move |entry| match entry.file_type().await.map(|ty| ty.is_dir()) {
-								Err(_) | Ok(true) => async_walkdir::Filtering::Ignore,
-								Ok(false) => async_walkdir::Filtering::Continue,
-							})
-							.map_err(anyhow::Error::new)
-							.and_then(async move |entry| {
-								let path = entry.path();
-								tokio::fs::canonicalize(path)
-									.await
-									.context("Unable to canonicalize path")
-							})
-							.try_collect()
-							.await
-							.context("Unable to recursively read directory files")?,
-						false => {
-							let dir = tokio::fs::read_dir(path).await.context("Unable to read directory")?;
-							ReadDirStream::new(dir)
-								.map_err(anyhow::Error::new)
-								.and_then(async move |entry| {
-									tokio::fs::canonicalize(entry.path())
-										.await
-										.context("Unable to canonicalize path")
-								})
-								.try_collect()
-								.await
-								.context("Unable to recursively read directory files")?
-						},
-					},
-					PlaylistItemKind::File { ref path } => vec![tokio::fs::canonicalize(path)
-						.await
-						.context("Unable to canonicalize path")?],
-				};
-
-				Ok::<_, AppError>(item)
-			})
-			.try_collect::<Vec<_>>()
-			.await
-			.context("Unable to collect all items")?
-			.into_iter()
-			.flatten()
-			.map(Into::into)
-			.collect();
-
-		Ok(items)
 	}
 }

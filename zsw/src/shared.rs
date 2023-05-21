@@ -16,6 +16,7 @@ pub use self::locker::{
 	PanelsRendererShaderRwLock,
 	PanelsUpdaterMeetupSender,
 	PlaylistItemRwLock,
+	PlaylistPlayerRwLock,
 	PlaylistRwLock,
 	PlaylistsRwLock,
 };
