@@ -104,6 +104,17 @@ impl PanelsManager {
 		shared: &Shared,
 		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<(), AppError> {
+		/// Attempts to canonicalize `path`. If unable to, logs a warning and returns `None`
+		async fn try_canonicalize_path(path: &Path) -> Option<std::path::PathBuf> {
+			match tokio::fs::canonicalize(path).await {
+				Ok(path) => Some(path),
+				Err(err) => {
+					tracing::warn!(?path, ?err, "Unable to canonicalize path");
+					None
+				},
+			}
+		}
+
 		let playlist_items = {
 			let playlist = shared
 				.playlists_manager
@@ -138,12 +149,10 @@ impl PanelsManager {
 							})
 							.map_err(anyhow::Error::new)
 							.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
-								let path = tokio::fs::canonicalize(entry?.path())
-									.await
-									.context("Unable to canonicalize path")?;
-
-								let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
-								playlist_player.add(path.into());
+								if let Some(path) = try_canonicalize_path(&entry?.path()).await {
+									let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+									playlist_player.add(path.into());
+								}
 
 								Ok::<_, AppError>(())
 							})
@@ -155,12 +164,10 @@ impl PanelsManager {
 							ReadDirStream::new(dir)
 								.map_err(anyhow::Error::new)
 								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
-									let path = tokio::fs::canonicalize(entry?.path())
-										.await
-										.context("Unable to canonicalize path")?;
-
-									let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
-									playlist_player.add(path.into());
+									if let Some(path) = try_canonicalize_path(&entry?.path()).await {
+										let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+										playlist_player.add(path.into());
+									}
 
 									Ok::<_, AppError>(())
 								})
@@ -169,14 +176,11 @@ impl PanelsManager {
 								.context("Unable to read directory files")?;
 						},
 					},
-					PlaylistItemKind::File { ref path } => {
-						let path = tokio::fs::canonicalize(path)
-							.await
-							.context("Unable to canonicalize path")?;
-
-						let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
-						playlist_player.add(path.into());
-					},
+					PlaylistItemKind::File { ref path } =>
+						if let Some(path) = try_canonicalize_path(path).await {
+							let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+							playlist_player.add(path.into());
+						},
 				}
 
 				Ok::<_, AppError>(())
