@@ -27,28 +27,25 @@ use {
 	},
 	anyhow::Context,
 	futures::TryStreamExt,
-	std::path::PathBuf,
-	zsw_util::{PathAppendExt, Rect},
+	std::path::Path,
+	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
 };
 
 /// Panels manager
 #[derive(Debug)]
-pub struct PanelsManager {
-	/// Base Directory
-	base_dir: PathBuf,
-}
+pub struct PanelsManager {}
 
 impl PanelsManager {
 	/// Creates a new panels manager
-	pub fn new(base_dir: PathBuf) -> Self {
-		Self { base_dir }
+	pub fn new() -> Self {
+		Self {}
 	}
 
-	/// Loads a panel group from disk
+	/// Loads a panel group from a path
 	pub async fn load(
 		&self,
-		name: &str,
+		path: &Path,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		playlists_manager: &PlaylistsManager,
@@ -56,8 +53,7 @@ impl PanelsManager {
 		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<PanelGroup, AppError> {
 		// Try to read the file
-		let path = self.base_dir.join(name).with_appended(".yaml");
-		tracing::debug!(?name, ?path, "Loading panel group");
+		tracing::debug!(?path, "Loading panel group");
 		let panel_group_yaml = tokio::fs::read(path).await.context("Unable to open file")?;
 
 		// Then parse it

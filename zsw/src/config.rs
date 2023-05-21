@@ -29,10 +29,6 @@ pub struct Config {
 	#[serde(default)]
 	pub log_file: Option<PathBuf>,
 
-	/// Panels directory
-	#[serde(default)]
-	pub panels_dir: Option<PathBuf>,
-
 	/// Shaders directory
 	#[serde(default)]
 	pub shaders_dir: Option<PathBuf>,
@@ -53,7 +49,7 @@ pub struct Config {
 
 	/// Default panel group
 	#[serde(default)]
-	pub default_panel_group: Option<String>,
+	pub default_panel_group: Option<PathBuf>,
 }
 
 impl Config {
@@ -105,7 +101,6 @@ impl Default for Config {
 			tokio_worker_threads: None,
 			rayon_worker_threads: None,
 			log_file:             None,
-			panels_dir:           None,
 			shaders_dir:          None,
 			upscale_cache_dir:    None,
 			upscale_cmd:          None,

@@ -70,7 +70,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::Future,
-	std::sync::Arc,
+	std::{path::PathBuf, sync::Arc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		platform::run_return::EventLoopExtRunReturn,
@@ -144,11 +144,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	let (playlists_manager, playlists) = playlist::create();
 
-	let panels_path = config
-		.panels_dir
-		.clone()
-		.unwrap_or_else(|| dirs.data_dir().join("panels/"));
-	let panels_manager = PanelsManager::new(panels_path);
+	let panels_manager = PanelsManager::new();
 
 	let upscale_cache_dir = config
 		.upscale_cache_dir
@@ -255,7 +251,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 /// Loads the default panel group
 async fn load_default_panel_group(
-	default_panel_group: Option<String>,
+	default_panel_group: Option<PathBuf>,
 	mut locker: AsyncLocker<'_, 0>,
 	shared: Arc<Shared>,
 ) -> Result<(), AppError> {
