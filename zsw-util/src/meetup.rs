@@ -5,7 +5,7 @@ use {
 	futures::{lock::Mutex, FutureExt},
 	std::{
 		sync::Arc,
-		task::{Poll, Waker},
+		task::{self, Poll, Waker},
 	},
 };
 
@@ -39,7 +39,7 @@ impl<T> Sender<T> {
 		std::future::poll_fn(|cx| {
 			// Lock the mutex
 			// Note: After locking we need to ensure that we re-create the lock future, as it's exhausted
-			let mut inner = inner_lock_fut.poll_unpin(cx).ready()?;
+			let mut inner = task::ready!(inner_lock_fut.poll_unpin(cx));
 			inner_lock_fut = self.inner.lock();
 
 			// If the value is present, add ourselves to the wakers and return pending
@@ -75,7 +75,7 @@ impl<T> Receiver<T> {
 		std::future::poll_fn(|cx| {
 			// Lock the mutex
 			// Note: After locking we need to ensure that we re-create the lock future, as it's exhausted
-			let mut inner = inner_lock_fut.poll_unpin(cx).ready()?;
+			let mut inner = task::ready!(inner_lock_fut.poll_unpin(cx));
 			inner_lock_fut = self.inner.lock();
 
 			// If the value isn't present, add ourselves to the wakers and return pending

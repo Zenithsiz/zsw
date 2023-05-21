@@ -25,7 +25,7 @@ pub trait AsyncMutexResource {
 		locker: &'locker mut AsyncLocker<'task, STATE>,
 	) -> (
 		MutexGuard<'locker, Self::Inner>,
-		AsyncLocker<'locker, { <AsyncLocker<'locker, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE }>,
+		AsyncLocker<'locker, { <AsyncLocker<'task, STATE> as AsyncMutexLocker<Self>>::NEXT_STATE }>,
 	)
 	where
 		Self: Sized,

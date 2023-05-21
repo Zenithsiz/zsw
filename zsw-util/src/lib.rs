@@ -12,13 +12,12 @@
 	let_chains,
 	entry_insert,
 	extend_one,
-	poll_ready,
 	async_closure,
 	lint_reasons,
 	must_not_suspend,
-	strict_provenance
+	strict_provenance,
+	impl_trait_in_assoc_type
 )]
-#![expect(incomplete_features)]
 
 // Modules
 pub mod meetup;

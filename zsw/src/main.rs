@@ -21,7 +21,7 @@
 	lint_reasons,
 	closure_track_caller,
 	generic_const_exprs,
-	once_cell,
+	lazy_cell,
 	return_position_impl_trait_in_trait,
 	associated_type_bounds,
 	hash_raw_entry,
