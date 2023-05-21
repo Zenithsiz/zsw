@@ -319,7 +319,6 @@ impl Panel {
 
 		// Then update the progress, depending on the state
 		self.state.cur_progress = match self.images.state() {
-			// If empty, or primary only,
 			ImagesState::Empty => 0,
 			ImagesState::PrimaryOnly => self.state.next_progress_primary_only(),
 			ImagesState::Both => self.state.next_progress_both(),

@@ -36,8 +36,8 @@ pub struct PanelImages {
 	/// Texture bind group
 	image_bind_group: wgpu::BindGroup,
 
-	/// Image receiver
-	image_receiver: Option<ImageReceiver>,
+	/// Scheduled image receiver.
+	scheduled_image_receiver: Option<ImageReceiver>,
 }
 
 impl PanelImages {
@@ -62,7 +62,7 @@ impl PanelImages {
 			back: back_image,
 			texture_sampler,
 			image_bind_group,
-			image_receiver: None,
+			scheduled_image_receiver: None,
 		}
 	}
 
@@ -117,7 +117,9 @@ impl PanelImages {
 		}
 	}
 
-	/// Advances to the next image, if available
+	/// Advances to the next image, if available.
+	///
+	/// If the current state is both images, no new image is loaded (not even scheduled).
 	pub async fn try_advance_next(
 		&mut self,
 		playlist_player: &PlaylistPlayerRwLock,
@@ -166,11 +168,13 @@ impl PanelImages {
 		geometries: &[PanelGeometry],
 		locker: &mut AsyncLocker<'_, 1>,
 	) -> Option<Image> {
-		match self.image_receiver.as_mut() {
+		match &mut self.scheduled_image_receiver {
+			// If we have a scheduled image, try to receive it
 			Some(image_receiver) => match image_receiver.try_recv() {
+				// If we managed to, check if it was ok
 				Some(response) => {
 					// Remove the exhausted receiver
-					self.image_receiver = None;
+					self.scheduled_image_receiver = None;
 
 					// Then check if we got the image
 					match response.image_res {
@@ -190,6 +194,8 @@ impl PanelImages {
 				},
 				None => None,
 			},
+
+			// If we didn't have a scheduled image, schedule it
 			None => {
 				let (mut playlist_player, _) = playlist_player.write(locker).await;
 				self.schedule_load_image(wgpu_shared, &mut playlist_player, image_requester, geometries);
@@ -198,7 +204,12 @@ impl PanelImages {
 		}
 	}
 
-	/// Schedules a new image
+	/// Schedules a new image.
+	///
+	/// If the playlist player is empty, does not schedule.
+	///
+	/// # Panics
+	/// Panics if `self.scheduled_image_receiver` is `Some(_)`
 	fn schedule_load_image(
 		&mut self,
 		wgpu_shared: &WgpuShared,
@@ -215,8 +226,12 @@ impl PanelImages {
 		};
 
 		let wgpu_limits = wgpu_shared.device.limits();
-		assert_matches!(self.image_receiver, None, "Overrode existing image loading future");
-		self.image_receiver = Some(image_requester.request(ImageRequest {
+		assert_matches!(
+			self.scheduled_image_receiver,
+			None,
+			"Overrode existing image loading future"
+		);
+		self.scheduled_image_receiver = Some(image_requester.request(ImageRequest {
 			path:           image_path,
 			geometries:     geometries.iter().map(|geometry| geometry.geometry).collect(),
 			max_image_size: wgpu_limits.max_texture_dimension_2d,
