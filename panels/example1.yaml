@@ -6,7 +6,7 @@ panels:
       parallax_ratio: 0.98
       parallax_exp: 2.0
       reverse_parallax: true
-    playlist: example1
+    playlist: playlists/example1.yaml
   - geometries: [geometry: '960x540+1360+0']
     state:
       duration: 300
@@ -14,4 +14,4 @@ panels:
       parallax_ratio: 0.98
       parallax_exp: 2.0
       reverse_parallax: true
-    playlist: example1
+    playlist: playlists/example1.yaml

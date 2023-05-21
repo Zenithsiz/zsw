@@ -142,13 +142,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (egui_renderer, egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
 
-	let playlist_path = config
-		.playlists_dir
-		.clone()
-		.unwrap_or_else(|| dirs.data_dir().join("playlists/"));
-	let (playlists_manager, playlists) = playlist::create(playlist_path)
-		.await
-		.context("Unable to create playlist manager")?;
+	let (playlists_manager, playlists) = playlist::create();
 
 	let panels_path = config
 		.panels_dir
@@ -188,14 +182,6 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
 	let (panels_updater_output_tx, panels_updater_output_rx) = meetup::channel();
 
-
-	self::spawn_task("Load playlists", {
-		let shared = Arc::clone(&shared);
-		async move {
-			let locker = AsyncLocker::new();
-			self::load_playlists(locker, shared).await
-		}
-	});
 
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
@@ -265,16 +251,6 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	});
 
 	Ok(())
-}
-
-/// Loads the playlists
-async fn load_playlists(mut locker: AsyncLocker<'_, 0>, shared: Arc<Shared>) -> Result<(), AppError> {
-	shared
-		.playlists_manager
-		.load_all_default(&shared.playlists, &mut locker)
-		.await
-		.inspect(|()| tracing::info!("Loaded all playlists"))
-		.inspect_err(|err| tracing::warn!(?err, "Unable to load all playlists"))
 }
 
 /// Loads the default panel group

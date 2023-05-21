@@ -82,7 +82,8 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'
 		.block_on();
 
 	for (name, playlist) in playlists {
-		ui.collapsing(&*name, |ui| match playlist {
+		let playlist_path = name.to_string_lossy();
+		ui.collapsing(playlist_path, |ui| match playlist {
 			Some(Ok(playlist)) => {
 				let items = playlist.read(locker).block_on().0.items();
 

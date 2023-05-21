@@ -1,7 +1,7 @@
 //! Panel serialization / deserialization
 
 // Imports
-use zsw_util::Rect;
+use {std::path::PathBuf, zsw_util::Rect};
 
 /// Serialized panel group
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub struct PanelGroup {
 pub struct Panel {
 	pub geometries: Vec<PanelGeometry>,
 	pub state:      PanelState,
-	pub playlist:   String,
+	pub playlist:   PathBuf,
 }
 
 /// Serialized panel geometry

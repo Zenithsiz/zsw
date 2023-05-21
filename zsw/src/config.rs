@@ -33,10 +33,6 @@ pub struct Config {
 	#[serde(default)]
 	pub panels_dir: Option<PathBuf>,
 
-	/// Playlists directory
-	#[serde(default)]
-	pub playlists_dir: Option<PathBuf>,
-
 	/// Shaders directory
 	#[serde(default)]
 	pub shaders_dir: Option<PathBuf>,
@@ -110,7 +106,6 @@ impl Default for Config {
 			rayon_worker_threads: None,
 			log_file:             None,
 			panels_dir:           None,
-			playlists_dir:        None,
 			shaders_dir:          None,
 			upscale_cache_dir:    None,
 			upscale_cmd:          None,
