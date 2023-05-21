@@ -49,7 +49,7 @@ impl PlaylistsManager {
 		}
 
 		// Else lock for write and insert the entry
-		let playlist = {
+		let playlist_lazy = {
 			let (mut playlists, _) = playlists.write(locker).await;
 			let entry = playlists.playlists.raw_entry_mut().from_key(path);
 			match entry {
@@ -58,33 +58,47 @@ impl PlaylistsManager {
 
 				// Else insert the future to load it
 				hash_map::RawEntryMut::Vacant(entry) => {
-					// The future to load the playlist
-					let load_fut: LoadPlaylistFut = Box::pin({
-						let path = path.to_owned();
-						async move {
-							tracing::debug!(?path, "Loading playlist");
-							match Self::load_raw(&path).await {
-								Ok(playlist) => {
-									tracing::debug!(?path, ?playlist, "Loaded playlist");
-									Ok(Arc::new(PlaylistRwLock::new(playlist)))
-								},
-								Err(err) => {
-									tracing::warn!(?path, ?err, "Unable to load playlist");
-									Err(Arc::new(err))
-								},
-							}
-						}
-					});
-
-					let lazy = Lazy::new(load_fut);
-					let (_, playlist) = entry.insert(path.into(), Arc::new(lazy));
-					Arc::clone(playlist)
+					let playlist_lazy = Lazy::new(Self::load_fut(path));
+					let (_, playlist_lazy) = entry.insert(path.into(), Arc::new(playlist_lazy));
+					Arc::clone(playlist_lazy)
 				},
 			}
 		};
 
 		// Finally wait on the playlist
-		playlist
+		playlist_lazy
+			.get_unpin()
+			.await
+			.as_ref()
+			.map(Arc::clone)
+			.map_err(Arc::clone)
+			.map_err(AppError::Shared)
+	}
+
+	/// Reloads a playlist by path.
+	///
+	/// If it's not loaded, loads it.
+	/// If currently loading, cancels the previous loading and loads again.
+	pub async fn reload(
+		&self,
+		path: &Path,
+		playlists: &PlaylistsRwLock,
+		locker: &mut AsyncLocker<'_, 0>,
+	) -> Result<Arc<PlaylistRwLock>, AppError> {
+		let playlist_lazy = {
+			let (mut playlists, _) = playlists.write(locker).await;
+
+			let playlist_lazy = Lazy::new(Self::load_fut(path));
+			let playlist_lazy = playlists
+				.playlists
+				.entry(path.into())
+				.insert_entry(Arc::new(playlist_lazy))
+				.into_mut();
+			Arc::clone(playlist_lazy)
+		};
+
+		// Finally wait on the playlist
+		playlist_lazy
 			.get_unpin()
 			.await
 			.as_ref()
@@ -118,8 +132,28 @@ impl PlaylistsManager {
 			.collect()
 	}
 
+	/// Creates the load playlist future, `LoadPlaylistFut`
+	fn load_fut(path: &Path) -> LoadPlaylistFut {
+		Box::pin({
+			let path = path.to_owned();
+			async move {
+				tracing::debug!(?path, "Loading playlist");
+				match Self::load_inner(&path).await {
+					Ok(playlist) => {
+						tracing::debug!(?path, ?playlist, "Loaded playlist");
+						Ok(Arc::new(PlaylistRwLock::new(playlist)))
+					},
+					Err(err) => {
+						tracing::warn!(?path, ?err, "Unable to load playlist");
+						Err(Arc::new(err))
+					},
+				}
+			}
+		})
+	}
+
 	/// Loads a playlist
-	async fn load_raw(path: &Path) -> Result<Playlist, AppError> {
+	async fn load_inner(path: &Path) -> Result<Playlist, AppError> {
 		// Read the file
 		let playlist_yaml = tokio::fs::read(path).await.context("Unable to open file")?;
 

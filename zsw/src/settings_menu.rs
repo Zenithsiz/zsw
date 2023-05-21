@@ -12,7 +12,7 @@ use {
 		shared::{AsyncLocker, AsyncMutexResource, AsyncRwLockResource, Shared},
 	},
 	egui::Widget,
-	std::path::Path,
+	std::{path::Path, sync::Arc},
 	zsw_util::{Rect, TokioTaskBlockOn},
 };
 
@@ -36,7 +36,7 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	pub fn draw(&mut self, ctx: &egui::Context, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
+	pub fn draw(&mut self, ctx: &egui::Context, shared: &Arc<Shared>, locker: &mut AsyncLocker<'_, 0>) {
 		// Adjust cursor pos to account for the scale factor
 		let scale_factor = shared.window.scale_factor();
 		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
@@ -68,22 +68,21 @@ impl SettingsMenu {
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
+fn draw_panels_tab(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLocker<'_, 0>) {
 	self::draw_panels_editor(ui, shared, locker);
 	ui.separator();
 	self::draw_shader_select(ui, shared, locker);
 }
 
 /// Draws the playlists tab
-fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
+fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLocker<'_, 0>) {
 	let playlists = shared
 		.playlists_manager
 		.get_all_loaded(&shared.playlists, locker)
 		.block_on();
 
-	for (name, playlist) in playlists {
-		let playlist_path = name.to_string_lossy();
-		ui.collapsing(playlist_path, |ui| match playlist {
+	for (playlist_path, playlist) in playlists {
+		ui.collapsing(playlist_path.to_string_lossy(), |ui| match playlist {
 			Some(Ok(playlist)) => {
 				let items = playlist.read(locker).block_on().0.items();
 
@@ -107,6 +106,26 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'
 							});
 						},
 					}
+
+					if ui.button("↻ (Reload)").clicked() {
+						let playlist_path = Arc::clone(&playlist_path);
+						let shared = Arc::clone(shared);
+						tokio::spawn(async move {
+							// DEADLOCK: We're creating a locker in a new task, which can progress
+							//           on it's own.
+							let mut locker = AsyncLocker::new();
+							match shared
+								.playlists_manager
+								.reload(&playlist_path, &shared.playlists, &mut locker)
+								.await
+							{
+								Ok(_) => tracing::debug!(?playlist_path, "Reloaded playlist"),
+								Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to reload playlist"),
+							}
+						});
+					}
+
+					ui.separator();
 				}
 			},
 			Some(Err(err)) => {
