@@ -93,31 +93,7 @@ impl PlaylistsManager {
 		let playlist = Self::wait_for_playlist_load(&playlist_lazy).await?;
 
 		// Finally save it
-		let playlist = ser::Playlist {
-			items: {
-				let (playlist, mut locker) = playlist.read(locker).await;
-				playlist
-					.items
-					.iter()
-					.split_locker_async_unordered(&mut locker, |item, mut locker| async move {
-						let (item, _) = item.read(&mut locker).await;
-						ser::PlaylistItem {
-							enabled: item.enabled,
-							kind:    match &item.kind {
-								PlaylistItemKind::Directory { path, recursive } => ser::PlaylistItemKind::Directory {
-									path:      path.to_path_buf(),
-									recursive: *recursive,
-								},
-								PlaylistItemKind::File { path } => ser::PlaylistItemKind::File {
-									path: path.to_path_buf(),
-								},
-							},
-						}
-					})
-					.collect()
-					.await
-			},
-		};
+		let playlist = Self::serialize_playlist(&playlist, locker).await;
 		let playlist_yaml = serde_yaml::to_string(&playlist).context("Unable to serialize playlist")?;
 		tokio::fs::write(path, playlist_yaml)
 			.await
@@ -206,7 +182,56 @@ impl PlaylistsManager {
 		tracing::trace!(?path, ?playlist_yaml, "Parsing playlist file");
 		let playlist = serde_yaml::from_slice::<ser::Playlist>(&playlist_yaml).context("Unable to parse playlist")?;
 		tracing::trace!(?path, ?playlist, "Parsed playlist file");
-		let playlist = Playlist {
+		let playlist = Self::deserialize_playlist(playlist);
+
+		Ok(playlist)
+	}
+
+	/// Waits for `playlist` to be loaded
+	async fn wait_for_playlist_load(
+		playlist: &Lazy<Result<Arc<PlaylistRwLock>, Arc<AppError>>, LoadPlaylistFut>,
+	) -> Result<Arc<PlaylistRwLock>, AppError> {
+		playlist
+			.get_unpin()
+			.await
+			.as_ref()
+			.map(Arc::clone)
+			.map_err(Arc::clone)
+			.map_err(AppError::Shared)
+	}
+
+	/// Serializes a playlist to it's serialized format
+	async fn serialize_playlist(playlist: &PlaylistRwLock, locker: &mut AsyncLocker<'_, 0>) -> ser::Playlist {
+		ser::Playlist {
+			items: {
+				let (playlist, mut locker) = playlist.read(locker).await;
+				playlist
+					.items
+					.iter()
+					.split_locker_async_unordered(&mut locker, |item, mut locker| async move {
+						let (item, _) = item.read(&mut locker).await;
+						ser::PlaylistItem {
+							enabled: item.enabled,
+							kind:    match &item.kind {
+								PlaylistItemKind::Directory { path, recursive } => ser::PlaylistItemKind::Directory {
+									path:      path.to_path_buf(),
+									recursive: *recursive,
+								},
+								PlaylistItemKind::File { path } => ser::PlaylistItemKind::File {
+									path: path.to_path_buf(),
+								},
+							},
+						}
+					})
+					.collect()
+					.await
+			},
+		}
+	}
+
+	/// Deserializes a playlist from it's serialized format
+	fn deserialize_playlist(playlist: ser::Playlist) -> Playlist {
+		Playlist {
 			items: playlist
 				.items
 				.into_iter()
@@ -223,22 +248,7 @@ impl PlaylistsManager {
 				.map(PlaylistItemRwLock::new)
 				.map(Arc::new)
 				.collect(),
-		};
-
-		Ok(playlist)
-	}
-
-	/// Waits for `playlist` to be loaded
-	async fn wait_for_playlist_load(
-		playlist: &Lazy<Result<Arc<PlaylistRwLock>, Arc<AppError>>, LoadPlaylistFut>,
-	) -> Result<Arc<PlaylistRwLock>, AppError> {
-		playlist
-			.get_unpin()
-			.await
-			.as_ref()
-			.map(Arc::clone)
-			.map_err(Arc::clone)
-			.map_err(AppError::Shared)
+		}
 	}
 }
 
