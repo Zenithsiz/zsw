@@ -79,9 +79,7 @@ impl PanelsManager {
 				crate::spawn_task(format!("Load panel group {path:?}"), {
 					let playlist_player = Arc::clone(&panel.playlist_player);
 					let shared = Arc::clone(shared);
-					async move {
-						// DEADLOCK: This is a new task
-						let mut locker = AsyncLocker::new();
+					|mut locker| async move {
 						Self::load_playlist_into(&playlist_player, &playlist, &shared, &mut locker)
 							.await
 							.context("Unable to load playlist")?;

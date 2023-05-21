@@ -182,16 +182,12 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
 		let default_panel_group = config.default_panel_group.clone();
-		async move {
-			let locker = AsyncLocker::new();
-			self::load_default_panel_group(default_panel_group, locker, shared).await
-		}
+		|locker| self::load_default_panel_group(default_panel_group, locker, shared)
 	});
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		async move {
-			let locker = AsyncLocker::new();
+		|locker| {
 			self::renderer(
 				shared,
 				locker,
@@ -201,28 +197,21 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 				egui_painter_output_rx,
 				panels_updater_output_rx,
 			)
-			.await
 		}
 	});
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
 		let panels_updater_output_tx = PanelsUpdaterMeetupSender::new(panels_updater_output_tx);
-		async move {
-			let locker = AsyncLocker::new();
-			self::panels_updater(shared, locker, panels_updater_output_tx).await
-		}
+		|locker| self::panels_updater(shared, locker, panels_updater_output_tx)
 	});
 
-	self::spawn_task("Image loader", image_loader.run());
+	self::spawn_task("Image loader", |_| image_loader.run());
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
 		let egui_painter_output_tx = EguiPainterRendererMeetupSender::new(egui_painter_output_tx);
-		async move {
-			let locker = AsyncLocker::new();
-			self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx).await
-		}
+		|locker| self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx)
 	});
 
 	// Then run the event loop on this thread
@@ -288,16 +277,21 @@ async fn load_default_panel_group(
 
 /// Spawns a task
 #[track_caller]
-pub fn spawn_task<F, T>(name: impl Into<String>, future: F)
+pub fn spawn_task<Fut, F, T>(name: impl Into<String>, f: F)
 where
-	F: Future<Output = Result<T, AppError>> + Send + 'static,
+	F: FnOnce(AsyncLocker<'static, 0>) -> Fut + Send + 'static,
+	Fut: Future<Output = Result<T, AppError>> + Send + 'static,
 {
 	let name = name.into();
 
 	let _ = tokio::task::Builder::new().name(&name.clone()).spawn(async move {
+		// DEADLOCK: This is a new spawned task
+		let locker = AsyncLocker::new();
+		let fut = f(locker);
+
 		let id = tokio::task::id();
 		tracing::debug!(?name, ?id, "Spawning task");
-		match future.await {
+		match fut.await {
 			Ok(_) => tracing::debug!(?name, "Task finished"),
 			Err(err) => tracing::debug!(?name, ?err, "Task returned error"),
 		}

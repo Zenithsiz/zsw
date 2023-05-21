@@ -111,10 +111,7 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLoc
 					if ui.button("↻ (Reload)").clicked() {
 						let playlist_path = Arc::clone(&playlist_path);
 						let shared = Arc::clone(shared);
-						crate::spawn_task(format!("Reload playlist {playlist_path:?}"), async move {
-							// DEADLOCK: We're creating a locker in a new task, which can progress
-							//           on it's own.
-							let mut locker = AsyncLocker::new();
+						crate::spawn_task(format!("Reload playlist {playlist_path:?}"), |mut locker| async move {
 							shared
 								.playlists_manager
 								.reload(&playlist_path, &shared.playlists, &mut locker)
@@ -128,10 +125,7 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLoc
 					if ui.button("🖫 (Save)").clicked() {
 						let playlist_path = Arc::clone(&playlist_path);
 						let shared = Arc::clone(shared);
-						crate::spawn_task(format!("Saving playlist {playlist_path:?}"), async move {
-							// DEADLOCK: We're creating a locker in a new task, which can progress
-							//           on it's own.
-							let mut locker = AsyncLocker::new();
+						crate::spawn_task(format!("Saving playlist {playlist_path:?}"), |mut locker| async move {
 							shared
 								.playlists_manager
 								.save(&playlist_path, &shared.playlists, &mut locker)

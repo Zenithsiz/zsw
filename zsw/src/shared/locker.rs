@@ -84,6 +84,7 @@ impl AsyncLocker<'_, 0> {
 	/// # Panics
 	/// Panics if two lockers are created in the same task, or if
 	/// created outside of a task.
+	#[expect(clippy::new_without_default)] // We want locker creation to be explicit
 	pub fn new() -> Self {
 		// Create the next id.
 		#[cfg(feature = "locker-validation")]
