@@ -76,17 +76,17 @@ impl PanelsManager {
 				let panel = Panel::new(&shared.wgpu, &shared.panels_renderer_layout, geometries, state)
 					.context("Unable to create panel")?;
 
-				#[allow(clippy::let_underscore_future)] // It's a spawned future and we don't care about joining
-				let _ = tokio::spawn({
+				crate::spawn_task(format!("Load panel group {path:?}"), {
 					let playlist_player = Arc::clone(&panel.playlist_player);
 					let shared = Arc::clone(shared);
 					async move {
 						// DEADLOCK: This is a new task
 						let mut locker = AsyncLocker::new();
-						match Self::load_playlist_into(&playlist_player, &playlist, &shared, &mut locker).await {
-							Ok(()) => tracing::debug!(?playlist, "Loaded playlist"),
-							Err(err) => tracing::debug!(?playlist, ?err, "Unable to load playlist"),
-						}
+						Self::load_playlist_into(&playlist_player, &playlist, &shared, &mut locker)
+							.await
+							.context("Unable to load playlist")?;
+
+						Ok(())
 					}
 				});
 

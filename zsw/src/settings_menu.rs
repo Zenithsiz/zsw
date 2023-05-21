@@ -11,6 +11,7 @@ use {
 		playlist::PlaylistItemKind,
 		shared::{AsyncLocker, AsyncMutexResource, AsyncRwLockResource, Shared},
 	},
+	anyhow::Context,
 	egui::Widget,
 	std::{path::Path, sync::Arc},
 	zsw_util::{Rect, TokioTaskBlockOn},
@@ -110,36 +111,34 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLoc
 					if ui.button("↻ (Reload)").clicked() {
 						let playlist_path = Arc::clone(&playlist_path);
 						let shared = Arc::clone(shared);
-						tokio::spawn(async move {
+						crate::spawn_task(format!("Reload playlist {playlist_path:?}"), async move {
 							// DEADLOCK: We're creating a locker in a new task, which can progress
 							//           on it's own.
 							let mut locker = AsyncLocker::new();
-							match shared
+							shared
 								.playlists_manager
 								.reload(&playlist_path, &shared.playlists, &mut locker)
 								.await
-							{
-								Ok(_) => tracing::debug!(?playlist_path, "Reloaded playlist"),
-								Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to reload playlist"),
-							}
+								.context("Unable to reload playlist")?;
+
+							Ok(())
 						});
 					}
 
 					if ui.button("🖫 (Save)").clicked() {
 						let playlist_path = Arc::clone(&playlist_path);
 						let shared = Arc::clone(shared);
-						tokio::spawn(async move {
+						crate::spawn_task(format!("Saving playlist {playlist_path:?}"), async move {
 							// DEADLOCK: We're creating a locker in a new task, which can progress
 							//           on it's own.
 							let mut locker = AsyncLocker::new();
-							match shared
+							shared
 								.playlists_manager
 								.save(&playlist_path, &shared.playlists, &mut locker)
 								.await
-							{
-								Ok(_) => tracing::debug!(?playlist_path, "Saved playlist"),
-								Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to save playlist"),
-							}
+								.context("Unable to save playlist")?;
+
+							Ok(())
 						});
 					}
 
