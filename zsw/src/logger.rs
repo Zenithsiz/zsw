@@ -19,7 +19,6 @@ use {
 /// Initializes the logger
 ///
 /// Logs to both stderr and `log_file`, if any
-#[expect(clippy::cognitive_complexity)] // TODO: Refactor?
 pub fn init(log_file: Option<&Path>) {
 	// Create the terminal layer
 	let term_use_colors = self::colors_enabled();

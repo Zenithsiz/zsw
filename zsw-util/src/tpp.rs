@@ -49,7 +49,6 @@ impl Tpp {
 
 	/// Processes a file
 	// TODO: Don't clone result once the borrow checker accepts the early return
-	#[expect(clippy::cognitive_complexity)] // TODO: Refactor
 	pub fn process(&mut self, path: impl AsRef<Path>) -> Result<String, anyhow::Error> {
 		// Open the file and check if we already processed it
 		let path = path.as_ref().canonicalize().context("Unable to canonicalize file")?;

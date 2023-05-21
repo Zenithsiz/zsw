@@ -4,17 +4,17 @@ members = ["zsw", "zsw-util", "zsw-wgpu", "zsw-error", "zsw-egui"]
 resolver = "2"
 
 [workspace.dependencies]
-anyhow = "1.0.70"
+anyhow = "1.0.71"
 async-channel = "1.8.0"
-async-once-cell = "0.4.4"
+async-once-cell = "0.5.2"
 async-walkdir = "0.2.0"
 bytemuck = { version = "1.13.1", features = ["derive"] }
 cgmath = "0.18.0"
-clap = { version = "4.1.11", features = ["derive"] }
-console-subscriber = "0.1.8"
+clap = { version = "4.3.0", features = ["derive"] }
+console-subscriber = "0.1.9"
 crossbeam = "0.8.2"
 dashmap = "5.4.0"
-directories = "5.0.0"
+directories = "5.0.1"
 duplicate = "1.0.0"
 egui = { version = "0.21.0", features = [
 	"default_fonts",
@@ -22,29 +22,29 @@ egui = { version = "0.21.0", features = [
 	"extra_debug_asserts",
 	"tracing",
 ] }
-egui_wgpu_backend = "0.22.0"
+egui_wgpu_backend = "0.23.0"
 egui_winit_platform = "0.18.0"
 extend = "1.2.0"
-futures = "0.3.27"
-image = "0.24.5"
+futures = "0.3.28"
+image = "0.24.6"
 include_dir = "0.7.3"
 itertools = "0.10.5"
 num-rational = "0.4.1"
-opener = "0.5.2"
+opener = "0.6.1"
 rand = "0.8.5"
 rayon = "1.7.0"
-sealed = "0.4.0"
-serde = { version = "1.0.158", features = ["derive"] }
-serde_json = "1.0.94"
-serde_with = "2.3.1"
-serde_yaml = "0.9.19"
+sealed = "0.5.0"
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.96"
+serde_with = "3.0.0"
+serde_yaml = "0.9.21"
 thiserror = "1.0.40"
-tokio = { version = "1.26.0", features = ["full", "tracing"] }
-tokio-stream = { version = "0.1.12", features = ["fs"] }
+tokio = { version = "1.28.1", features = ["full", "tracing"] }
+tokio-stream = { version = "0.1.14", features = ["fs"] }
 tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
-wgpu = { version = "0.15.1", features = ["trace"] }
-winit = "0.28.3"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+wgpu = { version = "0.16.0", features = ["trace"] }
+winit = "0.28.6"
 
 
 # Compile `image` (and some it's dependencies, which actually load images) in release mode,
