@@ -6,12 +6,19 @@ mod ser;
 // Imports
 use {
 	crate::{
-		shared::{AsyncLocker, AsyncRwLockResource, PlaylistItemRwLock, PlaylistRwLock, PlaylistsRwLock},
+		shared::{
+			AsyncLocker,
+			AsyncRwLockResource,
+			LockerIteratorExt,
+			PlaylistItemRwLock,
+			PlaylistRwLock,
+			PlaylistsRwLock,
+		},
 		AppError,
 	},
 	anyhow::Context,
 	async_once_cell::Lazy,
-	futures::Future,
+	futures::{Future, StreamExt},
 	std::{
 		collections::{hash_map, HashMap},
 		mem,
@@ -73,6 +80,68 @@ impl PlaylistsManager {
 			.map(Arc::clone)
 			.map_err(Arc::clone)
 			.map_err(AppError::Shared)
+	}
+
+	/// Saves a loaded playlist by path.
+	///
+	/// Waits for loading, if currently loading.
+	/// Returns an error if unloaded
+	pub async fn save(
+		&self,
+		path: &Path,
+		playlists: &PlaylistsRwLock,
+		locker: &mut AsyncLocker<'_, 0>,
+	) -> Result<(), anyhow::Error> {
+		// Get the playlist
+		let playlist_lazy = {
+			let (playlists, _) = playlists.read(locker).await;
+			let Some(playlist) = playlists.playlists.get(path) else {
+				anyhow::bail!("Playlist {path:?} isn't loaded");
+			};
+			Arc::clone(playlist)
+		};
+
+		// Then wait for it to load
+		let playlist = playlist_lazy
+			.get_unpin()
+			.await
+			.as_ref()
+			.map(Arc::clone)
+			.map_err(Arc::clone)
+			.map_err(AppError::Shared)?;
+
+		// Finally save it
+		let playlist = ser::Playlist {
+			items: {
+				let (playlist, mut locker) = playlist.read(locker).await;
+				playlist
+					.items
+					.iter()
+					.split_locker_async_unordered(&mut locker, |item, mut locker| async move {
+						let (item, _) = item.read(&mut locker).await;
+						ser::PlaylistItem {
+							enabled: item.enabled,
+							kind:    match &item.kind {
+								PlaylistItemKind::Directory { path, recursive } => ser::PlaylistItemKind::Directory {
+									path:      path.to_path_buf(),
+									recursive: *recursive,
+								},
+								PlaylistItemKind::File { path } => ser::PlaylistItemKind::File {
+									path: path.to_path_buf(),
+								},
+							},
+						}
+					})
+					.collect()
+					.await
+			},
+		};
+		let playlist_yaml = serde_yaml::to_string(&playlist).context("Unable to serialize playlist")?;
+		tokio::fs::write(path, playlist_yaml)
+			.await
+			.context("Unable to write playlist to file")?;
+
+		Ok(())
 	}
 
 	/// Reloads a playlist by path.

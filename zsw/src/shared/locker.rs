@@ -230,7 +230,7 @@ locker_impls! {
 			0 => 1,
 		},
 		PlaylistItemRwLock(PlaylistItem) {
-			0 => 1,
+			0, 1 => 2,
 		},
 		PanelsRendererShaderRwLock(PanelsRendererShader) {
 			0, 1 => 2,

@@ -125,6 +125,24 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLoc
 						});
 					}
 
+					if ui.button("🖫 (Save)").clicked() {
+						let playlist_path = Arc::clone(&playlist_path);
+						let shared = Arc::clone(shared);
+						tokio::spawn(async move {
+							// DEADLOCK: We're creating a locker in a new task, which can progress
+							//           on it's own.
+							let mut locker = AsyncLocker::new();
+							match shared
+								.playlists_manager
+								.save(&playlist_path, &shared.playlists, &mut locker)
+								.await
+							{
+								Ok(_) => tracing::debug!(?playlist_path, "Saved playlist"),
+								Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to save playlist"),
+							}
+						});
+					}
+
 					ui.separator();
 				}
 			},

@@ -19,7 +19,6 @@ pub struct Playlist {
 /// Playlist item
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
 pub struct PlaylistItem {
 	/// Enabled
 	#[serde(default = "PlaylistItem::default_enabled")]
