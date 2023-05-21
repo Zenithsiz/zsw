@@ -27,7 +27,7 @@ use {
 	},
 	anyhow::Context,
 	async_walkdir::WalkDir,
-	futures::TryStreamExt,
+	futures::StreamExt,
 	std::{path::Path, sync::Arc},
 	tokio_stream::wrappers::ReadDirStream,
 	zsw_util::Rect,
@@ -98,27 +98,25 @@ impl PanelsManager {
 	}
 
 	/// Loads `playlist` into `playlist_player`.
+	#[expect(clippy::too_many_lines)] // TODO: Refactor
 	async fn load_playlist_into(
 		playlist_player: &PlaylistPlayerRwLock,
-		playlist: &Path,
+		playlist_path: &Path,
 		shared: &Shared,
 		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<(), AppError> {
 		/// Attempts to canonicalize `path`. If unable to, logs a warning and returns `None`
 		async fn try_canonicalize_path(path: &Path) -> Option<std::path::PathBuf> {
-			match tokio::fs::canonicalize(path).await {
-				Ok(path) => Some(path),
-				Err(err) => {
-					tracing::warn!(?path, ?err, "Unable to canonicalize path");
-					None
-				},
-			}
+			tokio::fs::canonicalize(path)
+				.await
+				.inspect_err(|err| tracing::warn!(?path, ?err, "Unable to canonicalize path"))
+				.ok()
 		}
 
 		let playlist_items = {
 			let playlist = shared
 				.playlists_manager
-				.load(playlist, &shared.playlists, locker)
+				.load(playlist_path, &shared.playlists, locker)
 				.await
 				.context("Unable to load playlist")?;
 			let (playlist, _) = playlist.read(locker).await;
@@ -135,45 +133,79 @@ impl PanelsManager {
 
 				// If not enabled, skip it
 				if !item.enabled {
-					tracing::trace!(?item, "Ignoring non-enabled playlist item");
-					return Ok(());
+					tracing::trace!(?playlist_path, ?item, "Ignoring non-enabled playlist item");
+					return;
 				}
 
 				// Else check the kind of item
 				match item.kind {
 					PlaylistItemKind::Directory { ref path, recursive } => match recursive {
-						true => WalkDir::new(path)
-							.filter(async move |entry| match entry.file_type().await.map(|ty| ty.is_dir()) {
-								Err(_) | Ok(true) => async_walkdir::Filtering::Ignore,
-								Ok(false) => async_walkdir::Filtering::Continue,
-							})
-							.map_err(anyhow::Error::new)
-							.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
-								if let Some(path) = try_canonicalize_path(&entry?.path()).await {
+						true =>
+							WalkDir::new(path)
+								.filter(async move |entry| match entry.file_type().await.map(|ty| ty.is_dir()) {
+									Err(_) | Ok(true) => async_walkdir::Filtering::Ignore,
+									Ok(false) => async_walkdir::Filtering::Continue,
+								})
+								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
+									let entry = match entry {
+										Ok(entry) => entry,
+										Err(err) => {
+											tracing::warn!(
+												?playlist_path,
+												?path,
+												?err,
+												"Unable to read directory entry within recursive walk"
+											);
+											return;
+										},
+									};
+
+									let Some(path) = try_canonicalize_path(&entry.path()).await else {
+										return
+									};
+
 									let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
 									playlist_player.add(path.into());
-								}
-
-								Ok::<_, AppError>(())
-							})
-							.try_collect()
-							.await
-							.context("Unable to recursively read directory files")?,
-						false => {
-							let dir = tokio::fs::read_dir(path).await.context("Unable to read directory")?;
-							ReadDirStream::new(dir)
-								.map_err(anyhow::Error::new)
-								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
-									if let Some(path) = try_canonicalize_path(&entry?.path()).await {
-										let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
-										playlist_player.add(path.into());
-									}
-
-									Ok::<_, AppError>(())
 								})
-								.try_collect()
-								.await
-								.context("Unable to read directory files")?;
+								.collect()
+								.await,
+						false => {
+							let dir = match tokio::fs::read_dir(path).await {
+								Ok(dir) => dir,
+								Err(err) => {
+									tracing::warn!(
+										?playlist_path,
+										?path,
+										?err,
+										"Unable to read playlist playlist directory"
+									);
+									return;
+								},
+							};
+							ReadDirStream::new(dir)
+								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
+									let entry = match entry {
+										Ok(entry) => entry,
+										Err(err) => {
+											tracing::warn!(
+												?playlist_path,
+												?path,
+												?err,
+												"Unable to read playlist directory entry of directory"
+											);
+											return;
+										},
+									};
+
+									let Some(path) = try_canonicalize_path(&entry.path()).await else {
+										return
+									};
+
+									let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+									playlist_player.add(path.into());
+								})
+								.collect::<()>()
+								.await;
 						},
 					},
 					PlaylistItemKind::File { ref path } =>
@@ -182,12 +214,9 @@ impl PanelsManager {
 							playlist_player.add(path.into());
 						},
 				}
-
-				Ok::<_, AppError>(())
 			})
-			.try_collect::<()>()
-			.await
-			.context("Unable to load all items")?;
+			.collect::<()>()
+			.await;
 
 		// Once we're finished, clear the backlog to ensure we get proper random items after this
 		// Note: If we didn't do this, the first few items would always be in the order we get them
