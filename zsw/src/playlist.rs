@@ -43,15 +43,9 @@ impl PlaylistsManager {
 		{
 			let (playlists, _) = playlists.read(locker).await;
 			if let Some(playlist) = playlists.playlists.get(path) {
-				let playlist = Arc::clone(playlist);
+				let playlist_lazy = Arc::clone(playlist);
 				mem::drop(playlists);
-				return playlist
-					.get_unpin()
-					.await
-					.as_ref()
-					.map(Arc::clone)
-					.map_err(Arc::clone)
-					.map_err(AppError::Shared);
+				return Self::wait_for_playlist_load(&playlist_lazy).await;
 			}
 		}
 
@@ -73,13 +67,7 @@ impl PlaylistsManager {
 		};
 
 		// Finally wait on the playlist
-		playlist_lazy
-			.get_unpin()
-			.await
-			.as_ref()
-			.map(Arc::clone)
-			.map_err(Arc::clone)
-			.map_err(AppError::Shared)
+		Self::wait_for_playlist_load(&playlist_lazy).await
 	}
 
 	/// Saves a loaded playlist by path.
@@ -102,13 +90,7 @@ impl PlaylistsManager {
 		};
 
 		// Then wait for it to load
-		let playlist = playlist_lazy
-			.get_unpin()
-			.await
-			.as_ref()
-			.map(Arc::clone)
-			.map_err(Arc::clone)
-			.map_err(AppError::Shared)?;
+		let playlist = Self::wait_for_playlist_load(&playlist_lazy).await?;
 
 		// Finally save it
 		let playlist = ser::Playlist {
@@ -167,13 +149,7 @@ impl PlaylistsManager {
 		};
 
 		// Finally wait on the playlist
-		playlist_lazy
-			.get_unpin()
-			.await
-			.as_ref()
-			.map(Arc::clone)
-			.map_err(Arc::clone)
-			.map_err(AppError::Shared)
+		Self::wait_for_playlist_load(&playlist_lazy).await
 	}
 
 	/// Returns all loaded playlists
@@ -188,13 +164,12 @@ impl PlaylistsManager {
 			.playlists
 			.iter()
 			.map(|(name, playlist)| {
-				let playlist = match playlist.try_get() {
-					Some(res) => match res {
-						Ok(playlist) => Some(Ok(Arc::clone(playlist))),
-						Err(err) => Some(Err(AppError::Shared(Arc::clone(err)))),
-					},
-					None => None,
-				};
+				let playlist = playlist.try_get().map(|res| {
+					res.as_ref()
+						.map(Arc::clone)
+						.map_err(Arc::clone)
+						.map_err(AppError::Shared)
+				});
 
 				(Arc::clone(name), playlist)
 			})
@@ -248,6 +223,19 @@ impl PlaylistsManager {
 		};
 
 		Ok(playlist)
+	}
+
+	/// Waits for `playlist` to be loaded
+	async fn wait_for_playlist_load(
+		playlist: &Lazy<Result<Arc<PlaylistRwLock>, Arc<AppError>>, LoadPlaylistFut>,
+	) -> Result<Arc<PlaylistRwLock>, AppError> {
+		playlist
+			.get_unpin()
+			.await
+			.as_ref()
+			.map(Arc::clone)
+			.map_err(Arc::clone)
+			.map_err(AppError::Shared)
 	}
 }
 
