@@ -13,7 +13,10 @@ use {
 	},
 	anyhow::Context,
 	egui::Widget,
-	std::{path::Path, sync::Arc},
+	std::{
+		path::{Path, PathBuf},
+		sync::Arc,
+	},
 	zsw_util::{Rect, TokioTaskBlockOn},
 };
 
@@ -25,14 +28,18 @@ pub struct SettingsMenu {
 
 	/// Current tab
 	cur_tab: Tab,
+
+	/// Add playlist state
+	add_playlist_state: AddPlaylistState,
 }
 
 impl SettingsMenu {
 	/// Creates the settings menu
 	pub fn new() -> Self {
 		Self {
-			open:    false,
-			cur_tab: Tab::Panels,
+			open:               false,
+			cur_tab:            Tab::Panels,
+			add_playlist_state: AddPlaylistState::default(),
 		}
 	}
 
@@ -63,7 +70,7 @@ impl SettingsMenu {
 
 			match self.cur_tab {
 				Tab::Panels => self::draw_panels_tab(ui, shared, locker),
-				Tab::Playlists => self::draw_playlists(ui, shared, locker),
+				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared, locker),
 			}
 		});
 	}
@@ -76,7 +83,12 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLo
 }
 
 /// Draws the playlists tab
-fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLocker<'_, 0>) {
+fn draw_playlists(
+	add_playlist_state: &mut AddPlaylistState,
+	ui: &mut egui::Ui,
+	shared: &Arc<Shared>,
+	locker: &mut AsyncLocker<'_, 0>,
+) {
 	let playlists = shared
 		.playlists_manager
 		.get_all_loaded(&shared.playlists, locker)
@@ -122,7 +134,7 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLoc
 						});
 					}
 
-					if ui.button("🖫 (Save)").clicked() {
+					if ui.button("💾 (Save)").clicked() {
 						let playlist_path = Arc::clone(&playlist_path);
 						let shared = Arc::clone(shared);
 						crate::spawn_task(format!("Saving playlist {playlist_path:?}"), |mut locker| async move {
@@ -147,8 +159,56 @@ fn draw_playlists(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLoc
 			},
 		});
 	}
-}
 
+	if ui.button("➕ (Add playlist)").clicked() {
+		// If we don't have a start directory for the playlists, try to get one
+		if matches!(add_playlist_state.start_dir, AddPlaylistStateStartPath::None) {
+			if let Some((playlist_path, _)) = shared
+				.playlists_manager
+				.get_loaded_any(&shared.playlists, locker)
+				.block_on()
+			{
+				if let Some(playlist_dir) = playlist_path.parent() {
+					add_playlist_state.start_dir =
+						AddPlaylistStateStartPath::FromExistingPlaylists(playlist_dir.to_path_buf());
+				}
+			};
+		};
+
+		// TODO: Not have this yaml filter here? Or at least allow files other than `.yaml`
+		let mut file_dialog = rfd::FileDialog::new().add_filter("Playlist file", &["yaml"]);
+
+		// Set the starting directory, if we have any
+		if let Some(playlist_dir) = add_playlist_state.start_dir.as_path() {
+			file_dialog = file_dialog.set_directory(playlist_dir);
+		}
+
+		// Ask the user for a playlist file
+		match file_dialog.pick_file() {
+			// If we got it, try to load it
+			Some(playlist_path) => {
+				tracing::debug!(?playlist_path, "Adding playlist");
+
+				// Set the playlist state to the parent file
+				if let Some(path) = playlist_path.parent() {
+					add_playlist_state.start_dir = AddPlaylistStateStartPath::LastPlaylist(path.to_path_buf());
+				}
+
+				match shared
+					.playlists_manager
+					.load(&playlist_path, &shared.playlists, locker)
+					.block_on()
+				{
+					Ok(playlist) => tracing::debug!(?playlist_path, ?playlist, "Successfully added playlist"),
+					Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to add playlist"),
+				}
+			},
+
+			// Else just log that the user cancelled it
+			None => tracing::debug!("User cancelled add playlist"),
+		}
+	}
+}
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
@@ -375,9 +435,45 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>) {
 	});
 }
 
+
 /// Tab
 #[derive(PartialEq, Debug)]
 enum Tab {
 	Panels,
 	Playlists,
+}
+
+/// State for adding a playlist
+#[derive(Clone, Default, Debug)]
+struct AddPlaylistState {
+	/// Start directory
+	start_dir: AddPlaylistStateStartPath,
+}
+
+/// Start path for [`AddPlaylistState::start_path`]
+#[derive(Clone, Default, Debug)]
+enum AddPlaylistStateStartPath {
+	/// There are no playlists and user hasn't picked any playlists yet
+	#[default]
+	None,
+
+	/// User hasn't picked any playlists, but we took the parent path of
+	/// one of the existing playlists
+	FromExistingPlaylists(PathBuf),
+
+	/// User has picked a playlist, and this is it's parent path.
+	///
+	/// This variant will be chosen regardless if the last playlist was
+	/// successfully loaded or not.
+	LastPlaylist(PathBuf),
+}
+
+impl AddPlaylistStateStartPath {
+	/// Returns the inner path, if any
+	pub fn as_path(&self) -> Option<&Path> {
+		match self {
+			Self::None => None,
+			Self::FromExistingPlaylists(path) | Self::LastPlaylist(path) => Some(path),
+		}
+	}
 }
