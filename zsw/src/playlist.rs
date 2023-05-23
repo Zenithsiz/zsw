@@ -37,8 +37,8 @@ impl PlaylistsManager {
 		&self,
 		path: &Path,
 		playlists: &PlaylistsRwLock,
-		locker: &mut AsyncLocker<'_, 0>,
-	) -> Result<Arc<PlaylistRwLock>, AppError> {
+		locker: &mut AsyncLocker<'_, 2>,
+	) -> Result<(Arc<Path>, Arc<PlaylistRwLock>), AppError> {
 		// Canonicalize the path first, so we don't load the same playlist from two paths
 		// (e.g., one relative and one absolute)
 		let path = path.canonicalize().context("Unable to canonicalize path")?;
@@ -46,32 +46,34 @@ impl PlaylistsManager {
 		// Check if the playlist is already loaded
 		{
 			let (playlists, _) = playlists.read(locker).await;
-			if let Some(playlist) = playlists.playlists.get(&*path) {
+			if let Some((playlist_path, playlist)) = playlists.playlists.get_key_value(&*path) {
+				let playlist_path = Arc::clone(playlist_path);
 				let playlist_lazy = Arc::clone(playlist);
 				mem::drop(playlists);
-				return Self::wait_for_playlist_load(&playlist_lazy).await;
+				return Ok((playlist_path, Self::wait_for_playlist_load(&playlist_lazy).await?));
 			}
 		}
 
 		// Else lock for write and insert the entry
-		let playlist_lazy = {
+		let (playlist_path, playlist_lazy) = {
 			let (mut playlists, _) = playlists.write(locker).await;
 			let entry = playlists.playlists.raw_entry_mut().from_key(&*path);
 			match entry {
 				// If it's been inserted to in the meantime, wait on it
-				hash_map::RawEntryMut::Occupied(entry) => Arc::clone(entry.get()),
+				hash_map::RawEntryMut::Occupied(entry) => (Arc::clone(entry.key()), Arc::clone(entry.get())),
 
 				// Else insert the future to load it
 				hash_map::RawEntryMut::Vacant(entry) => {
-					let playlist_lazy = Lazy::new(Self::load_fut(&path));
-					let (_, playlist_lazy) = entry.insert(path.into(), Arc::new(playlist_lazy));
-					Arc::clone(playlist_lazy)
+					let playlist_path = <Arc<Path>>::from(path);
+					let playlist_lazy = Lazy::new(Self::load_fut(&playlist_path));
+					let (_, playlist_lazy) = entry.insert(Arc::clone(&playlist_path), Arc::new(playlist_lazy));
+					(playlist_path, Arc::clone(playlist_lazy))
 				},
 			}
 		};
 
 		// Finally wait on the playlist
-		Self::wait_for_playlist_load(&playlist_lazy).await
+		Ok((playlist_path, Self::wait_for_playlist_load(&playlist_lazy).await?))
 	}
 
 	/// Saves a loaded playlist by path.
@@ -138,7 +140,7 @@ impl PlaylistsManager {
 	pub async fn get_loaded_any(
 		&self,
 		playlists: &PlaylistsRwLock,
-		locker: &mut AsyncLocker<'_, 0>,
+		locker: &mut AsyncLocker<'_, 2>,
 	) -> Option<(Arc<Path>, Option<Result<Arc<PlaylistRwLock>, AppError>>)> {
 		let (playlists, _) = playlists.read(locker).await;
 

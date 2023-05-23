@@ -7,9 +7,9 @@
 // Imports
 use {
 	crate::{
-		panel::{self, PanelImage, PanelShader},
+		panel::{self, PanelImage, PanelShader, PanelsManager},
 		playlist::PlaylistItemKind,
-		shared::{AsyncLocker, AsyncMutexResource, AsyncRwLockResource, Shared},
+		shared::{AsyncLocker, AsyncMutexResource, AsyncRwLockResource, PlaylistRwLock, Shared},
 	},
 	anyhow::Context,
 	egui::Widget,
@@ -69,15 +69,20 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(ui, shared, locker),
+				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared, locker),
 				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared, locker),
 			}
 		});
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(ui: &mut egui::Ui, shared: &Arc<Shared>, locker: &mut AsyncLocker<'_, 0>) {
-	self::draw_panels_editor(ui, shared, locker);
+fn draw_panels_tab(
+	add_playlist_state: &mut AddPlaylistState,
+	ui: &mut egui::Ui,
+	shared: &Arc<Shared>,
+	locker: &mut AsyncLocker<'_, 0>,
+) {
+	self::draw_panels_editor(add_playlist_state, ui, shared, locker);
 	ui.separator();
 	self::draw_shader_select(ui, shared, locker);
 }
@@ -161,58 +166,79 @@ fn draw_playlists(
 	}
 
 	if ui.button("➕ (Add playlist)").clicked() {
-		// If we don't have a start directory for the playlists, try to get one
-		if matches!(add_playlist_state.start_dir, AddPlaylistStateStartPath::None) {
-			if let Some((playlist_path, _)) = shared
+		// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
+		self::choose_load_playlist_from_file(add_playlist_state, shared, &mut locker.next::<2>());
+	}
+}
+
+/// Asks the user and loads a playlist from a file
+fn choose_load_playlist_from_file(
+	add_playlist_state: &mut AddPlaylistState,
+	shared: &Arc<Shared>,
+	locker: &mut AsyncLocker<'_, 2>,
+) -> Option<(Arc<Path>, Arc<PlaylistRwLock>)> {
+	// If we don't have a start directory for the playlists, try to get one
+	if matches!(add_playlist_state.start_dir, AddPlaylistStateStartPath::None) {
+		if let Some((playlist_path, _)) = shared
+			.playlists_manager
+			.get_loaded_any(&shared.playlists, locker)
+			.block_on()
+		{
+			if let Some(playlist_dir) = playlist_path.parent() {
+				add_playlist_state.start_dir =
+					AddPlaylistStateStartPath::FromExistingPlaylists(playlist_dir.to_path_buf());
+			}
+		};
+	};
+
+	// TODO: Not have this yaml filter here? Or at least allow files other than `.yaml`
+	let mut file_dialog = rfd::FileDialog::new().add_filter("Playlist file", &["yaml"]);
+
+	// Set the starting directory, if we have any
+	if let Some(playlist_dir) = add_playlist_state.start_dir.as_path() {
+		file_dialog = file_dialog.set_directory(playlist_dir);
+	}
+
+	// Ask the user for a playlist file
+	match file_dialog.pick_file() {
+		// If we got it, try to load it
+		Some(playlist_path) => {
+			tracing::debug!(?playlist_path, "Loading playlist");
+
+			// Set the playlist state to the parent file
+			if let Some(path) = playlist_path.parent() {
+				add_playlist_state.start_dir = AddPlaylistStateStartPath::LastPlaylist(path.to_path_buf());
+			}
+
+			// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
+			match shared
 				.playlists_manager
-				.get_loaded_any(&shared.playlists, locker)
+				.load(&playlist_path, &shared.playlists, &mut locker.next::<2>())
 				.block_on()
 			{
-				if let Some(playlist_dir) = playlist_path.parent() {
-					add_playlist_state.start_dir =
-						AddPlaylistStateStartPath::FromExistingPlaylists(playlist_dir.to_path_buf());
-				}
-			};
-		};
+				Ok((playlist_path, playlist)) => {
+					tracing::debug!(?playlist_path, ?playlist, "Successfully loaded playlist");
+					return Some((playlist_path, playlist));
+				},
+				Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to load playlist"),
+			}
+		},
 
-		// TODO: Not have this yaml filter here? Or at least allow files other than `.yaml`
-		let mut file_dialog = rfd::FileDialog::new().add_filter("Playlist file", &["yaml"]);
-
-		// Set the starting directory, if we have any
-		if let Some(playlist_dir) = add_playlist_state.start_dir.as_path() {
-			file_dialog = file_dialog.set_directory(playlist_dir);
-		}
-
-		// Ask the user for a playlist file
-		match file_dialog.pick_file() {
-			// If we got it, try to load it
-			Some(playlist_path) => {
-				tracing::debug!(?playlist_path, "Adding playlist");
-
-				// Set the playlist state to the parent file
-				if let Some(path) = playlist_path.parent() {
-					add_playlist_state.start_dir = AddPlaylistStateStartPath::LastPlaylist(path.to_path_buf());
-				}
-
-				match shared
-					.playlists_manager
-					.load(&playlist_path, &shared.playlists, locker)
-					.block_on()
-				{
-					Ok(playlist) => tracing::debug!(?playlist_path, ?playlist, "Successfully added playlist"),
-					Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to add playlist"),
-				}
-			},
-
-			// Else just log that the user cancelled it
-			None => tracing::debug!("User cancelled add playlist"),
-		}
+		// Else just log that the user cancelled it
+		None => tracing::debug!("User cancelled load playlist"),
 	}
+
+	None
 }
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
+fn draw_panels_editor(
+	add_playlist_state: &mut AddPlaylistState,
+	ui: &mut egui::Ui,
+	shared: &Arc<Shared>,
+	locker: &mut AsyncLocker<'_, 0>,
+) {
 	let (mut panel_group, mut locker) = shared.cur_panel_group.lock(locker).block_on();
 	match &mut *panel_group {
 		Some(panel_group) =>
@@ -303,9 +329,38 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLock
 
 					#[expect(clippy::significant_drop_in_scrutinee)] // False positive, we're not locking anything
 					ui.collapsing("Playlist player", |ui| {
-						let (playlist_player, _) = panel.playlist_player.write(&mut locker).block_on();
+						let (playlist_player, mut locker) = panel.playlist_player.write(&mut locker).block_on();
 
 						let row_height = ui.text_style_height(&egui::TextStyle::Body);
+
+						if ui.button("↹ (Replace)").clicked() {
+							// TODO: Stop everything that could be inserting items still?
+							if let Some((playlist_path, playlist)) =
+								self::choose_load_playlist_from_file(add_playlist_state, shared, &mut locker)
+							{
+								crate::spawn_task(format!("Replace playlist {playlist:?}"), {
+									let playlist_player = Arc::clone(&panel.playlist_player);
+									let shared = Arc::clone(shared);
+									|mut locker| async move {
+										{
+											let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+											playlist_player.remove_all();
+										}
+
+										PanelsManager::load_playlist_into(
+											&playlist_player,
+											&playlist_path,
+											&shared,
+											&mut locker,
+										)
+										.await
+										.context("Unable to load playlist")?;
+
+										Ok(())
+									}
+								});
+							}
+						};
 
 						ui.collapsing("Prev", |ui| {
 							egui::ScrollArea::new([false, true])

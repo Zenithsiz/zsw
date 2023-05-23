@@ -141,7 +141,9 @@ impl<const STATE: usize> AsyncLocker<'_, STATE> {
 	///
 	/// # Deadlock
 	/// You must ensure the next state cannot deadlock with the current state.
-	fn next<const NEXT_STATE: usize>(&self) -> AsyncLocker<'_, NEXT_STATE> {
+	// TODO: This shouldn't be pub once functions outside can parametrize lockers
+	//       by `STATE` without crashing the compiler.
+	pub fn next<const NEXT_STATE: usize>(&self) -> AsyncLocker<'_, NEXT_STATE> {
 		AsyncLocker {
 			#[cfg(feature = "locker-validation")]
 			id: self.id,
@@ -225,7 +227,7 @@ locker_impls! {
 
 	async_rwlock {
 		PlaylistsRwLock(Playlists) {
-			0 => 1,
+			0, 1, 2 => 3,
 		},
 		PlaylistRwLock(Playlist) {
 			0 => 1,

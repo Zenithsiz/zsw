@@ -98,8 +98,9 @@ impl PanelsManager {
 	}
 
 	/// Loads `playlist` into `playlist_player`.
+	// TODO: Not make `pub`?
 	#[expect(clippy::too_many_lines)] // TODO: Refactor
-	async fn load_playlist_into(
+	pub async fn load_playlist_into(
 		playlist_player: &PlaylistPlayerRwLock,
 		playlist_path: &Path,
 		shared: &Shared,
@@ -114,9 +115,10 @@ impl PanelsManager {
 		}
 
 		let playlist_items = {
-			let playlist = shared
+			// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
+			let (_, playlist) = shared
 				.playlists_manager
-				.load(playlist_path, &shared.playlists, locker)
+				.load(playlist_path, &shared.playlists, &mut locker.next::<2>())
 				.await
 				.context("Unable to load playlist")?;
 			let (playlist, _) = playlist.read(locker).await;

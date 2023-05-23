@@ -52,6 +52,13 @@ impl PlaylistPlayer {
 		let _ = self.next_items.drain_filter(|item| &**item == path);
 	}
 
+	/// Removes all paths from the playlist
+	pub fn remove_all(&mut self) {
+		self.items.clear();
+		self.prev_items.clear();
+		self.next_items.clear();
+	}
+
 	/// Clears the current backlog
 	// TODO: Better wording than backlog: deck, remaining items?
 	pub fn clear_backlog(&mut self) {
