@@ -176,11 +176,11 @@ impl PlaylistsManager {
 	async fn load_inner(path: &Path) -> Result<Playlist, AppError> {
 		// Read the file
 		tracing::trace!(?path, "Reading playlist file");
-		let playlist_yaml = tokio::fs::read(path).await.context("Unable to open file")?;
+		let playlist_yaml = tokio::fs::read_to_string(path).await.context("Unable to open file")?;
 
 		// And parse it
 		tracing::trace!(?path, ?playlist_yaml, "Parsing playlist file");
-		let playlist = serde_yaml::from_slice::<ser::Playlist>(&playlist_yaml).context("Unable to parse playlist")?;
+		let playlist = serde_yaml::from_str::<ser::Playlist>(&playlist_yaml).context("Unable to parse playlist")?;
 		tracing::trace!(?path, ?playlist, "Parsed playlist file");
 		let playlist = Self::deserialize_playlist(playlist);
 
