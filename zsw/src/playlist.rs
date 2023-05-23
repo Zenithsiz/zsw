@@ -39,10 +39,14 @@ impl PlaylistsManager {
 		playlists: &PlaylistsRwLock,
 		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<Arc<PlaylistRwLock>, AppError> {
+		// Canonicalize the path first, so we don't load the same playlist from two paths
+		// (e.g., one relative and one absolute)
+		let path = path.canonicalize().context("Unable to canonicalize path")?;
+
 		// Check if the playlist is already loaded
 		{
 			let (playlists, _) = playlists.read(locker).await;
-			if let Some(playlist) = playlists.playlists.get(path) {
+			if let Some(playlist) = playlists.playlists.get(&*path) {
 				let playlist_lazy = Arc::clone(playlist);
 				mem::drop(playlists);
 				return Self::wait_for_playlist_load(&playlist_lazy).await;
@@ -52,14 +56,14 @@ impl PlaylistsManager {
 		// Else lock for write and insert the entry
 		let playlist_lazy = {
 			let (mut playlists, _) = playlists.write(locker).await;
-			let entry = playlists.playlists.raw_entry_mut().from_key(path);
+			let entry = playlists.playlists.raw_entry_mut().from_key(&*path);
 			match entry {
 				// If it's been inserted to in the meantime, wait on it
 				hash_map::RawEntryMut::Occupied(entry) => Arc::clone(entry.get()),
 
 				// Else insert the future to load it
 				hash_map::RawEntryMut::Vacant(entry) => {
-					let playlist_lazy = Lazy::new(Self::load_fut(path));
+					let playlist_lazy = Lazy::new(Self::load_fut(&path));
 					let (_, playlist_lazy) = entry.insert(path.into(), Arc::new(playlist_lazy));
 					Arc::clone(playlist_lazy)
 				},
@@ -128,6 +132,28 @@ impl PlaylistsManager {
 		Self::wait_for_playlist_load(&playlist_lazy).await
 	}
 
+	/// Returns a loaded playlist.
+	///
+	/// No guarantees are made on which playlist is chosen
+	pub async fn get_loaded_any(
+		&self,
+		playlists: &PlaylistsRwLock,
+		locker: &mut AsyncLocker<'_, 0>,
+	) -> Option<(Arc<Path>, Option<Result<Arc<PlaylistRwLock>, AppError>>)> {
+		let (playlists, _) = playlists.read(locker).await;
+
+		let (path, playlist) = playlists.playlists.iter().next()?;
+		let playlist = playlist.try_get().map(|res| {
+			res.as_ref()
+				.map(Arc::clone)
+				.map_err(Arc::clone)
+				.map_err(AppError::Shared)
+		});
+
+
+		Some((Arc::clone(path), playlist))
+	}
+
 	/// Returns all loaded playlists
 	pub async fn get_all_loaded(
 		&self,
@@ -139,7 +165,7 @@ impl PlaylistsManager {
 		playlists
 			.playlists
 			.iter()
-			.map(|(name, playlist)| {
+			.map(|(path, playlist)| {
 				let playlist = playlist.try_get().map(|res| {
 					res.as_ref()
 						.map(Arc::clone)
@@ -147,7 +173,7 @@ impl PlaylistsManager {
 						.map_err(AppError::Shared)
 				});
 
-				(Arc::clone(name), playlist)
+				(Arc::clone(path), playlist)
 			})
 			.collect()
 	}
@@ -265,7 +291,7 @@ pub struct Playlists {
 impl std::fmt::Debug for Playlists {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_map()
-			.entries(self.playlists.iter().map(|(name, playlist)| (name, playlist.try_get())))
+			.entries(self.playlists.iter().map(|(path, playlist)| (path, playlist.try_get())))
 			.finish()
 	}
 }
