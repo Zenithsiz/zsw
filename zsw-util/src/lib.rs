@@ -21,16 +21,13 @@
 
 // Modules
 pub mod meetup;
-mod oob;
 mod rect;
-mod resource;
 mod tpp;
 mod tuple_collect_res;
 pub mod unwrap_or_return;
 
 // Exports
 pub use {
-	oob::Oob,
 	rect::Rect,
 	tpp::Tpp,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
