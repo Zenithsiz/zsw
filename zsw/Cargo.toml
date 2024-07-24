@@ -19,7 +19,6 @@ egui = { workspace = true, features = ["default_fonts"] }
 extend = { workspace = true }
 futures = { workspace = true }
 image = { workspace = true }
-include_dir = { workspace = true, optional = true }
 itertools = { workspace = true }
 num-rational = { workspace = true }
 opener = { workspace = true }
@@ -43,7 +42,5 @@ zsw-egui = { path = "../zsw-egui" }
 
 [features]
 
-default = ["include-shaders"]
 tokio-console = ["dep:console-subscriber"]
-include-shaders = ["dep:include_dir"]
 locker-validation = []

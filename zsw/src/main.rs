@@ -89,9 +89,6 @@ fn main() -> Result<(), AppError> {
 	Ok(())
 }
 
-#[cfg(feature = "include-shaders")]
-static SHADERS_DIR: include_dir::Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/../shaders");
-
 async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (mut event_loop, window) = window::create().context("Unable to create winit event loop and window")?;
 	let window = Arc::new(window);
@@ -107,13 +104,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	// If the shaders path doesn't exist, write it
 	// TODO: Use a virtual filesystem instead?
 	if !std::fs::exists(&shaders_path).context("Unable to check if shaders path exists")? {
-		#[cfg(feature = "include-shaders")]
-		SHADERS_DIR
-			.extract(&shaders_path)
-			.context("Unable to extract shaders directory")?;
-
-		#[cfg(not(feature = "include-shaders"))]
-		tracing::warn!("Shaders directory doesn't exist on the filesystem and not included in the binary");
+		return Err(anyhow::anyhow!("Shaders directory doesn't exist: {shaders_path:?}").into());
 	}
 
 	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) =
