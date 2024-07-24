@@ -19,7 +19,6 @@ pub trait AsyncMutexResource {
 	fn as_inner(&self) -> &Mutex<Self::Inner>;
 
 	/// Locks this mutex
-	#[track_caller]
 	async fn lock<'locker, 'task, const STATE: usize>(
 		&'locker self,
 		locker: &'locker mut AsyncLocker<'task, STATE>,

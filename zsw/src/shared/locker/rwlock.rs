@@ -19,7 +19,6 @@ pub trait AsyncRwLockResource {
 	fn as_inner(&self) -> &RwLock<Self::Inner>;
 
 	/// Locks this rwlock for reads
-	#[track_caller]
 	async fn read<'locker, 'task, const STATE: usize>(
 		&'locker self,
 		locker: &'locker mut AsyncLocker<'task, STATE>,
@@ -39,7 +38,6 @@ pub trait AsyncRwLockResource {
 	}
 
 	/// Locks this rwlock for writes
-	#[track_caller]
 	async fn write<'locker, 'task, const STATE: usize>(
 		&'locker self,
 		locker: &'locker mut AsyncLocker<'task, STATE>,

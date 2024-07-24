@@ -7,6 +7,7 @@ use std::{
 };
 
 /// Resources bundle
+#[expect(async_fn_in_trait, reason = "We don't care about passing auto traits")]
 pub trait ResourcesBundle {
 	/// Retrieves the resource `R`
 	async fn resource<R>(&mut self) -> <Self as Resources<R>>::Resource<'_>

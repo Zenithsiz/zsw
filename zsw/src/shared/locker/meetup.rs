@@ -16,7 +16,6 @@ pub trait MeetupSenderResource {
 	fn as_inner(&self) -> &meetup::Sender<Self::Inner>;
 
 	/// Sends the resource `R` to this meetup channel
-	#[track_caller]
 	async fn send<'locker, 'task, const STATE: usize>(
 		&'locker self,
 		locker: &'locker mut AsyncLocker<'task, STATE>,

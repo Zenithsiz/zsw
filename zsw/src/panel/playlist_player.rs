@@ -48,8 +48,8 @@ impl PlaylistPlayer {
 		// Remove the item from all our playlists
 		// TODO: Not have `O(N)` complexity on prev / next items
 		let _ = self.items.remove(path);
-		let _ = self.prev_items.drain_filter(|item| &**item == path);
-		let _ = self.next_items.drain_filter(|item| &**item == path);
+		self.prev_items.retain(|item| &**item != path);
+		self.next_items.retain(|item| &**item != path);
 	}
 
 	/// Removes all paths from the playlist
@@ -66,21 +66,21 @@ impl PlaylistPlayer {
 	}
 
 	/// Returns an iterator over all items in the playlist
-	pub fn all_items(&self) -> impl Iterator<Item = &Arc<Path>> + ExactSizeIterator {
+	pub fn all_items(&self) -> impl ExactSizeIterator<Item = &Arc<Path>> {
 		self.items.iter()
 	}
 
 	/// Returns an iterator over all consumed items
 	///
 	/// They are ordered from newest to oldest
-	pub fn prev_items(&self) -> impl Iterator<Item = &Arc<Path>> + ExactSizeIterator {
+	pub fn prev_items(&self) -> impl ExactSizeIterator<Item = &Arc<Path>> {
 		self.prev_items.iter().rev()
 	}
 
 	/// Returns an iterator that peeks over the remaining items in this loop.
 	///
 	/// They are ordered from next to last
-	pub fn peek_next_items(&self) -> impl Iterator<Item = &Arc<Path>> + ExactSizeIterator {
+	pub fn peek_next_items(&self) -> impl ExactSizeIterator<Item = &Arc<Path>> {
 		self.next_items.iter().rev()
 	}
 

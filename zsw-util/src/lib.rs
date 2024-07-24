@@ -3,17 +3,15 @@
 // Features
 #![feature(
 	decl_macro,
-	generator_trait,
-	generators,
+	coroutine_trait,
+	coroutines,
 	never_type,
 	type_alias_impl_trait,
-	async_fn_in_trait,
 	if_let_guard,
 	let_chains,
 	entry_insert,
 	extend_one,
 	async_closure,
-	lint_reasons,
 	must_not_suspend,
 	strict_provenance,
 	impl_trait_in_assoc_type,
@@ -34,7 +32,6 @@ pub mod unwrap_or_return;
 pub use {
 	oob::Oob,
 	rect::Rect,
-	resource::{Resources, ResourcesBundle, ResourcesTuple2},
 	tpp::Tpp,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
 	unwrap_or_return::{UnwrapOrReturn, UnwrapOrReturnExt},

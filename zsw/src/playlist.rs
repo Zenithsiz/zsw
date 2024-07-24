@@ -65,7 +65,7 @@ impl PlaylistsManager {
 				// Else insert the future to load it
 				hash_map::RawEntryMut::Vacant(entry) => {
 					let playlist_path = <Arc<Path>>::from(path);
-					let playlist_lazy = Lazy::new(Self::load_fut(&playlist_path));
+					let playlist_lazy = Lazy::new(load_playlist_fut::load_fut(&playlist_path));
 					let (_, playlist_lazy) = entry.insert(Arc::clone(&playlist_path), Arc::new(playlist_lazy));
 					(playlist_path, Arc::clone(playlist_lazy))
 				},
@@ -121,7 +121,7 @@ impl PlaylistsManager {
 		let playlist_lazy = {
 			let (mut playlists, _) = playlists.write(locker).await;
 
-			let playlist_lazy = Lazy::new(Self::load_fut(path));
+			let playlist_lazy = Lazy::new(load_playlist_fut::load_fut(path));
 			let playlist_lazy = playlists
 				.playlists
 				.entry(path.into())
@@ -178,26 +178,6 @@ impl PlaylistsManager {
 				(Arc::clone(path), playlist)
 			})
 			.collect()
-	}
-
-	/// Creates the load playlist future, `LoadPlaylistFut`
-	fn load_fut(path: &Path) -> LoadPlaylistFut {
-		Box::pin({
-			let path = path.to_owned();
-			async move {
-				tracing::debug!(?path, "Loading playlist");
-				match Self::load_inner(&path).await {
-					Ok(playlist) => {
-						tracing::debug!(?path, ?playlist, "Loaded playlist");
-						Ok(Arc::new(PlaylistRwLock::new(playlist)))
-					},
-					Err(err) => {
-						tracing::warn!(?path, ?err, "Unable to load playlist");
-						Err(Arc::new(err))
-					},
-				}
-			}
-		})
 	}
 
 	/// Loads a playlist
@@ -298,8 +278,34 @@ impl std::fmt::Debug for Playlists {
 	}
 }
 
-/// Future that loads playlists
-type LoadPlaylistFut = impl Future<Output = Result<Arc<PlaylistRwLock>, Arc<AppError>>> + Send + Sync + Unpin;
+// TODO: Replace this mess.
+mod load_playlist_fut {
+	use super::*;
+
+	/// Future that loads playlists
+	pub type LoadPlaylistFut = impl Future<Output = Result<Arc<PlaylistRwLock>, Arc<AppError>>> + Send + Sync + Unpin;
+
+	/// Creates the load playlist future, `LoadPlaylistFut`
+	pub fn load_fut(path: &Path) -> LoadPlaylistFut {
+		Box::pin({
+			let path = path.to_owned();
+			async move {
+				tracing::debug!(?path, "Loading playlist");
+				match PlaylistsManager::load_inner(&path).await {
+					Ok(playlist) => {
+						tracing::debug!(?path, ?playlist, "Loaded playlist");
+						Ok(Arc::new(PlaylistRwLock::new(playlist)))
+					},
+					Err(err) => {
+						tracing::warn!(?path, ?err, "Unable to load playlist");
+						Err(Arc::new(err))
+					},
+				}
+			}
+		})
+	}
+}
+use load_playlist_fut::LoadPlaylistFut;
 
 /// Playlist
 #[derive(Debug)]

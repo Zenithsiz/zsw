@@ -7,27 +7,18 @@
 #![feature(
 	never_type,
 	decl_macro,
-	result_option_inspect,
 	async_closure,
 	assert_matches,
-	async_fn_in_trait,
 	type_alias_impl_trait,
-	impl_trait_projections,
 	path_file_prefix,
 	entry_insert,
-	fs_try_exists,
 	let_chains,
 	exit_status_error,
-	lint_reasons,
 	closure_track_caller,
 	generic_const_exprs,
-	lazy_cell,
-	return_position_impl_trait_in_trait,
-	associated_type_bounds,
 	hash_raw_entry,
 	must_not_suspend,
-	strict_provenance,
-	drain_filter
+	strict_provenance
 )]
 #![expect(incomplete_features)]
 
@@ -126,7 +117,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	// If the shaders path doesn't exist, write it
 	// TODO: Use a virtual filesystem instead?
-	if !std::fs::try_exists(&shaders_path).context("Unable to check if shaders path exists")? {
+	if !std::fs::exists(&shaders_path).context("Unable to check if shaders path exists")? {
 		#[cfg(feature = "include-shaders")]
 		SHADERS_DIR
 			.extract(&shaders_path)

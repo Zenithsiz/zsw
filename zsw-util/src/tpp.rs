@@ -131,7 +131,10 @@ impl Tpp {
 
 			// `#include_once`
 			State::Root { include_once } if let Some(rest) = line.trim().strip_prefix("#include_once") => {
-				anyhow::ensure!(rest.trim().is_empty(), "Unexpected tokens after `#include_once`: {rest:?}");
+				anyhow::ensure!(
+					rest.trim().is_empty(),
+					"Unexpected tokens after `#include_once`: {rest:?}"
+				);
 				match include_once {
 					true => anyhow::bail!("Cannot specify `#include_once` twice"),
 					false => *include_once = true,
@@ -150,18 +153,16 @@ impl Tpp {
 						.with_context(|| format!("Unknown binding {binding:?}"))?
 						.clone(),
 					is_matching: None,
-					prev_state: Box::new(cur_state.replace_poisoned()),
+					prev_state:  Box::new(cur_state.replace_poisoned()),
 				};
 
 				Ok(None)
 			},
 
 			// `#match_case`
-			State::Matching {
-				value,
-				is_matching,
-				..
-			} if let Some(match_value) = line.trim().strip_prefix("#match_case ") => {
+			State::Matching { value, is_matching, .. }
+				if let Some(match_value) = line.trim().strip_prefix("#match_case ") =>
+			{
 				let match_value = Self::parse_quoted_string(match_value)?;
 				*is_matching = Some(value == match_value);
 
@@ -169,11 +170,9 @@ impl Tpp {
 			},
 
 			// `#match_case_or`
-			State::Matching {
-				value,
-				is_matching,
-				..
-			} if let Some(match_value) = line.trim().strip_prefix("#match_case_or ") => {
+			State::Matching { value, is_matching, .. }
+				if let Some(match_value) = line.trim().strip_prefix("#match_case_or ") =>
+			{
 				let match_value = Self::parse_quoted_string(match_value)?;
 				match is_matching {
 					Some(is_matching) => *is_matching |= value == match_value,
@@ -189,7 +188,7 @@ impl Tpp {
 				*cur_state = prev_state.replace_poisoned();
 
 				Ok(None)
-			}
+			},
 
 			// Inside `#match`
 			State::Matching { is_matching, .. } => match is_matching {
@@ -199,7 +198,7 @@ impl Tpp {
 					true => Ok(None),
 					false => anyhow::bail!("Cannot parse code in `#match` without a `#match_case`"),
 				},
-			}
+			},
 
 			// Unknown directive
 			State::Root { .. } if let Some(unknown) = line.trim().strip_prefix('#') => {
@@ -240,7 +239,6 @@ struct ProcessedFile {
 
 /// Processor state
 #[derive(Debug)]
-#[expect(variant_size_differences)] // TODO: Check if boxing everything due to stack recursion is worth it?
 enum State {
 	Root {
 		include_once: bool,

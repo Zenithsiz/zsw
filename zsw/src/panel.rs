@@ -144,29 +144,34 @@ impl PanelsManager {
 					PlaylistItemKind::Directory { ref path, recursive } => match recursive {
 						true =>
 							WalkDir::new(path)
-								.filter(async move |entry| match entry.file_type().await.map(|ty| ty.is_dir()) {
-									Err(_) | Ok(true) => async_walkdir::Filtering::Ignore,
-									Ok(false) => async_walkdir::Filtering::Continue,
+								.filter(async move |entry: async_walkdir::DirEntry| {
+									match entry.file_type().await.map(|ty| ty.is_dir()) {
+										Err(_) | Ok(true) => async_walkdir::Filtering::Ignore,
+										Ok(false) => async_walkdir::Filtering::Continue,
+									}
 								})
-								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
-									let entry = entry
-										.map_err(|err| {
-											tracing::warn!(
-												?playlist_path,
-												?path,
-												?err,
-												"Unable to read directory entry within recursive walk"
-											);
-										})
-										.unwrap_or_return()?;
+								.split_locker_async_unordered(
+									&mut locker,
+									async move |entry: Result<async_walkdir::DirEntry, _>, mut locker| {
+										let entry = entry
+											.map_err(|err| {
+												tracing::warn!(
+													?playlist_path,
+													?path,
+													?err,
+													"Unable to read directory entry within recursive walk"
+												);
+											})
+											.unwrap_or_return()?;
 
-									let Some(path) = try_canonicalize_path(&entry.path()).await else {
-										return
-									};
+										let Some(path) = try_canonicalize_path(&entry.path()).await else {
+											return;
+										};
 
-									let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
-									playlist_player.add(path.into());
-								})
+										let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+										playlist_player.add(path.into());
+									},
+								)
 								.collect()
 								.await,
 						false => {
@@ -182,25 +187,28 @@ impl PanelsManager {
 								})
 								.unwrap_or_return()?;
 							ReadDirStream::new(dir)
-								.split_locker_async_unordered(&mut locker, async move |entry, mut locker| {
-									let entry = entry
-										.map_err(|err| {
-											tracing::warn!(
-												?playlist_path,
-												?path,
-												?err,
-												"Unable to read directory entry within recursive walk"
-											);
-										})
-										.unwrap_or_return()?;
+								.split_locker_async_unordered(
+									&mut locker,
+									async move |entry: Result<tokio::fs::DirEntry, _>, mut locker| {
+										let entry = entry
+											.map_err(|err| {
+												tracing::warn!(
+													?playlist_path,
+													?path,
+													?err,
+													"Unable to read directory entry within recursive walk"
+												);
+											})
+											.unwrap_or_return()?;
 
-									let Some(path) = try_canonicalize_path(&entry.path()).await else {
-										return
-									};
+										let Some(path) = try_canonicalize_path(&entry.path()).await else {
+											return;
+										};
 
-									let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
-									playlist_player.add(path.into());
-								})
+										let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+										playlist_player.add(path.into());
+									},
+								)
 								.collect::<()>()
 								.await;
 						},

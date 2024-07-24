@@ -228,7 +228,9 @@ impl ImageLoader {
 			.map(|geometry| Self::minimum_image_size_for_panel(Vector2::new(image_width, image_height), geometry.size))
 			.reduce(|lhs, rhs| Vector2::new(lhs.x.max(rhs.x), lhs.y.max(rhs.y)));
 		tracing::trace!(?request, ?minimum_size, "Minimum image size");
-		let Some(minimum_size) = minimum_size else { return Ok(None); };
+		let Some(minimum_size) = minimum_size else {
+			return Ok(None);
+		};
 
 		// If the image isn't smaller, return
 		if image_width >= minimum_size.x && image_height >= minimum_size.y {
@@ -294,7 +296,7 @@ impl ImageLoader {
 		));
 
 		// If the path already exists, use it
-		if std::fs::try_exists(&upscaled_image_path).context("Unable to check if upscaled image exists")? {
+		if std::fs::exists(&upscaled_image_path).context("Unable to check if upscaled image exists")? {
 			return Ok(upscaled_image_path);
 		}
 

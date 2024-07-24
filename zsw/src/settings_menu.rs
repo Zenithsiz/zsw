@@ -327,7 +327,6 @@ fn draw_panels_editor(
 						};
 					});
 
-					#[expect(clippy::significant_drop_in_scrutinee)] // False positive, we're not locking anything
 					ui.collapsing("Playlist player", |ui| {
 						let (playlist_player, mut locker) = panel.playlist_player.write(&mut locker).block_on();
 
