@@ -41,18 +41,7 @@ use {
 		config::Config,
 		panel::{PanelShader, PanelsManager, PanelsRenderer},
 		settings_menu::SettingsMenu,
-		shared::{
-			AsyncLocker,
-			AsyncMutexResource,
-			AsyncRwLockResource,
-			CurPanelGroupMutex,
-			EguiPainterRendererMeetupSender,
-			MeetupSenderResource,
-			PanelsRendererShaderRwLock,
-			PanelsUpdaterMeetupSender,
-			PlaylistsRwLock,
-			Shared,
-		},
+		shared::Shared,
 	},
 	anyhow::Context,
 	args::Args,
@@ -62,6 +51,7 @@ use {
 	directories::ProjectDirs,
 	futures::Future,
 	std::{path::PathBuf, sync::Arc},
+	tokio::sync::{Mutex, RwLock},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		platform::run_return::EventLoopExtRunReturn,
@@ -100,9 +90,8 @@ fn main() -> Result<(), AppError> {
 }
 
 #[cfg(feature = "include-shaders")]
-static SHADERS_DIR: include_dir::Dir<'_> = include_dir::include_dir!("shaders/");
+static SHADERS_DIR: include_dir::Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/../shaders");
 
-#[expect(clippy::too_many_lines)] // TODO: Separate
 async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (mut event_loop, window) = window::create().context("Unable to create winit event loop and window")?;
 	let window = Arc::new(window);
@@ -160,9 +149,9 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 		panels_manager,
 		image_requester,
 		playlists_manager,
-		cur_panel_group: CurPanelGroupMutex::new(None),
-		panels_renderer_shader: PanelsRendererShaderRwLock::new(panels_renderer_shader),
-		playlists: PlaylistsRwLock::new(playlists),
+		cur_panel_group: Mutex::new(None),
+		panels_renderer_shader: RwLock::new(panels_renderer_shader),
+		playlists: RwLock::new(playlists),
 	};
 	let shared = Arc::new(shared);
 
@@ -173,15 +162,14 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	self::spawn_task("Load default panel group", {
 		let shared = Arc::clone(&shared);
 		let default_panel_group = config.default_panel_group.clone();
-		|locker| self::load_default_panel_group(default_panel_group, locker, shared)
+		|| self::load_default_panel_group(default_panel_group, shared)
 	});
 
 	self::spawn_task("Renderer", {
 		let shared = Arc::clone(&shared);
-		|locker| {
+		|| {
 			self::renderer(
 				shared,
-				locker,
 				wgpu_renderer,
 				panels_renderer,
 				egui_renderer,
@@ -193,16 +181,14 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Panels updater", {
 		let shared = Arc::clone(&shared);
-		let panels_updater_output_tx = PanelsUpdaterMeetupSender::new(panels_updater_output_tx);
-		|locker| self::panels_updater(shared, locker, panels_updater_output_tx)
+		|| self::panels_updater(shared, panels_updater_output_tx)
 	});
 
-	self::spawn_task("Image loader", |_| image_loader.run());
+	self::spawn_task("Image loader", || image_loader.run());
 
 	self::spawn_task("Egui painter", {
 		let shared = Arc::clone(&shared);
-		let egui_painter_output_tx = EguiPainterRendererMeetupSender::new(egui_painter_output_tx);
-		|locker| self::egui_painter(shared, locker, egui_painter, settings_menu, egui_painter_output_tx)
+		|| self::egui_painter(shared, egui_painter, settings_menu, egui_painter_output_tx)
 	});
 
 	// Then run the event loop on this thread
@@ -230,11 +216,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 }
 
 /// Loads the default panel group
-async fn load_default_panel_group(
-	default_panel_group: Option<PathBuf>,
-	mut locker: AsyncLocker<'_, 0>,
-	shared: Arc<Shared>,
-) -> Result<(), AppError> {
+async fn load_default_panel_group(default_panel_group: Option<PathBuf>, shared: Arc<Shared>) -> Result<(), AppError> {
 	// If we don't have a default, don't do anything
 	let Some(default_panel_group) = &default_panel_group else {
 		return Ok(());
@@ -254,12 +236,12 @@ async fn load_default_panel_group(
 
 	// And set it as the current one
 	{
-		let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).await;
+		let mut panel_group = shared.cur_panel_group.lock().await;
 		*panel_group = Some(loaded_panel_group);
 	}
 
 	{
-		let (mut panels_renderer_shader, _) = shared.panels_renderer_shader.write(&mut locker).await;
+		let mut panels_renderer_shader = shared.panels_renderer_shader.write().await;
 		panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
 	}
 
@@ -270,15 +252,13 @@ async fn load_default_panel_group(
 #[track_caller]
 pub fn spawn_task<Fut, F, T>(name: impl Into<String>, f: F)
 where
-	F: FnOnce(AsyncLocker<'static, 0>) -> Fut + Send + 'static,
+	F: FnOnce() -> Fut + Send + 'static,
 	Fut: Future<Output = Result<T, AppError>> + Send + 'static,
 {
 	let name = name.into();
 
 	let _ = tokio::task::Builder::new().name(&name.clone()).spawn(async move {
-		// DEADLOCK: This is a new spawned task
-		let locker = AsyncLocker::new();
-		let fut = f(locker);
+		let fut = f();
 
 		let id = tokio::task::id();
 		tracing::debug!(?name, ?id, "Spawning task");
@@ -292,7 +272,6 @@ where
 /// Renderer task
 async fn renderer(
 	shared: Arc<Shared>,
-	mut locker: AsyncLocker<'_, 0>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -317,11 +296,11 @@ async fn renderer(
 			.context("Unable to start frame")?;
 		// Render the panels
 		{
-			let (mut panel_group, mut locker) = shared.cur_panel_group.lock(&mut locker).await;
+			let mut panel_group = shared.cur_panel_group.lock().await;
 			if let Some(panel_group) = &mut *panel_group {
 				let cursor_pos = shared.cursor_pos.load();
 
-				let (panels_renderer_shader, _) = shared.panels_renderer_shader.read(&mut locker).await;
+				let panels_renderer_shader = shared.panels_renderer_shader.read().await;
 				panels_renderer
 					.render(
 						&mut frame,
@@ -363,43 +342,36 @@ async fn renderer(
 /// Panel updater task
 async fn panels_updater(
 	shared: Arc<Shared>,
-	mut locker: AsyncLocker<'_, 0>,
-	panels_updater_output_tx: PanelsUpdaterMeetupSender,
+	panels_updater_output_tx: zsw_util::meetup::Sender<()>,
 ) -> Result<!, AppError> {
 	loop {
 		{
-			let (mut panel_group, mut locker) = shared.cur_panel_group.lock(&mut locker).await;
+			let mut panel_group = shared.cur_panel_group.lock().await;
 
 			if let Some(panel_group) = &mut *panel_group {
 				for panel in panel_group.panels_mut() {
 					panel
-						.update(
-							&shared.wgpu,
-							&shared.panels_renderer_layout,
-							&shared.image_requester,
-							&mut locker,
-						)
+						.update(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester)
 						.await;
 				}
 			}
 		}
 
-		panels_updater_output_tx.send(&mut locker, ()).await;
+		panels_updater_output_tx.send(()).await;
 	}
 }
 
 /// Egui painter task
 async fn egui_painter(
 	shared: Arc<Shared>,
-	mut locker: AsyncLocker<'_, 0>,
 	mut egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
-	egui_painter_output_tx: EguiPainterRendererMeetupSender,
+	egui_painter_output_tx: zsw_util::meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, AppError> {
 	loop {
 		let full_output = egui_painter.draw(&shared.window, |ctx| {
 			// Draw the settings menu
-			settings_menu.draw(ctx, &shared, &mut locker);
+			settings_menu.draw(ctx, &shared);
 
 			// Pause any double-clicked panels
 			if !ctx.is_pointer_over_area() &&
@@ -407,7 +379,7 @@ async fn egui_painter(
 			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();
+				let mut panel_group = shared.cur_panel_group.lock().block_on();
 				if let Some(panel_group) = &mut *panel_group {
 					for panel in panel_group.panels_mut() {
 						for geometry in &panel.geometries {
@@ -427,7 +399,7 @@ async fn egui_painter(
 			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();
+				let mut panel_group = shared.cur_panel_group.lock().block_on();
 				if let Some(panel_group) = &mut *panel_group {
 					for panel in panel_group.panels_mut() {
 						for geometry in &panel.geometries {
@@ -450,7 +422,7 @@ async fn egui_painter(
 				let delta = ctx.input(|input| input.scroll_delta.y);
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let (mut panel_group, _) = shared.cur_panel_group.lock(&mut locker).block_on();
+				let mut panel_group = shared.cur_panel_group.lock().block_on();
 				if let Some(panel_group) = &mut *panel_group {
 					for panel in panel_group.panels_mut() {
 						let max = match panel.images.state() {
@@ -479,9 +451,7 @@ async fn egui_painter(
 		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
 		let textures_delta = full_output.textures_delta;
 
-		egui_painter_output_tx
-			.send(&mut locker, (paint_jobs, textures_delta))
-			.await;
+		egui_painter_output_tx.send((paint_jobs, textures_delta)).await;
 	}
 }
 

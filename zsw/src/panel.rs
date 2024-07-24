@@ -19,16 +19,12 @@ pub use self::{
 
 // Imports
 use {
-	crate::{
-		image_loader::ImageRequester,
-		playlist::PlaylistItemKind,
-		shared::{AsyncLocker, AsyncRwLockResource, LockerIteratorExt, LockerStreamExt, PlaylistPlayerRwLock, Shared},
-		AppError,
-	},
+	crate::{image_loader::ImageRequester, playlist::PlaylistItemKind, shared::Shared, AppError},
 	anyhow::Context,
 	async_walkdir::WalkDir,
-	futures::StreamExt,
+	futures::{stream::FuturesUnordered, StreamExt},
 	std::{path::Path, sync::Arc},
+	tokio::sync::RwLock,
 	tokio_stream::wrappers::ReadDirStream,
 	zsw_util::{Rect, UnwrapOrReturnExt},
 	zsw_wgpu::WgpuShared,
@@ -79,8 +75,8 @@ impl PanelsManager {
 				crate::spawn_task(format!("Load panel group {path:?}"), {
 					let playlist_player = Arc::clone(&panel.playlist_player);
 					let shared = Arc::clone(shared);
-					|mut locker| async move {
-						Self::load_playlist_into(&playlist_player, &playlist, &shared, &mut locker)
+					|| async move {
+						Self::load_playlist_into(&playlist_player, &playlist, &shared)
 							.await
 							.context("Unable to load playlist")?;
 
@@ -101,10 +97,9 @@ impl PanelsManager {
 	// TODO: Not make `pub`?
 	#[expect(clippy::too_many_lines)] // TODO: Refactor
 	pub async fn load_playlist_into(
-		playlist_player: &PlaylistPlayerRwLock,
+		playlist_player: &RwLock<PlaylistPlayer>,
 		playlist_path: &Path,
 		shared: &Shared,
-		locker: &mut AsyncLocker<'_, 0>,
 	) -> Result<(), AppError> {
 		/// Attempts to canonicalize `path`. If unable to, logs a warning and returns `None`
 		async fn try_canonicalize_path(path: &Path) -> Option<std::path::PathBuf> {
@@ -118,18 +113,18 @@ impl PanelsManager {
 			// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
 			let (_, playlist) = shared
 				.playlists_manager
-				.load(playlist_path, &shared.playlists, &mut locker.next::<2>())
+				.load(playlist_path, &shared.playlists)
 				.await
 				.context("Unable to load playlist")?;
-			let (playlist, _) = playlist.read(locker).await;
+			let playlist = playlist.read().await;
 			playlist.items()
 		};
 
 		playlist_items
 			.into_iter()
-			.split_locker_async_unordered(locker, |item, mut locker| async move {
+			.map(|item| async move {
 				let item = {
-					let (item, _) = item.read(&mut locker).await;
+					let item = item.read().await;
 					item.clone()
 				};
 
@@ -150,29 +145,28 @@ impl PanelsManager {
 										Ok(false) => async_walkdir::Filtering::Continue,
 									}
 								})
-								.split_locker_async_unordered(
-									&mut locker,
-									async move |entry: Result<async_walkdir::DirEntry, _>, mut locker| {
-										let entry = entry
-											.map_err(|err| {
-												tracing::warn!(
-													?playlist_path,
-													?path,
-													?err,
-													"Unable to read directory entry within recursive walk"
-												);
-											})
-											.unwrap_or_return()?;
+								.map(async move |entry: Result<async_walkdir::DirEntry, _>| {
+									let entry = entry
+										.map_err(|err| {
+											tracing::warn!(
+												?playlist_path,
+												?path,
+												?err,
+												"Unable to read directory entry within recursive walk"
+											);
+										})
+										.unwrap_or_return()?;
 
-										let Some(path) = try_canonicalize_path(&entry.path()).await else {
-											return;
-										};
+									let Some(path) = try_canonicalize_path(&entry.path()).await else {
+										return;
+									};
 
-										let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
-										playlist_player.add(path.into());
-									},
-								)
-								.collect()
+									let mut playlist_player = playlist_player.write().await;
+									playlist_player.add(path.into());
+								})
+								.collect::<FuturesUnordered<_>>()
+								.await
+								.collect::<()>()
 								.await,
 						false => {
 							let dir = tokio::fs::read_dir(path)
@@ -187,39 +181,39 @@ impl PanelsManager {
 								})
 								.unwrap_or_return()?;
 							ReadDirStream::new(dir)
-								.split_locker_async_unordered(
-									&mut locker,
-									async move |entry: Result<tokio::fs::DirEntry, _>, mut locker| {
-										let entry = entry
-											.map_err(|err| {
-												tracing::warn!(
-													?playlist_path,
-													?path,
-													?err,
-													"Unable to read directory entry within recursive walk"
-												);
-											})
-											.unwrap_or_return()?;
+								.map(async move |entry: Result<tokio::fs::DirEntry, _>| {
+									let entry = entry
+										.map_err(|err| {
+											tracing::warn!(
+												?playlist_path,
+												?path,
+												?err,
+												"Unable to read directory entry within recursive walk"
+											);
+										})
+										.unwrap_or_return()?;
 
-										let Some(path) = try_canonicalize_path(&entry.path()).await else {
-											return;
-										};
+									let Some(path) = try_canonicalize_path(&entry.path()).await else {
+										return;
+									};
 
-										let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
-										playlist_player.add(path.into());
-									},
-								)
+									let mut playlist_player = playlist_player.write().await;
+									playlist_player.add(path.into());
+								})
+								.collect::<FuturesUnordered<_>>()
+								.await
 								.collect::<()>()
 								.await;
 						},
 					},
 					PlaylistItemKind::File { ref path } =>
 						if let Some(path) = try_canonicalize_path(path).await {
-							let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+							let mut playlist_player = playlist_player.write().await;
 							playlist_player.add(path.into());
 						},
 				}
 			})
+			.collect::<FuturesUnordered<_>>()
 			.collect::<()>()
 			.await;
 
@@ -227,7 +221,7 @@ impl PanelsManager {
 		// Note: If we didn't do this, the first few items would always be in the order we get them
 		//       from the file system
 		{
-			let (mut playlist_player, _) = playlist_player.write(locker).await;
+			let mut playlist_player = playlist_player.write().await;
 			playlist_player.clear_backlog();
 		}
 
@@ -269,7 +263,7 @@ pub struct Panel {
 	pub state: PanelState,
 
 	/// Playlist player
-	pub playlist_player: Arc<PlaylistPlayerRwLock>,
+	pub playlist_player: Arc<RwLock<PlaylistPlayer>>,
 
 	/// Images
 	pub images: PanelImages,
@@ -289,7 +283,7 @@ impl Panel {
 				.map(|geometry| PanelGeometry::new(wgpu_shared, renderer_layouts, geometry))
 				.collect(),
 			state,
-			playlist_player: Arc::new(PlaylistPlayerRwLock::new(PlaylistPlayer::new())),
+			playlist_player: Arc::new(RwLock::new(PlaylistPlayer::new())),
 			images: PanelImages::new(wgpu_shared, renderer_layouts),
 		})
 	}
@@ -300,7 +294,6 @@ impl Panel {
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
-		locker: &mut AsyncLocker<'_, 1>,
 	) {
 		// If we're paused, don't update anything
 		if self.state.paused {
@@ -323,7 +316,6 @@ impl Panel {
 				renderer_layouts,
 				image_requester,
 				&self.geometries,
-				locker,
 			)
 			.await;
 

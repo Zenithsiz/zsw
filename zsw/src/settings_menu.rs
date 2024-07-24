@@ -8,8 +8,8 @@
 use {
 	crate::{
 		panel::{self, PanelImage, PanelShader, PanelsManager},
-		playlist::PlaylistItemKind,
-		shared::{AsyncLocker, AsyncMutexResource, AsyncRwLockResource, PlaylistRwLock, Shared},
+		playlist::{Playlist, PlaylistItemKind},
+		shared::Shared,
 	},
 	anyhow::Context,
 	egui::Widget,
@@ -17,6 +17,7 @@ use {
 		path::{Path, PathBuf},
 		sync::Arc,
 	},
+	tokio::sync::RwLock,
 	zsw_util::{Rect, TokioTaskBlockOn},
 };
 
@@ -44,7 +45,7 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	pub fn draw(&mut self, ctx: &egui::Context, shared: &Arc<Shared>, locker: &mut AsyncLocker<'_, 0>) {
+	pub fn draw(&mut self, ctx: &egui::Context, shared: &Arc<Shared>) {
 		// Adjust cursor pos to account for the scale factor
 		let scale_factor = shared.window.scale_factor();
 		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
@@ -69,43 +70,30 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared, locker),
-				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared, locker),
+				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared),
+				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared),
 			}
 		});
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(
-	add_playlist_state: &mut AddPlaylistState,
-	ui: &mut egui::Ui,
-	shared: &Arc<Shared>,
-	locker: &mut AsyncLocker<'_, 0>,
-) {
-	self::draw_panels_editor(add_playlist_state, ui, shared, locker);
+fn draw_panels_tab(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
+	self::draw_panels_editor(add_playlist_state, ui, shared);
 	ui.separator();
-	self::draw_shader_select(ui, shared, locker);
+	self::draw_shader_select(ui, shared);
 }
 
 /// Draws the playlists tab
-fn draw_playlists(
-	add_playlist_state: &mut AddPlaylistState,
-	ui: &mut egui::Ui,
-	shared: &Arc<Shared>,
-	locker: &mut AsyncLocker<'_, 0>,
-) {
-	let playlists = shared
-		.playlists_manager
-		.get_all_loaded(&shared.playlists, locker)
-		.block_on();
+fn draw_playlists(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
+	let playlists = shared.playlists_manager.get_all_loaded(&shared.playlists).block_on();
 
 	for (playlist_path, playlist) in playlists {
 		ui.collapsing(playlist_path.to_string_lossy(), |ui| match playlist {
 			Some(Ok(playlist)) => {
-				let items = playlist.read(locker).block_on().0.items();
+				let items = playlist.read().block_on().items();
 
 				for item in items {
-					let (mut item, _) = item.write(locker).block_on();
+					let mut item = item.write().block_on();
 
 					ui.checkbox(&mut item.enabled, "Enabled");
 					match &mut item.kind {
@@ -128,10 +116,10 @@ fn draw_playlists(
 					if ui.button("↻ (Reload)").clicked() {
 						let playlist_path = Arc::clone(&playlist_path);
 						let shared = Arc::clone(shared);
-						crate::spawn_task(format!("Reload playlist {playlist_path:?}"), |mut locker| async move {
+						crate::spawn_task(format!("Reload playlist {playlist_path:?}"), || async move {
 							shared
 								.playlists_manager
-								.reload(&playlist_path, &shared.playlists, &mut locker)
+								.reload(&playlist_path, &shared.playlists)
 								.await
 								.context("Unable to reload playlist")?;
 
@@ -142,10 +130,10 @@ fn draw_playlists(
 					if ui.button("💾 (Save)").clicked() {
 						let playlist_path = Arc::clone(&playlist_path);
 						let shared = Arc::clone(shared);
-						crate::spawn_task(format!("Saving playlist {playlist_path:?}"), |mut locker| async move {
+						crate::spawn_task(format!("Saving playlist {playlist_path:?}"), || async move {
 							shared
 								.playlists_manager
-								.save(&playlist_path, &shared.playlists, &mut locker)
+								.save(&playlist_path, &shared.playlists)
 								.await
 								.context("Unable to save playlist")?;
 
@@ -167,7 +155,7 @@ fn draw_playlists(
 
 	if ui.button("➕ (Add playlist)").clicked() {
 		// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
-		self::choose_load_playlist_from_file(add_playlist_state, shared, &mut locker.next::<2>());
+		self::choose_load_playlist_from_file(add_playlist_state, shared);
 	}
 }
 
@@ -175,15 +163,10 @@ fn draw_playlists(
 fn choose_load_playlist_from_file(
 	add_playlist_state: &mut AddPlaylistState,
 	shared: &Arc<Shared>,
-	locker: &mut AsyncLocker<'_, 2>,
-) -> Option<(Arc<Path>, Arc<PlaylistRwLock>)> {
+) -> Option<(Arc<Path>, Arc<RwLock<Playlist>>)> {
 	// If we don't have a start directory for the playlists, try to get one
 	if matches!(add_playlist_state.start_dir, AddPlaylistStateStartPath::None) {
-		if let Some((playlist_path, _)) = shared
-			.playlists_manager
-			.get_loaded_any(&shared.playlists, locker)
-			.block_on()
-		{
+		if let Some((playlist_path, _)) = shared.playlists_manager.get_loaded_any(&shared.playlists).block_on() {
 			if let Some(playlist_dir) = playlist_path.parent() {
 				add_playlist_state.start_dir =
 					AddPlaylistStateStartPath::FromExistingPlaylists(playlist_dir.to_path_buf());
@@ -213,7 +196,7 @@ fn choose_load_playlist_from_file(
 			// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
 			match shared
 				.playlists_manager
-				.load(&playlist_path, &shared.playlists, &mut locker.next::<2>())
+				.load(&playlist_path, &shared.playlists)
 				.block_on()
 			{
 				Ok((playlist_path, playlist)) => {
@@ -233,13 +216,8 @@ fn choose_load_playlist_from_file(
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(
-	add_playlist_state: &mut AddPlaylistState,
-	ui: &mut egui::Ui,
-	shared: &Arc<Shared>,
-	locker: &mut AsyncLocker<'_, 0>,
-) {
-	let (mut panel_group, mut locker) = shared.cur_panel_group.lock(locker).block_on();
+fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
+	let mut panel_group = shared.cur_panel_group.lock().block_on();
 	match &mut *panel_group {
 		Some(panel_group) =>
 			for (panel_idx, panel) in panel_group.panels_mut().iter_mut().enumerate() {
@@ -328,32 +306,27 @@ fn draw_panels_editor(
 					});
 
 					ui.collapsing("Playlist player", |ui| {
-						let (playlist_player, mut locker) = panel.playlist_player.write(&mut locker).block_on();
+						let playlist_player = panel.playlist_player.write().block_on();
 
 						let row_height = ui.text_style_height(&egui::TextStyle::Body);
 
 						if ui.button("↹ (Replace)").clicked() {
 							// TODO: Stop everything that could be inserting items still?
 							if let Some((playlist_path, playlist)) =
-								self::choose_load_playlist_from_file(add_playlist_state, shared, &mut locker)
+								self::choose_load_playlist_from_file(add_playlist_state, shared)
 							{
 								crate::spawn_task(format!("Replace playlist {playlist:?}"), {
 									let playlist_player = Arc::clone(&panel.playlist_player);
 									let shared = Arc::clone(shared);
-									|mut locker| async move {
+									|| async move {
 										{
-											let (mut playlist_player, _) = playlist_player.write(&mut locker).await;
+											let mut playlist_player = playlist_player.write().await;
 											playlist_player.remove_all();
 										}
 
-										PanelsManager::load_playlist_into(
-											&playlist_player,
-											&playlist_path,
-											&shared,
-											&mut locker,
-										)
-										.await
-										.context("Unable to load playlist")?;
+										PanelsManager::load_playlist_into(&playlist_player, &playlist_path, &shared)
+											.await
+											.context("Unable to load playlist")?;
 
 										Ok(())
 									}
@@ -432,10 +405,10 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, locker: &mut AsyncLocker<'_, 0>) {
+fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared) {
 	ui.label("Shader");
 
-	let (mut panels_renderer_shader, _) = shared.panels_renderer_shader.write(locker).block_on();
+	let mut panels_renderer_shader = shared.panels_renderer_shader.write().block_on();
 	let cur_shader = &mut panels_renderer_shader.shader;
 	egui::ComboBox::from_id_source("Shader selection menu")
 		.selected_text(cur_shader.name())

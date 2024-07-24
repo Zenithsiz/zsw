@@ -1,36 +1,16 @@
 //! Shared data
 
-// Modules
-mod locker;
-
-// Exports
-pub use self::locker::{
-	AsyncLocker,
-	AsyncMutexResource,
-	AsyncRwLockResource,
-	CurPanelGroupMutex,
-	EguiPainterRendererMeetupSender,
-	LockerIteratorExt,
-	LockerStreamExt,
-	MeetupSenderResource,
-	PanelsRendererShaderRwLock,
-	PanelsUpdaterMeetupSender,
-	PlaylistItemRwLock,
-	PlaylistPlayerRwLock,
-	PlaylistRwLock,
-	PlaylistsRwLock,
-};
-
 // Imports
 use {
 	crate::{
 		image_loader::ImageRequester,
-		panel::{PanelsManager, PanelsRendererLayouts},
-		playlist::PlaylistsManager,
+		panel::{PanelGroup, PanelsManager, PanelsRendererLayouts, PanelsRendererShader},
+		playlist::{Playlists, PlaylistsManager},
 		Resize,
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
+	tokio::sync::{Mutex, RwLock},
 	winit::dpi::PhysicalPosition,
 	zsw_wgpu::WgpuShared,
 };
@@ -49,7 +29,7 @@ pub struct Shared {
 	pub image_requester:   ImageRequester,
 	pub playlists_manager: PlaylistsManager,
 
-	pub cur_panel_group:        CurPanelGroupMutex,
-	pub panels_renderer_shader: PanelsRendererShaderRwLock,
-	pub playlists:              PlaylistsRwLock,
+	pub cur_panel_group:        Mutex<Option<PanelGroup>>,
+	pub panels_renderer_shader: RwLock<PanelsRendererShader>,
+	pub playlists:              RwLock<Playlists>,
 }

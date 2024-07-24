@@ -3,10 +3,7 @@
 // Imports
 use {
 	super::{PanelGeometry, PanelsRendererLayouts, PlaylistPlayer},
-	crate::{
-		image_loader::{Image, ImageReceiver, ImageRequest, ImageRequester},
-		shared::{AsyncLocker, AsyncRwLockResource, PlaylistPlayerRwLock},
-	},
+	crate::image_loader::{Image, ImageReceiver, ImageRequest, ImageRequester},
 	cgmath::Vector2,
 	image::DynamicImage,
 	std::{
@@ -14,6 +11,7 @@ use {
 		mem,
 		path::{Path, PathBuf},
 	},
+	tokio::sync::RwLock,
 	wgpu::util::DeviceExt,
 	zsw_wgpu::WgpuShared,
 };
@@ -122,12 +120,11 @@ impl PanelImages {
 	/// If the current state is both images, no new image is loaded (not even scheduled).
 	pub async fn try_advance_next(
 		&mut self,
-		playlist_player: &PlaylistPlayerRwLock,
+		playlist_player: &RwLock<PlaylistPlayer>,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
-		locker: &mut AsyncLocker<'_, 1>,
 	) {
 		// If we have both images, don't load next
 		if self.state == ImagesState::Both {
@@ -136,7 +133,7 @@ impl PanelImages {
 
 		// Else try to load the next one
 		if let Some(image) = self
-			.try_load_next(wgpu_shared, playlist_player, image_requester, geometries, locker)
+			.try_load_next(wgpu_shared, playlist_player, image_requester, geometries)
 			.await
 		{
 			// Then update the respective image and update the state
@@ -163,10 +160,9 @@ impl PanelImages {
 	async fn try_load_next(
 		&mut self,
 		wgpu_shared: &WgpuShared,
-		playlist_player: &PlaylistPlayerRwLock,
+		playlist_player: &RwLock<PlaylistPlayer>,
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
-		locker: &mut AsyncLocker<'_, 1>,
 	) -> Option<Image> {
 		match &mut self.scheduled_image_receiver {
 			// If we have a scheduled image, try to receive it
@@ -185,7 +181,7 @@ impl PanelImages {
 						Err(err) => {
 							tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
 
-							let (mut playlist_player, _) = playlist_player.write(locker).await;
+							let mut playlist_player = playlist_player.write().await;
 							playlist_player.remove(&response.request.path);
 							self.schedule_load_image(wgpu_shared, &mut playlist_player, image_requester, geometries);
 							None
@@ -197,7 +193,7 @@ impl PanelImages {
 
 			// If we didn't have a scheduled image, schedule it
 			None => {
-				let (mut playlist_player, _) = playlist_player.write(locker).await;
+				let mut playlist_player = playlist_player.write().await;
 				self.schedule_load_image(wgpu_shared, &mut playlist_player, image_requester, geometries);
 				None
 			},

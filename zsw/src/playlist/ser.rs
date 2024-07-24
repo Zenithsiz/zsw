@@ -5,7 +5,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 /// Playlists
 #[derive(Debug)]
-pub struct Playlists {
+pub struct _Playlists {
 	pub playlists: HashMap<String, Playlist>,
 }
 

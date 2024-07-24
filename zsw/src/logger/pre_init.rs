@@ -21,7 +21,6 @@ macro pre_init_fns(
 		static $NAME: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 		/// Emits a log
-		#[expect(clippy::disallowed_methods)] // DEADLOCK: We only lock it temporarily
 		pub fn $log(message: impl Into<String>) {
 			let message = message.into();
 			match IS_INIT.load(atomic::Ordering::Acquire) {
@@ -34,7 +33,6 @@ macro pre_init_fns(
 		}
 
 		/// Retrieves all logs
-		#[expect(clippy::disallowed_methods)] // DEADLOCK: We only lock it temporarily
 		pub(super) fn $take() -> Vec<String> {
 			IS_INIT.store(true, atomic::Ordering::Release);
 			$NAME.lock().expect("Poisoned").drain(..).collect()

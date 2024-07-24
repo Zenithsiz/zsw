@@ -5,26 +5,17 @@ mod ser;
 
 // Imports
 use {
-	crate::{
-		shared::{
-			AsyncLocker,
-			AsyncRwLockResource,
-			LockerIteratorExt,
-			PlaylistItemRwLock,
-			PlaylistRwLock,
-			PlaylistsRwLock,
-		},
-		AppError,
-	},
+	crate::AppError,
 	anyhow::Context,
 	async_once_cell::Lazy,
-	futures::{Future, StreamExt},
+	futures::{stream::FuturesUnordered, Future, StreamExt},
 	std::{
 		collections::{hash_map, HashMap},
 		mem,
 		path::Path,
 		sync::Arc,
 	},
+	tokio::sync::RwLock,
 };
 
 /// Playlists manager
@@ -36,16 +27,15 @@ impl PlaylistsManager {
 	pub async fn load(
 		&self,
 		path: &Path,
-		playlists: &PlaylistsRwLock,
-		locker: &mut AsyncLocker<'_, 2>,
-	) -> Result<(Arc<Path>, Arc<PlaylistRwLock>), AppError> {
+		playlists: &RwLock<Playlists>,
+	) -> Result<(Arc<Path>, Arc<RwLock<Playlist>>), AppError> {
 		// Canonicalize the path first, so we don't load the same playlist from two paths
 		// (e.g., one relative and one absolute)
 		let path = path.canonicalize().context("Unable to canonicalize path")?;
 
 		// Check if the playlist is already loaded
 		{
-			let (playlists, _) = playlists.read(locker).await;
+			let playlists = playlists.read().await;
 			if let Some((playlist_path, playlist)) = playlists.playlists.get_key_value(&*path) {
 				let playlist_path = Arc::clone(playlist_path);
 				let playlist_lazy = Arc::clone(playlist);
@@ -56,7 +46,7 @@ impl PlaylistsManager {
 
 		// Else lock for write and insert the entry
 		let (playlist_path, playlist_lazy) = {
-			let (mut playlists, _) = playlists.write(locker).await;
+			let mut playlists = playlists.write().await;
 			let entry = playlists.playlists.raw_entry_mut().from_key(&*path);
 			match entry {
 				// If it's been inserted to in the meantime, wait on it
@@ -80,15 +70,10 @@ impl PlaylistsManager {
 	///
 	/// Waits for loading, if currently loading.
 	/// Returns an error if unloaded
-	pub async fn save(
-		&self,
-		path: &Path,
-		playlists: &PlaylistsRwLock,
-		locker: &mut AsyncLocker<'_, 0>,
-	) -> Result<(), anyhow::Error> {
+	pub async fn save(&self, path: &Path, playlists: &RwLock<Playlists>) -> Result<(), anyhow::Error> {
 		// Get the playlist
 		let playlist_lazy = {
-			let (playlists, _) = playlists.read(locker).await;
+			let playlists = playlists.read().await;
 			let Some(playlist) = playlists.playlists.get(path) else {
 				anyhow::bail!("Playlist {path:?} isn't loaded");
 			};
@@ -99,7 +84,7 @@ impl PlaylistsManager {
 		let playlist = Self::wait_for_playlist_load(&playlist_lazy).await?;
 
 		// Finally save it
-		let playlist = Self::serialize_playlist(&playlist, locker).await;
+		let playlist = Self::serialize_playlist(&playlist).await;
 		let playlist_yaml = serde_yaml::to_string(&playlist).context("Unable to serialize playlist")?;
 		tokio::fs::write(path, playlist_yaml)
 			.await
@@ -112,14 +97,9 @@ impl PlaylistsManager {
 	///
 	/// If it's not loaded, loads it.
 	/// If currently loading, cancels the previous loading and loads again.
-	pub async fn reload(
-		&self,
-		path: &Path,
-		playlists: &PlaylistsRwLock,
-		locker: &mut AsyncLocker<'_, 0>,
-	) -> Result<Arc<PlaylistRwLock>, AppError> {
+	pub async fn reload(&self, path: &Path, playlists: &RwLock<Playlists>) -> Result<Arc<RwLock<Playlist>>, AppError> {
 		let playlist_lazy = {
-			let (mut playlists, _) = playlists.write(locker).await;
+			let mut playlists = playlists.write().await;
 
 			let playlist_lazy = Lazy::new(load_playlist_fut::load_fut(path));
 			let playlist_lazy = playlists
@@ -139,10 +119,9 @@ impl PlaylistsManager {
 	/// No guarantees are made on which playlist is chosen
 	pub async fn get_loaded_any(
 		&self,
-		playlists: &PlaylistsRwLock,
-		locker: &mut AsyncLocker<'_, 2>,
-	) -> Option<(Arc<Path>, Option<Result<Arc<PlaylistRwLock>, AppError>>)> {
-		let (playlists, _) = playlists.read(locker).await;
+		playlists: &RwLock<Playlists>,
+	) -> Option<(Arc<Path>, Option<Result<Arc<RwLock<Playlist>>, AppError>>)> {
+		let playlists = playlists.read().await;
 
 		let (path, playlist) = playlists.playlists.iter().next()?;
 		let playlist = playlist.try_get().map(|res| {
@@ -159,10 +138,9 @@ impl PlaylistsManager {
 	/// Returns all loaded playlists
 	pub async fn get_all_loaded(
 		&self,
-		playlists: &PlaylistsRwLock,
-		locker: &mut AsyncLocker<'_, 0>,
-	) -> Vec<(Arc<Path>, Option<Result<Arc<PlaylistRwLock>, AppError>>)> {
-		let (playlists, _) = playlists.read(locker).await;
+		playlists: &RwLock<Playlists>,
+	) -> Vec<(Arc<Path>, Option<Result<Arc<RwLock<Playlist>>, AppError>>)> {
+		let playlists = playlists.read().await;
 
 		playlists
 			.playlists
@@ -197,8 +175,8 @@ impl PlaylistsManager {
 
 	/// Waits for `playlist` to be loaded
 	async fn wait_for_playlist_load(
-		playlist: &Lazy<Result<Arc<PlaylistRwLock>, Arc<AppError>>, LoadPlaylistFut>,
-	) -> Result<Arc<PlaylistRwLock>, AppError> {
+		playlist: &Lazy<Result<Arc<RwLock<Playlist>>, Arc<AppError>>, LoadPlaylistFut>,
+	) -> Result<Arc<RwLock<Playlist>>, AppError> {
 		playlist
 			.get_unpin()
 			.await
@@ -209,15 +187,15 @@ impl PlaylistsManager {
 	}
 
 	/// Serializes a playlist to it's serialized format
-	async fn serialize_playlist(playlist: &PlaylistRwLock, locker: &mut AsyncLocker<'_, 0>) -> ser::Playlist {
+	async fn serialize_playlist(playlist: &RwLock<Playlist>) -> ser::Playlist {
 		ser::Playlist {
 			items: {
-				let (playlist, mut locker) = playlist.read(locker).await;
+				let playlist = playlist.read().await;
 				playlist
 					.items
 					.iter()
-					.split_locker_async_unordered(&mut locker, |item, mut locker| async move {
-						let (item, _) = item.read(&mut locker).await;
+					.map(|item| async move {
+						let item = item.read().await;
 						ser::PlaylistItem {
 							enabled: item.enabled,
 							kind:    match &item.kind {
@@ -231,6 +209,7 @@ impl PlaylistsManager {
 							},
 						}
 					})
+					.collect::<FuturesUnordered<_>>()
 					.collect()
 					.await
 			},
@@ -253,7 +232,7 @@ impl PlaylistsManager {
 						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path: path.into() },
 					},
 				})
-				.map(PlaylistItemRwLock::new)
+				.map(RwLock::new)
 				.map(Arc::new)
 				.collect(),
 		}
@@ -267,7 +246,7 @@ pub struct Playlists {
 	//       Even a playlist with 10k file entries, with an average path of 200 bytes, would only occupy
 	//       ~2 MiB. This is far less than the size of most images we load.
 	#[expect(clippy::type_complexity)] // TODO: Refactor the whole type
-	playlists: HashMap<Arc<Path>, Arc<Lazy<Result<Arc<PlaylistRwLock>, Arc<AppError>>, LoadPlaylistFut>>>,
+	playlists: HashMap<Arc<Path>, Arc<Lazy<Result<Arc<RwLock<Playlist>>, Arc<AppError>>, LoadPlaylistFut>>>,
 }
 
 impl std::fmt::Debug for Playlists {
@@ -283,7 +262,7 @@ mod load_playlist_fut {
 	use super::*;
 
 	/// Future that loads playlists
-	pub type LoadPlaylistFut = impl Future<Output = Result<Arc<PlaylistRwLock>, Arc<AppError>>> + Send + Sync + Unpin;
+	pub type LoadPlaylistFut = impl Future<Output = Result<Arc<RwLock<Playlist>>, Arc<AppError>>> + Send + Sync + Unpin;
 
 	/// Creates the load playlist future, `LoadPlaylistFut`
 	pub fn load_fut(path: &Path) -> LoadPlaylistFut {
@@ -294,7 +273,7 @@ mod load_playlist_fut {
 				match PlaylistsManager::load_inner(&path).await {
 					Ok(playlist) => {
 						tracing::debug!(?path, ?playlist, "Loaded playlist");
-						Ok(Arc::new(PlaylistRwLock::new(playlist)))
+						Ok(Arc::new(RwLock::new(playlist)))
 					},
 					Err(err) => {
 						tracing::warn!(?path, ?err, "Unable to load playlist");
@@ -311,12 +290,12 @@ use load_playlist_fut::LoadPlaylistFut;
 #[derive(Debug)]
 pub struct Playlist {
 	/// All items
-	items: Vec<Arc<PlaylistItemRwLock>>,
+	items: Vec<Arc<RwLock<PlaylistItem>>>,
 }
 
 impl Playlist {
 	/// Returns all items
-	pub fn items(&self) -> Vec<Arc<PlaylistItemRwLock>> {
+	pub fn items(&self) -> Vec<Arc<RwLock<PlaylistItem>>> {
 		self.items.clone()
 	}
 }
