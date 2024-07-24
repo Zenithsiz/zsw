@@ -13,6 +13,7 @@ use {
 		collections::{hash_map, HashMap},
 		mem,
 		path::Path,
+		pin::Pin,
 		sync::Arc,
 	},
 	tokio::sync::RwLock,
@@ -55,7 +56,7 @@ impl PlaylistsManager {
 				// Else insert the future to load it
 				hash_map::RawEntryMut::Vacant(entry) => {
 					let playlist_path = <Arc<Path>>::from(path);
-					let playlist_lazy = Lazy::new(load_playlist_fut::load_fut(&playlist_path));
+					let playlist_lazy = Lazy::new(Self::load_fut(&playlist_path));
 					let (_, playlist_lazy) = entry.insert(Arc::clone(&playlist_path), Arc::new(playlist_lazy));
 					(playlist_path, Arc::clone(playlist_lazy))
 				},
@@ -64,6 +65,29 @@ impl PlaylistsManager {
 
 		// Finally wait on the playlist
 		Ok((playlist_path, Self::wait_for_playlist_load(&playlist_lazy).await?))
+	}
+
+	/// Creates the load playlist future, `LoadPlaylistFut`
+	#[expect(clippy::type_complexity)] // TODO: Refactor the whole type
+	pub fn load_fut(
+		path: &Path,
+	) -> Pin<Box<dyn Future<Output = Result<Arc<RwLock<Playlist>>, Arc<AppError>>> + Send + Sync>> {
+		Box::pin({
+			let path = path.to_owned();
+			async move {
+				tracing::debug!(?path, "Loading playlist");
+				match PlaylistsManager::load_inner(&path).await {
+					Ok(playlist) => {
+						tracing::debug!(?path, ?playlist, "Loaded playlist");
+						Ok(Arc::new(RwLock::new(playlist)))
+					},
+					Err(err) => {
+						tracing::warn!(?path, ?err, "Unable to load playlist");
+						Err(Arc::new(err))
+					},
+				}
+			}
+		})
 	}
 
 	/// Saves a loaded playlist by path.
@@ -101,7 +125,7 @@ impl PlaylistsManager {
 		let playlist_lazy = {
 			let mut playlists = playlists.write().await;
 
-			let playlist_lazy = Lazy::new(load_playlist_fut::load_fut(path));
+			let playlist_lazy = Lazy::new(Self::load_fut(path));
 			let playlist_lazy = playlists
 				.playlists
 				.entry(path.into())
@@ -174,8 +198,12 @@ impl PlaylistsManager {
 	}
 
 	/// Waits for `playlist` to be loaded
+	#[expect(clippy::type_complexity)] // TODO: Refactor the whole type
 	async fn wait_for_playlist_load(
-		playlist: &Lazy<Result<Arc<RwLock<Playlist>>, Arc<AppError>>, LoadPlaylistFut>,
+		playlist: &Lazy<
+			Result<Arc<RwLock<Playlist>>, Arc<AppError>>,
+			Pin<Box<dyn Future<Output = Result<Arc<RwLock<Playlist>>, Arc<AppError>>> + Send + Sync>>,
+		>,
 	) -> Result<Arc<RwLock<Playlist>>, AppError> {
 		playlist
 			.get_unpin()
@@ -246,7 +274,15 @@ pub struct Playlists {
 	//       Even a playlist with 10k file entries, with an average path of 200 bytes, would only occupy
 	//       ~2 MiB. This is far less than the size of most images we load.
 	#[expect(clippy::type_complexity)] // TODO: Refactor the whole type
-	playlists: HashMap<Arc<Path>, Arc<Lazy<Result<Arc<RwLock<Playlist>>, Arc<AppError>>, LoadPlaylistFut>>>,
+	playlists: HashMap<
+		Arc<Path>,
+		Arc<
+			Lazy<
+				Result<Arc<RwLock<Playlist>>, Arc<AppError>>,
+				Pin<Box<dyn Future<Output = Result<Arc<RwLock<Playlist>>, Arc<AppError>>> + Send + Sync>>,
+			>,
+		>,
+	>,
 }
 
 impl std::fmt::Debug for Playlists {
@@ -256,35 +292,6 @@ impl std::fmt::Debug for Playlists {
 			.finish()
 	}
 }
-
-// TODO: Replace this mess.
-mod load_playlist_fut {
-	use super::*;
-
-	/// Future that loads playlists
-	pub type LoadPlaylistFut = impl Future<Output = Result<Arc<RwLock<Playlist>>, Arc<AppError>>> + Send + Sync + Unpin;
-
-	/// Creates the load playlist future, `LoadPlaylistFut`
-	pub fn load_fut(path: &Path) -> LoadPlaylistFut {
-		Box::pin({
-			let path = path.to_owned();
-			async move {
-				tracing::debug!(?path, "Loading playlist");
-				match PlaylistsManager::load_inner(&path).await {
-					Ok(playlist) => {
-						tracing::debug!(?path, ?playlist, "Loaded playlist");
-						Ok(Arc::new(RwLock::new(playlist)))
-					},
-					Err(err) => {
-						tracing::warn!(?path, ?err, "Unable to load playlist");
-						Err(Arc::new(err))
-					},
-				}
-			}
-		})
-	}
-}
-use load_playlist_fut::LoadPlaylistFut;
 
 /// Playlist
 #[derive(Debug)]

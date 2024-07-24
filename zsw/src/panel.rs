@@ -145,7 +145,7 @@ impl PanelsManager {
 										Ok(false) => async_walkdir::Filtering::Continue,
 									}
 								})
-								.map(async move |entry: Result<async_walkdir::DirEntry, _>| {
+								.map(|entry: Result<async_walkdir::DirEntry, std::io::Error>| async move {
 									let entry = entry
 										.map_err(|err| {
 											tracing::warn!(
@@ -181,7 +181,7 @@ impl PanelsManager {
 								})
 								.unwrap_or_return()?;
 							ReadDirStream::new(dir)
-								.map(async move |entry: Result<tokio::fs::DirEntry, _>| {
+								.map(|entry: Result<tokio::fs::DirEntry, _>| async move {
 									let entry = entry
 										.map_err(|err| {
 											tracing::warn!(
