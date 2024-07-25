@@ -6,7 +6,8 @@
 // Imports
 use {
 	anyhow::Context,
-	tokio::sync::mpsc,
+	std::sync::Arc,
+	tokio::sync::Mutex,
 	tracing as _,
 	winit::window::Window,
 	zsw_error::AppError,
@@ -80,60 +81,54 @@ impl EguiRenderer {
 /// Egui drawer
 pub struct EguiPainter {
 	/// Platform
-	platform: egui_winit_platform::Platform,
-
-	/// Event receiver
-	event_rx: mpsc::UnboundedReceiver<winit::event::Event<'static, !>>,
+	platform: Arc<Mutex<egui_winit_platform::Platform>>,
 }
 
 impl std::fmt::Debug for EguiPainter {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("EguiPainter")
-			.field("platform", &"..")
-			.field("event_rx", &self.event_rx)
-			.finish()
+		f.debug_struct("EguiPainter").field("platform", &"..").finish()
 	}
 }
 
 impl EguiPainter {
 	/// Draws egui
-	pub fn draw<E>(
+	pub async fn draw<E>(
 		&mut self,
 		window: &Window,
 		f: impl FnOnce(&egui::Context) -> Result<(), E>,
 	) -> Result<egui::FullOutput, E> {
-		// If we have events, handle them before drawing
-		while let Ok(event) = self.event_rx.try_recv() {
-			self.platform.handle_event(&event);
-		}
+		let mut platform = self.platform.lock().await;
 
 		// Draw the frame
-		self.platform.begin_frame();
-		let res = f(&self.platform.context());
-		let output = self.platform.end_frame(Some(window));
+		platform.begin_frame();
+		let res = f(&platform.context());
+		let output = platform.end_frame(Some(window));
 
 		res.map(|()| output)
 	}
 
 	/// Tessellate the output shapes
-	pub fn tessellate_shapes(&mut self, shapes: Vec<egui::epaint::ClippedShape>) -> Vec<egui::ClippedPrimitive> {
-		self.platform.context().tessellate(shapes)
+	pub async fn tessellate_shapes(&mut self, shapes: Vec<egui::epaint::ClippedShape>) -> Vec<egui::ClippedPrimitive> {
+		self.platform.lock().await.context().tessellate(shapes)
 	}
 }
 
 /// Egui Event handler
-#[derive(Debug)]
 pub struct EguiEventHandler {
-	/// Event sender
-	event_tx: mpsc::UnboundedSender<winit::event::Event<'static, !>>,
+	/// Platform
+	platform: Arc<Mutex<egui_winit_platform::Platform>>,
+}
+
+impl std::fmt::Debug for EguiEventHandler {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("EguiEventHandler").field("platform", &"..").finish()
+	}
 }
 
 impl EguiEventHandler {
 	/// Handles an event
-	pub fn handle_event(&mut self, event: winit::event::Event<'static, !>) {
-		// Note: We don't care if the event won't be handled
-		#[expect(let_underscore_drop)]
-		let _ = self.event_tx.send(event);
+	pub async fn handle_event(&mut self, event: winit::event::Event<'_, !>) {
+		self.platform.lock().await.handle_event(&event);
 	}
 }
 
@@ -152,14 +147,16 @@ pub fn create(
 		font_definitions: egui::FontDefinitions::default(),
 		style:            egui::Style::default(),
 	});
+	let platform = Arc::new(Mutex::new(platform));
 
 	// Create the egui render pass
 	let render_pass = egui_wgpu_backend::RenderPass::new(&wgpu_shared.device, wgpu_renderer.surface_config().format, 1);
 
-	let (event_tx, event_rx) = mpsc::unbounded_channel();
 	(
 		EguiRenderer { render_pass },
-		EguiPainter { platform, event_rx },
-		EguiEventHandler { event_tx },
+		EguiPainter {
+			platform: Arc::clone(&platform),
+		},
+		EguiEventHandler { platform },
 	)
 }

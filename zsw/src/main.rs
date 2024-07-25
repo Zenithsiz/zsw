@@ -197,9 +197,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 				_ => (),
 			}
 
-			if let Some(event) = event.to_static() {
-				egui_event_handler.handle_event(event);
-			}
+			egui_event_handler.handle_event(event).block_on();
 		})
 	});
 
@@ -360,7 +358,7 @@ async fn egui_painter(
 	egui_painter_output_tx: zsw_util::meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, AppError> {
 	loop {
-		let full_output = egui_painter.draw(&shared.window, |ctx| {
+		let full_output_fut = egui_painter.draw(&shared.window, |ctx| {
 			// Draw the settings menu
 			settings_menu.draw(ctx, &shared);
 
@@ -438,8 +436,9 @@ async fn egui_painter(
 			}
 
 			Ok::<_, !>(())
-		})?;
-		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes);
+		});
+		let full_output = full_output_fut.await?;
+		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes).await;
 		let textures_delta = full_output.textures_delta;
 
 		egui_painter_output_tx.send((paint_jobs, textures_delta)).await;
