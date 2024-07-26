@@ -76,7 +76,7 @@ impl PlaylistsManager {
 			let path = path.to_owned();
 			async move {
 				tracing::debug!(?path, "Loading playlist");
-				match PlaylistsManager::load_inner(&path).await {
+				match Self::load_inner(&path).await {
 					Ok(playlist) => {
 						tracing::debug!(?path, ?playlist, "Loaded playlist");
 						Ok(Arc::new(RwLock::new(playlist)))

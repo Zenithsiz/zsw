@@ -70,7 +70,7 @@ impl WgpuRenderer {
 	///
 	/// Returns the encoder and surface view to render onto
 	// TODO: Ensure it's not called more than once?
-	pub fn start_render(&mut self, shared: &WgpuShared) -> Result<FrameRender, AppError> {
+	pub fn start_render(&self, shared: &WgpuShared) -> Result<FrameRender, AppError> {
 		// And then get the surface texture
 		// Note: This can block, so we run it under tokio's block-in-place
 		let surface_texture = tokio::task::block_in_place(|| self.surface.get_current_texture())
@@ -112,6 +112,7 @@ impl WgpuRenderer {
 
 /// A frame's rendering
 #[derive(Debug)]
+#[expect(clippy::partial_pub_fields, reason = "TODO: Make it public?")]
 pub struct FrameRender {
 	/// Encoder
 	pub encoder: wgpu::CommandEncoder,

@@ -93,7 +93,7 @@ impl std::fmt::Debug for EguiPainter {
 impl EguiPainter {
 	/// Draws egui
 	pub async fn draw<E>(
-		&mut self,
+		&self,
 		window: &Window,
 		f: impl FnOnce(&egui::Context) -> Result<(), E>,
 	) -> Result<egui::FullOutput, E> {
@@ -108,7 +108,7 @@ impl EguiPainter {
 	}
 
 	/// Tessellate the output shapes
-	pub async fn tessellate_shapes(&mut self, shapes: Vec<egui::epaint::ClippedShape>) -> Vec<egui::ClippedPrimitive> {
+	pub async fn tessellate_shapes(&self, shapes: Vec<egui::epaint::ClippedShape>) -> Vec<egui::ClippedPrimitive> {
 		self.platform.lock().await.context().tessellate(shapes)
 	}
 }
@@ -127,7 +127,7 @@ impl std::fmt::Debug for EguiEventHandler {
 
 impl EguiEventHandler {
 	/// Handles an event
-	pub async fn handle_event(&mut self, event: winit::event::Event<'_, !>) {
+	pub async fn handle_event(&self, event: winit::event::Event<'_, !>) {
 		self.platform.lock().await.handle_event(&event);
 	}
 }

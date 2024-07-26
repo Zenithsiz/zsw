@@ -32,6 +32,7 @@ impl<T> Sender<T> {
 	/// Sends a value.
 	///
 	/// Blocks until the value is received
+	#[expect(clippy::missing_panics_doc, reason = "It's an internal panic")]
 	pub async fn send(&self, value: T) {
 		let mut value = Some(value);
 		let mut inner_lock_fut = self.inner.lock();

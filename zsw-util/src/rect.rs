@@ -47,6 +47,9 @@ impl Rect<i32, u32> {
 	}
 
 	/// Creates a rectangle from min/max
+	///
+	/// # Panics
+	/// Panics if any component of `max` is less than any corresponding component of `min`
 	#[must_use]
 	pub fn from_min_max(min: Point2<i32>, max: Point2<i32>) -> Self {
 		Self {
@@ -62,6 +65,9 @@ impl Rect<i32, u32> {
 	}
 
 	/// Returns the max position of this rectangle
+	///
+	/// # Panics
+	/// Panics if the max point would overflow a `i32::MAX`
 	#[must_use]
 	pub fn max(self) -> Point2<i32> {
 		Point2::new(
@@ -71,6 +77,9 @@ impl Rect<i32, u32> {
 	}
 
 	/// Returns the center of this rectangle
+	///
+	/// # Panics
+	/// Panics if the middle point would overflow a `i32::MAX`
 	#[must_use]
 	pub fn center(self) -> Point2<i32> {
 		Point2::new(
@@ -80,6 +89,9 @@ impl Rect<i32, u32> {
 	}
 
 	/// Returns if a point is contained in this rectangle
+	///
+	/// # Panics
+	/// Panics if the max point would overflow a `i32::MAX`
 	#[must_use]
 	pub fn contains(self, point: Point2<i32>) -> bool {
 		point.x >= self.pos.x &&

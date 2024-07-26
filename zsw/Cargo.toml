@@ -13,10 +13,8 @@ cgmath = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 console-subscriber = { workspace = true, optional = true }
 crossbeam = { workspace = true }
-dashmap = { workspace = true }
 directories = { workspace = true }
 egui = { workspace = true, features = ["default_fonts"] }
-extend = { workspace = true }
 futures = { workspace = true }
 image = { workspace = true }
 itertools = { workspace = true }
@@ -24,7 +22,6 @@ num-rational = { workspace = true }
 opener = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
-sealed = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true }
 serde_yaml = { workspace = true }

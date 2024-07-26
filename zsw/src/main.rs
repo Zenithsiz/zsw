@@ -114,7 +114,7 @@ async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<
 	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) =
 		PanelsRenderer::new(&wgpu_renderer, &wgpu_shared, shaders_path.join("panels/fade.wgsl"))
 			.context("Unable to create panels renderer")?;
-	let (egui_renderer, egui_painter, mut egui_event_handler) = zsw_egui::create(&window, &wgpu_renderer, &wgpu_shared);
+	let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(&window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
 
 	let (playlists_manager, playlists) = playlist::create();
@@ -364,7 +364,7 @@ async fn panels_updater(
 /// Egui painter task
 async fn egui_painter(
 	shared: Arc<Shared>,
-	mut egui_painter: EguiPainter,
+	egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	egui_painter_output_tx: zsw_util::meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, AppError> {

@@ -158,3 +158,6 @@ clippy.future_not_send = "allow"
 # Triggers on `T: B + C` if `trait B: A` and `trait C: A`.
 # TODO: Turn back on once false positives are fixed
 clippy.trait_duplication_in_bounds = "allow"
+
+# Too many false positives
+clippy.significant_drop_tightening = "allow"

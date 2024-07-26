@@ -43,7 +43,7 @@ impl FromResidual<UnwrapOrReturn<!, ()>> for () {
 	fn from_residual(residual: UnwrapOrReturn<!, ()>) -> Self {
 		match residual {
 			UnwrapOrReturn::Value(never) => never,
-			UnwrapOrReturn::Return(_) => (),
+			UnwrapOrReturn::Return(()) => (),
 		}
 	}
 }
