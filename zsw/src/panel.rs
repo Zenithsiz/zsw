@@ -40,57 +40,46 @@ impl PanelsManager {
 		Self {}
 	}
 
-	/// Loads a panel group from a path
-	pub async fn load(&self, path: &Path, shared: &Arc<Shared>) -> Result<PanelGroup, AppError> {
+	/// Loads a panel from a path
+	pub async fn load(&self, path: &Path, shared: &Arc<Shared>) -> Result<Panel, AppError> {
 		// Try to read the file
-		tracing::debug!(?path, "Loading panel group");
-		let panel_group_yaml = tokio::fs::read(path).await.context("Unable to open file")?;
+		tracing::debug!(?path, "Loading panel");
+		let panel_yaml = tokio::fs::read(path).await.context("Unable to open file")?;
 
 		// Then parse it
-		let panel_group =
-			serde_yaml::from_slice::<ser::PanelGroup>(&panel_group_yaml).context("Unable to parse panel group")?;
+		let panel = serde_yaml::from_slice::<ser::Panel>(&panel_yaml).context("Unable to parse panel")?;
 
 		// Finally convert it
-		let panels = panel_group
-			.panels
-			.into_iter()
-			.map(|panel| {
-				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
-				let state = PanelState {
-					paused:       false,
-					cur_progress: 0,
-					duration:     panel.state.duration,
-					fade_point:   panel.state.fade_point,
-					parallax:     PanelParallaxState {
-						ratio:   panel.state.parallax_ratio,
-						exp:     panel.state.parallax_exp,
-						reverse: panel.state.reverse_parallax,
-					},
-				};
-				let playlist = panel.playlist;
+		let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
+		let state = PanelState {
+			paused:       false,
+			cur_progress: 0,
+			duration:     panel.state.duration,
+			fade_point:   panel.state.fade_point,
+			parallax:     PanelParallaxState {
+				ratio:   panel.state.parallax_ratio,
+				exp:     panel.state.parallax_exp,
+				reverse: panel.state.reverse_parallax,
+			},
+		};
+		let playlist = panel.playlist;
 
-				let panel = Panel::new(&shared.wgpu, &shared.panels_renderer_layout, geometries, state)
-					.context("Unable to create panel")?;
+		let panel = Panel::new(&shared.wgpu, &shared.panels_renderer_layout, geometries, state)
+			.context("Unable to create panel")?;
 
-				crate::spawn_task(format!("Load panel group {path:?}"), {
-					let playlist_player = Arc::clone(&panel.playlist_player);
-					let shared = Arc::clone(shared);
-					|| async move {
-						Self::load_playlist_into(&playlist_player, &playlist, &shared)
-							.await
-							.context("Unable to load playlist")?;
+		crate::spawn_task(format!("Load panel {path:?}"), {
+			let playlist_player = Arc::clone(&panel.playlist_player);
+			let shared = Arc::clone(shared);
+			|| async move {
+				Self::load_playlist_into(&playlist_player, &playlist, &shared)
+					.await
+					.context("Unable to load playlist")?;
 
-						Ok(())
-					}
-				});
+				Ok(())
+			}
+		});
 
-				Ok::<_, AppError>(panel)
-			})
-			.collect::<Result<Vec<_>, _>>()
-			.context("Unable to create panels")?;
-		let panel_group = PanelGroup::new(panels);
-
-		Ok(panel_group)
+		Ok(panel)
 	}
 
 	/// Loads `playlist` into `playlist_player`.
@@ -226,30 +215,6 @@ impl PanelsManager {
 		}
 
 		Ok(())
-	}
-}
-
-/// Panel group
-#[derive(Debug)]
-pub struct PanelGroup {
-	/// All panels
-	panels: Vec<Panel>,
-}
-
-impl PanelGroup {
-	/// Creates panels from a list of panels
-	pub fn new(panels: Vec<Panel>) -> Self {
-		Self { panels }
-	}
-
-	/// Returns all panels
-	pub fn panels(&self) -> &[Panel] {
-		&self.panels
-	}
-
-	/// Returns all panels, mutably
-	pub fn panels_mut(&mut self) -> &mut Vec<Panel> {
-		&mut self.panels
 	}
 }
 

@@ -4,7 +4,7 @@
 use {
 	crate::{
 		image_loader::ImageRequester,
-		panel::{PanelGroup, PanelsManager, PanelsRendererLayouts, PanelsRendererShader},
+		panel::{Panel, PanelsManager, PanelsRendererLayouts, PanelsRendererShader},
 		playlist::{Playlists, PlaylistsManager},
 		Resize,
 	},
@@ -29,7 +29,7 @@ pub struct Shared {
 	pub image_requester:   ImageRequester,
 	pub playlists_manager: PlaylistsManager,
 
-	pub cur_panel_group:        Mutex<Option<PanelGroup>>,
+	pub cur_panels:             Mutex<Vec<Panel>>,
 	pub panels_renderer_shader: RwLock<PanelsRendererShader>,
 	pub playlists:              RwLock<Playlists>,
 }

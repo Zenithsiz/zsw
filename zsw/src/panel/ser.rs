@@ -3,13 +3,6 @@
 // Imports
 use {std::path::PathBuf, zsw_util::Rect};
 
-/// Serialized panel group
-#[derive(Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct PanelGroup {
-	pub panels: Vec<Panel>,
-}
-
 /// Serialized panel
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]

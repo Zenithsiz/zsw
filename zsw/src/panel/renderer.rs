@@ -10,7 +10,7 @@ pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{PanelGroup, PanelImage},
+	super::{Panel, PanelImage},
 	crate::panel::PanelGeometry,
 	anyhow::Context,
 	cgmath::Point2,
@@ -142,7 +142,7 @@ impl PanelsRenderer {
 		needs_reload
 	}
 
-	/// Renders a panel group
+	/// Renders a panel
 	#[expect(clippy::too_many_arguments)] // TODO: Refactor
 	pub fn render(
 		&mut self,
@@ -151,7 +151,7 @@ impl PanelsRenderer {
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
 		cursor_pos: Point2<i32>,
-		panel_group: &PanelGroup,
+		panels: impl IntoIterator<Item = &'_ Panel>,
 		shader: &PanelsRendererShader,
 	) -> Result<(), AppError> {
 		// Update the shader, if requested
@@ -210,7 +210,7 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// And draw each panel
-		for panel in panel_group.panels() {
+		for panel in panels {
 			// Bind the panel-shared image bind group
 			render_pass.set_bind_group(1, panel.images.image_bind_group(), &[]);
 

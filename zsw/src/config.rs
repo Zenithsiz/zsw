@@ -47,9 +47,9 @@ pub struct Config {
 	#[serde(default)]
 	pub upscale_exclude: HashSet<PathBuf>,
 
-	/// Default panel group
+	/// Default panels
 	#[serde(default)]
-	pub default_panel_group: Option<PathBuf>,
+	pub default_panels: Vec<PathBuf>,
 }
 
 impl Config {
@@ -105,7 +105,7 @@ impl Default for Config {
 			upscale_cache_dir:    None,
 			upscale_cmd:          None,
 			upscale_exclude:      HashSet::new(),
-			default_panel_group:  None,
+			default_panels:       vec![],
 		}
 	}
 }

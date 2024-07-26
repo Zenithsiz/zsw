@@ -18,7 +18,8 @@
 	generic_const_exprs,
 	hash_raw_entry,
 	must_not_suspend,
-	strict_provenance
+	strict_provenance,
+	anonymous_lifetime_in_impl_trait
 )]
 #![expect(incomplete_features)]
 
@@ -39,7 +40,7 @@ mod window;
 use {
 	self::{
 		config::Config,
-		panel::{PanelShader, PanelsManager, PanelsRenderer},
+		panel::{Panel, PanelShader, PanelsManager, PanelsRenderer},
 		settings_menu::SettingsMenu,
 		shared::Shared,
 	},
@@ -49,7 +50,7 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::Future,
+	futures::{stream::FuturesUnordered, Future, StreamExt},
 	std::{path::PathBuf, sync::Arc},
 	tokio::sync::{Mutex, RwLock},
 	winit::{
@@ -140,7 +141,7 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 		panels_manager,
 		image_requester,
 		playlists_manager,
-		cur_panel_group: Mutex::new(None),
+		cur_panels: Mutex::new(vec![]),
 		panels_renderer_shader: RwLock::new(panels_renderer_shader),
 		playlists: RwLock::new(playlists),
 	};
@@ -150,10 +151,10 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	let (panels_updater_output_tx, panels_updater_output_rx) = meetup::channel();
 
 
-	self::spawn_task("Load default panel group", {
+	self::spawn_task("Load default panels", {
 		let shared = Arc::clone(&shared);
-		let default_panel_group = config.default_panel_group.clone();
-		|| self::load_default_panel_group(default_panel_group, shared)
+		let default_panels = config.default_panels.clone();
+		|| self::load_default_panels(default_panels, shared)
 	});
 
 	self::spawn_task("Renderer", {
@@ -204,32 +205,34 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 	Ok(())
 }
 
-/// Loads the default panel group
-async fn load_default_panel_group(default_panel_group: Option<PathBuf>, shared: Arc<Shared>) -> Result<(), AppError> {
-	// If we don't have a default, don't do anything
-	let Some(default_panel_group) = &default_panel_group else {
-		return Ok(());
-	};
+/// Loads the default panels
+async fn load_default_panels(default_panels: Vec<PathBuf>, shared: Arc<Shared>) -> Result<(), AppError> {
+	// Load the panels
+	let shared = &shared;
+	let loaded_panels = default_panels
+		.iter()
+		.map(|default_panel| async move {
+			shared
+				.panels_manager
+				.load(default_panel, shared)
+				.await
+				.inspect(|panel| tracing::debug!(?panel, "Loaded default panel"))
+				.inspect_err(|err| tracing::warn!("Unable to load default panel {default_panel:?}: {err:?}"))
+				.ok()
+		})
+		.collect::<FuturesUnordered<_>>()
+		.filter_map(async move |opt| opt)
+		.collect::<Vec<Panel>>()
+		.await;
 
-	// Else load the panel group
-	let loaded_panel_group = match shared.panels_manager.load(default_panel_group, &shared).await {
-		Ok(panel_group) => {
-			tracing::debug!(?panel_group, "Loaded default panel group");
-			panel_group
-		},
-		Err(err) => {
-			tracing::warn!("Unable to load default panel group: {err:?}");
-			return Ok(());
-		},
-	};
-
-	// And set it as the current one
+	// Add the default panels to the current panels
 	{
-		let mut panel_group = shared.cur_panel_group.lock().await;
-		*panel_group = Some(loaded_panel_group);
+		let mut cur_panels = shared.cur_panels.lock().await;
+		cur_panels.extend(loaded_panels);
 	}
 
-	{
+	// Finally at the end set the shader, if any panels were loaded
+	if !default_panels.is_empty() {
 		let mut panels_renderer_shader = shared.panels_renderer_shader.write().await;
 		panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
 	}
@@ -285,23 +288,21 @@ async fn renderer(
 			.context("Unable to start frame")?;
 		// Render the panels
 		{
-			let mut panel_group = shared.cur_panel_group.lock().await;
-			if let Some(panel_group) = &mut *panel_group {
-				let cursor_pos = shared.cursor_pos.load();
+			let cur_panels = shared.cur_panels.lock().await;
+			let cursor_pos = shared.cursor_pos.load();
 
-				let panels_renderer_shader = shared.panels_renderer_shader.read().await;
-				panels_renderer
-					.render(
-						&mut frame,
-						&wgpu_renderer,
-						&shared.wgpu,
-						&shared.panels_renderer_layout,
-						Point2::new(cursor_pos.x as i32, cursor_pos.y as i32),
-						panel_group,
-						&panels_renderer_shader,
-					)
-					.context("Unable to render panels")?;
-			}
+			let panels_renderer_shader = shared.panels_renderer_shader.read().await;
+			panels_renderer
+				.render(
+					&mut frame,
+					&wgpu_renderer,
+					&shared.wgpu,
+					&shared.panels_renderer_layout,
+					Point2::new(cursor_pos.x as i32, cursor_pos.y as i32),
+					&*cur_panels,
+					&panels_renderer_shader,
+				)
+				.context("Unable to render panels")?;
 		}
 
 		// Render egui
@@ -335,14 +336,12 @@ async fn panels_updater(
 ) -> Result<!, AppError> {
 	loop {
 		{
-			let mut panel_group = shared.cur_panel_group.lock().await;
+			let mut cur_panels = shared.cur_panels.lock().await;
 
-			if let Some(panel_group) = &mut *panel_group {
-				for panel in panel_group.panels_mut() {
-					panel
-						.update(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester)
-						.await;
-				}
+			for panel in &mut *cur_panels {
+				panel
+					.update(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester)
+					.await;
 			}
 		}
 
@@ -368,14 +367,12 @@ async fn egui_painter(
 			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let mut panel_group = shared.cur_panel_group.lock().block_on();
-				if let Some(panel_group) = &mut *panel_group {
-					for panel in panel_group.panels_mut() {
-						for geometry in &panel.geometries {
-							if geometry.geometry.contains(cursor_pos) {
-								panel.state.paused ^= true;
-								break;
-							}
+				let mut cur_panels = shared.cur_panels.lock().block_on();
+				for panel in &mut *cur_panels {
+					for geometry in &panel.geometries {
+						if geometry.geometry.contains(cursor_pos) {
+							panel.state.paused ^= true;
+							break;
 						}
 					}
 				}
@@ -388,17 +385,14 @@ async fn egui_painter(
 			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let mut panel_group = shared.cur_panel_group.lock().block_on();
-				if let Some(panel_group) = &mut *panel_group {
-					for panel in panel_group.panels_mut() {
-						for geometry in &panel.geometries {
-							if geometry.geometry.contains(cursor_pos) {
-								match panel.images.state() {
-									panel::ImagesState::Empty => (),
-									panel::ImagesState::PrimaryOnly =>
-										panel.state.cur_progress = panel.state.fade_point,
-									panel::ImagesState::Both => panel.state.cur_progress = panel.state.duration,
-								}
+				let mut cur_panels = shared.cur_panels.lock().block_on();
+				for panel in &mut *cur_panels {
+					for geometry in &panel.geometries {
+						if geometry.geometry.contains(cursor_pos) {
+							match panel.images.state() {
+								panel::ImagesState::Empty => (),
+								panel::ImagesState::PrimaryOnly => panel.state.cur_progress = panel.state.fade_point,
+								panel::ImagesState::Both => panel.state.cur_progress = panel.state.duration,
 							}
 						}
 					}
@@ -411,25 +405,23 @@ async fn egui_painter(
 				let delta = ctx.input(|input| input.scroll_delta.y);
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let mut panel_group = shared.cur_panel_group.lock().block_on();
-				if let Some(panel_group) = &mut *panel_group {
-					for panel in panel_group.panels_mut() {
-						let max = match panel.images.state() {
-							panel::ImagesState::Empty => 0,
-							panel::ImagesState::PrimaryOnly => panel.state.fade_point,
-							panel::ImagesState::Both => panel.state.duration,
-						};
+				let mut cur_panels = shared.cur_panels.lock().block_on();
+				for panel in &mut *cur_panels {
+					let max = match panel.images.state() {
+						panel::ImagesState::Empty => 0,
+						panel::ImagesState::PrimaryOnly => panel.state.fade_point,
+						panel::ImagesState::Both => panel.state.duration,
+					};
 
-						let speed = (panel.state.duration as f32) / 240.0;
+					let speed = (panel.state.duration as f32) / 240.0;
 
-						for geometry in &panel.geometries {
-							if geometry.geometry.contains(cursor_pos) {
-								panel.state.cur_progress = panel
-									.state
-									.cur_progress
-									.saturating_add_signed((-delta * speed) as i64)
-									.clamp(0, max);
-							}
+					for geometry in &panel.geometries {
+						if geometry.geometry.contains(cursor_pos) {
+							panel.state.cur_progress = panel
+								.state
+								.cur_progress
+								.saturating_add_signed((-delta * speed) as i64)
+								.clamp(0, max);
 						}
 					}
 				}

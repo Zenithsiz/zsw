@@ -217,166 +217,166 @@ fn choose_load_playlist_from_file(
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
 fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
-	let mut panel_group = shared.cur_panel_group.lock().block_on();
-	match &mut *panel_group {
-		Some(panel_group) =>
-			for (panel_idx, panel) in panel_group.panels_mut().iter_mut().enumerate() {
-				ui.collapsing(format!("Panel {panel_idx}"), |ui| {
-					ui.checkbox(&mut panel.state.paused, "Paused");
+	let mut cur_panels = shared.cur_panels.lock().block_on();
 
-					ui.collapsing("Geometries", |ui| {
-						for (geometry_idx, geometry) in panel.geometries.iter_mut().enumerate() {
-							ui.horizontal(|ui| {
-								ui.label(format!("#{}: ", geometry_idx + 1));
-								self::draw_rect(ui, &mut geometry.geometry);
-							});
-						}
-					});
+	if cur_panels.is_empty() {
+		ui.label("None loaded");
+		return;
+	}
 
+	for (panel_idx, panel) in cur_panels.iter_mut().enumerate() {
+		ui.collapsing(format!("Panel {panel_idx}"), |ui| {
+			ui.checkbox(&mut panel.state.paused, "Paused");
+
+			ui.collapsing("Geometries", |ui| {
+				for (geometry_idx, geometry) in panel.geometries.iter_mut().enumerate() {
 					ui.horizontal(|ui| {
-						// Note: We only allow up until the duration - 1 so that you don't get stuck
-						//       skipping images when you hold it at the max value
-						ui.label("Cur progress");
-						egui::Slider::new(
-							&mut panel.state.cur_progress,
-							0..=panel.state.duration.saturating_sub(1),
-						)
-						.clamp_to_range(true)
-						.ui(ui);
-
-						// Then clamp to the current max
-						// Note: We don't just use this max above so the slider doesn't jitter when the max changes
-						let cur_max = match panel.images.state() {
-							panel::ImagesState::Empty => 0,
-							panel::ImagesState::PrimaryOnly => panel.state.fade_point,
-							panel::ImagesState::Both => panel.state.duration,
-						};
-						panel.state.cur_progress = panel.state.cur_progress.clamp(0, cur_max);
+						ui.label(format!("#{}: ", geometry_idx + 1));
+						self::draw_rect(ui, &mut geometry.geometry);
 					});
+				}
+			});
 
-					ui.horizontal(|ui| {
-						ui.label("Fade Point");
-						let min = panel.state.duration / 2;
-						let max = panel.state.duration.saturating_sub(1);
-						egui::Slider::new(&mut panel.state.fade_point, min..=max).ui(ui);
-					});
+			ui.horizontal(|ui| {
+				// Note: We only allow up until the duration - 1 so that you don't get stuck
+				//       skipping images when you hold it at the max value
+				ui.label("Cur progress");
+				egui::Slider::new(
+					&mut panel.state.cur_progress,
+					0..=panel.state.duration.saturating_sub(1),
+				)
+				.clamp_to_range(true)
+				.ui(ui);
 
-					ui.horizontal(|ui| {
-						ui.label("Duration");
-						egui::Slider::new(&mut panel.state.duration, 0..=10800).ui(ui);
-					});
+				// Then clamp to the current max
+				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
+				let cur_max = match panel.images.state() {
+					panel::ImagesState::Empty => 0,
+					panel::ImagesState::PrimaryOnly => panel.state.fade_point,
+					panel::ImagesState::Both => panel.state.duration,
+				};
+				panel.state.cur_progress = panel.state.cur_progress.clamp(0, cur_max);
+			});
 
-					ui.horizontal(|ui| {
-						ui.label("Parallax ratio");
-						egui::Slider::new(&mut panel.state.parallax.ratio, 0.0..=1.0).ui(ui);
-					});
+			ui.horizontal(|ui| {
+				ui.label("Fade Point");
+				let min = panel.state.duration / 2;
+				let max = panel.state.duration.saturating_sub(1);
+				egui::Slider::new(&mut panel.state.fade_point, min..=max).ui(ui);
+			});
 
-					ui.horizontal(|ui| {
-						ui.label("Parallax exp");
-						egui::Slider::new(&mut panel.state.parallax.exp, 0.0..=4.0).ui(ui);
-					});
+			ui.horizontal(|ui| {
+				ui.label("Duration");
+				egui::Slider::new(&mut panel.state.duration, 0..=10800).ui(ui);
+			});
+
+			ui.horizontal(|ui| {
+				ui.label("Parallax ratio");
+				egui::Slider::new(&mut panel.state.parallax.ratio, 0.0..=1.0).ui(ui);
+			});
+
+			ui.horizontal(|ui| {
+				ui.label("Parallax exp");
+				egui::Slider::new(&mut panel.state.parallax.exp, 0.0..=4.0).ui(ui);
+			});
 
 
-					ui.horizontal(|ui| {
-						ui.checkbox(&mut panel.state.parallax.reverse, "Reverse parallax");
-					});
+			ui.horizontal(|ui| {
+				ui.checkbox(&mut panel.state.parallax.reverse, "Reverse parallax");
+			});
 
-					ui.horizontal(|ui| {
-						ui.label("Skip");
-						if ui.button("🔄").clicked() {
-							match panel.images.state() {
-								panel::ImagesState::Empty => (),
-								panel::ImagesState::PrimaryOnly => panel.state.cur_progress = panel.state.fade_point,
-								panel::ImagesState::Both => panel.state.cur_progress = panel.state.duration,
+			ui.horizontal(|ui| {
+				ui.label("Skip");
+				if ui.button("🔄").clicked() {
+					match panel.images.state() {
+						panel::ImagesState::Empty => (),
+						panel::ImagesState::PrimaryOnly => panel.state.cur_progress = panel.state.fade_point,
+						panel::ImagesState::Both => panel.state.cur_progress = panel.state.duration,
+					}
+				}
+			});
+
+			ui.collapsing("Images", |ui| {
+				match panel.images.state() {
+					panel::ImagesState::Empty => (),
+					panel::ImagesState::PrimaryOnly => {
+						ui.collapsing("Front", |ui| self::draw_panel_image(ui, panel.images.front_mut()));
+					},
+					panel::ImagesState::Both => {
+						ui.collapsing("Front", |ui| self::draw_panel_image(ui, panel.images.front_mut()));
+						ui.collapsing("Back", |ui| self::draw_panel_image(ui, panel.images.back_mut()));
+					},
+				};
+			});
+
+			ui.collapsing("Playlist player", |ui| {
+				let playlist_player = panel.playlist_player.write().block_on();
+
+				let row_height = ui.text_style_height(&egui::TextStyle::Body);
+
+				if ui.button("↹ (Replace)").clicked() {
+					// TODO: Stop everything that could be inserting items still?
+					if let Some((playlist_path, playlist)) =
+						self::choose_load_playlist_from_file(add_playlist_state, shared)
+					{
+						crate::spawn_task(format!("Replace playlist {playlist:?}"), {
+							let playlist_player = Arc::clone(&panel.playlist_player);
+							let shared = Arc::clone(shared);
+							|| async move {
+								{
+									let mut playlist_player = playlist_player.write().await;
+									playlist_player.remove_all();
+								}
+
+								PanelsManager::load_playlist_into(&playlist_player, &playlist_path, &shared)
+									.await
+									.context("Unable to load playlist")?;
+
+								Ok(())
 							}
-						}
-					});
+						});
+					}
+				};
 
-					ui.collapsing("Images", |ui| {
-						match panel.images.state() {
-							panel::ImagesState::Empty => (),
-							panel::ImagesState::PrimaryOnly => {
-								ui.collapsing("Front", |ui| self::draw_panel_image(ui, panel.images.front_mut()));
-							},
-							panel::ImagesState::Both => {
-								ui.collapsing("Front", |ui| self::draw_panel_image(ui, panel.images.front_mut()));
-								ui.collapsing("Back", |ui| self::draw_panel_image(ui, panel.images.back_mut()));
-							},
-						};
-					});
-
-					ui.collapsing("Playlist player", |ui| {
-						let playlist_player = panel.playlist_player.write().block_on();
-
-						let row_height = ui.text_style_height(&egui::TextStyle::Body);
-
-						if ui.button("↹ (Replace)").clicked() {
-							// TODO: Stop everything that could be inserting items still?
-							if let Some((playlist_path, playlist)) =
-								self::choose_load_playlist_from_file(add_playlist_state, shared)
-							{
-								crate::spawn_task(format!("Replace playlist {playlist:?}"), {
-									let playlist_player = Arc::clone(&panel.playlist_player);
-									let shared = Arc::clone(shared);
-									|| async move {
-										{
-											let mut playlist_player = playlist_player.write().await;
-											playlist_player.remove_all();
-										}
-
-										PanelsManager::load_playlist_into(&playlist_player, &playlist_path, &shared)
-											.await
-											.context("Unable to load playlist")?;
-
-										Ok(())
-									}
-								});
+				ui.collapsing("Prev", |ui| {
+					egui::ScrollArea::new([false, true])
+						.auto_shrink([false, true])
+						.stick_to_right(true)
+						.max_height(row_height * 10.0)
+						.show_rows(ui, row_height, playlist_player.prev_items().len(), |ui, idx| {
+							for item in playlist_player.prev_items().take(idx.end).skip(idx.start) {
+								self::draw_openable_path(ui, item);
 							}
-						};
-
-						ui.collapsing("Prev", |ui| {
-							egui::ScrollArea::new([false, true])
-								.auto_shrink([false, true])
-								.stick_to_right(true)
-								.max_height(row_height * 10.0)
-								.show_rows(ui, row_height, playlist_player.prev_items().len(), |ui, idx| {
-									for item in playlist_player.prev_items().take(idx.end).skip(idx.start) {
-										self::draw_openable_path(ui, item);
-									}
-								});
 						});
-
-						ui.collapsing("Next", |ui| {
-							egui::ScrollArea::new([false, true])
-								.auto_shrink([false, true])
-								.stick_to_right(true)
-								.max_height(row_height * 10.0)
-								.show_rows(ui, row_height, playlist_player.peek_next_items().len(), |ui, idx| {
-									for item in playlist_player.peek_next_items().take(idx.end).skip(idx.start) {
-										self::draw_openable_path(ui, item);
-									}
-								});
-						});
-
-						ui.collapsing("All", |ui| {
-							egui::ScrollArea::new([false, true])
-								.auto_shrink([false, true])
-								.stick_to_right(true)
-								.max_height(row_height * 10.0)
-								.show_rows(ui, row_height, playlist_player.all_items().len(), |ui, idx| {
-									for item in playlist_player.all_items().take(idx.end).skip(idx.start) {
-										self::draw_openable_path(ui, item);
-									}
-								});
-						});
-
-						// TODO: Allow a "Go back" button. Or even a full playlist solution
-					});
 				});
-			},
-		None => {
-			ui.label("None loaded");
-		},
+
+				ui.collapsing("Next", |ui| {
+					egui::ScrollArea::new([false, true])
+						.auto_shrink([false, true])
+						.stick_to_right(true)
+						.max_height(row_height * 10.0)
+						.show_rows(ui, row_height, playlist_player.peek_next_items().len(), |ui, idx| {
+							for item in playlist_player.peek_next_items().take(idx.end).skip(idx.start) {
+								self::draw_openable_path(ui, item);
+							}
+						});
+				});
+
+				ui.collapsing("All", |ui| {
+					egui::ScrollArea::new([false, true])
+						.auto_shrink([false, true])
+						.stick_to_right(true)
+						.max_height(row_height * 10.0)
+						.show_rows(ui, row_height, playlist_player.all_items().len(), |ui, idx| {
+							for item in playlist_player.all_items().take(idx.end).skip(idx.start) {
+								self::draw_openable_path(ui, item);
+							}
+						});
+				});
+
+				// TODO: Allow a "Go back" button. Or even a full playlist solution
+			});
+		});
 	}
 }
 
