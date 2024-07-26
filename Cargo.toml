@@ -59,3 +59,102 @@ opt-level = 3
 # Add debug to release for profiling
 [profile.release]
 debug = true
+
+[workspace.lints]
+
+clippy.pedantic = { level = "warn", priority = -1 }
+clippy.nursery  = { level = "warn", priority = -1 }
+rust.missing_copy_implementations = "warn"
+rust.missing_debug_implementations = "warn"
+rust.noop_method_call = "warn"
+rust.unused_results = "warn"
+rust.elided_lifetimes_in_paths = "warn"
+rust.explicit_outlives_requirements = "warn"
+rust.fuzzy_provenance_casts = "warn"
+rust.meta_variable_misuse = "warn"
+rust.must_not_suspend = "warn"
+rust.pointer_structural_match = "warn"
+rust.single_use_lifetimes = "warn"
+rust.trivial_numeric_casts = "warn"
+rust.unused_crate_dependencies = "warn"
+rust.unused_lifetimes = "warn"
+rust.unused_macro_rules = "warn"
+rust.unused_tuple_struct_fields = "warn"
+rust.variant_size_differences = "warn"
+clippy.clone_on_ref_ptr = "warn"
+clippy.create_dir = "warn"
+clippy.deref_by_slicing = "warn"
+clippy.filetype_is_file = "warn"
+clippy.format_push_string = "warn"
+clippy.get_unwrap = "warn"
+clippy.if_then_some_else_none = "warn"
+clippy.large_include_file = "warn"
+clippy.lossy_float_literal = "warn"
+clippy.map_err_ignore = "warn"
+clippy.mixed_read_write_in_expression = "warn"
+clippy.multiple_unsafe_ops_per_block = "warn"
+clippy.mutex_atomic = "warn"
+clippy.rc_buffer = "warn"
+clippy.rc_mutex = "warn"
+clippy.rest_pat_in_fully_bound_structs = "warn"
+clippy.same_name_method = "warn"
+clippy.mod_module_files = "warn"
+clippy.semicolon_inside_block = "warn"
+clippy.string_to_string = "warn"
+clippy.undocumented_unsafe_blocks = "warn"
+clippy.unnecessary_safety_comment = "warn"
+clippy.unnecessary_safety_doc = "warn"
+clippy.unnecessary_self_imports = "warn"
+clippy.verbose_file_reads = "warn"
+clippy.partial_pub_fields = "warn"
+
+# We want to annotate unsafe inside unsafe fns
+rust.unsafe_op_in_unsafe_fn = "deny"
+
+# We muse use `expect` instead
+clippy.unwrap_used = "deny"
+
+# Style
+clippy.implicit_return = "allow"
+clippy.multiple_inherent_impl = "allow"
+clippy.pattern_type_mismatch = "allow"
+# `match` reads easier than `if / else`
+clippy.match_bool             = "allow"
+clippy.single_match_else = "allow"
+clippy.option_if_let_else = "allow"
+clippy.self_named_module_files = "allow"
+clippy.items_after_statements = "allow"
+clippy.module_name_repetitions = "allow"
+
+# Performance of floats isn't paramount
+clippy.suboptimal_flops = "allow"
+
+# Some functions might return an error / be async in the future
+clippy.unnecessary_wraps = "allow"
+clippy.unused_async = "allow"
+
+# Due to working with windows and rendering, which use `u32` / `f32` liberally
+# and interchangeably, we can't do much aside from casting and accepting possible
+# losses, although most will be lossless, since we deal with window sizes and the
+# such, which will fit within a `f32` losslessly.
+clippy.cast_precision_loss = "allow"
+clippy.cast_possible_truncation = "allow"
+
+# We use proper error types when it matters what errors can be returned, else
+# such as when using `anyhow`, we just assume the caller won't check *what* error
+# happened and instead just bubbles it up
+clippy.missing_errors_doc = "allow"
+
+# Too many false positives and not too important
+clippy.missing_const_for_fn = "allow"
+
+# We don't expose certain entities that should be documented for internal use.
+rustdoc.private_intra_doc_links = "allow"
+
+# This is too prevalent on generic functions, which we don't want to ALWAYS be `Send`
+clippy.future_not_send = "allow"
+
+# Too many false positives
+# Triggers on `T: B + C` if `trait B: A` and `trait C: A`.
+# TODO: Turn back on once false positives are fixed
+clippy.trait_duplication_in_bounds = "allow"

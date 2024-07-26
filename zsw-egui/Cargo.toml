@@ -13,3 +13,6 @@ tracing = { workspace = true }
 winit = { workspace = true }
 zsw-error = { path = "../zsw-error" }
 zsw-wgpu = { path = "../zsw-wgpu" }
+
+[lints]
+workspace = true

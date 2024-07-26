@@ -44,3 +44,6 @@ zsw-egui = { path = "../zsw-egui" }
 
 tokio-console = ["dep:console-subscriber"]
 locker-validation = []
+
+[lints]
+workspace = true
