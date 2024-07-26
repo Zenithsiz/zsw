@@ -140,10 +140,7 @@ pub fn parse_json_from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Pat
 }
 
 /// Serializes json to a file
-pub fn serialize_json_to_file<T: serde::ser::Serialize>(
-	path: impl AsRef<Path>,
-	value: &T,
-) -> Result<(), anyhow::Error> {
+pub fn serialize_json_to_file<T: serde::Serialize>(path: impl AsRef<Path>, value: &T) -> Result<(), anyhow::Error> {
 	// Open the file
 	let file = fs::File::create(path).context("Unable to create file")?;
 

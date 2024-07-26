@@ -9,6 +9,7 @@ use {
 		collections::HashMap,
 		fs,
 		io::{BufRead, BufReader},
+		mem,
 		path::{Path, PathBuf},
 	},
 };
@@ -258,6 +259,6 @@ enum State {
 impl State {
 	/// Replaces this state with a poisoned state
 	pub fn replace_poisoned(&mut self) -> Self {
-		std::mem::replace(self, Self::Poisoned)
+		mem::replace(self, Self::Poisoned)
 	}
 }

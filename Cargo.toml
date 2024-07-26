@@ -63,7 +63,7 @@ debug = true
 [workspace.lints]
 
 clippy.pedantic = { level = "warn", priority = -1 }
-clippy.nursery  = { level = "warn", priority = -1 }
+clippy.nursery = { level = "warn", priority = -1 }
 rust.missing_copy_implementations = "warn"
 rust.missing_debug_implementations = "warn"
 rust.noop_method_call = "warn"
@@ -73,13 +73,11 @@ rust.explicit_outlives_requirements = "warn"
 rust.fuzzy_provenance_casts = "warn"
 rust.meta_variable_misuse = "warn"
 rust.must_not_suspend = "warn"
-rust.pointer_structural_match = "warn"
 rust.single_use_lifetimes = "warn"
 rust.trivial_numeric_casts = "warn"
 rust.unused_crate_dependencies = "warn"
 rust.unused_lifetimes = "warn"
 rust.unused_macro_rules = "warn"
-rust.unused_tuple_struct_fields = "warn"
 rust.variant_size_differences = "warn"
 clippy.clone_on_ref_ptr = "warn"
 clippy.create_dir = "warn"
@@ -107,6 +105,18 @@ clippy.unnecessary_safety_doc = "warn"
 clippy.unnecessary_self_imports = "warn"
 clippy.verbose_file_reads = "warn"
 clippy.partial_pub_fields = "warn"
+clippy.pathbuf_init_then_push = "warn"
+clippy.assigning_clones = "warn"
+clippy.empty_enum_variants_with_brackets = "warn"
+clippy.infinite_loop = "warn"
+clippy.iter_over_hash_type = "warn"
+clippy.string_lit_chars_any = "warn"
+clippy.needless_raw_strings = "warn"
+clippy.pub_without_shorthand = "warn"
+clippy.redundant_type_annotations = "warn"
+clippy.allow_attributes = "warn"
+clippy.missing_assert_message = "warn"
+clippy.tests_outside_test_module = "warn"
 
 # We want to annotate unsafe inside unsafe fns
 rust.unsafe_op_in_unsafe_fn = "deny"
@@ -119,7 +129,7 @@ clippy.implicit_return = "allow"
 clippy.multiple_inherent_impl = "allow"
 clippy.pattern_type_mismatch = "allow"
 # `match` reads easier than `if / else`
-clippy.match_bool             = "allow"
+clippy.match_bool = "allow"
 clippy.single_match_else = "allow"
 clippy.option_if_let_else = "allow"
 clippy.self_named_module_files = "allow"
@@ -161,3 +171,7 @@ clippy.trait_duplication_in_bounds = "allow"
 
 # Too many false positives
 clippy.significant_drop_tightening = "allow"
+
+# We can't configure it with the granurality we'd like, only by crate.
+# TODO: Turn on every once a while to check for actual use cases.
+#clippy.absolute_paths = "warn"

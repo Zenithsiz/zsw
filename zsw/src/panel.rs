@@ -23,7 +23,11 @@ use {
 	anyhow::Context,
 	async_walkdir::WalkDir,
 	futures::{stream::FuturesUnordered, StreamExt},
-	std::{path::Path, sync::Arc},
+	std::{
+		io,
+		path::{Path, PathBuf},
+		sync::Arc,
+	},
 	tokio::sync::RwLock,
 	tokio_stream::wrappers::ReadDirStream,
 	zsw_util::{Rect, UnwrapOrReturnExt},
@@ -94,7 +98,7 @@ impl PanelsManager {
 		shared: &Shared,
 	) -> Result<(), AppError> {
 		/// Attempts to canonicalize `path`. If unable to, logs a warning and returns `None`
-		async fn try_canonicalize_path(path: &Path) -> Option<std::path::PathBuf> {
+		async fn try_canonicalize_path(path: &Path) -> Option<PathBuf> {
 			tokio::fs::canonicalize(path)
 				.await
 				.inspect_err(|err| tracing::warn!(?path, ?err, "Unable to canonicalize path"))
@@ -137,7 +141,7 @@ impl PanelsManager {
 										Ok(false) => async_walkdir::Filtering::Continue,
 									}
 								})
-								.map(|entry: Result<async_walkdir::DirEntry, std::io::Error>| async move {
+								.map(|entry: Result<async_walkdir::DirEntry, io::Error>| async move {
 									let entry = entry
 										.map_err(|err| {
 											tracing::warn!(

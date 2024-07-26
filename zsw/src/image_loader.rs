@@ -9,6 +9,7 @@ use {
 	image::DynamicImage,
 	std::{
 		collections::HashSet,
+		fs,
 		path::{Path, PathBuf},
 	},
 	tokio::sync::{oneshot, Semaphore},
@@ -295,7 +296,7 @@ impl ImageLoader {
 		));
 
 		// If the path already exists, use it
-		if std::fs::exists(&upscaled_image_path).context("Unable to check if upscaled image exists")? {
+		if fs::exists(&upscaled_image_path).context("Unable to check if upscaled image exists")? {
 			return Ok(upscaled_image_path);
 		}
 

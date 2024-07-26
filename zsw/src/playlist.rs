@@ -11,6 +11,7 @@ use {
 	futures::{stream::FuturesUnordered, Future, StreamExt},
 	std::{
 		collections::{hash_map, HashMap},
+		fmt,
 		mem,
 		path::Path,
 		pin::Pin,
@@ -285,8 +286,8 @@ pub struct Playlists {
 	>,
 }
 
-impl std::fmt::Debug for Playlists {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Playlists {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_map()
 			.entries(self.playlists.iter().map(|(path, playlist)| (path, playlist.try_get())))
 			.finish()

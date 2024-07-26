@@ -7,7 +7,7 @@
 // Imports
 use {
 	bytemuck::{Pod, Zeroable},
-	std::ptr,
+	std::{mem, ptr, slice},
 };
 
 /// `vec2<f32>`
@@ -98,7 +98,7 @@ impl<X: UniformsExtra> PanelUniforms<X> {
 	pub fn as_bytes(&self) -> &[u8] {
 		// SAFETY: Transmuting to `[u8]` is never UB for `repr(C)` structs.
 		//         We also guarantee `X` is Pod,
-		unsafe { std::slice::from_raw_parts(ptr::from_ref(self).cast(), std::mem::size_of::<Self>()) }
+		unsafe { slice::from_raw_parts(ptr::from_ref(self).cast(), mem::size_of::<Self>()) }
 	}
 }
 

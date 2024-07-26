@@ -9,6 +9,7 @@ use {
 	std::{
 		collections::{hash_map, HashMap},
 		env::{self, VarError},
+		fs,
 		path::Path,
 	},
 	tracing::metadata::LevelFilter,
@@ -35,7 +36,7 @@ pub fn init(log_file: Option<&Path>) {
 	// Create the file layer, if requested
 	let file_layer = log_file.and_then(|log_file| {
 		// Try to create the file
-		let file = match std::fs::File::create(log_file) {
+		let file = match fs::File::create(log_file) {
 			Ok(file) => file,
 			Err(err) => {
 				pre_init::warn(format!("Unable to create log file: {err}"));
@@ -114,7 +115,7 @@ fn get_env_filters(env: &str, default: &str) -> String {
 
 	// Get the current filters
 	let env_var;
-	let mut cur_filters = match std::env::var(env) {
+	let mut cur_filters = match env::var(env) {
 		// Split filters by `,`, then src and level by `=`
 		Ok(var) => {
 			env_var = var;

@@ -4,6 +4,7 @@
 use {
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
+	serde::de,
 	std::{borrow::Cow, fmt, str::FromStr},
 };
 
@@ -152,7 +153,7 @@ impl<'de> serde::Deserialize<'de> for Rect<i32, u32> {
 		D: serde::Deserializer<'de>,
 	{
 		let s = Cow::deserialize(deserializer)?;
-		Self::from_str(&s).map_err(serde::de::Error::custom)
+		Self::from_str(&s).map_err(de::Error::custom)
 	}
 }
 

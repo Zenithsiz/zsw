@@ -52,6 +52,7 @@ use {
 	directories::ProjectDirs,
 	futures::{stream::FuturesUnordered, Future, StreamExt},
 	std::{
+		fs,
 		path::{Path, PathBuf},
 		sync::Arc,
 	},
@@ -74,7 +75,7 @@ fn main() -> Result<(), AppError> {
 
 	// Create the configuration then load the config
 	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
-	std::fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
+	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.yaml"));
 	let config = Config::get_or_create_default(&config_path);
 	logger::pre_init::debug(format!("config_path: {config_path:?}, config: {config:?}"));
@@ -107,7 +108,7 @@ async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<
 
 	// If the shaders path doesn't exist, write it
 	// TODO: Use a virtual filesystem instead?
-	if !std::fs::exists(&shaders_path).context("Unable to check if shaders path exists")? {
+	if !fs::exists(&shaders_path).context("Unable to check if shaders path exists")? {
 		return Err(anyhow::anyhow!("Shaders directory doesn't exist: {shaders_path:?}").into());
 	}
 
@@ -342,10 +343,8 @@ async fn renderer(
 }
 
 /// Panel updater task
-async fn panels_updater(
-	shared: Arc<Shared>,
-	panels_updater_output_tx: zsw_util::meetup::Sender<()>,
-) -> Result<!, AppError> {
+#[expect(clippy::infinite_loop, reason = "We need this type signature for `spawn_task`")]
+async fn panels_updater(shared: Arc<Shared>, panels_updater_output_tx: meetup::Sender<()>) -> Result<!, AppError> {
 	loop {
 		{
 			let mut cur_panels = shared.cur_panels.lock().await;
@@ -366,7 +365,7 @@ async fn egui_painter(
 	shared: Arc<Shared>,
 	egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
-	egui_painter_output_tx: zsw_util::meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
+	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, AppError> {
 	loop {
 		let full_output_fut = egui_painter.draw(&shared.window, |ctx| {

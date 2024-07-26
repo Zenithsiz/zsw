@@ -6,7 +6,8 @@
 // Imports
 use {
 	anyhow::Context,
-	std::sync::Arc,
+	egui::epaint,
+	std::{fmt, sync::Arc},
 	tokio::sync::Mutex,
 	tracing as _,
 	winit::window::Window,
@@ -20,8 +21,8 @@ pub struct EguiRenderer {
 	render_pass: egui_wgpu_backend::RenderPass,
 }
 
-impl std::fmt::Debug for EguiRenderer {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for EguiRenderer {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("EguiRenderer").field("render_pass", &"..").finish()
 	}
 }
@@ -31,7 +32,7 @@ impl EguiRenderer {
 	pub fn render_egui(
 		&mut self,
 		frame: &mut FrameRender,
-		window: &winit::window::Window,
+		window: &Window,
 		wgpu_shared: &WgpuShared,
 		paint_jobs: &[egui::ClippedPrimitive],
 		textures_delta: Option<egui::TexturesDelta>,
@@ -84,8 +85,8 @@ pub struct EguiPainter {
 	platform: Arc<Mutex<egui_winit_platform::Platform>>,
 }
 
-impl std::fmt::Debug for EguiPainter {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for EguiPainter {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("EguiPainter").field("platform", &"..").finish()
 	}
 }
@@ -108,7 +109,7 @@ impl EguiPainter {
 	}
 
 	/// Tessellate the output shapes
-	pub async fn tessellate_shapes(&self, shapes: Vec<egui::epaint::ClippedShape>) -> Vec<egui::ClippedPrimitive> {
+	pub async fn tessellate_shapes(&self, shapes: Vec<epaint::ClippedShape>) -> Vec<egui::ClippedPrimitive> {
 		self.platform.lock().await.context().tessellate(shapes)
 	}
 }
@@ -119,8 +120,8 @@ pub struct EguiEventHandler {
 	platform: Arc<Mutex<egui_winit_platform::Platform>>,
 }
 
-impl std::fmt::Debug for EguiEventHandler {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for EguiEventHandler {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("EguiEventHandler").field("platform", &"..").finish()
 	}
 }

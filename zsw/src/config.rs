@@ -5,6 +5,7 @@ use {
 	anyhow::Context,
 	std::{
 		collections::HashSet,
+		fs,
 		num::NonZeroUsize,
 		path::{Path, PathBuf},
 	},
@@ -65,7 +66,7 @@ impl Config {
 
 				// If the config file doesn't exist, write the default
 				// Note: If we're unable to check for existence, we assume it does exist, so we don't override anything
-				if !std::fs::exists(path).unwrap_or(true) {
+				if !fs::exists(path).unwrap_or(true) {
 					if let Err(err) = config.write(path) {
 						tracing::warn!("Unable to write default config: {err:?}");
 					}
@@ -80,7 +81,7 @@ impl Config {
 	fn load(path: &Path) -> Result<Self, AppError> {
 		tracing::debug!(?path, "Loading config");
 
-		let config_yaml = std::fs::read(path).context("Unable to open file")?;
+		let config_yaml = fs::read(path).context("Unable to open file")?;
 		let config = serde_yaml::from_slice(&config_yaml).context("Unable to parse config")?;
 		Ok(config)
 	}
@@ -88,7 +89,7 @@ impl Config {
 	/// Writes the config
 	fn write(&self, path: &Path) -> Result<(), AppError> {
 		let config_yaml = serde_yaml::to_string(self).context("Unable to serialize config")?;
-		std::fs::write(path, config_yaml.as_bytes()).context("Unable to write config")?;
+		fs::write(path, config_yaml.as_bytes()).context("Unable to write config")?;
 
 		Ok(())
 	}

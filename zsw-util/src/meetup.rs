@@ -4,6 +4,7 @@
 use {
 	futures::{lock::Mutex, FutureExt},
 	std::{
+		future,
 		sync::Arc,
 		task::{self, Poll, Waker},
 	},
@@ -36,7 +37,7 @@ impl<T> Sender<T> {
 	pub async fn send(&self, value: T) {
 		let mut value = Some(value);
 		let mut inner_lock_fut = self.inner.lock();
-		std::future::poll_fn(|cx| {
+		future::poll_fn(|cx| {
 			// Lock the mutex
 			// Note: After locking we need to ensure that we re-create the lock future, as it's exhausted
 			let mut inner = task::ready!(inner_lock_fut.poll_unpin(cx));
@@ -71,7 +72,7 @@ impl<T> Receiver<T> {
 	/// Blocks until the value is sent
 	pub async fn recv(&self) -> T {
 		let mut inner_lock_fut = self.inner.lock();
-		std::future::poll_fn(|cx| {
+		future::poll_fn(|cx| {
 			// Lock the mutex
 			// Note: After locking we need to ensure that we re-create the lock future, as it's exhausted
 			let mut inner = task::ready!(inner_lock_fut.poll_unpin(cx));
