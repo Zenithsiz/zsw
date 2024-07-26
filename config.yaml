@@ -5,4 +5,4 @@ shaders_dir: shaders/
 upscale_cache_dir: null # Use default
 upscale_cmd: null # None
 upscale_exclude: [] # None
-default_panels: [panels/quarter.yaml, panels/multiple.yaml]
+default_panels: [panels/full.yaml]
