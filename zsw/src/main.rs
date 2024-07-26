@@ -51,7 +51,10 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{stream::FuturesUnordered, Future, StreamExt},
-	std::{path::PathBuf, sync::Arc},
+	std::{
+		path::{Path, PathBuf},
+		sync::Arc,
+	},
 	tokio::sync::{Mutex, RwLock},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -85,12 +88,12 @@ fn main() -> Result<(), AppError> {
 
 	// Then run `run` on the tokio runtime
 	let _runtime_enter = tokio_runtime.enter();
-	tokio_runtime.block_on(self::run(&dirs, &config))?;
+	tokio_runtime.block_on(self::run(&dirs, &config_path, &config))?;
 
 	Ok(())
 }
 
-async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
+async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<(), AppError> {
 	let (mut event_loop, window) = window::create().context("Unable to create winit event loop and window")?;
 	let window = Arc::new(window);
 	let (wgpu_shared, wgpu_renderer) = zsw_wgpu::create(Arc::clone(&window))
@@ -153,8 +156,9 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 
 	self::spawn_task("Load default panels", {
 		let shared = Arc::clone(&shared);
+		let config_path = config_path.to_path_buf();
 		let default_panels = config.default_panels.clone();
-		|| self::load_default_panels(default_panels, shared)
+		|| async move { self::load_default_panels(&config_path, default_panels, shared).await }
 	});
 
 	self::spawn_task("Renderer", {
@@ -206,18 +210,26 @@ async fn run(dirs: &ProjectDirs, config: &Config) -> Result<(), AppError> {
 }
 
 /// Loads the default panels
-async fn load_default_panels(default_panels: Vec<PathBuf>, shared: Arc<Shared>) -> Result<(), AppError> {
+async fn load_default_panels(
+	config_path: &Path,
+	default_panels: Vec<PathBuf>,
+	shared: Arc<Shared>,
+) -> Result<(), AppError> {
 	// Load the panels
 	let shared = &shared;
 	let loaded_panels = default_panels
 		.iter()
 		.map(|default_panel| async move {
+			let default_panel_path = config_path
+				.parent()
+				.expect("Config path had no parent directory")
+				.join(default_panel);
 			shared
 				.panels_manager
-				.load(default_panel, shared)
+				.load(&default_panel_path, shared)
 				.await
 				.inspect(|panel| tracing::debug!(?panel, "Loaded default panel"))
-				.inspect_err(|err| tracing::warn!("Unable to load default panel {default_panel:?}: {err:?}"))
+				.inspect_err(|err| tracing::warn!("Unable to load default panel {default_panel_path:?}: {err:?}"))
 				.ok()
 		})
 		.collect::<FuturesUnordered<_>>()

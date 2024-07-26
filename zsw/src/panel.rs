@@ -62,7 +62,10 @@ impl PanelsManager {
 				reverse: panel.state.reverse_parallax,
 			},
 		};
-		let playlist = panel.playlist;
+		let playlist_path = path
+			.parent()
+			.context("Panel path had no parent directory")?
+			.join(panel.playlist);
 
 		let panel = Panel::new(&shared.wgpu, &shared.panels_renderer_layout, geometries, state)
 			.context("Unable to create panel")?;
@@ -71,7 +74,7 @@ impl PanelsManager {
 			let playlist_player = Arc::clone(&panel.playlist_player);
 			let shared = Arc::clone(shared);
 			|| async move {
-				Self::load_playlist_into(&playlist_player, &playlist, &shared)
+				Self::load_playlist_into(&playlist_player, &playlist_path, &shared)
 					.await
 					.context("Unable to load playlist")?;
 
