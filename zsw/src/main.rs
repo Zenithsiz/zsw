@@ -269,7 +269,7 @@ where
 		tracing::debug!(?name, ?id, "Spawning task");
 		match fut.await {
 			Ok(_) => tracing::debug!(?name, "Task finished"),
-			Err(err) => tracing::debug!(?name, ?err, "Task returned error"),
+			Err(err) => tracing::warn!(?name, ?err, "Task returned error"),
 		}
 	});
 }
