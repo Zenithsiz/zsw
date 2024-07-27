@@ -370,7 +370,7 @@ async fn egui_painter(
 	loop {
 		let full_output_fut = egui_painter.draw(&shared.window, |ctx| {
 			// Draw the settings menu
-			settings_menu.draw(ctx, &shared);
+			tokio::task::block_in_place(|| settings_menu.draw(ctx, &shared));
 
 			// Pause any double-clicked panels
 			if !ctx.is_pointer_over_area() &&
