@@ -19,7 +19,12 @@ pub use self::{
 
 // Imports
 use {
-	crate::{image_loader::ImageRequester, playlist::PlaylistItemKind, shared::Shared, AppError},
+	crate::{
+		image_loader::ImageRequester,
+		playlist::{PlaylistItemKind, PlaylistName},
+		shared::Shared,
+		AppError,
+	},
 	anyhow::Context,
 	async_walkdir::WalkDir,
 	futures::{stream::FuturesUnordered, StreamExt},
@@ -66,19 +71,16 @@ impl PanelsManager {
 				reverse: panel.state.reverse_parallax,
 			},
 		};
-		let playlist_path = path
-			.parent()
-			.context("Panel path had no parent directory")?
-			.join(panel.playlist);
+		let playlist_name = PlaylistName::from(panel.playlist);
 
 		let panel = Panel::new(&shared.wgpu, &shared.panels_renderer_layout, geometries, state)
 			.context("Unable to create panel")?;
 
-		crate::spawn_task(format!("Load panel {path:?}"), {
+		crate::spawn_task(format!("Load panel playlist {path:?}: {playlist_name:?}"), {
 			let playlist_player = Arc::clone(&panel.playlist_player);
 			let shared = Arc::clone(shared);
 			|| async move {
-				Self::load_playlist_into(&playlist_player, &playlist_path, &shared)
+				Self::load_playlist_into(&playlist_player, &playlist_name, &shared)
 					.await
 					.context("Unable to load playlist")?;
 
@@ -94,7 +96,7 @@ impl PanelsManager {
 	#[expect(clippy::too_many_lines)] // TODO: Refactor
 	pub async fn load_playlist_into(
 		playlist_player: &RwLock<PlaylistPlayer>,
-		playlist_path: &Path,
+		playlist_name: &PlaylistName,
 		shared: &Shared,
 	) -> Result<(), AppError> {
 		/// Attempts to canonicalize `path`. If unable to, logs a warning and returns `None`
@@ -106,12 +108,10 @@ impl PanelsManager {
 		}
 
 		let playlist_items = {
-			// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
-			let (_, playlist) = shared
-				.playlists_manager
-				.load(playlist_path, &shared.playlists)
-				.await
-				.context("Unable to load playlist")?;
+			let playlists = shared.playlists.read().await;
+			let playlist = playlists
+				.get(playlist_name)
+				.with_context(|| format!("Unknown playlist: {playlist_name:?}"))?;
 			let playlist = playlist.read().await;
 			playlist.items()
 		};
@@ -126,7 +126,7 @@ impl PanelsManager {
 
 				// If not enabled, skip it
 				if !item.enabled {
-					tracing::trace!(?playlist_path, ?item, "Ignoring non-enabled playlist item");
+					tracing::trace!(?playlist_name, ?item, "Ignoring non-enabled playlist item");
 					return;
 				}
 
@@ -145,7 +145,7 @@ impl PanelsManager {
 									let entry = entry
 										.map_err(|err| {
 											tracing::warn!(
-												?playlist_path,
+												?playlist_name,
 												?path,
 												?err,
 												"Unable to read directory entry within recursive walk"
@@ -169,7 +169,7 @@ impl PanelsManager {
 								.await
 								.map_err(|err| {
 									tracing::warn!(
-										?playlist_path,
+										?playlist_name,
 										?path,
 										?err,
 										"Unable to read playlist playlist directory"
@@ -181,7 +181,7 @@ impl PanelsManager {
 									let entry = entry
 										.map_err(|err| {
 											tracing::warn!(
-												?playlist_path,
+												?playlist_name,
 												?path,
 												?err,
 												"Unable to read directory entry within recursive walk"

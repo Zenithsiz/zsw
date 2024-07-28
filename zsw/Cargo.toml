@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 async-channel = { workspace = true }
-async-once-cell = { workspace = true }
 async-walkdir = { workspace = true }
 bytemuck = { workspace = true, features = ["derive"] }
 cgmath = { workspace = true }

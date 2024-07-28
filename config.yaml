@@ -2,6 +2,7 @@ tokio_worker_threads: 2
 rayon_worker_threads: 2
 log_file: latest.log
 shaders_dir: shaders/
+playlists_dir: playlists/
 upscale_cache_dir: null # Use default
 upscale_cmd: null # None
 upscale_exclude: [] # None

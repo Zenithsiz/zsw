@@ -19,7 +19,8 @@
 	hash_raw_entry,
 	must_not_suspend,
 	strict_provenance,
-	anonymous_lifetime_in_impl_trait
+	anonymous_lifetime_in_impl_trait,
+	try_blocks
 )]
 #![expect(incomplete_features)]
 
@@ -41,6 +42,7 @@ use {
 	self::{
 		config::Config,
 		panel::{Panel, PanelShader, PanelsManager, PanelsRenderer},
+		playlist::Playlists,
 		settings_menu::SettingsMenu,
 		shared::Shared,
 	},
@@ -105,6 +107,10 @@ async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<
 		.shaders_dir
 		.clone()
 		.unwrap_or_else(|| dirs.data_dir().join("shaders/"));
+	let playlists_path = config
+		.playlists_dir
+		.clone()
+		.unwrap_or_else(|| dirs.data_dir().join("playlists/"));
 
 	// If the shaders path doesn't exist, write it
 	// TODO: Use a virtual filesystem instead?
@@ -118,7 +124,9 @@ async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<
 	let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(&window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
 
-	let (playlists_manager, playlists) = playlist::create();
+	let playlists = Playlists::load(playlists_path)
+		.await
+		.context("Unable to load playlists")?;
 
 	let panels_manager = PanelsManager::new();
 
@@ -144,7 +152,6 @@ async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<
 		cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 		panels_manager,
 		image_requester,
-		playlists_manager,
 		cur_panels: Mutex::new(vec![]),
 		panels_renderer_shader: RwLock::new(panels_renderer_shader),
 		playlists: RwLock::new(playlists),

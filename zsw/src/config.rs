@@ -34,6 +34,10 @@ pub struct Config {
 	#[serde(default)]
 	pub shaders_dir: Option<PathBuf>,
 
+	/// Playlists directory
+	#[serde(default)]
+	pub playlists_dir: Option<PathBuf>,
+
 	/// Upscale cache directory
 	#[serde(default)]
 	pub upscale_cache_dir: Option<PathBuf>,
@@ -103,6 +107,7 @@ impl Default for Config {
 			rayon_worker_threads: None,
 			log_file:             None,
 			shaders_dir:          None,
+			playlists_dir:        None,
 			upscale_cache_dir:    None,
 			upscale_cmd:          None,
 			upscale_exclude:      HashSet::new(),

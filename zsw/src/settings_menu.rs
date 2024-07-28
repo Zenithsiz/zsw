@@ -8,15 +8,12 @@
 use {
 	crate::{
 		panel::{self, PanelImage, PanelShader, PanelsManager},
-		playlist::{Playlist, PlaylistItemKind},
+		playlist::{Playlist, PlaylistItemKind, PlaylistName},
 		shared::Shared,
 	},
 	anyhow::Context,
 	egui::Widget,
-	std::{
-		path::{Path, PathBuf},
-		sync::Arc,
-	},
+	std::{path::Path, sync::Arc},
 	tokio::sync::RwLock,
 	zsw_util::{Rect, TokioTaskBlockOn},
 };
@@ -85,71 +82,68 @@ fn draw_panels_tab(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui,
 
 /// Draws the playlists tab
 fn draw_playlists(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
-	let playlists = shared.playlists_manager.get_all_loaded(&shared.playlists).block_on();
+	let playlists = shared.playlists.blocking_read().get_all();
 
-	for (playlist_path, playlist) in playlists {
-		ui.collapsing(playlist_path.to_string_lossy(), |ui| match playlist {
-			Some(Ok(playlist)) => {
-				let items = playlist.read().block_on().items();
+	for (playlist_name, playlist) in playlists {
+		let playlist_path = shared.playlists.blocking_read().playlist_path(&playlist_name);
+		ui.collapsing(format!("{playlist_name} ({playlist_path:?})"), |ui| {
+			let items = playlist.read().block_on().items();
 
-				for item in items {
-					let mut item = item.write().block_on();
+			for item in items {
+				let mut item = item.write().block_on();
 
-					ui.checkbox(&mut item.enabled, "Enabled");
-					match &mut item.kind {
-						PlaylistItemKind::Directory { path, recursive } => {
-							ui.horizontal(|ui| {
-								ui.label("Dir: ");
-								self::draw_openable_path(ui, path);
-							});
-
-							ui.checkbox(recursive, "Recursive");
-						},
-						PlaylistItemKind::File { path } => {
-							ui.horizontal(|ui| {
-								ui.label("File: ");
-								self::draw_openable_path(ui, path);
-							});
-						},
-					}
-
-					if ui.button("↻ (Reload)").clicked() {
-						let playlist_path = Arc::clone(&playlist_path);
-						let shared = Arc::clone(shared);
-						crate::spawn_task(format!("Reload playlist {playlist_path:?}"), || async move {
-							shared
-								.playlists_manager
-								.reload(&playlist_path, &shared.playlists)
-								.await
-								.context("Unable to reload playlist")?;
-
-							Ok(())
+				ui.checkbox(&mut item.enabled, "Enabled");
+				match &mut item.kind {
+					PlaylistItemKind::Directory { path, recursive } => {
+						ui.horizontal(|ui| {
+							ui.label("Dir: ");
+							self::draw_openable_path(ui, path);
 						});
-					}
 
-					if ui.button("💾 (Save)").clicked() {
-						let playlist_path = Arc::clone(&playlist_path);
-						let shared = Arc::clone(shared);
-						crate::spawn_task(format!("Saving playlist {playlist_path:?}"), || async move {
-							shared
-								.playlists_manager
-								.save(&playlist_path, &shared.playlists)
-								.await
-								.context("Unable to save playlist")?;
-
-							Ok(())
+						ui.checkbox(recursive, "Recursive");
+					},
+					PlaylistItemKind::File { path } => {
+						ui.horizontal(|ui| {
+							ui.label("File: ");
+							self::draw_openable_path(ui, path);
 						});
-					}
-
-					ui.separator();
+					},
 				}
-			},
-			Some(Err(err)) => {
-				ui.label(format!("Error: {:?}", anyhow::anyhow!(err)));
-			},
-			None => {
-				ui.label("Loading...");
-			},
+
+				if ui.button("↻ (Reload)").clicked() {
+					let playlist_name = playlist_name.clone();
+					let shared = Arc::clone(shared);
+					crate::spawn_task(format!("Reload playlist {playlist_name:?}"), || async move {
+						shared
+							.playlists
+							.write()
+							.await
+							.reload(playlist_name)
+							.await
+							.context("Unable to reload playlist")?;
+
+						Ok(())
+					});
+				}
+
+				if ui.button("💾 (Save)").clicked() {
+					let playlist_name = playlist_name.clone();
+					let shared = Arc::clone(shared);
+					crate::spawn_task(format!("Saving playlist {playlist_name:?}"), || async move {
+						shared
+							.playlists
+							.read()
+							.await
+							.save(&playlist_name)
+							.await
+							.context("Unable to save playlist")?;
+
+						Ok(())
+					});
+				}
+
+				ui.separator();
+			}
 		});
 	}
 
@@ -161,26 +155,11 @@ fn draw_playlists(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, 
 
 /// Asks the user and loads a playlist from a file
 fn choose_load_playlist_from_file(
-	add_playlist_state: &mut AddPlaylistState,
+	_add_playlist_state: &mut AddPlaylistState,
 	shared: &Arc<Shared>,
-) -> Option<(Arc<Path>, Arc<RwLock<Playlist>>)> {
-	// If we don't have a start directory for the playlists, try to get one
-	if matches!(add_playlist_state.start_dir, AddPlaylistStateStartPath::None) {
-		if let Some((playlist_path, _)) = shared.playlists_manager.get_loaded_any(&shared.playlists).block_on() {
-			if let Some(playlist_dir) = playlist_path.parent() {
-				add_playlist_state.start_dir =
-					AddPlaylistStateStartPath::FromExistingPlaylists(playlist_dir.to_path_buf());
-			}
-		};
-	};
-
+) -> Option<(PlaylistName, Arc<RwLock<Playlist>>)> {
 	// TODO: Not have this yaml filter here? Or at least allow files other than `.yaml`
-	let mut file_dialog = rfd::FileDialog::new().add_filter("Playlist file", &["yaml"]);
-
-	// Set the starting directory, if we have any
-	if let Some(playlist_dir) = add_playlist_state.start_dir.as_path() {
-		file_dialog = file_dialog.set_directory(playlist_dir);
-	}
+	let file_dialog = rfd::FileDialog::new().add_filter("Playlist file", &["yaml"]);
 
 	// Ask the user for a playlist file
 	match file_dialog.pick_file() {
@@ -188,20 +167,12 @@ fn choose_load_playlist_from_file(
 		Some(playlist_path) => {
 			tracing::debug!(?playlist_path, "Loading playlist");
 
-			// Set the playlist state to the parent file
-			if let Some(path) = playlist_path.parent() {
-				add_playlist_state.start_dir = AddPlaylistStateStartPath::LastPlaylist(path.to_path_buf());
-			}
-
 			// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
-			match shared
-				.playlists_manager
-				.load(&playlist_path, &shared.playlists)
-				.block_on()
-			{
-				Ok((playlist_path, playlist)) => {
-					tracing::debug!(?playlist_path, ?playlist, "Successfully loaded playlist");
-					return Some((playlist_path, playlist));
+			let res = shared.playlists.blocking_write().add(&playlist_path).block_on();
+			match res {
+				Ok((playlist_name, playlist)) => {
+					tracing::debug!(?playlist_name, ?playlist, "Successfully loaded playlist");
+					return Some((playlist_name, playlist));
 				},
 				Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to load playlist"),
 			}
@@ -316,7 +287,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 
 				if ui.button("↹ (Replace)").clicked() {
 					// TODO: Stop everything that could be inserting items still?
-					if let Some((playlist_path, playlist)) =
+					if let Some((playlist_name, playlist)) =
 						self::choose_load_playlist_from_file(add_playlist_state, shared)
 					{
 						crate::spawn_task(format!("Replace playlist {playlist:?}"), {
@@ -328,7 +299,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 									playlist_player.remove_all();
 								}
 
-								PanelsManager::load_playlist_into(&playlist_player, &playlist_path, &shared)
+								PanelsManager::load_playlist_into(&playlist_player, &playlist_name, &shared)
 									.await
 									.context("Unable to load playlist")?;
 
@@ -472,35 +443,4 @@ enum Tab {
 
 /// State for adding a playlist
 #[derive(Clone, Default, Debug)]
-struct AddPlaylistState {
-	/// Start directory
-	start_dir: AddPlaylistStateStartPath,
-}
-
-/// Start path for [`AddPlaylistState::start_path`]
-#[derive(Clone, Default, Debug)]
-enum AddPlaylistStateStartPath {
-	/// There are no playlists and user hasn't picked any playlists yet
-	#[default]
-	None,
-
-	/// User hasn't picked any playlists, but we took the parent path of
-	/// one of the existing playlists
-	FromExistingPlaylists(PathBuf),
-
-	/// User has picked a playlist, and this is it's parent path.
-	///
-	/// This variant will be chosen regardless if the last playlist was
-	/// successfully loaded or not.
-	LastPlaylist(PathBuf),
-}
-
-impl AddPlaylistStateStartPath {
-	/// Returns the inner path, if any
-	pub fn as_path(&self) -> Option<&Path> {
-		match self {
-			Self::None => None,
-			Self::FromExistingPlaylists(path) | Self::LastPlaylist(path) => Some(path),
-		}
-	}
-}
+struct AddPlaylistState {}

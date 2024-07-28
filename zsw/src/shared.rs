@@ -5,7 +5,7 @@ use {
 	crate::{
 		image_loader::ImageRequester,
 		panel::{Panel, PanelsManager, PanelsRendererLayouts, PanelsRendererShader},
-		playlist::{Playlists, PlaylistsManager},
+		playlist::Playlists,
 		Resize,
 	},
 	crossbeam::atomic::AtomicCell,
@@ -25,9 +25,8 @@ pub struct Shared {
 	pub last_resize:            AtomicCell<Option<Resize>>,
 	pub cursor_pos:             AtomicCell<PhysicalPosition<f64>>,
 
-	pub panels_manager:    PanelsManager,
-	pub image_requester:   ImageRequester,
-	pub playlists_manager: PlaylistsManager,
+	pub panels_manager:  PanelsManager,
+	pub image_requester: ImageRequester,
 
 	pub cur_panels:             Mutex<Vec<Panel>>,
 	pub panels_renderer_shader: RwLock<PanelsRendererShader>,

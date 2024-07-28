@@ -6,291 +6,180 @@ mod ser;
 // Imports
 use {
 	crate::AppError,
-	anyhow::Context,
-	async_once_cell::Lazy,
-	futures::{stream::FuturesUnordered, Future, StreamExt},
+	anyhow::{anyhow, Context},
+	futures::{stream::FuturesUnordered, StreamExt},
 	std::{
-		collections::{hash_map, HashMap},
+		borrow::Borrow,
+		collections::HashMap,
+		ffi::OsStr,
 		fmt,
-		mem,
-		path::Path,
-		pin::Pin,
+		path::{Path, PathBuf},
 		sync::Arc,
 	},
 	tokio::sync::RwLock,
+	tokio_stream::wrappers::ReadDirStream,
+	zsw_util::PathAppendExt,
 };
 
-/// Playlists manager
+/// Playlists
 #[derive(Debug)]
-pub struct PlaylistsManager {}
+pub struct Playlists {
+	/// Playlists directory
+	root: PathBuf,
 
-impl PlaylistsManager {
-	/// Loads a playlist by path
-	pub async fn load(
-		&self,
-		path: &Path,
-		playlists: &RwLock<Playlists>,
-	) -> Result<(Arc<Path>, Arc<RwLock<Playlist>>), AppError> {
-		// Canonicalize the path first, so we don't load the same playlist from two paths
-		// (e.g., one relative and one absolute)
-		let path = path.canonicalize().context("Unable to canonicalize path")?;
+	/// Playlists
+	playlists: HashMap<PlaylistName, Arc<RwLock<Playlist>>>,
+}
 
-		// Check if the playlist is already loaded
-		{
-			let playlists = playlists.read().await;
-			if let Some((playlist_path, playlist)) = playlists.playlists.get_key_value(&*path) {
-				let playlist_path = Arc::clone(playlist_path);
-				let playlist_lazy = Arc::clone(playlist);
-				mem::drop(playlists);
-				return Ok((playlist_path, Self::wait_for_playlist_load(&playlist_lazy).await?));
-			}
-		}
+impl Playlists {
+	/// Loads all playlists from a directory
+	pub async fn load(root: PathBuf) -> Result<Self, anyhow::Error> {
+		tokio::fs::create_dir_all(&root)
+			.await
+			.context("Unable to create playlists directory")?;
 
-		// Else lock for write and insert the entry
-		let (playlist_path, playlist_lazy) = {
-			let mut playlists = playlists.write().await;
-			let entry = playlists.playlists.raw_entry_mut().from_key(&*path);
-			match entry {
-				// If it's been inserted to in the meantime, wait on it
-				hash_map::RawEntryMut::Occupied(entry) => (Arc::clone(entry.key()), Arc::clone(entry.get())),
+		let playlists = tokio::fs::read_dir(&root)
+			.await
+			.map(ReadDirStream::new)
+			.context("Unable to read playlists directory")?
+			.then(|entry| async {
+				let res: Result<_, anyhow::Error> = try {
+					// Ignore directories and non `.yaml` files
+					let entry = entry.context("Unable to get entry")?;
+					let entry_path = entry.path();
+					if entry
+						.file_type()
+						.await
+						.context("Unable to get entry metadata")?
+						.is_dir() || entry_path.extension().and_then(OsStr::to_str) != Some("yaml")
+					{
+						return None;
+					}
 
-				// Else insert the future to load it
-				hash_map::RawEntryMut::Vacant(entry) => {
-					let playlist_path = <Arc<Path>>::from(path);
-					let playlist_lazy = Lazy::new(Self::load_fut(&playlist_path));
-					let (_, playlist_lazy) = entry.insert(Arc::clone(&playlist_path), Arc::new(playlist_lazy));
-					(playlist_path, Arc::clone(playlist_lazy))
-				},
-			}
-		};
+					// Then get the playlist name from the file
+					let playlist_name = entry_path
+						.file_stem()
+						.context("Entry path had no file stem")?
+						.to_os_string()
+						.into_string()
+						.map(PlaylistName::from)
+						.map_err(|file_name| anyhow!("Entry name was non-utf8: {file_name:?}"))?;
 
-		// Finally wait on the playlist
-		Ok((playlist_path, Self::wait_for_playlist_load(&playlist_lazy).await?))
+					let playlist = self::load_playlist(&entry_path)
+						.await
+						.with_context(|| format!("Unable to load playlist: {entry_path:?}"))?;
+					tracing::debug!(?playlist_name, ?playlist, "Loaded playlist");
+
+					(playlist_name, Arc::new(RwLock::new(playlist)))
+				};
+
+				res.inspect_err(|err| tracing::warn!(?err, "Unable to load entry")).ok()
+			})
+			.filter_map(|res| async move { res })
+			.collect()
+			.await;
+
+		let playlists = Self { root, playlists };
+
+
+		Ok(playlists)
 	}
 
-	/// Creates the load playlist future, `LoadPlaylistFut`
-	#[expect(clippy::type_complexity)] // TODO: Refactor the whole type
-	pub fn load_fut(
-		path: &Path,
-	) -> Pin<Box<dyn Future<Output = Result<Arc<RwLock<Playlist>>, Arc<AppError>>> + Send + Sync>> {
-		Box::pin({
-			let path = path.to_owned();
-			async move {
-				tracing::debug!(?path, "Loading playlist");
-				match Self::load_inner(&path).await {
-					Ok(playlist) => {
-						tracing::debug!(?path, ?playlist, "Loaded playlist");
-						Ok(Arc::new(RwLock::new(playlist)))
-					},
-					Err(err) => {
-						tracing::warn!(?path, ?err, "Unable to load playlist");
-						Err(Arc::new(err))
-					},
-				}
-			}
-		})
+	/// Gets a playlist
+	pub fn get(&self, name: &PlaylistName) -> Option<Arc<RwLock<Playlist>>> {
+		let playlist = self.playlists.get(name)?;
+		Some(Arc::clone(playlist))
 	}
 
-	/// Saves a loaded playlist by path.
+	/// Gets an arbitrary playlist
+	pub fn get_any(&self) -> Option<(PlaylistName, Arc<RwLock<Playlist>>)> {
+		self.playlists
+			.iter()
+			.next()
+			.map(|(name, playlist)| (name.clone(), Arc::clone(playlist)))
+	}
+
+	/// Gets all playlists
+	pub fn get_all(&self) -> Vec<(PlaylistName, Arc<RwLock<Playlist>>)> {
+		self.playlists
+			.iter()
+			.map(|(name, playlist)| (name.clone(), Arc::clone(playlist)))
+			.collect()
+	}
+
+	/// Returns a playlist's path
+	pub fn playlist_path(&self, name: &PlaylistName) -> PathBuf {
+		self.root.join(&*name.0).with_appended(".yaml")
+	}
+
+	/// Adds a playlist.
 	///
-	/// Waits for loading, if currently loading.
-	/// Returns an error if unloaded
-	pub async fn save(&self, path: &Path, playlists: &RwLock<Playlists>) -> Result<(), anyhow::Error> {
+	/// Saves the playlist to disk.
+	pub async fn add(&mut self, path: &Path) -> Result<(PlaylistName, Arc<RwLock<Playlist>>), anyhow::Error> {
+		// Create the playlist path, ensuring we don't overwrite an existing path
+		let mut playlist_name = path
+			.file_name()
+			.context("Path has no file name")?
+			.to_os_string()
+			.into_string()
+			.map_err(|file_name| anyhow!("Playlist file name was non-utf8: {file_name:?}"))?;
+		while self.playlists.contains_key(playlist_name.as_str()) {
+			playlist_name.push_str("-new");
+		}
+		let playlist_name = PlaylistName::from(playlist_name);
+
+		// Load the playlist
+		let playlist = self::load_playlist(path).await?;
+		let playlist = self
+			.playlists
+			.entry(playlist_name.clone())
+			.insert_entry(Arc::new(RwLock::new(playlist)))
+			.into_mut();
+		let playlist = Arc::clone(playlist);
+
+		// Save it to disk
+		let ser_playlist = self::serialize_playlist(&playlist).await;
+		let playlist_yaml = serde_yaml::to_string(&ser_playlist).context("Unable to serialize playlist")?;
+		let playlist_path = self.playlist_path(&playlist_name);
+		tokio::fs::write(playlist_path, playlist_yaml)
+			.await
+			.context("Unable to write playlist to file")?;
+
+		Ok((playlist_name, playlist))
+	}
+
+	/// Saves a loaded playlist by name.
+	///
+	/// If the playlist doesn't exist, returns `Err`.
+	pub async fn save(&self, name: &PlaylistName) -> Result<(), anyhow::Error> {
 		// Get the playlist
-		let playlist_lazy = {
-			let playlists = playlists.read().await;
-			let Some(playlist) = playlists.playlists.get(path) else {
-				anyhow::bail!("Playlist {path:?} isn't loaded");
-			};
-			Arc::clone(playlist)
+		let playlist = match self.playlists.get(name) {
+			Some(playlist) => Arc::clone(playlist),
+			None => anyhow::bail!("Playlist {name:?} isn't loaded"),
 		};
 
-		// Then wait for it to load
-		let playlist = Self::wait_for_playlist_load(&playlist_lazy).await?;
-
-		// Finally save it
-		let playlist = Self::serialize_playlist(&playlist).await;
+		// And save it
+		let playlist = self::serialize_playlist(&playlist).await;
 		let playlist_yaml = serde_yaml::to_string(&playlist).context("Unable to serialize playlist")?;
-		tokio::fs::write(path, playlist_yaml)
+		let playlist_path = self.playlist_path(name);
+		tokio::fs::write(playlist_path, playlist_yaml)
 			.await
 			.context("Unable to write playlist to file")?;
 
 		Ok(())
 	}
 
-	/// Reloads a playlist by path.
-	///
-	/// If it's not loaded, loads it.
-	/// If currently loading, cancels the previous loading and loads again.
-	pub async fn reload(&self, path: &Path, playlists: &RwLock<Playlists>) -> Result<Arc<RwLock<Playlist>>, AppError> {
-		let playlist_lazy = {
-			let mut playlists = playlists.write().await;
-
-			let playlist_lazy = Lazy::new(Self::load_fut(path));
-			let playlist_lazy = playlists
-				.playlists
-				.entry(path.into())
-				.insert_entry(Arc::new(playlist_lazy))
-				.into_mut();
-			Arc::clone(playlist_lazy)
-		};
-
-		// Finally wait on the playlist
-		Self::wait_for_playlist_load(&playlist_lazy).await
-	}
-
-	/// Returns a loaded playlist.
-	///
-	/// No guarantees are made on which playlist is chosen
-	pub async fn get_loaded_any(
-		&self,
-		playlists: &RwLock<Playlists>,
-	) -> Option<(Arc<Path>, Option<Result<Arc<RwLock<Playlist>>, AppError>>)> {
-		let playlists = playlists.read().await;
-
-		let (path, playlist) = playlists.playlists.iter().next()?;
-		let playlist = playlist.try_get().map(|res| {
-			res.as_ref()
-				.map(Arc::clone)
-				.map_err(Arc::clone)
-				.map_err(AppError::Shared)
-		});
-
-
-		Some((Arc::clone(path), playlist))
-	}
-
-	/// Returns all loaded playlists
-	pub async fn get_all_loaded(
-		&self,
-		playlists: &RwLock<Playlists>,
-	) -> Vec<(Arc<Path>, Option<Result<Arc<RwLock<Playlist>>, AppError>>)> {
-		let playlists = playlists.read().await;
-
-		playlists
+	/// Reloads a playlist by name.
+	pub async fn reload(&mut self, name: PlaylistName) -> Result<Arc<RwLock<Playlist>>, AppError> {
+		let playlist_path = self.playlist_path(&name);
+		let playlist = self::load_playlist(&playlist_path).await?;
+		let playlist = self
 			.playlists
-			.iter()
-			.map(|(path, playlist)| {
-				let playlist = playlist.try_get().map(|res| {
-					res.as_ref()
-						.map(Arc::clone)
-						.map_err(Arc::clone)
-						.map_err(AppError::Shared)
-				});
+			.entry(name)
+			.insert_entry(Arc::new(RwLock::new(playlist)))
+			.into_mut();
 
-				(Arc::clone(path), playlist)
-			})
-			.collect()
-	}
-
-	/// Loads a playlist
-	async fn load_inner(path: &Path) -> Result<Playlist, AppError> {
-		// Read the file
-		tracing::trace!(?path, "Reading playlist file");
-		let playlist_yaml = tokio::fs::read_to_string(path).await.context("Unable to open file")?;
-
-		// And parse it
-		tracing::trace!(?path, ?playlist_yaml, "Parsing playlist file");
-		let playlist = serde_yaml::from_str::<ser::Playlist>(&playlist_yaml).context("Unable to parse playlist")?;
-		tracing::trace!(?path, ?playlist, "Parsed playlist file");
-		let playlist = Self::deserialize_playlist(playlist);
-
-		Ok(playlist)
-	}
-
-	/// Waits for `playlist` to be loaded
-	#[expect(clippy::type_complexity)] // TODO: Refactor the whole type
-	async fn wait_for_playlist_load(
-		playlist: &Lazy<
-			Result<Arc<RwLock<Playlist>>, Arc<AppError>>,
-			Pin<Box<dyn Future<Output = Result<Arc<RwLock<Playlist>>, Arc<AppError>>> + Send + Sync>>,
-		>,
-	) -> Result<Arc<RwLock<Playlist>>, AppError> {
-		playlist
-			.get_unpin()
-			.await
-			.as_ref()
-			.map(Arc::clone)
-			.map_err(Arc::clone)
-			.map_err(AppError::Shared)
-	}
-
-	/// Serializes a playlist to it's serialized format
-	async fn serialize_playlist(playlist: &RwLock<Playlist>) -> ser::Playlist {
-		ser::Playlist {
-			items: {
-				let playlist = playlist.read().await;
-				playlist
-					.items
-					.iter()
-					.map(|item| async move {
-						let item = item.read().await;
-						ser::PlaylistItem {
-							enabled: item.enabled,
-							kind:    match &item.kind {
-								PlaylistItemKind::Directory { path, recursive } => ser::PlaylistItemKind::Directory {
-									path:      path.to_path_buf(),
-									recursive: *recursive,
-								},
-								PlaylistItemKind::File { path } => ser::PlaylistItemKind::File {
-									path: path.to_path_buf(),
-								},
-							},
-						}
-					})
-					.collect::<FuturesUnordered<_>>()
-					.collect()
-					.await
-			},
-		}
-	}
-
-	/// Deserializes a playlist from it's serialized format
-	fn deserialize_playlist(playlist: ser::Playlist) -> Playlist {
-		Playlist {
-			items: playlist
-				.items
-				.into_iter()
-				.map(|item| PlaylistItem {
-					enabled: item.enabled,
-					kind:    match item.kind {
-						ser::PlaylistItemKind::Directory { path, recursive } => PlaylistItemKind::Directory {
-							path: path.into(),
-							recursive,
-						},
-						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path: path.into() },
-					},
-				})
-				.map(RwLock::new)
-				.map(Arc::new)
-				.collect(),
-		}
-	}
-}
-
-/// Playlists
-pub struct Playlists {
-	/// Playlists
-	// Note: We keep all playlists loaded due to them being likely small in both size and quantity.
-	//       Even a playlist with 10k file entries, with an average path of 200 bytes, would only occupy
-	//       ~2 MiB. This is far less than the size of most images we load.
-	#[expect(clippy::type_complexity)] // TODO: Refactor the whole type
-	playlists: HashMap<
-		Arc<Path>,
-		Arc<
-			Lazy<
-				Result<Arc<RwLock<Playlist>>, Arc<AppError>>,
-				Pin<Box<dyn Future<Output = Result<Arc<RwLock<Playlist>>, Arc<AppError>>> + Send + Sync>>,
-			>,
-		>,
-	>,
-}
-
-impl fmt::Debug for Playlists {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.debug_map()
-			.entries(self.playlists.iter().map(|(path, playlist)| (path, playlist.try_get())))
-			.finish()
+		Ok(Arc::clone(playlist))
 	}
 }
 
@@ -332,12 +221,91 @@ pub enum PlaylistItemKind {
 	File { path: Arc<Path> },
 }
 
-/// Creates the playlists service
-pub fn create() -> (PlaylistsManager, Playlists) {
-	let playlists_manager = PlaylistsManager {};
-	let playlists = Playlists {
-		playlists: HashMap::new(),
-	};
+/// Playlist name
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Debug)]
+pub struct PlaylistName(Arc<str>);
 
-	(playlists_manager, playlists)
+impl From<String> for PlaylistName {
+	fn from(s: String) -> Self {
+		Self(s.into())
+	}
+}
+
+impl Borrow<str> for PlaylistName {
+	fn borrow(&self) -> &str {
+		&self.0
+	}
+}
+
+impl fmt::Display for PlaylistName {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.0.fmt(f)
+	}
+}
+
+/// Loads a playlist
+async fn load_playlist(path: &Path) -> Result<Playlist, AppError> {
+	// Read the file
+	tracing::trace!(?path, "Reading playlist file");
+	let playlist_yaml = tokio::fs::read_to_string(path).await.context("Unable to open file")?;
+
+	// And parse it
+	tracing::trace!(?path, ?playlist_yaml, "Parsing playlist file");
+	let playlist = serde_yaml::from_str::<ser::Playlist>(&playlist_yaml).context("Unable to parse playlist")?;
+	tracing::trace!(?path, ?playlist, "Parsed playlist file");
+	let playlist = self::deserialize_playlist(playlist);
+
+	Ok(playlist)
+}
+
+/// Serializes a playlist to it's serialized format
+async fn serialize_playlist(playlist: &RwLock<Playlist>) -> ser::Playlist {
+	ser::Playlist {
+		items: {
+			let playlist = playlist.read().await;
+			playlist
+				.items
+				.iter()
+				.map(|item| async move {
+					let item = item.read().await;
+					ser::PlaylistItem {
+						enabled: item.enabled,
+						kind:    match &item.kind {
+							PlaylistItemKind::Directory { path, recursive } => ser::PlaylistItemKind::Directory {
+								path:      path.to_path_buf(),
+								recursive: *recursive,
+							},
+							PlaylistItemKind::File { path } => ser::PlaylistItemKind::File {
+								path: path.to_path_buf(),
+							},
+						},
+					}
+				})
+				.collect::<FuturesUnordered<_>>()
+				.collect()
+				.await
+		},
+	}
+}
+
+/// Deserializes a playlist from it's serialized format
+fn deserialize_playlist(playlist: ser::Playlist) -> Playlist {
+	Playlist {
+		items: playlist
+			.items
+			.into_iter()
+			.map(|item| PlaylistItem {
+				enabled: item.enabled,
+				kind:    match item.kind {
+					ser::PlaylistItemKind::Directory { path, recursive } => PlaylistItemKind::Directory {
+						path: path.into(),
+						recursive,
+					},
+					ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path: path.into() },
+				},
+			})
+			.map(RwLock::new)
+			.map(Arc::new)
+			.collect(),
+	}
 }
