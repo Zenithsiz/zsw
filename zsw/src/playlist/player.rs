@@ -3,7 +3,11 @@
 // Imports
 use {
 	rand::{rngs::StdRng, seq::SliceRandom, SeedableRng},
-	std::{collections::HashSet, path::Path, sync::Arc},
+	std::{
+		collections::{HashSet, VecDeque},
+		path::Path,
+		sync::Arc,
+	},
 };
 
 /// Playlist player
@@ -15,7 +19,10 @@ pub struct PlaylistPlayer {
 	/// Previous items
 	///
 	/// Last item is newest item
-	prev_items: Vec<Arc<Path>>,
+	prev_items: VecDeque<Arc<Path>>,
+
+	/// Maximum number of previous items
+	max_prev_items: usize,
 
 	/// Next items
 	///
@@ -30,10 +37,11 @@ impl PlaylistPlayer {
 	/// Creates a new, empty, player
 	pub fn new() -> Self {
 		Self {
-			items:      HashSet::new(),
-			prev_items: vec![],
-			next_items: vec![],
-			rng:        StdRng::from_entropy(),
+			items:          HashSet::new(),
+			prev_items:     VecDeque::new(),
+			max_prev_items: 64,
+			next_items:     vec![],
+			rng:            StdRng::from_entropy(),
 		}
 	}
 
@@ -95,7 +103,11 @@ impl PlaylistPlayer {
 
 		// Then pop the last item
 		let item = self.next_items.pop()?;
-		self.prev_items.push(Arc::clone(&item));
+		self.prev_items.push_back(Arc::clone(&item));
+		if self.prev_items.len() > self.max_prev_items {
+			let _ = self.prev_items.pop_front();
+		}
+
 		Some(item)
 	}
 }
