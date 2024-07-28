@@ -13,6 +13,7 @@ use {
 		path::{Path, PathBuf},
 	},
 	tokio::sync::{oneshot, Semaphore},
+	tracing::Instrument,
 	zsw_error::AppError,
 	zsw_util::Rect,
 };
@@ -170,27 +171,27 @@ impl ImageLoader {
 
 		// Load the image
 		tracing::trace!(path = ?request.path, "Loading image");
-		let (mut image, load_duration) =
-			tokio::task::spawn_blocking(move || zsw_util::try_measure!(image::open(image_path)))
-				.await
-				.context("Unable to join image load task")?
-				.context("Unable to open image")?;
-		tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), ?load_duration, "Loaded image");
+		let mut image = tokio::task::spawn_blocking(move || image::open(image_path))
+			.instrument(tracing::trace_span!("Loading image"))
+			.await
+			.context("Unable to join image load task")?
+			.context("Unable to open image")?;
+		tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), "Loaded image");
 
 		// TODO: Use `request.geometries?` for upscaling?
 
 		// If the image is too big, resize it
 		if image.width() >= request.max_image_size || image.height() >= request.max_image_size {
 			let max_image_size = request.max_image_size;
-			tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), ?max_image_size, "Resizing image that is too large");
 
-			let resize_duration;
-			(image, resize_duration) = tokio::task::spawn_blocking(move || {
-				zsw_util::measure!(image.resize(max_image_size, max_image_size, image::imageops::FilterType::Nearest))
+			tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), ?max_image_size, "Resizing image");
+			image = tokio::task::spawn_blocking(move || {
+				image.resize(max_image_size, max_image_size, image::imageops::FilterType::Nearest)
 			})
+			.instrument(tracing::trace_span!("Resizing image"))
 			.await
 			.context("Failed to join image resize task")?;
-			tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), ?resize_duration, "Resized image");
+			tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), "Resized image");
 		}
 
 		Ok(Image {
@@ -302,25 +303,23 @@ impl ImageLoader {
 
 		let _permit = upscale_semaphore.acquire().await;
 		tracing::trace!(?image_path, ?upscaled_image_path, ?ratio, "Upscaling image");
-		let ((), upscale_duration) = zsw_util::try_measure_async(async {
-			tokio::process::Command::new(upscale_cmd)
-				.arg("-i")
-				.arg(image_path)
-				.arg("-o")
-				.arg(&upscaled_image_path)
-				.arg("-s")
-				.arg(ratio.to_string())
-				.kill_on_drop(true)
-				.spawn()
-				.context("Unable to run upscaler")?
-				.wait()
-				.await
-				.context("Unable to wait for upscaler to finish")?
-				.exit_ok()
-				.context("upscaler returned error")
-		})
-		.await?;
-		tracing::trace!(?image_path, ?upscaled_image_path, ?upscale_duration, "Upscaled image");
+		tokio::process::Command::new(upscale_cmd)
+			.arg("-i")
+			.arg(image_path)
+			.arg("-o")
+			.arg(&upscaled_image_path)
+			.arg("-s")
+			.arg(ratio.to_string())
+			.kill_on_drop(true)
+			.spawn()
+			.context("Unable to run upscaler")?
+			.wait()
+			.instrument(tracing::trace_span!("Upscaling image"))
+			.await
+			.context("Unable to wait for upscaler to finish")?
+			.exit_ok()
+			.context("upscaler returned error")?;
+		tracing::trace!(?image_path, ?upscaled_image_path, "Upscaled image");
 
 		Ok(upscaled_image_path)
 	}

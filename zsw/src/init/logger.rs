@@ -13,7 +13,7 @@ use {
 		path::Path,
 	},
 	tracing::metadata::LevelFilter,
-	tracing_subscriber::{prelude::*, EnvFilter},
+	tracing_subscriber::{fmt::format::FmtSpan, prelude::*, EnvFilter},
 };
 
 
@@ -25,6 +25,7 @@ pub fn init(log_file: Option<&Path>) {
 	let term_use_colors = self::colors_enabled();
 	let term_env = self::get_env_filters("RUST_LOG", "info");
 	let term_layer = tracing_subscriber::fmt::layer()
+		.with_span_events(FmtSpan::CLOSE)
 		.with_ansi(term_use_colors)
 		.pretty()
 		.with_filter(
@@ -47,6 +48,7 @@ pub fn init(log_file: Option<&Path>) {
 		// Then create the layer
 		let env = self::get_env_filters("RUST_FILE_LOG", "debug");
 		let layer = tracing_subscriber::fmt::layer()
+			.with_span_events(FmtSpan::CLOSE)
 			.with_writer(file)
 			.with_ansi(false)
 			.with_filter(EnvFilter::builder().parse_lossy(env));
