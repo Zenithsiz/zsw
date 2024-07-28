@@ -230,9 +230,9 @@ impl PanelsRenderer {
 					PanelImageUniforms::new(ratio, parallax_ratio, parallax_offset, image.swap_dir())
 				};
 
-				let uniforms_prev = create_uniforms(&panel.images.prev);
-				let uniforms_cur = create_uniforms(&panel.images.cur);
-				let uniforms_next = create_uniforms(&panel.images.next);
+				let uniforms_prev = create_uniforms(panel.images.prev());
+				let uniforms_cur = create_uniforms(panel.images.cur());
+				let uniforms_next = create_uniforms(panel.images.next());
 
 				/// Writes uniforms with `$extra` into `panel.uniforms`
 				macro write_uniforms($extra:expr) {{

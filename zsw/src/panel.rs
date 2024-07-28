@@ -271,7 +271,7 @@ impl Panel {
 		}
 
 		// If we're at the end of both, swap the back image
-		if self.images.next.is_loaded() && self.state.progress >= self.state.duration {
+		if self.images.next().is_loaded() && self.state.progress >= self.state.duration {
 			self.images.step_next(wgpu_shared, renderer_layouts);
 			self.state.progress = self.state.back_swapped_progress();
 			return;
@@ -290,7 +290,7 @@ impl Panel {
 			.await;
 
 		// Then update the progress, depending on the state
-		self.state.progress = match (self.images.cur.is_loaded(), self.images.next.is_loaded()) {
+		self.state.progress = match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
 			(false, false) => 0,
 			(true, false) => self.state.next_progress_primary_only(),
 			(_, true) => self.state.next_progress_both(),

@@ -406,7 +406,7 @@ async fn egui_painter(
 				for panel in &mut *cur_panels {
 					for geometry in &panel.geometries {
 						if geometry.geometry.contains(cursor_pos) {
-							match (panel.images.cur.is_loaded(), panel.images.next.is_loaded()) {
+							match (panel.images.cur().is_loaded(), panel.images.next().is_loaded()) {
 								(false, false) => (),
 								(true, false) => panel.state.progress = panel.state.fade_point,
 								(_, true) => panel.state.progress = panel.state.duration,
@@ -424,7 +424,7 @@ async fn egui_painter(
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().block_on();
 				for panel in &mut *cur_panels {
-					let max = match (panel.images.cur.is_loaded(), panel.images.next.is_loaded()) {
+					let max = match (panel.images.cur().is_loaded(), panel.images.next().is_loaded()) {
 						(false, false) => 0,
 						(true, false) => panel.state.fade_point,
 						(_, true) => panel.state.duration,

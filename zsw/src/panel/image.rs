@@ -18,16 +18,15 @@ use {
 
 /// Panel images
 #[derive(Debug)]
-#[expect(clippy::partial_pub_fields, reason = "TODO: Add some getters for the images")]
 pub struct PanelImages {
 	/// Previous image
-	pub prev: PanelImage,
+	prev: PanelImage,
 
 	/// Current image
-	pub cur: PanelImage,
+	cur: PanelImage,
 
 	/// Next image
-	pub next: PanelImage,
+	next: PanelImage,
 
 	/// Texture sampler
 	texture_sampler: wgpu::Sampler,
@@ -199,6 +198,36 @@ impl PanelImages {
 			&self.next.texture_view,
 			&self.texture_sampler,
 		);
+	}
+
+	/// Returns the previous image
+	pub fn prev(&self) -> &PanelImage {
+		&self.prev
+	}
+
+	/// Returns the previous image mutably
+	pub fn prev_mut(&mut self) -> &mut PanelImage {
+		&mut self.prev
+	}
+
+	/// Returns the current image
+	pub fn cur(&self) -> &PanelImage {
+		&self.cur
+	}
+
+	/// Returns the current image mutably
+	pub fn cur_mut(&mut self) -> &mut PanelImage {
+		&mut self.cur
+	}
+
+	/// Returns the next image
+	pub fn next(&self) -> &PanelImage {
+		&self.next
+	}
+
+	/// Returns the next image mutably
+	pub fn next_mut(&mut self) -> &mut PanelImage {
+		&mut self.next
 	}
 }
 

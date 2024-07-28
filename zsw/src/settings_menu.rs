@@ -218,7 +218,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 
 				// Then clamp to the current max
 				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
-				let cur_max = match (panel.images.cur.is_loaded(), panel.images.next.is_loaded()) {
+				let cur_max = match (panel.images.cur().is_loaded(), panel.images.next().is_loaded()) {
 					(false, false) => 0,
 					(true, false) => panel.state.fade_point,
 					(_, true) => panel.state.duration,
@@ -256,7 +256,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 			ui.horizontal(|ui| {
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
-					match (panel.images.cur.is_loaded(), panel.images.next.is_loaded()) {
+					match (panel.images.cur().is_loaded(), panel.images.next().is_loaded()) {
 						(false, false) => (),
 						(true, false) => panel.state.progress = panel.state.fade_point,
 						(_, true) => panel.state.progress = panel.state.duration,
@@ -265,20 +265,20 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 			});
 
 			ui.collapsing("Images", |ui| {
-				ui.collapsing("Previous", |ui| match panel.images.prev.is_loaded() {
-					true => self::draw_panel_image(ui, &mut panel.images.prev),
+				ui.collapsing("Previous", |ui| match panel.images.prev().is_loaded() {
+					true => self::draw_panel_image(ui, panel.images.prev_mut()),
 					false => {
 						ui.label("[Unloaded]");
 					},
 				});
-				ui.collapsing("Current", |ui| match panel.images.cur.is_loaded() {
-					true => self::draw_panel_image(ui, &mut panel.images.cur),
+				ui.collapsing("Current", |ui| match panel.images.cur().is_loaded() {
+					true => self::draw_panel_image(ui, panel.images.cur_mut()),
 					false => {
 						ui.label("[Unloaded]");
 					},
 				});
-				ui.collapsing("Next", |ui| match panel.images.next.is_loaded() {
-					true => self::draw_panel_image(ui, &mut panel.images.next),
+				ui.collapsing("Next", |ui| match panel.images.next().is_loaded() {
+					true => self::draw_panel_image(ui, panel.images.next_mut()),
 					false => {
 						ui.label("[Unloaded]");
 					},
