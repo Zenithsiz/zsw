@@ -1,4 +1,4 @@
-//! Rayon initialization
+//! Rayon pool
 //!
 //! Some dependencies use rayon, so we customize it's thread pool.
 

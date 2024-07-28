@@ -28,13 +28,11 @@
 mod args;
 mod config;
 mod image_loader;
-mod logger;
+mod init;
 mod panel;
 mod playlist;
-mod rayon_init;
 mod settings_menu;
 mod shared;
-mod tokio_runtime;
 mod window;
 
 // Imports
@@ -73,21 +71,22 @@ use {
 fn main() -> Result<(), AppError> {
 	// Get arguments
 	let args = Args::parse();
-	logger::pre_init::debug(format!("args: {args:?}"));
+	init::logger::pre_init::debug(format!("args: {args:?}"));
 
 	// Create the configuration then load the config
 	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
 	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.yaml"));
 	let config = Config::get_or_create_default(&config_path);
-	logger::pre_init::debug(format!("config_path: {config_path:?}, config: {config:?}"));
+	init::logger::pre_init::debug(format!("config_path: {config_path:?}, config: {config:?}"));
 
 	// Initialize the logger properly now
-	logger::init(args.log_file.as_deref().or(config.log_file.as_deref()));
+	init::logger::init(args.log_file.as_deref().or(config.log_file.as_deref()));
 
 	// Initialize and create everything
-	rayon_init::init(config.rayon_worker_threads).context("Unable to initialize rayon")?;
-	let tokio_runtime = tokio_runtime::create(config.tokio_worker_threads).context("Unable to create tokio runtime")?;
+	init::rayon_pool::init(config.rayon_worker_threads).context("Unable to initialize rayon")?;
+	let tokio_runtime =
+		init::tokio_runtime::create(config.tokio_worker_threads).context("Unable to create tokio runtime")?;
 
 	// Then run `run` on the tokio runtime
 	let _runtime_enter = tokio_runtime.enter();
