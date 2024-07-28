@@ -18,15 +18,16 @@ use {
 
 /// Panel images
 #[derive(Debug)]
+#[expect(clippy::partial_pub_fields, reason = "TODO: Add some getters for the images")]
 pub struct PanelImages {
-	/// Images state
-	state: ImagesState,
+	/// Previous image
+	pub prev: PanelImage,
 
-	/// Front image
-	front: PanelImage,
+	/// Current image
+	pub cur: PanelImage,
 
-	/// Back image
-	back: PanelImage,
+	/// Next image
+	pub next: PanelImage,
 
 	/// Texture sampler
 	texture_sampler: wgpu::Sampler,
@@ -43,50 +44,27 @@ impl PanelImages {
 	#[must_use]
 	pub fn new(wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Self {
 		// Create the textures
-		let front_image = PanelImage::new(wgpu_shared);
-		let back_image = PanelImage::new(wgpu_shared);
+		let image_prev = PanelImage::new(wgpu_shared);
+		let image_cur = PanelImage::new(wgpu_shared);
+		let image_next = PanelImage::new(wgpu_shared);
 		let texture_sampler = self::create_texture_sampler(wgpu_shared);
 		let image_bind_group = self::create_image_bind_group(
 			wgpu_shared,
 			&renderer_layouts.image_bind_group_layout,
-			&front_image.texture_view,
-			&back_image.texture_view,
+			&image_prev.texture_view,
+			&image_cur.texture_view,
+			&image_next.texture_view,
 			&texture_sampler,
 		);
 
 		Self {
-			state: ImagesState::Empty,
-			front: front_image,
-			back: back_image,
+			prev: image_prev,
+			cur: image_cur,
+			next: image_next,
 			texture_sampler,
 			image_bind_group,
 			scheduled_image_receiver: None,
 		}
-	}
-
-	/// Returns the current state of the images
-	pub fn state(&self) -> ImagesState {
-		self.state
-	}
-
-	/// Returns the front image
-	pub fn front(&self) -> &PanelImage {
-		&self.front
-	}
-
-	/// Returns the front image mutably
-	pub fn front_mut(&mut self) -> &mut PanelImage {
-		&mut self.front
-	}
-
-	/// Returns the back image
-	pub fn back(&self) -> &PanelImage {
-		&self.back
-	}
-
-	/// Returns the back image mutably
-	pub fn back_mut(&mut self) -> &mut PanelImage {
-		&mut self.back
 	}
 
 	/// Returns the image bind group for these images
@@ -94,31 +72,18 @@ impl PanelImages {
 		&self.image_bind_group
 	}
 
-	/// Swaps out the back with front and sets as only primary loaded
-	pub fn swap_back(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
-		match self.state {
-			// If we're empty, there's nothing to swap
-			ImagesState::Empty => (),
-
-			// If we only have the primary, swapping puts us back to empty
-			// Note: Since we're empty, there's no use in swapping the front and back buffers
-			ImagesState::PrimaryOnly => {
-				self.state = ImagesState::Empty;
-			},
-
-			// If we have both, swap the back and front
-			ImagesState::Both => {
-				self.state = ImagesState::PrimaryOnly;
-				mem::swap(&mut self.front, &mut self.back);
-				self.update_image_bind_group(wgpu_shared, renderer_layouts);
-			},
-		}
+	/// Steps to the next image
+	pub fn step_next(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+		mem::swap(&mut self.prev, &mut self.cur);
+		mem::swap(&mut self.cur, &mut self.next);
+		self.next.is_loaded = false;
+		self.update_image_bind_group(wgpu_shared, renderer_layouts);
 	}
 
-	/// Advances to the next image, if available.
+	/// Loads the next (or current) images.
 	///
-	/// If the current state is both images, no new image is loaded (not even scheduled).
-	pub async fn try_advance_next(
+	/// Requests images if missing any.
+	pub async fn load_next(
 		&mut self,
 		playlist_player: &RwLock<PlaylistPlayer>,
 		wgpu_shared: &WgpuShared,
@@ -127,37 +92,27 @@ impl PanelImages {
 		geometries: &[PanelGeometry],
 	) {
 		// If we have both images, don't load next
-		if self.state == ImagesState::Both {
+		if self.next.is_loaded {
 			return;
 		}
 
 		// Else try to load the next one
 		if let Some(image) = self
-			.try_load_next(wgpu_shared, playlist_player, image_requester, geometries)
+			.load_img(wgpu_shared, playlist_player, image_requester, geometries)
 			.await
 		{
-			// Then update the respective image and update the state
-			self.state = match self.state {
-				ImagesState::Empty => {
-					self.front.update(wgpu_shared, image);
-					ImagesState::PrimaryOnly
-				},
-				ImagesState::PrimaryOnly => {
-					self.back.update(wgpu_shared, image);
-					ImagesState::Both
-				},
-				// Note: If we were both, we would have quit above
-				ImagesState::Both => unreachable!(),
-			};
-
+			match self.cur.is_loaded {
+				true => self.next.update(wgpu_shared, image),
+				false => self.cur.update(wgpu_shared, image),
+			}
 			self.update_image_bind_group(wgpu_shared, renderer_layouts);
 		}
 	}
 
-	/// Tries to load the next image.
+	/// Tries to load the scheduled image.
 	///
 	/// If unavailable, schedules it, and returns None.
-	async fn try_load_next(
+	async fn load_img(
 		&mut self,
 		wgpu_shared: &WgpuShared,
 		playlist_player: &RwLock<PlaylistPlayer>,
@@ -239,33 +194,13 @@ impl PanelImages {
 		self.image_bind_group = self::create_image_bind_group(
 			wgpu_shared,
 			&renderer_layouts.image_bind_group_layout,
-			&self.front.texture_view,
-			&self.back.texture_view,
+			&self.prev.texture_view,
+			&self.cur.texture_view,
+			&self.next.texture_view,
 			&self.texture_sampler,
 		);
 	}
 }
-
-/// State of all images of a panel
-#[derive(PartialEq, Eq, Clone, Copy, Default, Debug)]
-pub enum ImagesState {
-	/// Empty
-	///
-	/// This means no images have been loaded yet
-	#[default]
-	Empty,
-
-	/// Primary only
-	///
-	/// The primary image is loaded. The back image is still not available
-	PrimaryOnly,
-
-	/// Both
-	///
-	/// Both images are loaded to be faded in between
-	Both,
-}
-
 
 /// Panel's image
 ///
@@ -277,6 +212,9 @@ pub struct PanelImage {
 
 	/// Texture view
 	texture_view: wgpu::TextureView,
+
+	/// Whether the image is loaded
+	is_loaded: bool,
 
 	/// Image size
 	size: Vector2<u32>,
@@ -298,10 +236,16 @@ impl PanelImage {
 		Self {
 			texture,
 			texture_view,
+			is_loaded: false,
 			size: Vector2::new(0, 0),
 			swap_dir: false,
 			image_path: None,
 		}
+	}
+
+	/// Returns if this image is loaded
+	pub fn is_loaded(&self) -> bool {
+		self.is_loaded
 	}
 
 	/// Returns this image's size
@@ -334,6 +278,7 @@ impl PanelImage {
 		// Then update the image size and swap direction
 		self.size = size;
 		self.swap_dir = rand::random();
+		self.is_loaded = true;
 	}
 }
 
@@ -407,8 +352,9 @@ fn create_texture_sampler(wgpu_shared: &WgpuShared) -> wgpu::Sampler {
 fn create_image_bind_group(
 	wgpu_shared: &WgpuShared,
 	bind_group_layout: &wgpu::BindGroupLayout,
-	front_view: &wgpu::TextureView,
-	back_view: &wgpu::TextureView,
+	view_prev: &wgpu::TextureView,
+	view_cur: &wgpu::TextureView,
+	view_next: &wgpu::TextureView,
 	sampler: &wgpu::Sampler,
 ) -> wgpu::BindGroup {
 	let descriptor = wgpu::BindGroupDescriptor {
@@ -416,14 +362,18 @@ fn create_image_bind_group(
 		entries: &[
 			wgpu::BindGroupEntry {
 				binding:  0,
-				resource: wgpu::BindingResource::TextureView(front_view),
+				resource: wgpu::BindingResource::TextureView(view_prev),
 			},
 			wgpu::BindGroupEntry {
 				binding:  1,
-				resource: wgpu::BindingResource::TextureView(back_view),
+				resource: wgpu::BindingResource::TextureView(view_cur),
 			},
 			wgpu::BindGroupEntry {
 				binding:  2,
+				resource: wgpu::BindingResource::TextureView(view_next),
+			},
+			wgpu::BindGroupEntry {
+				binding:  3,
 				resource: wgpu::BindingResource::Sampler(sampler),
 			},
 		],

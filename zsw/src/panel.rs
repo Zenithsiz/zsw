@@ -10,7 +10,7 @@ mod state;
 // Exports
 pub use self::{
 	geometry::PanelGeometry,
-	image::{ImagesState, PanelImage, PanelImages},
+	image::{PanelImage, PanelImages},
 	renderer::{PanelShader, PanelsRenderer, PanelsRendererLayouts, PanelsRendererShader},
 	state::{PanelParallaxState, PanelState},
 };
@@ -59,11 +59,11 @@ impl PanelsManager {
 		// Finally convert it
 		let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
 		let state = PanelState {
-			paused:       false,
-			cur_progress: 0,
-			duration:     panel.state.duration,
-			fade_point:   panel.state.fade_point,
-			parallax:     PanelParallaxState {
+			paused:     false,
+			progress:   0,
+			duration:   panel.state.duration,
+			fade_point: panel.state.fade_point,
+			parallax:   PanelParallaxState {
 				ratio:   panel.state.parallax_ratio,
 				exp:     panel.state.parallax_exp,
 				reverse: panel.state.reverse_parallax,
@@ -271,16 +271,16 @@ impl Panel {
 		}
 
 		// If we're at the end of both, swap the back image
-		if self.images.state() == ImagesState::Both && self.state.cur_progress >= self.state.duration {
-			self.images.swap_back(wgpu_shared, renderer_layouts);
-			self.state.cur_progress = self.state.back_swapped_progress();
+		if self.images.next.is_loaded() && self.state.progress >= self.state.duration {
+			self.images.step_next(wgpu_shared, renderer_layouts);
+			self.state.progress = self.state.back_swapped_progress();
 			return;
 		}
 
 		// Else try to load the next image
 		// Note: If we have both, this will simply return.
 		self.images
-			.try_advance_next(
+			.load_next(
 				&self.playlist_player,
 				wgpu_shared,
 				renderer_layouts,
@@ -290,10 +290,10 @@ impl Panel {
 			.await;
 
 		// Then update the progress, depending on the state
-		self.state.cur_progress = match self.images.state() {
-			ImagesState::Empty => 0,
-			ImagesState::PrimaryOnly => self.state.next_progress_primary_only(),
-			ImagesState::Both => self.state.next_progress_both(),
+		self.state.progress = match (self.images.cur.is_loaded(), self.images.next.is_loaded()) {
+			(false, false) => 0,
+			(true, false) => self.state.next_progress_primary_only(),
+			(_, true) => self.state.next_progress_both(),
 		};
 	}
 }

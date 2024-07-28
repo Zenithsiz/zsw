@@ -218,7 +218,7 @@ impl PanelsRenderer {
 				// Calculate the position matrix for the panel
 				let pos_matrix = geometry.pos_matrix(surface_size);
 
-				let create_uniforms = |image: &PanelImage, progress| {
+				let create_uniforms = |image: &PanelImage| {
 					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, image.size());
 					let (parallax_ratio, parallax_offset) = geometry.parallax_ratio_offset(
 						ratio,
@@ -227,23 +227,22 @@ impl PanelsRenderer {
 						panel.state.parallax.exp,
 						panel.state.parallax.reverse,
 					);
-					let progress = match image.swap_dir() {
-						true => 1.0 - progress,
-						false => progress,
-					};
-					PanelImageUniforms::new(ratio, progress, parallax_ratio, parallax_offset)
+					PanelImageUniforms::new(ratio, parallax_ratio, parallax_offset, image.swap_dir())
 				};
 
-				let front_uniforms = create_uniforms(panel.images.front(), panel.state.front_progress_norm());
-				let back_uniforms = create_uniforms(panel.images.back(), panel.state.back_progress_norm());
+				let uniforms_prev = create_uniforms(&panel.images.prev);
+				let uniforms_cur = create_uniforms(&panel.images.cur);
+				let uniforms_next = create_uniforms(&panel.images.next);
 
 				/// Writes uniforms with `$extra` into `panel.uniforms`
 				macro write_uniforms($extra:expr) {{
 					let uniforms = PanelUniforms::new(
 						pos_matrix,
-						front_uniforms,
-						back_uniforms,
-						panel.state.front_alpha(),
+						uniforms_prev,
+						uniforms_cur,
+						uniforms_next,
+						panel.state.fade_point_norm(),
+						panel.state.progress_norm(),
 						$extra,
 					);
 					wgpu_shared
@@ -452,6 +451,16 @@ fn create_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLa
 			},
 			wgpu::BindGroupLayoutEntry {
 				binding:    2,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty:         wgpu::BindingType::Texture {
+					multisampled:   false,
+					view_dimension: wgpu::TextureViewDimension::D2,
+					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+				},
+				count:      None,
+			},
+			wgpu::BindGroupLayoutEntry {
+				binding:    3,
 				visibility: wgpu::ShaderStages::FRAGMENT,
 				ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
 				count:      None,

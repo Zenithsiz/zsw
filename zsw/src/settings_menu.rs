@@ -7,7 +7,7 @@
 // Imports
 use {
 	crate::{
-		panel::{self, PanelImage, PanelShader, PanelsManager},
+		panel::{PanelImage, PanelShader, PanelsManager},
 		playlist::{Playlist, PlaylistItemKind, PlaylistName},
 		shared::Shared,
 	},
@@ -212,21 +212,18 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 				// Note: We only allow up until the duration - 1 so that you don't get stuck
 				//       skipping images when you hold it at the max value
 				ui.label("Cur progress");
-				egui::Slider::new(
-					&mut panel.state.cur_progress,
-					0..=panel.state.duration.saturating_sub(1),
-				)
-				.clamp_to_range(true)
-				.ui(ui);
+				egui::Slider::new(&mut panel.state.progress, 0..=panel.state.duration.saturating_sub(1))
+					.clamp_to_range(true)
+					.ui(ui);
 
 				// Then clamp to the current max
 				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
-				let cur_max = match panel.images.state() {
-					panel::ImagesState::Empty => 0,
-					panel::ImagesState::PrimaryOnly => panel.state.fade_point,
-					panel::ImagesState::Both => panel.state.duration,
+				let cur_max = match (panel.images.cur.is_loaded(), panel.images.next.is_loaded()) {
+					(false, false) => 0,
+					(true, false) => panel.state.fade_point,
+					(_, true) => panel.state.duration,
 				};
-				panel.state.cur_progress = panel.state.cur_progress.clamp(0, cur_max);
+				panel.state.progress = panel.state.progress.clamp(0, cur_max);
 			});
 
 			ui.horizontal(|ui| {
@@ -259,25 +256,33 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 			ui.horizontal(|ui| {
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
-					match panel.images.state() {
-						panel::ImagesState::Empty => (),
-						panel::ImagesState::PrimaryOnly => panel.state.cur_progress = panel.state.fade_point,
-						panel::ImagesState::Both => panel.state.cur_progress = panel.state.duration,
+					match (panel.images.cur.is_loaded(), panel.images.next.is_loaded()) {
+						(false, false) => (),
+						(true, false) => panel.state.progress = panel.state.fade_point,
+						(_, true) => panel.state.progress = panel.state.duration,
 					}
 				}
 			});
 
 			ui.collapsing("Images", |ui| {
-				match panel.images.state() {
-					panel::ImagesState::Empty => (),
-					panel::ImagesState::PrimaryOnly => {
-						ui.collapsing("Front", |ui| self::draw_panel_image(ui, panel.images.front_mut()));
+				ui.collapsing("Previous", |ui| match panel.images.prev.is_loaded() {
+					true => self::draw_panel_image(ui, &mut panel.images.prev),
+					false => {
+						ui.label("[Unloaded]");
 					},
-					panel::ImagesState::Both => {
-						ui.collapsing("Front", |ui| self::draw_panel_image(ui, panel.images.front_mut()));
-						ui.collapsing("Back", |ui| self::draw_panel_image(ui, panel.images.back_mut()));
+				});
+				ui.collapsing("Current", |ui| match panel.images.cur.is_loaded() {
+					true => self::draw_panel_image(ui, &mut panel.images.cur),
+					false => {
+						ui.label("[Unloaded]");
 					},
-				};
+				});
+				ui.collapsing("Next", |ui| match panel.images.next.is_loaded() {
+					true => self::draw_panel_image(ui, &mut panel.images.next),
+					false => {
+						ui.label("[Unloaded]");
+					},
+				});
 			});
 
 			ui.collapsing("Playlist player", |ui| {

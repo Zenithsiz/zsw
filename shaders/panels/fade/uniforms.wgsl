@@ -4,17 +4,19 @@
 /// Uniforms for each image
 struct ImageUniforms {
 	image_ratio: vec2<f32>,
-	progress: f32,
 	parallax_ratio: vec2<f32>,
 	parallax_offset: vec2<f32>,
+	swap_dir: u32,
 }
 
 /// Uniforms
 struct Uniforms {
 	pos_matrix: mat4x4<f32>,
-	front: ImageUniforms,
-	back: ImageUniforms,
-	front_alpha: f32,
+	prev: ImageUniforms,
+	cur: ImageUniforms,
+	next: ImageUniforms,
+	fade_point: f32,
+	progress: f32,
 
 	// Shader specific uniforms
 	#match SHADER

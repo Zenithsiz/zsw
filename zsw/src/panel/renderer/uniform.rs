@@ -27,28 +27,28 @@ pub struct PanelImageUniforms {
 	/// Image ratio
 	ratio: Vec2,
 
-	/// Progress
-	progress: f32,
-
 	/// Parallax ratio
 	parallax_ratio: Vec2,
 
 	/// parallax offset
 	parallax_offset: Vec2,
+
+	/// Swap direction
+	swap_dir: u32,
 }
 
 impl PanelImageUniforms {
 	pub fn new(
 		ratio: impl Into<[f32; 2]>,
-		progress: f32,
 		parallax_ratio: impl Into<[f32; 2]>,
 		parallax_offset: impl Into<[f32; 2]>,
+		swap_dir: bool,
 	) -> Self {
 		Self {
-			ratio: Vec2(ratio.into()),
-			progress,
-			parallax_ratio: Vec2(parallax_ratio.into()),
+			ratio:           Vec2(ratio.into()),
+			parallax_ratio:  Vec2(parallax_ratio.into()),
 			parallax_offset: Vec2(parallax_offset.into()),
+			swap_dir:        swap_dir.into(),
 		}
 	}
 }
@@ -61,14 +61,20 @@ pub struct PanelUniforms<X: UniformsExtra> {
 	/// Position matrix
 	pos_matrix: Matrix4x4,
 
-	/// Front
-	front: PanelImageUniforms,
+	/// Previous
+	prev: PanelImageUniforms,
 
-	/// Back
-	back: PanelImageUniforms,
+	/// Current
+	cur: PanelImageUniforms,
 
-	/// Front alpha
-	front_alpha: f32,
+	/// Next
+	next: PanelImageUniforms,
+
+	/// Fade point
+	fade_point: f32,
+
+	/// Progress
+	progress: f32,
 
 	/// Extra
 	extra: X,
@@ -78,18 +84,20 @@ impl<X: UniformsExtra> PanelUniforms<X> {
 	/// Creates new panel uniforms
 	pub fn new(
 		pos_matrix: impl Into<[[f32; 4]; 4]>,
-		front: PanelImageUniforms,
-		back: PanelImageUniforms,
-
-		front_alpha: f32,
+		prev: PanelImageUniforms,
+		cur: PanelImageUniforms,
+		next: PanelImageUniforms,
+		fade_point: f32,
+		progress: f32,
 		extra: X,
 	) -> Self {
 		Self {
 			pos_matrix: Matrix4x4(pos_matrix.into()),
-			front,
-			back,
-			front_alpha,
-
+			prev,
+			cur,
+			next,
+			fade_point,
+			progress,
 			extra,
 		}
 	}

@@ -406,10 +406,10 @@ async fn egui_painter(
 				for panel in &mut *cur_panels {
 					for geometry in &panel.geometries {
 						if geometry.geometry.contains(cursor_pos) {
-							match panel.images.state() {
-								panel::ImagesState::Empty => (),
-								panel::ImagesState::PrimaryOnly => panel.state.cur_progress = panel.state.fade_point,
-								panel::ImagesState::Both => panel.state.cur_progress = panel.state.duration,
+							match (panel.images.cur.is_loaded(), panel.images.next.is_loaded()) {
+								(false, false) => (),
+								(true, false) => panel.state.progress = panel.state.fade_point,
+								(_, true) => panel.state.progress = panel.state.duration,
 							}
 						}
 					}
@@ -424,19 +424,19 @@ async fn egui_painter(
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().block_on();
 				for panel in &mut *cur_panels {
-					let max = match panel.images.state() {
-						panel::ImagesState::Empty => 0,
-						panel::ImagesState::PrimaryOnly => panel.state.fade_point,
-						panel::ImagesState::Both => panel.state.duration,
+					let max = match (panel.images.cur.is_loaded(), panel.images.next.is_loaded()) {
+						(false, false) => 0,
+						(true, false) => panel.state.fade_point,
+						(_, true) => panel.state.duration,
 					};
 
 					let speed = (panel.state.duration as f32) / 240.0;
 
 					for geometry in &panel.geometries {
 						if geometry.geometry.contains(cursor_pos) {
-							panel.state.cur_progress = panel
+							panel.state.progress = panel
 								.state
-								.cur_progress
+								.progress
 								.saturating_add_signed((-delta * speed) as i64)
 								.clamp(0, max);
 						}
