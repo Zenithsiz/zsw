@@ -3,7 +3,6 @@
 // Modules
 mod geometry;
 mod image;
-mod playlist_player;
 mod renderer;
 mod ser;
 mod state;
@@ -12,7 +11,6 @@ mod state;
 pub use self::{
 	geometry::PanelGeometry,
 	image::{ImagesState, PanelImage, PanelImages},
-	playlist_player::PlaylistPlayer,
 	renderer::{PanelShader, PanelsRenderer, PanelsRendererLayouts, PanelsRendererShader},
 	state::{PanelParallaxState, PanelState},
 };
@@ -21,7 +19,7 @@ pub use self::{
 use {
 	crate::{
 		image_loader::ImageRequester,
-		playlist::{PlaylistItemKind, PlaylistName},
+		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer},
 		shared::Shared,
 		AppError,
 	},

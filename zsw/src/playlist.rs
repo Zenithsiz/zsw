@@ -1,7 +1,11 @@
 //! Playlist
 
 // Modules
+mod player;
 mod ser;
+
+// Exports
+pub use self::player::PlaylistPlayer;
 
 // Imports
 use {
