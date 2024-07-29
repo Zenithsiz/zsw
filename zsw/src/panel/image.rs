@@ -7,7 +7,6 @@ use {
 	cgmath::Vector2,
 	image::DynamicImage,
 	std::{
-		assert_matches::assert_matches,
 		mem,
 		path::{Path, PathBuf},
 	},
@@ -90,12 +89,16 @@ impl PanelImages {
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
 	) {
-		// If we have both images, don't load next
+		// Schedule the next image.
+		self.schedule_load_image(wgpu_shared, playlist_player, image_requester, geometries)
+			.await;
+
+		// If we have both images, don't advance
 		if self.next.is_loaded {
 			return;
 		}
 
-		// Else try to load the next one
+		// Otherwise, try to load the image.
 		if let Some(image) = self
 			.load_img(wgpu_shared, playlist_player, image_requester, geometries)
 			.await
@@ -118,37 +121,34 @@ impl PanelImages {
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
 	) -> Option<Image> {
-		match &mut self.scheduled_image_receiver {
-			// If we have a scheduled image, try to receive it
-			Some(image_receiver) => match image_receiver.try_recv() {
-				// If we managed to, check if it was ok
-				Some(response) => {
-					// Remove the exhausted receiver
-					self.scheduled_image_receiver = None;
+		// Get the image receiver, or schedule it.
+		let Some(image_receiver) = self.scheduled_image_receiver.as_mut() else {
+			self.schedule_load_image(wgpu_shared, playlist_player, image_requester, geometries)
+				.await;
+			return None;
+		};
 
-					// Then check if we got the image
-					match response.image_res {
-						// If so, return it
-						Ok(image) => Some(image),
+		// Then try to get the response
+		let response = image_receiver.try_recv()?;
 
-						// Else, log an error, remove the image and re-schedule it
-						Err(err) => {
-							tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
+		// Remove the exhausted receiver
+		self.scheduled_image_receiver = None;
 
-							let mut playlist_player = playlist_player.write().await;
-							playlist_player.remove(&response.request.path);
-							self.schedule_load_image(wgpu_shared, &mut playlist_player, image_requester, geometries);
-							None
-						},
-					}
-				},
-				None => None,
-			},
+		// Then check if we got the image
+		match response.image_res {
+			// If so, return it
+			Ok(image) => Some(image),
 
-			// If we didn't have a scheduled image, schedule it
-			None => {
-				let mut playlist_player = playlist_player.write().await;
-				self.schedule_load_image(wgpu_shared, &mut playlist_player, image_requester, geometries);
+			// Else, log an error, remove the image and re-schedule it
+			Err(err) => {
+				{
+					tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
+					let mut playlist_player = playlist_player.write().await;
+					playlist_player.remove(&response.request.path);
+				}
+
+				self.schedule_load_image(wgpu_shared, playlist_player, image_requester, geometries)
+					.await;
 				None
 			},
 		}
@@ -157,16 +157,19 @@ impl PanelImages {
 	/// Schedules a new image.
 	///
 	/// If the playlist player is empty, does not schedule.
-	///
-	/// # Panics
-	/// Panics if `self.scheduled_image_receiver` is `Some(_)`
-	fn schedule_load_image(
+	/// If already scheduled, returns
+	async fn schedule_load_image(
 		&mut self,
 		wgpu_shared: &WgpuShared,
-		playlist_player: &mut PlaylistPlayer,
+		playlist_player: &RwLock<PlaylistPlayer>,
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
 	) {
+		if self.scheduled_image_receiver.is_some() {
+			return;
+		}
+
+		let mut playlist_player = playlist_player.write().await;
 		let image_path = match playlist_player.next() {
 			Some(path) => path.to_path_buf(),
 			None => {
@@ -176,11 +179,6 @@ impl PanelImages {
 		};
 
 		let wgpu_limits = wgpu_shared.device.limits();
-		assert_matches!(
-			self.scheduled_image_receiver,
-			None,
-			"Overrode existing image loading future"
-		);
 		self.scheduled_image_receiver = Some(image_requester.request(ImageRequest {
 			path:           image_path,
 			geometries:     geometries.iter().map(|geometry| geometry.geometry).collect(),

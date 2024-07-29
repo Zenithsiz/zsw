@@ -326,6 +326,18 @@ impl Panel {
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
+		// Then try to load the next image
+		// Note: If we already have a next one, this will simply return.
+		self.images
+			.load_next(
+				&self.playlist_player,
+				wgpu_shared,
+				renderer_layouts,
+				image_requester,
+				&self.geometries,
+			)
+			.await;
+
 		// If we're paused, don't update anything
 		if self.state.paused {
 			return;
