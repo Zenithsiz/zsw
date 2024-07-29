@@ -20,23 +20,6 @@ pub struct PanelState {
 }
 
 impl PanelState {
-	/// Returns the next progress when using only primary image
-	pub fn next_progress_primary_only(&self) -> u64 {
-		self.progress.saturating_add(1).clamp(0, self.fade_point)
-	}
-
-	/// Returns the next progress when using both images
-	pub fn next_progress_both(&self) -> u64 {
-		self.progress.saturating_add(1).clamp(0, self.duration)
-	}
-
-	/// Returns the progress if a swap occurred right now
-	pub fn back_swapped_progress(&self) -> u64 {
-		// Note: This is the progress of the back image at the duration
-		//       See `back_progress` for more details
-		self.progress.saturating_sub(self.fade_point)
-	}
-
 	/// Returns the normalized image progress
 	#[must_use]
 	pub fn progress_norm(&self) -> f32 {

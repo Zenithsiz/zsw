@@ -256,11 +256,9 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 			ui.horizontal(|ui| {
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
-					match (panel.images.cur().is_loaded(), panel.images.next().is_loaded()) {
-						(false, false) => (),
-						(true, false) => panel.state.progress = panel.state.fade_point,
-						(_, true) => panel.state.progress = panel.state.duration,
-					}
+					panel
+						.skip(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester)
+						.block_on();
 				}
 			});
 

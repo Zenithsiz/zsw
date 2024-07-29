@@ -258,6 +258,67 @@ impl Panel {
 		})
 	}
 
+	/// Skips to the next image
+	pub async fn skip(
+		&mut self,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+		image_requester: &ImageRequester,
+	) {
+		self.images.step_next(wgpu_shared, renderer_layouts);
+		self.state.progress = self.state.duration.saturating_sub(self.state.fade_point);
+
+		// Then try to load the next image
+		// Note: If we already have a next one, this will simply return.
+		self.images
+			.load_next(
+				&self.playlist_player,
+				wgpu_shared,
+				renderer_layouts,
+				image_requester,
+				&self.geometries,
+			)
+			.await;
+	}
+
+	/// Steps this panel's state by a certain number of frames (potentially negative).
+	pub async fn step(
+		&mut self,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+		image_requester: &ImageRequester,
+		frames: i64,
+	) {
+		// Update the progress, potentially rolling over to the next image
+		let next_progress = self.state.progress.saturating_add_signed(frames);
+		match next_progress >= self.state.duration {
+			true => {
+				self.images.step_next(wgpu_shared, renderer_layouts);
+				self.state.progress = next_progress.saturating_sub(self.state.fade_point);
+			},
+			false => {
+				let max_progress = match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
+					(false, false) => 0,
+					(true, false) => self.state.fade_point,
+					(_, true) => self.state.duration,
+				};
+				self.state.progress = self.state.progress.saturating_add_signed(frames).clamp(0, max_progress);
+			},
+		}
+
+		// Then try to load the next image
+		// Note: If we already have a next one, this will simply return.
+		self.images
+			.load_next(
+				&self.playlist_player,
+				wgpu_shared,
+				renderer_layouts,
+				image_requester,
+				&self.geometries,
+			)
+			.await;
+	}
+
 	/// Updates this panel's state
 	pub async fn update(
 		&mut self,
@@ -270,30 +331,6 @@ impl Panel {
 			return;
 		}
 
-		// If we're at the end of both, swap the back image
-		if self.images.next().is_loaded() && self.state.progress >= self.state.duration {
-			self.images.step_next(wgpu_shared, renderer_layouts);
-			self.state.progress = self.state.back_swapped_progress();
-			return;
-		}
-
-		// Else try to load the next image
-		// Note: If we have both, this will simply return.
-		self.images
-			.load_next(
-				&self.playlist_player,
-				wgpu_shared,
-				renderer_layouts,
-				image_requester,
-				&self.geometries,
-			)
-			.await;
-
-		// Then update the progress, depending on the state
-		self.state.progress = match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
-			(false, false) => 0,
-			(true, false) => self.state.next_progress_primary_only(),
-			(_, true) => self.state.next_progress_both(),
-		};
+		self.step(wgpu_shared, renderer_layouts, image_requester, 1).await;
 	}
 }
