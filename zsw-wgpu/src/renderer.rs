@@ -68,8 +68,15 @@ impl WgpuRenderer {
 	pub fn start_render(&self, shared: &WgpuShared) -> Result<FrameRender, AppError> {
 		// And then get the surface texture
 		// Note: This can block, so we run it under tokio's block-in-place
-		let surface_texture = tokio::task::block_in_place(|| self.surface.get_current_texture())
-			.context("Unable to retrieve current texture")?;
+		// Note: If the application goes to sleep, this can fail spuriously due to a timeout,
+		//       so we keep retrying.
+		// TODO: Use an exponential timeout, with a max duration?
+		let surface_texture = tokio::task::block_in_place(|| loop {
+			match self.surface.get_current_texture() {
+				Ok(surface_texture) => break surface_texture,
+				Err(err) => tracing::warn!(%err, "Unable to retrieve current texture, retrying"),
+			}
+		});
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
 			label: Some("[zsw] Window surface texture view"),
 			..wgpu::TextureViewDescriptor::default()
