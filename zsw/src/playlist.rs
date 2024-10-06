@@ -96,7 +96,7 @@ impl Playlists {
 	}
 
 	/// Gets an arbitrary playlist
-	pub fn get_any(&self) -> Option<(PlaylistName, Arc<RwLock<Playlist>>)> {
+	pub fn _get_any(&self) -> Option<(PlaylistName, Arc<RwLock<Playlist>>)> {
 		self.playlists
 			.iter()
 			.next()

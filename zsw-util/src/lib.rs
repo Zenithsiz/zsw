@@ -9,7 +9,6 @@
 	type_alias_impl_trait,
 	if_let_guard,
 	let_chains,
-	entry_insert,
 	extend_one,
 	async_closure,
 	must_not_suspend,

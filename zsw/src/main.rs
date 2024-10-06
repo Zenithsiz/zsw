@@ -11,7 +11,6 @@
 	assert_matches,
 	type_alias_impl_trait,
 	path_file_prefix,
-	entry_insert,
 	let_chains,
 	exit_status_error,
 	closure_track_caller,
