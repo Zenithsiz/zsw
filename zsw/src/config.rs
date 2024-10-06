@@ -85,15 +85,15 @@ impl Config {
 	fn load(path: &Path) -> Result<Self, AppError> {
 		tracing::debug!(?path, "Loading config");
 
-		let config_yaml = fs::read(path).context("Unable to open file")?;
-		let config = serde_yaml::from_slice(&config_yaml).context("Unable to parse config")?;
+		let config_toml = fs::read_to_string(path).context("Unable to open file")?;
+		let config = toml::from_str(&config_toml).context("Unable to parse config")?;
 		Ok(config)
 	}
 
 	/// Writes the config
 	fn write(&self, path: &Path) -> Result<(), AppError> {
-		let config_yaml = serde_yaml::to_string(self).context("Unable to serialize config")?;
-		fs::write(path, config_yaml.as_bytes()).context("Unable to write config")?;
+		let config_toml = toml::to_string(self).context("Unable to serialize config")?;
+		fs::write(path, config_toml.as_bytes()).context("Unable to write config")?;
 
 		Ok(())
 	}

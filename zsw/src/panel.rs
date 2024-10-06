@@ -50,10 +50,10 @@ impl PanelsManager {
 	pub async fn load(&self, path: &Path, shared: &Arc<Shared>) -> Result<Panel, AppError> {
 		// Try to read the file
 		tracing::debug!(?path, "Loading panel");
-		let panel_yaml = tokio::fs::read(path).await.context("Unable to open file")?;
+		let panel_toml = tokio::fs::read_to_string(path).await.context("Unable to open file")?;
 
 		// Then parse it
-		let panel = serde_yaml::from_slice::<ser::Panel>(&panel_yaml).context("Unable to parse panel")?;
+		let panel = toml::from_str::<ser::Panel>(&panel_toml).context("Unable to parse panel")?;
 
 		// Finally convert it
 		let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();

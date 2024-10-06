@@ -158,8 +158,8 @@ fn choose_load_playlist_from_file(
 	_add_playlist_state: &mut AddPlaylistState,
 	shared: &Arc<Shared>,
 ) -> Option<(PlaylistName, Arc<RwLock<Playlist>>)> {
-	// TODO: Not have this yaml filter here? Or at least allow files other than `.yaml`
-	let file_dialog = rfd::FileDialog::new().add_filter("Playlist file", &["yaml"]);
+	// TODO: Not have this toml filter here? Or at least allow files other than `.toml`
+	let file_dialog = rfd::FileDialog::new().add_filter("Playlist file", &["toml"]);
 
 	// Ask the user for a playlist file
 	match file_dialog.pick_file() {

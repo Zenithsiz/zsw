@@ -23,9 +23,9 @@ rand = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true }
-serde_yaml = { workspace = true }
 tokio = { workspace = true, features = ["full", "tracing"] }
 tokio-stream = { workspace = true, features = ["fs"] }
+toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 wgpu = { workspace = true }

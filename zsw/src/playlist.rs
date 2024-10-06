@@ -48,14 +48,14 @@ impl Playlists {
 			.context("Unable to read playlists directory")?
 			.then(|entry| async {
 				let res: Result<_, anyhow::Error> = try {
-					// Ignore directories and non `.yaml` files
+					// Ignore directories and non `.toml` files
 					let entry = entry.context("Unable to get entry")?;
 					let entry_path = entry.path();
 					if entry
 						.file_type()
 						.await
 						.context("Unable to get entry metadata")?
-						.is_dir() || entry_path.extension().and_then(OsStr::to_str) != Some("yaml")
+						.is_dir() || entry_path.extension().and_then(OsStr::to_str) != Some("toml")
 					{
 						return None;
 					}
@@ -113,7 +113,7 @@ impl Playlists {
 
 	/// Returns a playlist's path
 	pub fn playlist_path(&self, name: &PlaylistName) -> PathBuf {
-		self.root.join(&*name.0).with_appended(".yaml")
+		self.root.join(&*name.0).with_appended(".toml")
 	}
 
 	/// Adds a playlist.
@@ -143,9 +143,9 @@ impl Playlists {
 
 		// Save it to disk
 		let ser_playlist = self::serialize_playlist(&playlist).await;
-		let playlist_yaml = serde_yaml::to_string(&ser_playlist).context("Unable to serialize playlist")?;
+		let playlist_toml = toml::to_string(&ser_playlist).context("Unable to serialize playlist")?;
 		let playlist_path = self.playlist_path(&playlist_name);
-		tokio::fs::write(playlist_path, playlist_yaml)
+		tokio::fs::write(playlist_path, playlist_toml)
 			.await
 			.context("Unable to write playlist to file")?;
 
@@ -164,9 +164,9 @@ impl Playlists {
 
 		// And save it
 		let playlist = self::serialize_playlist(&playlist).await;
-		let playlist_yaml = serde_yaml::to_string(&playlist).context("Unable to serialize playlist")?;
+		let playlist_toml = toml::to_string(&playlist).context("Unable to serialize playlist")?;
 		let playlist_path = self.playlist_path(name);
-		tokio::fs::write(playlist_path, playlist_yaml)
+		tokio::fs::write(playlist_path, playlist_toml)
 			.await
 			.context("Unable to write playlist to file")?;
 
@@ -251,11 +251,11 @@ impl fmt::Display for PlaylistName {
 async fn load_playlist(path: &Path) -> Result<Playlist, AppError> {
 	// Read the file
 	tracing::trace!(?path, "Reading playlist file");
-	let playlist_yaml = tokio::fs::read_to_string(path).await.context("Unable to open file")?;
+	let playlist_toml = tokio::fs::read_to_string(path).await.context("Unable to open file")?;
 
 	// And parse it
-	tracing::trace!(?path, ?playlist_yaml, "Parsing playlist file");
-	let playlist = serde_yaml::from_str::<ser::Playlist>(&playlist_yaml).context("Unable to parse playlist")?;
+	tracing::trace!(?path, ?playlist_toml, "Parsing playlist file");
+	let playlist = toml::from_str::<ser::Playlist>(&playlist_toml).context("Unable to parse playlist")?;
 	tracing::trace!(?path, ?playlist, "Parsed playlist file");
 	let playlist = self::deserialize_playlist(playlist);
 
