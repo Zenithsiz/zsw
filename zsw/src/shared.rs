@@ -9,7 +9,6 @@ use {
 		Resize,
 	},
 	crossbeam::atomic::AtomicCell,
-	std::sync::Arc,
 	tokio::sync::{Mutex, RwLock},
 	winit::dpi::PhysicalPosition,
 	zsw_wgpu::WgpuShared,
@@ -18,8 +17,7 @@ use {
 /// Shared data
 #[derive(Debug)]
 pub struct Shared {
-	// TODO: Not have a double-`Arc` in here?
-	pub window:                 Arc<winit::window::Window>,
+	pub window:                 &'static winit::window::Window,
 	pub wgpu:                   WgpuShared,
 	pub panels_renderer_layout: PanelsRendererLayouts,
 	pub last_resize:            AtomicCell<Option<Resize>>,

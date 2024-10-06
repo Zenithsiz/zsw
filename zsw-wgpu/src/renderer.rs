@@ -4,7 +4,6 @@
 use {
 	super::WgpuShared,
 	anyhow::Context,
-	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_error::AppError,
 };
@@ -16,7 +15,7 @@ pub struct WgpuRenderer {
 	adapter: wgpu::Adapter,
 
 	/// Surface
-	surface: wgpu::Surface,
+	surface: wgpu::Surface<'static>,
 
 	/// Surface size
 	// Note: We keep the size ourselves instead of using the inner
@@ -28,17 +27,14 @@ pub struct WgpuRenderer {
 	//       ensure this size is the surface's actual size.
 	surface_size: PhysicalSize<u32>,
 
-	/// Window
-	_window: Arc<Window>,
-
 	/// Surface config
 	surface_config: wgpu::SurfaceConfiguration,
 }
 
 impl WgpuRenderer {
 	pub(super) fn new(
-		window: Arc<Window>,
-		surface: wgpu::Surface,
+		window: &'static Window,
+		surface: wgpu::Surface<'static>,
 		adapter: wgpu::Adapter,
 		device: &wgpu::Device,
 	) -> Result<Self, AppError> {
@@ -51,7 +47,6 @@ impl WgpuRenderer {
 			adapter,
 			surface,
 			surface_size,
-			_window: window,
 			surface_config,
 		})
 	}
@@ -146,7 +141,7 @@ impl FrameRender {
 
 /// Configures the window surface and returns the configuration
 fn configure_window_surface(
-	surface: &wgpu::Surface,
+	surface: &wgpu::Surface<'static>,
 	adapter: &wgpu::Adapter,
 	device: &wgpu::Device,
 	size: PhysicalSize<u32>,

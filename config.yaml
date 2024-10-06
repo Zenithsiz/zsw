@@ -6,4 +6,4 @@ playlists_dir: playlists/
 upscale_cache_dir: null # Use default
 upscale_cmd: null # None
 upscale_exclude: [] # None
-default_panels: [panels/full.yaml]
+default_panels: [panels/multiple.yaml, panels/quarter.yaml]

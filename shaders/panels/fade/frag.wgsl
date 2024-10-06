@@ -23,9 +23,9 @@ struct Sampled {
 }
 
 // Samples a texture
-fn sample(texture: texture_2d<f32>, uvs: vec2<f32>, image_uniforms: ImageUniforms, progress: f32, alpha: f32) -> Sampled {
+fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUniforms, progress: f32, alpha: f32) -> Sampled {
 	var sampled: Sampled;
-	var uvs = uvs;
+	var uvs = in_uvs;
 
 	// Apply parallax to the uvs first
 	{

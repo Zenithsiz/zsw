@@ -27,7 +27,6 @@ use {
 	async_walkdir::WalkDir,
 	futures::{stream::FuturesUnordered, StreamExt},
 	std::{
-		io,
 		path::{Path, PathBuf},
 		sync::Arc,
 	},
@@ -139,7 +138,7 @@ impl PanelsManager {
 										Ok(false) => async_walkdir::Filtering::Continue,
 									}
 								})
-								.map(|entry: Result<async_walkdir::DirEntry, io::Error>| async move {
+								.map(|entry: Result<async_walkdir::DirEntry, _>| async move {
 									let entry = entry
 										.map_err(|err| {
 											tracing::warn!(

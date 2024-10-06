@@ -2,24 +2,21 @@
 
 // Imports
 #[cfg(target_os = "linux")]
-use winit::platform::x11::{WindowBuilderExtX11, XWindowType};
+use winit::platform::x11::{WindowAttributesExtX11, WindowType};
 use {
 	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
-		event_loop::{EventLoop, EventLoopBuilder},
-		window::{Window, WindowBuilder},
+		event_loop::ActiveEventLoop,
+		window::{Window, WindowAttributes},
 	},
 	zsw_error::AppError,
 	zsw_util::Rect,
 };
 
 /// Creates the window, as well as the associated event loop
-pub fn create() -> Result<(EventLoop<!>, Window), AppError> {
-	// Build the window
-	let event_loop = EventLoopBuilder::with_user_event().build();
-
+pub fn create(event_loop: &ActiveEventLoop) -> Result<Window, AppError> {
 	// Find the window geometry
 	// Note: We just merge all monitors' geometry.
 	let window_geometry = event_loop
@@ -30,7 +27,7 @@ pub fn create() -> Result<(EventLoop<!>, Window), AppError> {
 	tracing::debug!(?window_geometry, "Found window geometry");
 
 	// Start building the window
-	let window_builder = WindowBuilder::new()
+	let window_attrs = WindowAttributes::default()
 		.with_title("zsw")
 		.with_position(PhysicalPosition {
 			x: window_geometry.pos[0],
@@ -45,12 +42,14 @@ pub fn create() -> Result<(EventLoop<!>, Window), AppError> {
 	// If on linux x11, add the `Desktop`
 	// TODO: Wayland, windows and macos?
 	#[cfg(target_os = "linux")]
-	let window_builder = window_builder.with_x11_window_type(vec![XWindowType::Desktop]);
+	let window_attrs = window_attrs.with_x11_window_type(vec![WindowType::Desktop]);
 
 	// Finally build the window
-	let window = window_builder.build(&event_loop).context("Unable to build window")?;
+	let window = event_loop
+		.create_window(window_attrs)
+		.context("Unable to build window")?;
 
-	Ok((event_loop, window))
+	Ok(window)
 }
 
 /// Returns a monitor's geometry

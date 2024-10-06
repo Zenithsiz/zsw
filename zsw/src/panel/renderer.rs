@@ -179,7 +179,7 @@ impl PanelsRenderer {
 						b: 0.0,
 						a: 1.0,
 					}),
-					store: true,
+					store: wgpu::StoreOp::Store,
 				},
 			},
 			_ => wgpu::RenderPassColorAttachment {
@@ -192,7 +192,7 @@ impl PanelsRenderer {
 						b: 0.0,
 						a: 1.0,
 					}),
-					store: false,
+					store: wgpu::StoreOp::Discard,
 				},
 			},
 		};
@@ -200,6 +200,8 @@ impl PanelsRenderer {
 			label:                    Some("[zsw::panel_renderer] Render pass"),
 			color_attachments:        &[Some(render_pass_color_attachment)],
 			depth_stencil_attachment: None,
+			timestamp_writes:         None,
+			occlusion_query_set:      None,
 		};
 		let surface_size = frame.surface_size();
 		let mut render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
@@ -339,12 +341,14 @@ fn create_render_pipeline(
 		write_mask: wgpu::ColorWrites::ALL,
 	})];
 	let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
-		label:         Some("[zsw::panel_renderer] Render pipeline"),
-		layout:        Some(&render_pipeline_layout),
+		label:  Some("[zsw::panel_renderer] Render pipeline"),
+		layout: Some(&render_pipeline_layout),
+
 		vertex:        wgpu::VertexState {
-			module:      &shader,
-			entry_point: "vs_main",
-			buffers:     &[PanelVertex::buffer_layout()],
+			module:              &shader,
+			entry_point:         "vs_main",
+			buffers:             &[PanelVertex::buffer_layout()],
+			compilation_options: wgpu::PipelineCompilationOptions::default(),
 		},
 		primitive:     wgpu::PrimitiveState {
 			topology:           wgpu::PrimitiveTopology::TriangleList,
@@ -362,11 +366,13 @@ fn create_render_pipeline(
 			alpha_to_coverage_enabled: false,
 		},
 		fragment:      Some(wgpu::FragmentState {
-			module:      &shader,
-			entry_point: "fs_main",
-			targets:     &color_targets,
+			module:              &shader,
+			entry_point:         "fs_main",
+			targets:             &color_targets,
+			compilation_options: wgpu::PipelineCompilationOptions::default(),
 		}),
 		multiview:     None,
+		cache:         None,
 	};
 
 	Ok(wgpu_shared.device.create_render_pipeline(&render_pipeline_descriptor))

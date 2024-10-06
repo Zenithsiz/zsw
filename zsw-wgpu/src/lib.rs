@@ -10,7 +10,7 @@ mod renderer;
 pub use renderer::{FrameRender, WgpuRenderer};
 
 // Imports
-use {anyhow::Context, std::sync::Arc, winit::window::Window, zsw_error::AppError};
+use {anyhow::Context, winit::window::Window, zsw_error::AppError};
 
 /// Wgpu shared
 #[derive(Debug)]
@@ -23,10 +23,9 @@ pub struct WgpuShared {
 }
 
 /// Creates the wgpu service
-pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), AppError> {
+pub async fn create(window: &'static Window) -> Result<(WgpuShared, WgpuRenderer), AppError> {
 	// Create the surface and adapter
-	// SAFETY: `WgpuRenderer` keeps an `Arc<Window>` to ensure it stays alive for as long as the surface
-	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window) }.await?;
+	let (surface, adapter) = self::create_surface_and_adapter(window).await?;
 
 	// Then create the device and it's queue
 	let (device, queue) = self::create_device(&adapter).await?;
@@ -42,9 +41,10 @@ pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), A
 async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), AppError> {
 	// Request the device without any features
 	let device_descriptor = wgpu::DeviceDescriptor {
-		label:    Some("[zsw] Device"),
-		features: wgpu::Features::empty(),
-		limits:   wgpu::Limits::default(),
+		label:             Some("[zsw] Device"),
+		required_features: wgpu::Features::default(),
+		required_limits:   wgpu::Limits::default(),
+		memory_hints:      wgpu::MemoryHints::default(),
 	};
 	tracing::debug!(?device_descriptor, "Requesting wgpu device");
 	let (device, queue) = adapter
@@ -64,14 +64,18 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 ///
 /// # Safety
 /// The returned surface *must* be dropped before the window.
-async unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Surface, wgpu::Adapter), AppError> {
+async fn create_surface_and_adapter(
+	window: &'static Window,
+) -> Result<(wgpu::Surface<'static>, wgpu::Adapter), AppError> {
 	// Get an instance with any backend
 	let instance_desc = wgpu::InstanceDescriptor {
 		backends:             wgpu::Backends::all(),
+		flags:                wgpu::InstanceFlags::default(),
 		dx12_shader_compiler: wgpu::Dx12Compiler::Dxc {
 			dxil_path: None,
 			dxc_path:  None,
 		},
+		gles_minor_version:   wgpu::Gles3MinorVersion::default(),
 	};
 	// TODO: Just use `?instance_desc` once it implements `Debug`
 	tracing::debug!(?instance_desc.backends, ?instance_desc.dx12_shader_compiler, "Requesting wgpu instance");
@@ -80,8 +84,7 @@ async unsafe fn create_surface_and_adapter(window: &Window) -> Result<(wgpu::Sur
 
 	// Create the surface
 	tracing::debug!(?window, "Requesting wgpu surface");
-	// SAFETY: Caller promises the window outlives the surface
-	let surface = unsafe { instance.create_surface(window) }.context("Unable to request surface")?;
+	let surface = instance.create_surface(window).context("Unable to request surface")?;
 	tracing::debug!(?surface, "Created wgpu surface");
 
 	// Then request the adapter

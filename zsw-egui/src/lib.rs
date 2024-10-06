@@ -109,8 +109,16 @@ impl EguiPainter {
 	}
 
 	/// Tessellate the output shapes
-	pub async fn tessellate_shapes(&self, shapes: Vec<epaint::ClippedShape>) -> Vec<egui::ClippedPrimitive> {
-		self.platform.lock().await.context().tessellate(shapes)
+	pub async fn tessellate_shapes(
+		&self,
+		shapes: Vec<epaint::ClippedShape>,
+		pixels_per_point: f32,
+	) -> Vec<egui::ClippedPrimitive> {
+		self.platform
+			.lock()
+			.await
+			.context()
+			.tessellate(shapes, pixels_per_point)
 	}
 }
 
@@ -128,8 +136,8 @@ impl fmt::Debug for EguiEventHandler {
 
 impl EguiEventHandler {
 	/// Handles an event
-	pub async fn handle_event(&self, event: winit::event::Event<'_, !>) {
-		self.platform.lock().await.handle_event(&event);
+	pub async fn handle_event(&self, event: &winit::event::WindowEvent) {
+		self.platform.lock().await.handle_event(event);
 	}
 }
 

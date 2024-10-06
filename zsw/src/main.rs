@@ -55,10 +55,12 @@ use {
 		path::{Path, PathBuf},
 		sync::Arc,
 	},
-	tokio::sync::{Mutex, RwLock},
+	tokio::sync::{mpsc, Mutex, RwLock},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
-		platform::run_return::EventLoopExtRunReturn,
+		event::WindowEvent,
+		event_loop::EventLoop,
+		window::WindowId,
 	},
 	zsw_egui::{EguiPainter, EguiRenderer},
 	zsw_error::AppError,
@@ -87,17 +89,76 @@ fn main() -> Result<(), AppError> {
 	let tokio_runtime =
 		init::tokio_runtime::create(config.tokio_worker_threads).context("Unable to create tokio runtime")?;
 
-	// Then run `run` on the tokio runtime
+	// Enter the tokio runtime
 	let _runtime_enter = tokio_runtime.enter();
-	tokio_runtime.block_on(self::run(&dirs, &config_path, &config))?;
+
+	// Create the event loop
+	let event_loop = EventLoop::builder()
+		.build()
+		.context("Unable to build winit event loop")?;
+
+	// Finally run the app on the event loop
+	let (event_tx, event_rx) = mpsc::unbounded_channel();
+	event_loop
+		.run_app(&mut WinitApp {
+			dirs,
+			config_path,
+			config,
+			event_rx: Some(event_rx),
+			event_tx,
+		})
+		.context("Unable to run event loop")?;
 
 	Ok(())
 }
 
-async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<(), AppError> {
-	let (mut event_loop, window) = window::create().context("Unable to create winit event loop and window")?;
-	let window = Arc::new(window);
-	let (wgpu_shared, wgpu_renderer) = zsw_wgpu::create(Arc::clone(&window))
+struct WinitApp {
+	dirs:        ProjectDirs,
+	config_path: PathBuf,
+	config:      Config,
+	event_rx:    Option<mpsc::UnboundedReceiver<(WindowId, WindowEvent)>>,
+	event_tx:    mpsc::UnboundedSender<(WindowId, WindowEvent)>,
+}
+
+impl winit::application::ApplicationHandler for WinitApp {
+	fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+		// Try to initialize
+		let Err(err) = futures::executor::block_on(self::run(
+			&self.dirs,
+			&self.config_path,
+			&self.config,
+			event_loop,
+			self.event_rx.take().expect("Already resumed"),
+		)) else {
+			return;
+		};
+
+		// If we get an error, print it and quit
+		tracing::error!(?err, "Unable to initialize");
+		std::process::exit(1);
+	}
+
+	fn window_event(
+		&mut self,
+		_event_loop: &winit::event_loop::ActiveEventLoop,
+		window_id: WindowId,
+		event: WindowEvent,
+	) {
+		let _ = self.event_tx.send((window_id, event));
+	}
+}
+
+async fn run(
+	dirs: &ProjectDirs,
+	config_path: &Path,
+	config: &Config,
+	event_loop: &winit::event_loop::ActiveEventLoop,
+	mut event_rx: mpsc::UnboundedReceiver<(WindowId, WindowEvent)>,
+) -> Result<(), AppError> {
+	// TODO: Not leak the window?
+	let window = window::create(event_loop).context("Unable to create winit event loop and window")?;
+	let window = Box::leak(Box::new(window));
+	let (wgpu_shared, wgpu_renderer) = zsw_wgpu::create(window)
 		.await
 		.context("Unable to create wgpu renderer")?;
 
@@ -119,7 +180,7 @@ async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<
 	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) =
 		PanelsRenderer::new(&wgpu_renderer, &wgpu_shared, shaders_path.join("panels/fade.wgsl"))
 			.context("Unable to create panels renderer")?;
-	let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(&window, &wgpu_renderer, &wgpu_shared);
+	let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
 
 	let playlists = Playlists::load(playlists_path)
@@ -193,23 +254,21 @@ async fn run(dirs: &ProjectDirs, config_path: &Path, config: &Config) -> Result<
 		|| self::egui_painter(shared, egui_painter, settings_menu, egui_painter_output_tx)
 	});
 
-	// Then run the event loop on this thread
-	let _ = tokio::task::block_in_place(|| {
-		event_loop.run_return(|event, _, control_flow| {
-			*control_flow = winit::event_loop::ControlFlow::Wait;
-
-			#[expect(clippy::single_match)] // We'll add more in the future
-			match event {
-				winit::event::Event::WindowEvent { ref event, .. } => match *event {
+	self::spawn_task("Event receiver", {
+		let shared = Arc::clone(&shared);
+		|| async move {
+			while let Some((_, event)) = event_rx.recv().await {
+				match event {
 					winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
 					winit::event::WindowEvent::CursorMoved { position, .. } => shared.cursor_pos.store(position),
 					_ => (),
-				},
-				_ => (),
+				}
+
+				egui_event_handler.handle_event(&event).await;
 			}
 
-			egui_event_handler.handle_event(event).block_on();
-		})
+			Ok(())
+		}
 	});
 
 	Ok(())
@@ -327,7 +386,7 @@ async fn renderer(
 		egui_renderer
 			.render_egui(
 				&mut frame,
-				&shared.window,
+				shared.window,
 				&shared.wgpu,
 				&egui_paint_jobs,
 				egui_textures_delta.take(),
@@ -373,7 +432,7 @@ async fn egui_painter(
 	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, AppError> {
 	loop {
-		let full_output_fut = egui_painter.draw(&shared.window, |ctx| {
+		let full_output_fut = egui_painter.draw(shared.window, |ctx| {
 			// Draw the settings menu
 			tokio::task::block_in_place(|| settings_menu.draw(ctx, &shared));
 
@@ -419,8 +478,8 @@ async fn egui_painter(
 
 			// Scroll panels
 			// TODO: Deduplicate this with the above and settings menu.
-			if !ctx.is_pointer_over_area() && ctx.input(|input| input.scroll_delta.y != 0.0) {
-				let delta = ctx.input(|input| input.scroll_delta.y);
+			if !ctx.is_pointer_over_area() && ctx.input(|input| input.smooth_scroll_delta.y != 0.0) {
+				let delta = ctx.input(|input| input.smooth_scroll_delta.y);
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().block_on();
@@ -433,7 +492,8 @@ async fn egui_painter(
 						continue;
 					}
 
-					let speed = (panel.state.duration as f32) / 240.0;
+					// TODO: Make this "speed" configurable
+					let speed = (panel.state.duration as f32) / 1000.0;
 					let frames = (-delta * speed) as i64;
 					panel
 						.step(
@@ -449,7 +509,9 @@ async fn egui_painter(
 			Ok::<_, !>(())
 		});
 		let full_output = full_output_fut.await?;
-		let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes).await;
+		let paint_jobs = egui_painter
+			.tessellate_shapes(full_output.shapes, full_output.pixels_per_point)
+			.await;
 		let textures_delta = full_output.textures_delta;
 
 		egui_painter_output_tx.send((paint_jobs, textures_delta)).await;

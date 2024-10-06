@@ -351,10 +351,12 @@ fn create_image_texture(wgpu_shared: &WgpuShared, image: DynamicImage) -> (wgpu:
 	// TODO: Pass some view formats?
 	let texture_descriptor =
 		self::texture_descriptor("[zsw::panel_img] Image", image.width(), image.height(), format, &[]);
-	let texture =
-		wgpu_shared
-			.device
-			.create_texture_with_data(&wgpu_shared.queue, &texture_descriptor, image.as_bytes());
+	let texture = wgpu_shared.device.create_texture_with_data(
+		&wgpu_shared.queue,
+		&texture_descriptor,
+		wgpu::util::TextureDataOrder::LayerMajor,
+		image.as_bytes(),
+	);
 	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
 	let texture_view = texture.create_view(&texture_view_descriptor);
 	(texture, texture_view)
