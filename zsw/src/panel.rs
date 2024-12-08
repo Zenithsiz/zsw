@@ -24,15 +24,13 @@ use {
 		AppError,
 	},
 	anyhow::Context,
-	async_walkdir::WalkDir,
 	futures::{stream::FuturesUnordered, StreamExt},
 	std::{
 		path::{Path, PathBuf},
 		sync::Arc,
 	},
-	tokio::sync::RwLock,
-	tokio_stream::wrappers::ReadDirStream,
-	zsw_util::{Rect, UnwrapOrReturnExt},
+	tokio::{fs, sync::RwLock},
+	zsw_util::{Rect, UnwrapOrReturnExt, WalkDir},
 	zsw_wgpu::WgpuShared,
 };
 
@@ -90,7 +88,6 @@ impl PanelsManager {
 
 	/// Loads `playlist` into `playlist_player`.
 	// TODO: Not make `pub`?
-	#[expect(clippy::too_many_lines)] // TODO: Refactor
 	pub async fn load_playlist_into(
 		playlist_player: &RwLock<PlaylistPlayer>,
 		playlist_name: &PlaylistName,
@@ -129,76 +126,53 @@ impl PanelsManager {
 
 				// Else check the kind of item
 				match item.kind {
-					PlaylistItemKind::Directory { ref path, recursive } => match recursive {
-						true =>
-							WalkDir::new(path)
-								.filter(async move |entry: async_walkdir::DirEntry| {
-									match entry.file_type().await.map(|ty| ty.is_dir()) {
-										Err(_) | Ok(true) => async_walkdir::Filtering::Ignore,
-										Ok(false) => async_walkdir::Filtering::Continue,
-									}
-								})
-								.map(|entry: Result<async_walkdir::DirEntry, _>| async move {
-									let entry = entry
-										.map_err(|err| {
-											tracing::warn!(
-												?playlist_name,
-												?path,
-												?err,
-												"Unable to read directory entry within recursive walk"
-											);
-										})
-										.unwrap_or_return()?;
+					PlaylistItemKind::Directory {
+						path: ref dir_path,
+						recursive,
+					} =>
+						WalkDir::builder()
+							.max_depth(match recursive {
+								true => None,
+								false => Some(0),
+							})
+							.recurse_symlink(true)
+							.build(dir_path.to_path_buf())
+							.map(|entry: Result<fs::DirEntry, _>| async move {
+								let entry = entry
+									.map_err(|err| {
+										tracing::warn!(
+											?playlist_name,
+											?dir_path,
+											?err,
+											"Unable to read directory entry"
+										);
+									})
+									.unwrap_or_return()?;
 
-									let Some(path) = try_canonicalize_path(&entry.path()).await else {
-										return;
-									};
+								let path = entry.path();
+								if fs::metadata(&path)
+									.await
+									.map_err(|err| {
+										tracing::warn!(?playlist_name, ?path, ?err, "Unable to get entry metadata");
+									})
+									.unwrap_or_return()?
+									.is_dir()
+								{
+									// If it's a directory, skip it
+									return;
+								}
 
-									let mut playlist_player = playlist_player.write().await;
-									playlist_player.add(path.into());
-								})
-								.collect::<FuturesUnordered<_>>()
-								.await
-								.collect::<()>()
-								.await,
-						false => {
-							let dir = tokio::fs::read_dir(path)
-								.await
-								.map_err(|err| {
-									tracing::warn!(
-										?playlist_name,
-										?path,
-										?err,
-										"Unable to read playlist playlist directory"
-									);
-								})
-								.unwrap_or_return()?;
-							ReadDirStream::new(dir)
-								.map(|entry: Result<tokio::fs::DirEntry, _>| async move {
-									let entry = entry
-										.map_err(|err| {
-											tracing::warn!(
-												?playlist_name,
-												?path,
-												?err,
-												"Unable to read directory entry within recursive walk"
-											);
-										})
-										.unwrap_or_return()?;
+								let Some(path) = try_canonicalize_path(&path).await else {
+									return;
+								};
 
-									let Some(path) = try_canonicalize_path(&entry.path()).await else {
-										return;
-									};
-
-									let mut playlist_player = playlist_player.write().await;
-									playlist_player.add(path.into());
-								})
-								.collect::<FuturesUnordered<_>>()
-								.await
-								.collect::<()>()
-								.await;
-						},
-					},
+								let mut playlist_player = playlist_player.write().await;
+								playlist_player.add(path.into());
+							})
+							.collect::<FuturesUnordered<_>>()
+							.await
+							.collect::<()>()
+							.await,
 					PlaylistItemKind::File { ref path } =>
 						if let Some(path) = try_canonicalize_path(path).await {
 							let mut playlist_player = playlist_player.write().await;

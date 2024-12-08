@@ -13,6 +13,7 @@ image = { workspace = true }
 # Async
 futures = { workspace = true }
 tokio = { workspace = true }
+pin-project = { workspace = true }
 
 # Math
 cgmath = { workspace = true, features = ["serde"] }
