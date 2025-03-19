@@ -121,8 +121,9 @@ impl Stream for WalkDir {
 
 		// If we're reading an entry's metadata, read it
 		if let Some(read_entry_metadata_fut) = this.read_entry_metadata_fut.as_mut().as_pin_mut() {
-			let (entry_path, metadata) = task::ready!(read_entry_metadata_fut.poll(cx))?;
+			let res = task::ready!(read_entry_metadata_fut.poll(cx));
 			this.read_entry_metadata_fut.set(None);
+			let (entry_path, metadata) = res?;
 
 			// If we found a directory, read it
 			if metadata.is_dir() {
@@ -133,8 +134,9 @@ impl Stream for WalkDir {
 
 		// If we're reading a directory, read it
 		if let Some(read_dir_fut) = this.read_dir_fut.as_mut().as_pin_mut() {
-			let dir = task::ready!(read_dir_fut.poll(cx)?);
+			let res = task::ready!(read_dir_fut.poll(cx));
 			this.read_dir_fut.set(None);
+			let dir = res?;
 			this.stack.push(dir);
 		}
 
