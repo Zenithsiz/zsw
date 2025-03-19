@@ -1,7 +1,7 @@
 //! Egui wrapper
 
 // Features
-#![feature(must_not_suspend, strict_provenance, never_type)]
+#![feature(must_not_suspend, never_type)]
 
 // Imports
 use {

@@ -1,7 +1,7 @@
 //! Wgpu wrapper
 
 // Features
-#![feature(must_not_suspend, strict_provenance)]
+#![feature(must_not_suspend)]
 
 // Modules
 mod renderer;

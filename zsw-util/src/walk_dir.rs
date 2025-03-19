@@ -90,6 +90,7 @@ impl WalkDir {
 
 impl fmt::Debug for WalkDir {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		#[expect(clippy::ref_option, reason = "We don't want to use `.as_ref()` on the caller")]
 		fn show_fut<F>(fut: &Option<F>) -> Option<&'static str> {
 			fut.as_ref().map(|_| "...")
 		}

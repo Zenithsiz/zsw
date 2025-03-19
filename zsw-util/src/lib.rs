@@ -10,9 +10,7 @@
 	if_let_guard,
 	let_chains,
 	extend_one,
-	async_closure,
 	must_not_suspend,
-	strict_provenance,
 	impl_trait_in_assoc_type,
 	try_trait_v2,
 	assert_matches

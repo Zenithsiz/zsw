@@ -7,7 +7,6 @@
 #![feature(
 	never_type,
 	decl_macro,
-	async_closure,
 	assert_matches,
 	type_alias_impl_trait,
 	path_file_prefix,
@@ -17,7 +16,6 @@
 	generic_const_exprs,
 	hash_raw_entry,
 	must_not_suspend,
-	strict_provenance,
 	anonymous_lifetime_in_impl_trait,
 	try_blocks
 )]
