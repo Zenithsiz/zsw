@@ -27,12 +27,6 @@ fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUnif
 	var sampled: Sampled;
 	var uvs = in_uvs;
 
-	// Apply parallax to the uvs first
-	{
-		let mid = vec2<f32>(0.5, 0.5);
-		uvs = (uvs - mid) * image_uniforms.parallax_ratio + mid + image_uniforms.parallax_offset;
-	}
-
 	// Then apply the image ratio and delta
 	let uvs_delta = (vec2<f32>(1.0, 1.0) - image_uniforms.image_ratio) * progress;
 	uvs = uvs * image_uniforms.image_ratio + uvs_delta;

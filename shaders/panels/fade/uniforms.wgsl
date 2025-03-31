@@ -4,8 +4,6 @@
 /// Uniforms for each image
 struct ImageUniforms {
 	image_ratio: vec2<f32>,
-	parallax_ratio: vec2<f32>,
-	parallax_offset: vec2<f32>,
 	swap_dir: u32,
 }
 

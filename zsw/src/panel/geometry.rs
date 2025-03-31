@@ -3,7 +3,7 @@
 // Imports
 use {
 	super::PanelsRendererLayouts,
-	cgmath::{Matrix4, Point2, Vector2, Vector3},
+	cgmath::{Matrix4, Vector2, Vector3},
 	num_rational::Rational32,
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -73,56 +73,6 @@ impl PanelGeometry {
 		));
 		let scaling = Matrix4::from_nonuniform_scale(x_scale, -y_scale, 1.0);
 		translation * scaling
-	}
-
-	/// Returns the parallax ratio and offset
-	pub fn parallax_ratio_offset(
-		&self,
-		ratio: Vector2<f32>,
-		cursor_pos: Point2<i32>,
-		parallax_ratio: f32,
-		parallax_exp: f32,
-		reverse_parallax: bool,
-	) -> (Vector2<f32>, Vector2<f32>) {
-		// Matrix to move image outside of the visible parallax scale
-		let parallax_offset = {
-			let geometry_size = self
-				.geometry
-				.size
-				.cast::<f32>()
-				.expect("Panel geometry size didn't fit into an `f32`");
-
-			// Calculate the offset from center of image
-			let offset = (cursor_pos - self.geometry.center())
-				.cast::<f32>()
-				.expect("Panel cursor offset didn't fit into an `f32`");
-
-			// Normalize it
-			let offset = Vector2::new(2.0 * offset.x / geometry_size.x, 2.0 * offset.y / geometry_size.y);
-
-			// Sign-exponentiate it to make parallax move less near origin
-			let offset = Vector2::new(
-				offset.x.signum() * offset.x.abs().powf(parallax_exp),
-				offset.y.signum() * offset.y.abs().powf(parallax_exp),
-			);
-
-			// Then stretch it to match the ratio
-			let offset = Vector2::new(ratio.x * offset.x, ratio.y * offset.y);
-
-			// Then clamp the offset to the edges
-			let offset = Vector2::new(offset.x.clamp(-0.5, 0.5), offset.y.clamp(-0.5, 0.5));
-
-			// Then reverse if we should
-			let offset = match reverse_parallax {
-				true => -offset,
-				false => offset,
-			};
-
-			// Then make sure we don't go more than the parallax ratio allows for
-			(1.0 - parallax_ratio) * offset
-		};
-
-		(Vector2::new(parallax_ratio, parallax_ratio), parallax_offset)
 	}
 
 	/// Calculates an image's ratio for this panel geometry

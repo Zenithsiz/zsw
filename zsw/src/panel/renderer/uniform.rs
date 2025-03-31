@@ -27,28 +27,15 @@ pub struct PanelImageUniforms {
 	/// Image ratio
 	ratio: Vec2,
 
-	/// Parallax ratio
-	parallax_ratio: Vec2,
-
-	/// parallax offset
-	parallax_offset: Vec2,
-
 	/// Swap direction
 	swap_dir: u32,
 }
 
 impl PanelImageUniforms {
-	pub fn new(
-		ratio: impl Into<[f32; 2]>,
-		parallax_ratio: impl Into<[f32; 2]>,
-		parallax_offset: impl Into<[f32; 2]>,
-		swap_dir: bool,
-	) -> Self {
+	pub fn new(ratio: impl Into<[f32; 2]>, swap_dir: bool) -> Self {
 		Self {
-			ratio:           Vec2(ratio.into()),
-			parallax_ratio:  Vec2(parallax_ratio.into()),
-			parallax_offset: Vec2(parallax_offset.into()),
-			swap_dir:        swap_dir.into(),
+			ratio:    Vec2(ratio.into()),
+			swap_dir: swap_dir.into(),
 		}
 	}
 }

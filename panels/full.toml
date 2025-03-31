@@ -6,6 +6,3 @@ geometry = "1366x768+0+0"
 [state]
 duration = 300
 fade_point = 250
-parallax_ratio = 0.98
-parallax_exp = 2.0
-reverse_parallax = true

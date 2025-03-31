@@ -364,7 +364,6 @@ async fn renderer(
 		// Render the panels
 		{
 			let cur_panels = shared.cur_panels.lock().await;
-			let cursor_pos = shared.cursor_pos.load();
 
 			let panels_renderer_shader = shared.panels_renderer_shader.read().await;
 			panels_renderer
@@ -373,7 +372,6 @@ async fn renderer(
 					&wgpu_renderer,
 					&shared.wgpu,
 					&shared.panels_renderer_layout,
-					Point2::new(cursor_pos.x as i32, cursor_pos.y as i32),
 					&*cur_panels,
 					&panels_renderer_shader,
 				)

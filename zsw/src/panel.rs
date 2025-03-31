@@ -12,7 +12,7 @@ pub use self::{
 	geometry::PanelGeometry,
 	image::{PanelImage, PanelImages},
 	renderer::{PanelShader, PanelsRenderer, PanelsRendererLayouts, PanelsRendererShader},
-	state::{PanelParallaxState, PanelState},
+	state::PanelState,
 };
 
 // Imports
@@ -60,11 +60,6 @@ impl PanelsManager {
 			progress:   0,
 			duration:   panel.state.duration,
 			fade_point: panel.state.fade_point,
-			parallax:   PanelParallaxState {
-				ratio:   panel.state.parallax_ratio,
-				exp:     panel.state.parallax_exp,
-				reverse: panel.state.reverse_parallax,
-			},
 		};
 		let playlist_name = PlaylistName::from(panel.playlist);
 

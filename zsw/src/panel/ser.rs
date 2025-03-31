@@ -28,22 +28,4 @@ pub struct PanelGeometry {
 pub struct PanelState {
 	pub duration:   u64,
 	pub fade_point: u64,
-
-	// TODO: Move these to a sub-struct?
-	#[serde(default = "default_panel_parallax_ratio")]
-	pub parallax_ratio:   f32,
-	#[serde(default = "default_panel_parallax_exp")]
-	pub parallax_exp:     f32,
-	#[serde(default = "default_panel_parallax_reverse")]
-	pub reverse_parallax: bool,
-}
-
-fn default_panel_parallax_ratio() -> f32 {
-	0.998
-}
-fn default_panel_parallax_exp() -> f32 {
-	2.0
-}
-fn default_panel_parallax_reverse() -> bool {
-	false
 }

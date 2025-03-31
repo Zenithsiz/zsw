@@ -14,9 +14,6 @@ pub struct PanelState {
 
 	/// Fade point (in frames)
 	pub fade_point: u64,
-
-	/// Parallax
-	pub parallax: PanelParallaxState,
 }
 
 impl PanelState {
@@ -32,18 +29,4 @@ impl PanelState {
 		// Note: Image progress is linear throughout the full cycle
 		self.fade_point as f32 / self.duration as f32
 	}
-}
-
-/// Parallax state
-#[derive(Debug)]
-pub struct PanelParallaxState {
-	/// Parallax scale, 0.0 .. 1.0
-	// TODO: Rename to `scale`?
-	pub ratio: f32,
-
-	/// Parallax exponentiation
-	pub exp: f32,
-
-	/// Reverse parallax
-	pub reverse: bool,
 }

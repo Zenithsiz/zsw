@@ -13,7 +13,6 @@ use {
 	super::{Panel, PanelImage},
 	crate::panel::PanelGeometry,
 	anyhow::Context,
-	cgmath::Point2,
 	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -143,14 +142,12 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
-	#[expect(clippy::too_many_arguments)] // TODO: Refactor
 	pub fn render(
 		&mut self,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
-		cursor_pos: Point2<i32>,
 		panels: impl IntoIterator<Item = &'_ Panel>,
 		shader: &PanelsRendererShader,
 	) -> Result<(), AppError> {
@@ -221,14 +218,7 @@ impl PanelsRenderer {
 
 				let create_uniforms = |image: &PanelImage| {
 					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, image.size());
-					let (parallax_ratio, parallax_offset) = geometry.parallax_ratio_offset(
-						ratio,
-						cursor_pos,
-						panel.state.parallax.ratio,
-						panel.state.parallax.exp,
-						panel.state.parallax.reverse,
-					);
-					PanelImageUniforms::new(ratio, parallax_ratio, parallax_offset, image.swap_dir())
+					PanelImageUniforms::new(ratio, image.swap_dir())
 				};
 
 				let uniforms_prev = create_uniforms(panel.images.prev());
