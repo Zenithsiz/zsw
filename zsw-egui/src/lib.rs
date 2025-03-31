@@ -38,11 +38,10 @@ impl EguiRenderer {
 		textures_delta: Option<egui::TexturesDelta>,
 	) -> Result<(), AppError> {
 		// Update textures
-		let surface_size = frame.surface_size();
 		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 		let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-			physical_width:  surface_size.width,
-			physical_height: surface_size.height,
+			physical_width:  frame.surface_size.width,
+			physical_height: frame.surface_size.height,
 			scale_factor:    window.scale_factor() as f32,
 		};
 

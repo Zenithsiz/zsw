@@ -114,7 +114,6 @@ impl WgpuRenderer {
 
 /// A frame's rendering
 #[derive(Debug)]
-#[expect(clippy::partial_pub_fields, reason = "TODO: Make it public?")]
 pub struct FrameRender {
 	/// Encoder
 	pub encoder: wgpu::CommandEncoder,
@@ -126,16 +125,10 @@ pub struct FrameRender {
 	pub surface_view: wgpu::TextureView,
 
 	/// Surface size
-	surface_size: PhysicalSize<u32>,
+	pub surface_size: PhysicalSize<u32>,
 }
 
 impl FrameRender {
-	/// Returns the surface size
-	#[must_use]
-	pub fn surface_size(&self) -> PhysicalSize<u32> {
-		self.surface_size
-	}
-
 	/// Finishes rendering this frame
 	pub fn finish(self, shared: &WgpuShared) {
 		// Submit everything to the queue and present the surface's texture

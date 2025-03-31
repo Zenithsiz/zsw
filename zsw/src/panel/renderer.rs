@@ -203,7 +203,6 @@ impl PanelsRenderer {
 			timestamp_writes:         None,
 			occlusion_query_set:      None,
 		};
-		let surface_size = frame.surface_size();
 		let mut render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
 
 		// Set our shared pipeline, indices, vertices and uniform bind group
@@ -218,7 +217,7 @@ impl PanelsRenderer {
 
 			for geometry in &panel.geometries {
 				// Calculate the position matrix for the panel
-				let pos_matrix = geometry.pos_matrix(surface_size);
+				let pos_matrix = geometry.pos_matrix(frame.surface_size);
 
 				let create_uniforms = |image: &PanelImage| {
 					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, image.size());
