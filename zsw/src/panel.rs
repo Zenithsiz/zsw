@@ -2,7 +2,7 @@
 
 // Modules
 mod geometry;
-mod image;
+mod images;
 mod renderer;
 mod ser;
 mod state;
@@ -10,7 +10,7 @@ mod state;
 // Exports
 pub use self::{
 	geometry::PanelGeometry,
-	image::{PanelImage, PanelImages},
+	images::{PanelImage, PanelImages},
 	renderer::{PanelShader, PanelsRenderer, PanelsRendererLayouts, PanelsRendererShader},
 	state::PanelState,
 };
