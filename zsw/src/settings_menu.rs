@@ -2,7 +2,6 @@
 
 // Lints
 #![allow(unused_results)] // Egui produces a lot of results we don't need to use
-#![expect(clippy::too_many_lines)] // TODO: Refactor
 
 // Imports
 use {
@@ -248,30 +247,17 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 			});
 
 			ui.collapsing("Images", |ui| {
-				ui.collapsing("Previous", |ui| match panel.images.prev().is_loaded() {
-					true => self::draw_panel_image(ui, panel.images.prev_mut()),
-					false => {
-						ui.label("[Unloaded]");
-					},
-				});
-				ui.collapsing("Current", |ui| match panel.images.cur().is_loaded() {
-					true => self::draw_panel_image(ui, panel.images.cur_mut()),
-					false => {
-						ui.label("[Unloaded]");
-					},
-				});
-				ui.collapsing("Next", |ui| match panel.images.next().is_loaded() {
-					true => self::draw_panel_image(ui, panel.images.next_mut()),
-					false => {
-						ui.label("[Unloaded]");
-					},
-				});
+				ui.collapsing("Previous", |ui| self::draw_panel_image(ui, panel.images.prev_mut()));
+				ui.collapsing("Current", |ui| self::draw_panel_image(ui, panel.images.cur_mut()));
+				ui.collapsing("Next", |ui| self::draw_panel_image(ui, panel.images.next_mut()));
 			});
 
 			ui.collapsing("Playlist player", |ui| {
 				let playlist_player = panel.images.playlist_player().write().block_on();
 
 				let row_height = ui.text_style_height(&egui::TextStyle::Body);
+
+				ui.label(format!("Position: {}", playlist_player.cur_pos()));
 
 				if ui.button("↹ (Replace)").clicked() {
 					// TODO: Stop everything that could be inserting items still?
@@ -331,12 +317,21 @@ fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 
 /// Draws a panel image
 fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
-	let size = image.size();
-	if let Some(path) = image.path() {
-		self::draw_openable_path(ui, path);
+	match image {
+		PanelImage::Empty => {
+			ui.label("[Unloaded]");
+		},
+		PanelImage::Loaded {
+			size,
+			swap_dir,
+			image_path,
+			..
+		} => {
+			self::draw_openable_path(ui, image_path);
+			ui.label(format!("Size: {}x{}", size.x, size.y));
+			ui.checkbox(swap_dir, "Swap direction");
+		},
 	}
-	ui.label(format!("Size: {}x{}", size.x, size.y));
-	ui.checkbox(image.swap_dir_mut(), "Swap direction");
 }
 
 /// Draws the shader select

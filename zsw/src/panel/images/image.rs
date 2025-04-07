@@ -5,7 +5,7 @@ use {
 	crate::image_loader::Image,
 	cgmath::Vector2,
 	image::DynamicImage,
-	std::path::{Path, PathBuf},
+	std::{path::PathBuf, sync::OnceLock},
 	wgpu::util::DeviceExt,
 	zsw_wgpu::WgpuShared,
 };
@@ -14,98 +14,81 @@ use {
 ///
 /// Represents a single image of a panel.
 #[derive(Debug)]
-pub struct PanelImage {
-	/// Texture
-	texture: wgpu::Texture,
+pub enum PanelImage {
+	/// Empty
+	Empty,
 
-	/// Texture view
-	texture_view: wgpu::TextureView,
+	/// Loaded
+	Loaded {
+		/// Texture
+		_texture: wgpu::Texture,
 
-	/// Whether the image is loaded
-	// TODO: Remove this and just use an enum?
-	is_loaded: bool,
+		/// Texture view
+		texture_view: wgpu::TextureView,
 
-	/// Image size
-	size: Vector2<u32>,
+		/// Image size
+		size: Vector2<u32>,
 
-	/// Swap direction
-	swap_dir: bool,
+		/// Swap direction
+		swap_dir: bool,
 
-	/// Image path
-	image_path: Option<PathBuf>,
+		/// Image path
+		image_path: PathBuf,
+	},
 }
 
 impl PanelImage {
-	/// Creates a new image
+	/// Creates a new, empty, panel image
 	#[must_use]
-	pub fn new(wgpu_shared: &WgpuShared) -> Self {
-		// Create the texture and sampler
-		let (texture, texture_view) = self::create_empty_image_texture(wgpu_shared);
+	pub fn empty() -> Self {
+		Self::Empty
+	}
 
-		Self {
-			texture,
+	/// Creates a new panel image from an image
+	#[must_use]
+	pub fn new(wgpu_shared: &WgpuShared, image: Image) -> Self {
+		let size = Vector2::new(image.image.width(), image.image.height());
+		let (texture, texture_view) = self::create_image_texture(wgpu_shared, image.image);
+
+		Self::Loaded {
+			_texture: texture,
 			texture_view,
-			is_loaded: false,
-			size: Vector2::new(0, 0),
-			swap_dir: false,
-			image_path: None,
+			size,
+			swap_dir: rand::random(),
+			image_path: image.path,
 		}
 	}
 
 	/// Returns the texture view for this image.
-	pub fn texture_view(&self) -> &wgpu::TextureView {
-		&self.texture_view
+	pub fn texture_view<'a>(&'a self, wgpu_shared: &'_ WgpuShared) -> &'a wgpu::TextureView {
+		match self {
+			Self::Empty => &self::get_empty_image_texture(wgpu_shared).1,
+			Self::Loaded { texture_view, .. } => texture_view,
+		}
 	}
 
 	/// Returns if this image is loaded
 	pub fn is_loaded(&self) -> bool {
-		self.is_loaded
-	}
-
-	/// Returns this image's size
-	pub fn size(&self) -> Vector2<u32> {
-		self.size
-	}
-
-	/// Returns the swap direction of this image
-	pub fn swap_dir(&self) -> bool {
-		self.swap_dir
-	}
-
-	/// Returns the swap direction of this image mutably
-	pub fn swap_dir_mut(&mut self) -> &mut bool {
-		&mut self.swap_dir
-	}
-
-	/// Returns the image path, if any
-	pub fn path(&self) -> Option<&Path> {
-		self.image_path.as_deref()
-	}
-
-	/// Updates this image
-	pub fn update(&mut self, wgpu_shared: &WgpuShared, image: Image) {
-		// Update our texture
-		let size = Vector2::new(image.image.width(), image.image.height());
-		(self.texture, self.texture_view) = self::create_image_texture(wgpu_shared, image.image);
-		self.image_path = Some(image.path);
-
-		// Then update the image size and swap direction
-		self.size = size;
-		self.swap_dir = rand::random();
-		self.is_loaded = true;
+		matches!(self, Self::Loaded { .. })
 	}
 }
 
-/// Creates an empty texture
-fn create_empty_image_texture(wgpu_shared: &WgpuShared) -> (wgpu::Texture, wgpu::TextureView) {
-	// TODO: Pass some view formats?
-	let texture_descriptor =
-		self::texture_descriptor("[zsw::panel] Null image", 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb, &[
-		]);
-	let texture = wgpu_shared.device.create_texture(&texture_descriptor);
-	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
-	let texture_view = texture.create_view(&texture_view_descriptor);
-	(texture, texture_view)
+/// Empty texture
+static EMPTY_TEXTURE: OnceLock<(wgpu::Texture, wgpu::TextureView)> = OnceLock::new();
+
+/// Gets an empty texture
+fn get_empty_image_texture(wgpu_shared: &WgpuShared) -> &'static (wgpu::Texture, wgpu::TextureView) {
+	EMPTY_TEXTURE.get_or_init(|| {
+		// TODO: Pass some view formats?
+		let texture_descriptor =
+			self::texture_descriptor("[zsw::panel] Null image", 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb, &[
+			]);
+		let texture = wgpu_shared.device.create_texture(&texture_descriptor);
+		let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+		let texture_view = texture.create_view(&texture_view_descriptor);
+
+		(texture, texture_view)
+	})
 }
 
 /// Creates the image texture and view

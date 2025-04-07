@@ -13,6 +13,7 @@ use {
 	super::{Panel, PanelImage},
 	crate::panel::PanelGeometry,
 	anyhow::Context,
+	cgmath::Vector2,
 	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -217,8 +218,13 @@ impl PanelsRenderer {
 				let pos_matrix = geometry.pos_matrix(frame.surface_size);
 
 				let create_uniforms = |image: &PanelImage| {
-					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, image.size());
-					PanelImageUniforms::new(ratio, image.swap_dir())
+					let (size, swap_dir) = match *image {
+						PanelImage::Empty => (Vector2::new(0, 0), false),
+						PanelImage::Loaded { size, swap_dir, .. } => (size, swap_dir),
+					};
+
+					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);
+					PanelImageUniforms::new(ratio, swap_dir)
 				};
 
 				let uniforms_prev = create_uniforms(panel.images.prev());

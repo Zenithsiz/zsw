@@ -46,16 +46,16 @@ impl PanelImages {
 	#[must_use]
 	pub fn new(wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Self {
 		// Create the textures
-		let image_prev = PanelImage::new(wgpu_shared);
-		let image_cur = PanelImage::new(wgpu_shared);
-		let image_next = PanelImage::new(wgpu_shared);
+		let image_prev = PanelImage::empty();
+		let image_cur = PanelImage::empty();
+		let image_next = PanelImage::empty();
 		let texture_sampler = self::create_texture_sampler(wgpu_shared);
 		let image_bind_group = self::create_image_bind_group(
 			wgpu_shared,
 			&renderer_layouts.image_bind_group_layout,
-			image_prev.texture_view(),
-			image_cur.texture_view(),
-			image_next.texture_view(),
+			image_prev.texture_view(wgpu_shared),
+			image_cur.texture_view(wgpu_shared),
+			image_next.texture_view(wgpu_shared),
 			&texture_sampler,
 		);
 
@@ -89,7 +89,7 @@ impl PanelImages {
 		self.playlist_player.write().await.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
-		self.prev = PanelImage::new(wgpu_shared);
+		self.prev = PanelImage::empty();
 		self.update_image_bind_group(wgpu_shared, renderer_layouts);
 		Ok(())
 	}
@@ -98,7 +98,7 @@ impl PanelImages {
 	pub async fn step_next(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
-		self.next = PanelImage::new(wgpu_shared);
+		self.next = PanelImage::empty();
 		self.playlist_player.write().await.step_next();
 		self.update_image_bind_group(wgpu_shared, renderer_layouts);
 	}
@@ -165,9 +165,9 @@ impl PanelImages {
 
 		if let Some(slot) = slot {
 			match slot {
-				Slot::Prev => self.prev.update(wgpu_shared, image),
-				Slot::Cur => self.cur.update(wgpu_shared, image),
-				Slot::Next => self.next.update(wgpu_shared, image),
+				Slot::Prev => self.prev = PanelImage::new(wgpu_shared, image),
+				Slot::Cur => self.cur = PanelImage::new(wgpu_shared, image),
+				Slot::Next => self.next = PanelImage::new(wgpu_shared, image),
 			}
 			self.update_image_bind_group(wgpu_shared, renderer_layouts);
 		}
@@ -214,9 +214,9 @@ impl PanelImages {
 		self.image_bind_group = self::create_image_bind_group(
 			wgpu_shared,
 			&renderer_layouts.image_bind_group_layout,
-			self.prev.texture_view(),
-			self.cur.texture_view(),
-			self.next.texture_view(),
+			self.prev.texture_view(wgpu_shared),
+			self.cur.texture_view(wgpu_shared),
+			self.next.texture_view(wgpu_shared),
 			&self.texture_sampler,
 		);
 	}
