@@ -41,6 +41,9 @@ pub struct ImageRequest {
 
 	/// Max image size
 	pub max_image_size: u32,
+
+	/// Playlist position for this image
+	pub playlist_pos: usize,
 }
 
 /// Response

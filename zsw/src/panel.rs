@@ -67,7 +67,7 @@ impl PanelsManager {
 			.context("Unable to create panel")?;
 
 		crate::spawn_task(format!("Load panel playlist {path:?}: {playlist_name:?}"), {
-			let playlist_player = Arc::clone(&panel.playlist_player);
+			let playlist_player = Arc::clone(panel.images.playlist_player());
 			let shared = Arc::clone(shared);
 			|| async move {
 				Self::load_playlist_into(&playlist_player, &playlist_name, &shared)
@@ -179,12 +179,10 @@ impl PanelsManager {
 			.collect::<()>()
 			.await;
 
-		// Once we're finished, clear the backlog to ensure we get proper random items after this
-		// Note: If we didn't do this, the first few items would always be in the order we get them
-		//       from the file system
+		// Once we're finished, step into the first (next) item.
 		{
 			let mut playlist_player = playlist_player.write().await;
-			playlist_player.clear_backlog();
+			playlist_player.step_next();
 		}
 
 		Ok(())
@@ -199,9 +197,6 @@ pub struct Panel {
 
 	/// State
 	pub state: PanelState,
-
-	/// Playlist player
-	pub playlist_player: Arc<RwLock<PlaylistPlayer>>,
 
 	/// Images
 	pub images: PanelImages,
@@ -221,7 +216,6 @@ impl Panel {
 				.map(|geometry| PanelGeometry::new(wgpu_shared, renderer_layouts, geometry))
 				.collect(),
 			state,
-			playlist_player: Arc::new(RwLock::new(PlaylistPlayer::new())),
 			images: PanelImages::new(wgpu_shared, renderer_layouts),
 		})
 	}
@@ -233,19 +227,12 @@ impl Panel {
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
-		self.images.step_next(wgpu_shared, renderer_layouts);
+		self.images.step_next(wgpu_shared, renderer_layouts).await;
 		self.state.progress = self.state.duration.saturating_sub(self.state.fade_point);
 
-		// Then try to load the next image
-		// Note: If we already have a next one, this will simply return.
+		// Then load any missing images
 		self.images
-			.load_next(
-				&self.playlist_player,
-				wgpu_shared,
-				renderer_layouts,
-				image_requester,
-				&self.geometries,
-			)
+			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
 			.await;
 	}
 
@@ -257,33 +244,31 @@ impl Panel {
 		image_requester: &ImageRequester,
 		frames: i64,
 	) {
-		// Update the progress, potentially rolling over to the next image
-		let next_progress = self.state.progress.saturating_add_signed(frames);
-		match next_progress >= self.state.duration {
-			true => {
-				self.images.step_next(wgpu_shared, renderer_layouts);
-				self.state.progress = next_progress.saturating_sub(self.state.fade_point);
+		// Update the progress, potentially rolling over to the previous/next image
+		match self.state.progress.checked_add_signed(frames) {
+			Some(next_progress) => match next_progress >= self.state.duration {
+				true => {
+					self.images.step_next(wgpu_shared, renderer_layouts).await;
+					self.state.progress = next_progress.saturating_sub(self.state.fade_point);
+				},
+				false => {
+					let max_progress = match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
+						(false, false) => 0,
+						(true, false) => self.state.fade_point,
+						(_, true) => self.state.duration,
+					};
+					self.state.progress = self.state.progress.saturating_add_signed(frames).clamp(0, max_progress);
+				},
 			},
-			false => {
-				let max_progress = match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
-					(false, false) => 0,
-					(true, false) => self.state.fade_point,
-					(_, true) => self.state.duration,
-				};
-				self.state.progress = self.state.progress.saturating_add_signed(frames).clamp(0, max_progress);
-			},
-		}
+			None =>
+				if self.images.step_prev(wgpu_shared, renderer_layouts).await.is_ok() {
+					self.state.progress = self.state.fade_point.saturating_add_signed(frames);
+				},
+		};
 
-		// Then try to load the next image
-		// Note: If we already have a next one, this will simply return.
+		// Then load any missing images
 		self.images
-			.load_next(
-				&self.playlist_player,
-				wgpu_shared,
-				renderer_layouts,
-				image_requester,
-				&self.geometries,
-			)
+			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
 			.await;
 	}
 
@@ -294,16 +279,9 @@ impl Panel {
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
-		// Then try to load the next image
-		// Note: If we already have a next one, this will simply return.
+		// Then load any missing images
 		self.images
-			.load_next(
-				&self.playlist_player,
-				wgpu_shared,
-				renderer_layouts,
-				image_requester,
-				&self.geometries,
-			)
+			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
 			.await;
 
 		// If we're paused, don't update anything

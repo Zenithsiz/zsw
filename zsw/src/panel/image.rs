@@ -9,6 +9,7 @@ use {
 	std::{
 		mem,
 		path::{Path, PathBuf},
+		sync::Arc,
 	},
 	tokio::sync::RwLock,
 	wgpu::util::DeviceExt,
@@ -26,6 +27,10 @@ pub struct PanelImages {
 
 	/// Next image
 	next: PanelImage,
+
+	/// Playlist player
+	// TODO: Remove these indirections?
+	playlist_player: Arc<RwLock<PlaylistPlayer>>,
 
 	/// Texture sampler
 	texture_sampler: wgpu::Sampler,
@@ -62,6 +67,7 @@ impl PanelImages {
 			texture_sampler,
 			image_bind_group,
 			scheduled_image_receiver: None,
+			playlist_player: Arc::new(RwLock::new(PlaylistPlayer::new())),
 		}
 	}
 
@@ -70,120 +76,138 @@ impl PanelImages {
 		&self.image_bind_group
 	}
 
+	/// Returns the playlist player for these images
+	pub fn playlist_player(&self) -> &Arc<RwLock<PlaylistPlayer>> {
+		&self.playlist_player
+	}
+
+	/// Steps to the previous image, if any
+	pub async fn step_prev(
+		&mut self,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+	) -> Result<(), ()> {
+		self.playlist_player.write().await.step_prev()?;
+		mem::swap(&mut self.cur, &mut self.next);
+		mem::swap(&mut self.prev, &mut self.cur);
+		self.prev = PanelImage::new(wgpu_shared);
+		self.update_image_bind_group(wgpu_shared, renderer_layouts);
+		Ok(())
+	}
+
 	/// Steps to the next image
-	pub fn step_next(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub async fn step_next(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
-		self.next.is_loaded = false;
+		self.next = PanelImage::new(wgpu_shared);
+		self.playlist_player.write().await.step_next();
 		self.update_image_bind_group(wgpu_shared, renderer_layouts);
 	}
 
-	/// Loads the next (or current) images.
+	/// Loads any missing images, prioritizing the current, then next, then previous.
 	///
 	/// Requests images if missing any.
-	pub async fn load_next(
+	pub async fn load_missing(
 		&mut self,
-		playlist_player: &RwLock<PlaylistPlayer>,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
 	) {
-		// Schedule the next image.
-		self.schedule_load_image(wgpu_shared, playlist_player, image_requester, geometries)
-			.await;
-
-		// If we have both images, don't advance
-		if self.next.is_loaded {
-			return;
-		}
-
-		// Otherwise, try to load the image.
-		if let Some(image) = self
-			.load_img(wgpu_shared, playlist_player, image_requester, geometries)
-			.await
-		{
-			match self.cur.is_loaded {
-				true => self.next.update(wgpu_shared, image),
-				false => self.cur.update(wgpu_shared, image),
-			}
-			self.update_image_bind_group(wgpu_shared, renderer_layouts);
-		}
-	}
-
-	/// Tries to load the scheduled image.
-	///
-	/// If unavailable, schedules it, and returns None.
-	async fn load_img(
-		&mut self,
-		wgpu_shared: &WgpuShared,
-		playlist_player: &RwLock<PlaylistPlayer>,
-		image_requester: &ImageRequester,
-		geometries: &[PanelGeometry],
-	) -> Option<Image> {
 		// Get the image receiver, or schedule it.
 		let Some(image_receiver) = self.scheduled_image_receiver.as_mut() else {
-			self.schedule_load_image(wgpu_shared, playlist_player, image_requester, geometries)
-				.await;
-			return None;
+			_ = self.schedule_load_image(wgpu_shared, image_requester, geometries).await;
+			return;
 		};
 
 		// Then try to get the response
-		let response = image_receiver.try_recv()?;
+		let Some(response) = image_receiver.try_recv() else {
+			return;
+		};
 
 		// Remove the exhausted receiver
 		self.scheduled_image_receiver = None;
 
 		// Then check if we got the image
-		match response.image_res {
+		let image = match response.image_res {
 			// If so, return it
-			Ok(image) => Some(image),
+			Ok(image) => image,
 
 			// Else, log an error, remove the image and re-schedule it
 			Err(err) => {
 				{
 					tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
-					let mut playlist_player = playlist_player.write().await;
+					let mut playlist_player = self.playlist_player.write().await;
 					playlist_player.remove(&response.request.path);
 				}
 
-				self.schedule_load_image(wgpu_shared, playlist_player, image_requester, geometries)
-					.await;
-				None
+				_ = self.schedule_load_image(wgpu_shared, image_requester, geometries).await;
+				return;
 			},
+		};
+
+		// Get which slot to load the image into
+		let slot = {
+			let playlist_player = self.playlist_player.read().await;
+			match response.request.playlist_pos {
+				pos if Some(pos) == playlist_player.prev_pos() => Some(Slot::Prev),
+				pos if pos == playlist_player.cur_pos() => Some(Slot::Cur),
+				pos if pos == playlist_player.next_pos() => Some(Slot::Next),
+				pos => {
+					tracing::warn!(
+						pos,
+						playlist_pos = playlist_player.cur_pos(),
+						"Discarding loaded image due to position being too far",
+					);
+					None
+				},
+			}
+		};
+
+		if let Some(slot) = slot {
+			match slot {
+				Slot::Prev => self.prev.update(wgpu_shared, image),
+				Slot::Cur => self.cur.update(wgpu_shared, image),
+				Slot::Next => self.next.update(wgpu_shared, image),
+			}
+			self.update_image_bind_group(wgpu_shared, renderer_layouts);
 		}
 	}
 
 	/// Schedules a new image.
+	///
+	/// Returns the position in the playlist we're loading
 	///
 	/// If the playlist player is empty, does not schedule.
 	/// If already scheduled, returns
 	async fn schedule_load_image(
 		&mut self,
 		wgpu_shared: &WgpuShared,
-		playlist_player: &RwLock<PlaylistPlayer>,
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
-	) {
+	) -> Option<usize> {
 		if self.scheduled_image_receiver.is_some() {
-			return;
+			return None;
 		}
 
-		let mut playlist_player = playlist_player.write().await;
-		let image_path = match playlist_player.next() {
-			Some(path) => path.to_path_buf(),
-			None => {
-				tracing::trace!("No images left");
-				return;
-			},
+		// Get the playlist position and path to load
+		let playlist_player = self.playlist_player.read().await;
+		let (playlist_pos, image_path) = match () {
+			() if !self.cur.is_loaded() => (playlist_player.cur_pos(), playlist_player.cur()?),
+			() if !self.next.is_loaded() => (playlist_player.next_pos(), playlist_player.next()?),
+			() if !self.prev.is_loaded() => (playlist_player.prev_pos()?, playlist_player.prev()?),
+			() => return None,
 		};
 
 		let wgpu_limits = wgpu_shared.device.limits();
 		self.scheduled_image_receiver = Some(image_requester.request(ImageRequest {
-			path:           image_path,
-			geometries:     geometries.iter().map(|geometry| geometry.geometry).collect(),
+			path: image_path.to_path_buf(),
+			geometries: geometries.iter().map(|geometry| geometry.geometry).collect(),
 			max_image_size: wgpu_limits.max_texture_dimension_2d,
+			playlist_pos,
 		}));
+
+		Some(playlist_pos)
 	}
 
 	/// Updates the image bind group
@@ -232,6 +256,7 @@ impl PanelImages {
 /// Panel's image
 ///
 /// Represents a single image of a panel.
+// TODO: Move this onto a submodule to prevent access of fields we don't want
 #[derive(Debug)]
 pub struct PanelImage {
 	/// Texture
@@ -241,6 +266,7 @@ pub struct PanelImage {
 	texture_view: wgpu::TextureView,
 
 	/// Whether the image is loaded
+	// TODO: Remove this and just use an enum?
 	is_loaded: bool,
 
 	/// Image size
@@ -309,6 +335,13 @@ impl PanelImage {
 	}
 }
 
+/// Image slot
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+enum Slot {
+	Prev,
+	Cur,
+	Next,
+}
 
 /// Creates an empty texture
 fn create_empty_image_texture(wgpu_shared: &WgpuShared) -> (wgpu::Texture, wgpu::TextureView) {

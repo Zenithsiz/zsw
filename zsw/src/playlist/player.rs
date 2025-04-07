@@ -14,20 +14,16 @@ use {
 #[derive(Debug)]
 pub struct PlaylistPlayer {
 	/// All items
-	items: HashSet<Arc<Path>>,
+	all_items: HashSet<Arc<Path>>,
 
-	/// Previous items
-	///
-	/// Last item is newest item
-	prev_items: VecDeque<Arc<Path>>,
+	/// Current items
+	cur_items: VecDeque<Arc<Path>>,
 
-	/// Maximum number of previous items
-	max_prev_items: usize,
+	/// Number of old items to keep
+	max_old_items: usize,
 
-	/// Next items
-	///
-	/// Last item is next item
-	next_items: Vec<Arc<Path>>,
+	/// Current item position (within `cur_items`)
+	cur_pos: usize,
 
 	/// Rng
 	rng: StdRng,
@@ -37,76 +33,134 @@ impl PlaylistPlayer {
 	/// Creates a new, empty, player
 	pub fn new() -> Self {
 		Self {
-			items:          HashSet::new(),
-			prev_items:     VecDeque::new(),
-			max_prev_items: 64,
-			next_items:     vec![],
-			rng:            StdRng::from_entropy(),
+			all_items:     HashSet::new(),
+			cur_items:     VecDeque::new(),
+			max_old_items: 100,
+			cur_pos:       0,
+			rng:           StdRng::from_entropy(),
 		}
+	}
+
+	/// Returns the previous position in the playlist
+	pub fn prev_pos(&self) -> Option<usize> {
+		self.cur_pos.checked_sub(1)
+	}
+
+	/// Returns the current position in the playlist
+	pub fn cur_pos(&self) -> usize {
+		self.cur_pos
+	}
+
+	/// Returns the next position in the playlist
+	pub fn next_pos(&self) -> usize {
+		self.cur_pos.checked_add(1).expect("Playlist position overflowed")
 	}
 
 	/// Adds an item to the playlist
 	pub fn add(&mut self, path: Arc<Path>) {
 		// TODO: Should we care if the item was already in?
-		let _ = self.items.insert(path);
+		_ = self.all_items.insert(path);
 	}
 
 	/// Removes an item from the playlist
 	pub fn remove(&mut self, path: &Path) {
-		// Remove the item from all our playlists
-		// TODO: Not have `O(N)` complexity on prev / next items
-		let _ = self.items.remove(path);
-		self.prev_items.retain(|item| &**item != path);
-		self.next_items.retain(|item| &**item != path);
+		// TODO: Do we care if the path didn't exist?
+		_ = self.all_items.remove(path);
+
+		// Remove all matches from the current items, adjusting the indexes along the way
+		let mut cur_idx = 0;
+		self.cur_items.retain(|item| {
+			// If this isn't the item, go next
+			if &**item != path {
+				cur_idx += 1;
+				return true;
+			}
+
+			// Else if this is the item, and our current position
+			// is after it, adjust the current position
+			// Note: Since we're removing the item, we don't increase `cur_idx`.
+			if self.cur_pos > cur_idx {
+				self.cur_pos -= 1;
+			}
+
+			false
+		});
 	}
 
 	/// Removes all paths from the playlist
 	pub fn remove_all(&mut self) {
-		self.items.clear();
-		self.prev_items.clear();
-		self.next_items.clear();
-	}
-
-	/// Clears the current backlog
-	// TODO: Better wording than backlog: deck, remaining items?
-	pub fn clear_backlog(&mut self) {
-		self.next_items.clear();
+		self.all_items.clear();
+		self.cur_items.clear();
 	}
 
 	/// Returns an iterator over all items in the playlist
 	pub fn all_items(&self) -> impl ExactSizeIterator<Item = &Arc<Path>> {
-		self.items.iter()
+		self.all_items.iter()
 	}
 
-	/// Returns an iterator over all consumed items
+	/// Steps the player backwards.
 	///
-	/// They are ordered from newest to oldest
-	pub fn prev_items(&self) -> impl ExactSizeIterator<Item = &Arc<Path>> {
-		self.prev_items.iter().rev()
+	/// Returns `Err(())` if there is no previous item.
+	pub fn step_prev(&mut self) -> Result<(), ()> {
+		// If we're empty or at the start, we can't retract
+		if self.all_items.is_empty() || self.cur_pos == 0 {
+			return Err(());
+		}
+
+		// Otherwise, just go back
+		self.cur_pos -= 1;
+
+		Ok(())
 	}
 
-	/// Returns an iterator that peeks over the remaining items in this loop.
-	///
-	/// They are ordered from next to last
-	pub fn peek_next_items(&self) -> impl ExactSizeIterator<Item = &Arc<Path>> {
-		self.next_items.iter().rev()
+	/// Steps the player forward
+	pub fn step_next(&mut self) {
+		// If we're empty, we can't advance
+		if self.all_items.is_empty() {
+			return;
+		}
+
+		// If we're at the end
+		if self.cur_pos >= self.cur_items.len() {
+			// Shuffle in all the new items
+			let mut new_items = self.all_items.iter().map(Arc::clone).collect::<Vec<_>>();
+			new_items.shuffle(&mut self.rng);
+			self.cur_pos = self.cur_items.len();
+			self.cur_items.extend(new_items);
+
+			// And drop any old items from the back
+			if let Some(old_items) = self.cur_pos.checked_sub(self.max_old_items) {
+				_ = self.cur_items.drain(..old_items);
+				self.cur_pos -= old_items;
+			}
+
+			return;
+		}
+
+		// Otherwise, just go to the next item
+		self.cur_pos += 1;
+	}
+
+	/// Returns the previous image to load
+	pub fn prev(&self) -> Option<Arc<Path>> {
+		let item = self.cur_items.get(self.prev_pos()?)?;
+		let item = Arc::clone(item);
+
+		Some(item)
+	}
+
+	/// Returns the current image to load
+	pub fn cur(&self) -> Option<Arc<Path>> {
+		let item = self.cur_items.get(self.cur_pos())?;
+		let item = Arc::clone(item);
+
+		Some(item)
 	}
 
 	/// Returns the next image to load
-	pub fn next(&mut self) -> Option<Arc<Path>> {
-		// If we're out of current items, shuffle the items in
-		// Note: If we don't actually have any items, this is essentially a no-op
-		if self.next_items.is_empty() {
-			self.next_items.extend(self.items.iter().cloned());
-			self.next_items.shuffle(&mut self.rng);
-		}
-
-		// Then pop the last item
-		let item = self.next_items.pop()?;
-		self.prev_items.push_back(Arc::clone(&item));
-		if self.prev_items.len() > self.max_prev_items {
-			let _ = self.prev_items.pop_front();
-		}
+	pub fn next(&self) -> Option<Arc<Path>> {
+		let item = self.cur_items.get(self.next_pos())?;
+		let item = Arc::clone(item);
 
 		Some(item)
 	}

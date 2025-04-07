@@ -269,7 +269,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let playlist_player = panel.playlist_player.write().block_on();
+				let playlist_player = panel.images.playlist_player().write().block_on();
 
 				let row_height = ui.text_style_height(&egui::TextStyle::Body);
 
@@ -279,7 +279,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 						self::choose_load_playlist_from_file(add_playlist_state, shared)
 					{
 						crate::spawn_task(format!("Replace playlist {playlist:?}"), {
-							let playlist_player = Arc::clone(&panel.playlist_player);
+							let playlist_player = Arc::clone(panel.images.playlist_player());
 							let shared = Arc::clone(shared);
 							|| async move {
 								{
@@ -297,31 +297,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 					}
 				};
 
-				ui.collapsing("Prev", |ui| {
-					egui::ScrollArea::new([false, true])
-						.auto_shrink([false, true])
-						.stick_to_right(true)
-						.max_height(row_height * 10.0)
-						.show_rows(ui, row_height, playlist_player.prev_items().len(), |ui, idx| {
-							for item in playlist_player.prev_items().take(idx.end).skip(idx.start) {
-								self::draw_openable_path(ui, item);
-							}
-						});
-				});
-
-				ui.collapsing("Next", |ui| {
-					egui::ScrollArea::new([false, true])
-						.auto_shrink([false, true])
-						.stick_to_right(true)
-						.max_height(row_height * 10.0)
-						.show_rows(ui, row_height, playlist_player.peek_next_items().len(), |ui, idx| {
-							for item in playlist_player.peek_next_items().take(idx.end).skip(idx.start) {
-								self::draw_openable_path(ui, item);
-							}
-						});
-				});
-
-				ui.collapsing("All", |ui| {
+				ui.collapsing("Items", |ui| {
 					egui::ScrollArea::new([false, true])
 						.auto_shrink([false, true])
 						.stick_to_right(true)
