@@ -127,26 +127,6 @@ impl PanelsRenderer {
 		self.msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, size);
 	}
 
-	/// Updates the shader.
-	///
-	/// Returns if a pipeline reload is necessary
-	fn update_shader(&mut self, shader: PanelShader) -> bool {
-		let needs_reload = match (self.cur_shader, shader) {
-			// If we're the same kind, no need to reload the pipeline
-			(PanelShader::Fade, PanelShader::Fade) |
-			(PanelShader::FadeWhite { .. }, PanelShader::FadeWhite { .. }) |
-			(PanelShader::FadeOut { .. }, PanelShader::FadeOut { .. }) |
-			(PanelShader::FadeIn { .. }, PanelShader::FadeIn { .. }) => false,
-
-			// Else reload it
-			_ => true,
-		};
-
-		self.cur_shader = shader;
-
-		needs_reload
-	}
-
 	/// Renders a panel
 	pub async fn render(
 		&mut self,
@@ -158,7 +138,8 @@ impl PanelsRenderer {
 		shader: &PanelsRendererShader,
 	) -> Result<(), AppError> {
 		// Update the shader, if requested
-		if self.update_shader(shader.shader) {
+		if self.cur_shader != shader.shader {
+			self.cur_shader = shader.shader;
 			self.render_pipeline = self::create_render_pipeline(
 				wgpu_renderer,
 				wgpu_shared,
