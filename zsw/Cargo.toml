@@ -15,6 +15,7 @@ egui = { workspace = true, features = ["default_fonts"] }
 futures = { workspace = true }
 image = { workspace = true }
 itertools = { workspace = true }
+naga_oil = { workspace = true }
 num-rational = { workspace = true }
 opener = { workspace = true }
 rand = { workspace = true }
@@ -27,7 +28,7 @@ tokio-stream = { workspace = true, features = ["fs"] }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-wgpu = { workspace = true }
+wgpu = { workspace = true, features = ["naga-ir"] }
 winit = { workspace = true, features = ["x11"] }
 zsw-egui = { path = "../zsw-egui" }
 zsw-util = { path = "../zsw-util" }

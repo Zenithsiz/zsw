@@ -518,12 +518,27 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bit-set"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
+dependencies = [
+ "bit-vec 0.6.3",
+]
+
+[[package]]
+name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
 dependencies = [
- "bit-vec",
+ "bit-vec 0.8.0",
 ]
+
+[[package]]
+name = "bit-vec"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bit-vec"
@@ -1016,6 +1031,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "data-encoding"
+version = "2.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "575f75dfd25738df5b91b8e43e14d44bda14637a58fae779fd2b064f8bf3e010"
 
 [[package]]
 name = "dbus"
@@ -2353,19 +2374,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e380993072e52eef724eddfcde0ed013b0c023c3f0417336ed041aa9f076994e"
 dependencies = [
  "arrayvec",
- "bit-set",
+ "bit-set 0.8.0",
  "bitflags 2.9.0",
  "cfg_aliases",
  "codespan-reporting",
  "hexf-parse",
  "indexmap 2.9.0",
  "log",
+ "pp-rs",
  "rustc-hash",
  "spirv",
  "strum",
  "termcolor",
  "thiserror 2.0.12",
  "unicode-xid",
+]
+
+[[package]]
+name = "naga_oil"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ca507a365f886f95f74420361b75442a3709c747a8a6e8b6c45b8667f45a82c"
+dependencies = [
+ "bit-set 0.5.3",
+ "codespan-reporting",
+ "data-encoding",
+ "indexmap 2.9.0",
+ "naga",
+ "once_cell",
+ "regex",
+ "regex-syntax 0.8.5",
+ "rustc-hash",
+ "thiserror 1.0.69",
+ "tracing",
+ "unicode-ident",
 ]
 
 [[package]]
@@ -3003,6 +3045,15 @@ name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
+
+[[package]]
+name = "pp-rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb458bb7f6e250e6eb79d5026badc10a3ebb8f9a15d1fff0f13d17c71f4d6dee"
+dependencies = [
+ "unicode-xid",
+]
 
 [[package]]
 name = "ppv-lite86"
@@ -4525,7 +4576,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "671c25545d479b47d3f0a8e373aceb2060b67c6eb841b24ac8c32348151c7a0c"
 dependencies = [
  "arrayvec",
- "bit-vec",
+ "bit-vec 0.8.0",
  "bitflags 2.9.0",
  "cfg_aliases",
  "document-features",
@@ -4552,7 +4603,7 @@ dependencies = [
  "android_system_properties",
  "arrayvec",
  "ash",
- "bit-set",
+ "bit-set 0.8.0",
  "bitflags 2.9.0",
  "block",
  "bytemuck",
@@ -5306,6 +5357,7 @@ dependencies = [
  "futures",
  "image",
  "itertools 0.14.0",
+ "naga_oil",
  "num-rational",
  "opener",
  "rand 0.9.0",
@@ -5349,12 +5401,10 @@ dependencies = [
  "extend",
  "futures",
  "image",
- "itertools 0.14.0",
  "pin-project",
  "serde",
  "serde_json",
  "tokio",
- "tracing",
  "zutil-app-error",
 ]
 

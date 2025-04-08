@@ -7,11 +7,11 @@ log_file = "latest.log"
 
 [[default.panels]]
 panel = "multiple.toml"
-playlist = "example1"
+playlist = "example2"
 
 [[default.panels]]
 panel = "quarter.toml"
-playlist = "example1"
+playlist = "example2"
 
 #[[default.panels]]
 #panel = "full.toml"

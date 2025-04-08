@@ -175,6 +175,7 @@ async fn run(
 
 	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) =
 		PanelsRenderer::new(&wgpu_renderer, &wgpu_shared, shaders_path.join("panels/fade.wgsl"))
+			.await
 			.context("Unable to create panels renderer")?;
 	let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
@@ -368,6 +369,7 @@ async fn renderer(
 					&*cur_panels,
 					&panels_renderer_shader,
 				)
+				.await
 				.context("Unable to render panels")?;
 		}
 

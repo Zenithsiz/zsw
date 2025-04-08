@@ -1,13 +1,12 @@
 //! Vertex shader
-#include_once
+#define_import_path vertex
 
-// Includes
-#include "stage_io.wgsl"
-#include "uniforms.wgsl"
+// Imports
+#import stage_io::{VertexInput, VertexOutputFragInput}
+#import uniforms::uniforms
 
 // Vertex entry
-@vertex
-fn vs_main(in: VertexInput) -> VertexOutputFragInput {
+fn main(in: VertexInput) -> VertexOutputFragInput {
 	var out: VertexOutputFragInput;
 
 	out.pos = uniforms.pos_matrix * vec4<f32>(in.pos, 0.0, 1.0);

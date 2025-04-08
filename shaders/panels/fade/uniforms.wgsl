@@ -1,5 +1,5 @@
 //! Uniforms
-#include_once
+#define_import_path uniforms
 
 /// Uniforms for each image
 struct ImageUniforms {
@@ -9,26 +9,25 @@ struct ImageUniforms {
 
 /// Uniforms
 struct Uniforms {
-	#match SHADER
-	#match_case "none"
-		pos_matrix: mat4x4<f32>,
 
-	#match_case "fade"
-		pos_matrix: mat4x4<f32>,
-		prev: ImageUniforms,
-		cur: ImageUniforms,
-		next: ImageUniforms,
-		fade_point: f32,
-		progress: f32,
+#ifdef SHADER_NONE
+	pos_matrix: mat4x4<f32>,
+#else ifdef SHADER_FADE
+	pos_matrix: mat4x4<f32>,
+	prev: ImageUniforms,
+	cur: ImageUniforms,
+	next: ImageUniforms,
+	fade_point: f32,
+	progress: f32,
 
-		#match SHADER_FADE_TYPE
-		#match_case    "white"
-		#match_case_or "out"
-		#match_case_or "in"
-			strength: f32,
-
-		#match_end
-	#match_end
+	#ifdef SHADER_FADE_WHITE
+		strength: f32,
+	#else ifdef SHADER_FADE_OUT
+		strength: f32,
+	#else ifdef SHADER_FADE_IN
+		strength: f32,
+	#endif
+#endif
 };
 
 // Uniforms

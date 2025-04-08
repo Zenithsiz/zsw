@@ -13,10 +13,15 @@ use {
 	super::{Panel, PanelImage},
 	crate::panel::PanelGeometry,
 	cgmath::Vector2,
-	std::path::{Path, PathBuf},
-	wgpu::util::DeviceExt,
+	naga_oil::compose::{ComposableModuleDescriptor, Composer, ImportDefinition, NagaModuleDescriptor, ShaderDefValue},
+	std::{
+		borrow::Cow,
+		collections::HashSet,
+		path::{Path, PathBuf},
+	},
+	tokio::fs,
+	wgpu::{naga, util::DeviceExt},
 	winit::dpi::PhysicalSize,
-	zsw_util::Tpp,
 	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
 	zutil_app_error::{AppError, Context},
 };
@@ -72,7 +77,7 @@ pub struct PanelsRenderer {
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
-	pub fn new(
+	pub async fn new(
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		shader_path: PathBuf,
@@ -101,6 +106,7 @@ impl PanelsRenderer {
 					shader,
 					&shader_path,
 				)
+				.await
 				.context("Unable to create render pipeline")?,
 				vertices,
 				indices,
@@ -142,7 +148,7 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
-	pub fn render(
+	pub async fn render(
 		&mut self,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
@@ -161,6 +167,7 @@ impl PanelsRenderer {
 				shader.shader,
 				&shader.shader_path,
 			)
+			.await
 			.context("Unable to create render pipeline")?;
 		}
 
@@ -328,7 +335,7 @@ fn create_indices(wgpu_shared: &WgpuShared) -> wgpu::Buffer {
 }
 
 /// Creates the render pipeline
-fn create_render_pipeline(
+async fn create_render_pipeline(
 	wgpu_renderer: &WgpuRenderer,
 	wgpu_shared: &WgpuShared,
 	uniforms_bind_group_layout: &wgpu::BindGroupLayout,
@@ -338,35 +345,14 @@ fn create_render_pipeline(
 ) -> Result<wgpu::RenderPipeline, AppError> {
 	tracing::debug!(?shader, ?shader_path, "Creating render pipeline for shader");
 
-	// Parse the shader
-	let mut tpp = Tpp::new();
-	match shader {
-		PanelShader::None => tpp.define("SHADER", "none"),
-		PanelShader::Fade => {
-			tpp.define("SHADER", "fade");
-			tpp.define("SHADER_FADE_TYPE", "fade");
-		},
-		PanelShader::FadeWhite { .. } => {
-			tpp.define("SHADER", "fade");
-			tpp.define("SHADER_FADE_TYPE", "white");
-		},
-		PanelShader::FadeOut { .. } => {
-			tpp.define("SHADER", "fade");
-			tpp.define("SHADER_FADE_TYPE", "out");
-		},
-		PanelShader::FadeIn { .. } => {
-			tpp.define("SHADER", "fade");
-			tpp.define("SHADER_FADE_TYPE", "in");
-		},
-	};
-	let shader_contents = tpp
-		.process(shader_path)
+	let shader_module = self::parse_shader(shader_path, shader)
+		.await
 		.with_context(|| format!("Unable to preprocess shader {shader_path:?}"))?;
 
 	// Load the shader
 	let shader_descriptor = wgpu::ShaderModuleDescriptor {
 		label:  Some("[zsw::panel_renderer] Shader"),
-		source: wgpu::ShaderSource::Wgsl(shader_contents.into()),
+		source: wgpu::ShaderSource::Naga(Cow::Owned(shader_module)),
 	};
 	let shader = wgpu_shared.device.create_shader_module(shader_descriptor);
 
@@ -421,6 +407,106 @@ fn create_render_pipeline(
 	};
 
 	Ok(wgpu_shared.device.create_render_pipeline(&render_pipeline_descriptor))
+}
+
+/// Parses the shader
+async fn parse_shader(shader_path: &Path, shader: PanelShader) -> Result<naga::Module, AppError> {
+	// Read the initial shader
+	let shader_dir = shader_path.with_extension("");
+	let shader_path = shader_path.as_os_str().to_str().context("Shader path must be UTF-8")?;
+	let shader_source = fs::read_to_string(shader_path)
+		.await
+		.context("Unable to read shader file")?;
+
+	// Import all modules that we need, starting with the main file and recursively
+	// getting them all
+	let mut composer = Composer::default();
+	let (_, required_modules, _) = naga_oil::compose::get_preprocessor_data(&shader_source);
+	for module in required_modules {
+		self::parse_shader_module(&shader_dir, &mut composer, &module)
+			.await
+			.with_context(|| format!("Unable to build import {:?}", module.import))?;
+	}
+
+	let mut shader_defs = HashSet::new();
+	#[expect(unused_results, reason = "We don't care about whether it exists or not")]
+	match shader {
+		PanelShader::None => {
+			shader_defs.insert("SHADER_NONE");
+		},
+		PanelShader::Fade => {
+			shader_defs.insert("SHADER_FADE");
+			shader_defs.insert("SHADER_FADE_BASIC");
+		},
+		PanelShader::FadeWhite { .. } => {
+			shader_defs.insert("SHADER_FADE");
+			shader_defs.insert("SHADER_FADE_WHITE");
+		},
+		PanelShader::FadeOut { .. } => {
+			shader_defs.insert("SHADER_FADE");
+			shader_defs.insert("SHADER_FADE_OUT");
+		},
+		PanelShader::FadeIn { .. } => {
+			shader_defs.insert("SHADER_FADE");
+			shader_defs.insert("SHADER_FADE_IN");
+		},
+	}
+
+	// And finally build the final module.
+	let shader_module = composer
+		.make_naga_module(NagaModuleDescriptor {
+			source: &shader_source,
+			file_path: shader_path,
+			shader_type: naga_oil::compose::ShaderType::Wgsl,
+			shader_defs: shader_defs
+				.into_iter()
+				.map(|def| (def.to_owned(), ShaderDefValue::Bool(true)))
+				.collect(),
+			..Default::default()
+		})
+		.context("Unable to make naga module")?;
+
+	Ok(shader_module)
+}
+
+/// Parses a shader module
+async fn parse_shader_module(
+	shader_dir: &Path,
+	composer: &mut Composer,
+	module: &ImportDefinition,
+) -> Result<(), AppError> {
+	// If we already have the module, continue
+	if composer.contains_module(&module.import) {
+		return Ok(());
+	}
+
+	// Else read the module
+	let module_path = shader_dir.join(&module.import).with_extension("wgsl");
+	let module_path = module_path.to_str().context("Module file name was non-utf8")?;
+	let module_source = fs::read_to_string(module_path)
+		.await
+		.context("Unable to read module file")?;
+
+	// And get all required imports
+	let (_, required_modules, _) = naga_oil::compose::get_preprocessor_data(&module_source);
+	for module in required_modules {
+		Box::pin(self::parse_shader_module(shader_dir, composer, &module))
+			.await
+			.with_context(|| format!("Unable to build import {:?}", module.import))?;
+	}
+
+	// Then add it as a module
+	tracing::debug!(?module_path, "Processing shader module");
+	_ = composer
+		.add_composable_module(ComposableModuleDescriptor {
+			source: &module_source,
+			file_path: module_path,
+			language: naga_oil::compose::ShaderLanguage::Wgsl,
+			..Default::default()
+		})
+		.context("Unable to parse module")?;
+
+	Ok(())
 }
 
 /// Creates the msaa framebuffer

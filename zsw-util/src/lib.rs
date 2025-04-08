@@ -20,7 +20,6 @@
 // Modules
 pub mod meetup;
 mod rect;
-mod tpp;
 mod tuple_collect_res;
 pub mod unwrap_or_return;
 pub mod walk_dir;
@@ -28,7 +27,6 @@ pub mod walk_dir;
 // Exports
 pub use {
 	rect::Rect,
-	tpp::Tpp,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
 	unwrap_or_return::{UnwrapOrReturn, UnwrapOrReturnExt},
 	walk_dir::WalkDir,

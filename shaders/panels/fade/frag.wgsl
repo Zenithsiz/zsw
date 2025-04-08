@@ -1,15 +1,9 @@
 //! Frag shader
-#include_once
+#define_import_path frag
 
-// Includes
-#include "stage_io.wgsl"
-#include "uniforms.wgsl"
-
-// Frag output
-struct FragOutput {
-	@location(0)
-	color: vec4<f32>,
-};
+// Imports
+#import stage_io::{VertexOutputFragInput, FragOutput}
+#import uniforms::{uniforms, ImageUniforms}
 
 // Bindings
 @group(1) @binding(0) var texture_prev: texture_2d<f32>;
@@ -32,19 +26,17 @@ fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUnif
 	uvs = uvs * image_uniforms.image_ratio + uvs_delta;
 
 	// Offset it, if necessary
-	#match SHADER
-	#match_case "fade"
-		#match SHADER_FADE_TYPE
-		#match_case "out"
+	#ifdef SHADER_FADE
+		#ifdef SHADER_FADE_OUT
 			let mid = vec2<f32>(image_uniforms.image_ratio.x / 2.0 + uvs_delta.x, image_uniforms.image_ratio.y / 2.0 + uvs_delta.y);
 			uvs = (uvs.xy - mid) * pow(alpha, uniforms.strength) + mid;
 
-		#match_case "in"
+		#else ifdef SHADER_FADE_IN
 			let mid = vec2<f32>(image_uniforms.image_ratio.x / 2.0 + uvs_delta.x, image_uniforms.image_ratio.y / 2.0 + uvs_delta.y);
 			uvs = (uvs.xy - mid) / pow(alpha, uniforms.strength) + mid;
 
-		#match_end
-	#match_end
+		#endif
+	#endif
 
 	sampled.color = textureSample(texture, texture_sampler, uvs);
 	sampled.uvs = uvs;
@@ -52,12 +44,10 @@ fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUnif
 	return sampled;
 }
 
-@fragment
-fn fs_main(in: VertexOutputFragInput) -> FragOutput {
+fn main(in: VertexOutputFragInput) -> FragOutput {
 	var out: FragOutput;
 
-	#match SHADER
-	#match_case "fade"
+	#ifdef SHADER_FADE
 		let progress_prev = 1.0 - max((1.0 - uniforms.progress) - uniforms.fade_point, 0.0);
 		let progress_cur  = uniforms.progress;
 		let progress_next = max(uniforms.progress - uniforms.fade_point, 0.0);
@@ -70,24 +60,28 @@ fn fs_main(in: VertexOutputFragInput) -> FragOutput {
 		let sample_prev = sample(texture_prev, in.uvs, uniforms.prev, progress_prev, alpha_prev);
 		let sample_cur  = sample( texture_cur, in.uvs, uniforms.cur , progress_cur , alpha_cur );
 		let sample_next = sample(texture_next, in.uvs, uniforms.next, progress_next, alpha_next);
-	#match_end
+	#endif
 
 	// Then mix the color
-	#match SHADER
-	#match_case "none"
+	#ifdef SHADER_NONE
 		out.color = vec4(0.0);
 
-	#match_case "fade"
-		#match SHADER_FADE_TYPE
-		#match_case "fade"
-		#match_case_or "out"
+	#else ifdef SHADER_FADE
+		// TODO: Don't repeat this once we're able to use `defined(SHADER_FADE_BASIC) || defined(SHADER_FADE_OUT)`
+		#ifdef SHADER_FADE_BASIC
+			out.color =
+				alpha_prev * sample_prev.color +
+				alpha_cur  * sample_cur .color +
+				alpha_next * sample_next.color;
+			out.color.a = 1.0;
+		#else ifdef SHADER_FADE_OUT
 			out.color =
 				alpha_prev * sample_prev.color +
 				alpha_cur  * sample_cur .color +
 				alpha_next * sample_next.color;
 			out.color.a = 1.0;
 
-		#match_case "white"
+		#else ifdef SHADER_FADE_WHITE
 			out.color =
 				alpha_prev * sample_prev.color +
 				alpha_cur  * sample_cur .color +
@@ -99,7 +93,7 @@ fn fs_main(in: VertexOutputFragInput) -> FragOutput {
 			);
 			out.color.a = 1.0;
 
-		#match_case "in"
+		#else ifdef SHADER_FADE_IN
 			// TODO: Use a background color instead of black?
 			let contained_prev = sample_prev.uvs.x >= 0.0 && sample_prev.uvs.x <= 1.0 && sample_prev.uvs.y >= 0.0 && sample_prev.uvs.y <= 1.0;
 			let contained_cur  = sample_cur .uvs.x >= 0.0 && sample_cur .uvs.x <= 1.0 && sample_cur .uvs.y >= 0.0 && sample_cur .uvs.y <= 1.0;
@@ -109,8 +103,8 @@ fn fs_main(in: VertexOutputFragInput) -> FragOutput {
 				alpha_cur  * sample_cur .color * f32(contained_cur ) +
 				alpha_next * sample_next.color * f32(contained_next) ;
 			out.color.a = f32(contained_prev || contained_cur || contained_next);
-		#match_end
-	#match_end
+		#endif
+	#endif
 
 	return out;
 }

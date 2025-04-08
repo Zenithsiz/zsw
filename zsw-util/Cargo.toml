@@ -9,12 +9,10 @@ duplicate = { workspace = true }
 extend = { workspace = true }
 futures = { workspace = true }
 image = { workspace = true }
-itertools = { workspace = true }
 pin-project = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true }
 zutil-app-error = { workspace = true }
 
 [lints]

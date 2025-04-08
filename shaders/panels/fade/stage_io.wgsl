@@ -1,5 +1,5 @@
 //! Stage Input/Output
-#include_once
+#define_import_path stage_io
 
 // Vertex input
 struct VertexInput {
@@ -17,4 +17,10 @@ struct VertexOutputFragInput {
 
 	@location(0)
 	uvs: vec2<f32>,
+};
+
+// Frag output
+struct FragOutput {
+	@location(0)
+	color: vec4<f32>,
 };
