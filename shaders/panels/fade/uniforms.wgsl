@@ -9,14 +9,12 @@ struct ImageUniforms {
 
 /// Uniforms
 struct Uniforms {
-
-#ifdef SHADER_NONE
-	pos_matrix: mat4x4<f32>,
-#else ifdef SHADER_FADE
 	pos_matrix: mat4x4<f32>,
 	prev: ImageUniforms,
 	cur: ImageUniforms,
 	next: ImageUniforms,
+
+#ifdef SHADER_FADE
 	fade_point: f32,
 	progress: f32,
 
