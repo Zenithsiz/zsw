@@ -11,7 +11,7 @@ mod state;
 pub use self::{
 	geometry::PanelGeometry,
 	images::{PanelImage, PanelImages},
-	renderer::{PanelShader, PanelsRenderer, PanelsRendererLayouts, PanelsRendererShader},
+	renderer::{PanelShader, PanelsRenderer, PanelsRendererLayouts},
 	state::PanelState,
 };
 
@@ -23,7 +23,6 @@ use {
 		shared::Shared,
 		AppError,
 	},
-	zutil_app_error::Context,
 	futures::{stream::FuturesUnordered, StreamExt},
 	std::{
 		path::{Path, PathBuf},
@@ -32,6 +31,7 @@ use {
 	tokio::{fs, sync::RwLock},
 	zsw_util::{Rect, UnwrapOrReturnExt, WalkDir},
 	zsw_wgpu::WgpuShared,
+	zutil_app_error::Context,
 };
 
 /// Panels manager

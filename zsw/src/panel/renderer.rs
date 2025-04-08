@@ -11,14 +11,10 @@ pub use self::vertex::PanelVertex;
 use {
 	self::uniform::PanelImageUniforms,
 	super::{Panel, PanelImage},
-	crate::panel::PanelGeometry,
+	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	cgmath::Vector2,
 	naga_oil::compose::{ComposableModuleDescriptor, Composer, ImportDefinition, NagaModuleDescriptor, ShaderDefValue},
-	std::{
-		borrow::Cow,
-		collections::HashSet,
-		path::{Path, PathBuf},
-	},
+	std::{borrow::Cow, collections::HashSet, path::Path},
 	tokio::fs,
 	wgpu::{naga, util::DeviceExt},
 	winit::dpi::PhysicalSize,
@@ -34,16 +30,6 @@ pub struct PanelsRendererLayouts {
 
 	/// Image bind group layout
 	pub image_bind_group_layout: wgpu::BindGroupLayout,
-}
-
-/// Panels renderer shader
-#[derive(Debug)]
-pub struct PanelsRendererShader {
-	/// Current shader
-	pub shader: PanelShader,
-
-	/// Shader path
-	pub shader_path: PathBuf,
 }
 
 /// Panels renderer
@@ -78,10 +64,10 @@ pub struct PanelsRenderer {
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
 	pub async fn new(
+		config_dirs: &ConfigDirs,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
-		shader_path: PathBuf,
-	) -> Result<(Self, PanelsRendererLayouts, PanelsRendererShader), AppError> {
+	) -> Result<(Self, PanelsRendererLayouts), AppError> {
 		// Create the index / vertex buffer
 		let indices = self::create_indices(wgpu_shared);
 		let vertices = self::create_vertices(wgpu_shared);
@@ -99,12 +85,12 @@ impl PanelsRenderer {
 		Ok((
 			Self {
 				render_pipeline: self::create_render_pipeline(
+					config_dirs,
 					wgpu_renderer,
 					wgpu_shared,
 					&uniforms_bind_group_layout,
 					&image_bind_group_layout,
 					shader,
-					&shader_path,
 				)
 				.await
 				.context("Unable to create render pipeline")?,
@@ -117,7 +103,6 @@ impl PanelsRenderer {
 				uniforms_bind_group_layout,
 				image_bind_group_layout,
 			},
-			PanelsRendererShader { shader, shader_path },
 		))
 	}
 
@@ -128,25 +113,27 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
+	#[expect(clippy::too_many_arguments, reason = "TODO: Remove something")]
 	pub async fn render(
 		&mut self,
 		frame: &mut FrameRender,
+		config_dirs: &ConfigDirs,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
 		panels: impl IntoIterator<Item = &'_ Panel>,
-		shader: &PanelsRendererShader,
+		shader: PanelShader,
 	) -> Result<(), AppError> {
 		// Update the shader, if requested
-		if self.cur_shader != shader.shader {
-			self.cur_shader = shader.shader;
+		if self.cur_shader != shader {
+			self.cur_shader = shader;
 			self.render_pipeline = self::create_render_pipeline(
+				config_dirs,
 				wgpu_renderer,
 				wgpu_shared,
 				&layouts.uniforms_bind_group_layout,
 				&layouts.image_bind_group_layout,
-				shader.shader,
-				&shader.shader_path,
+				shader,
 			)
 			.await
 			.context("Unable to create render pipeline")?;
@@ -322,16 +309,18 @@ fn create_indices(wgpu_shared: &WgpuShared) -> wgpu::Buffer {
 
 /// Creates the render pipeline
 async fn create_render_pipeline(
+	config_dirs: &ConfigDirs,
 	wgpu_renderer: &WgpuRenderer,
 	wgpu_shared: &WgpuShared,
 	uniforms_bind_group_layout: &wgpu::BindGroupLayout,
 	image_bind_group_layout: &wgpu::BindGroupLayout,
 	shader: PanelShader,
-	shader_path: &Path,
 ) -> Result<wgpu::RenderPipeline, AppError> {
+	let shader_path = config_dirs.shaders().join(shader.path());
+
 	tracing::debug!(?shader, ?shader_path, "Creating render pipeline for shader");
 
-	let shader_module = self::parse_shader(shader_path, shader)
+	let shader_module = self::parse_shader(&shader_path, shader)
 		.await
 		.with_context(|| format!("Unable to preprocess shader {shader_path:?}"))?;
 
@@ -604,6 +593,15 @@ pub enum PanelShader {
 	FadeIn { strength: f32 },
 }
 impl PanelShader {
+	/// Returns this shader's path, relative to the shaders path
+	pub fn path(self) -> &'static str {
+		match self {
+			// TODO: Make `None` have a custom file?
+			Self::None | Self::Fade | Self::FadeWhite { .. } | Self::FadeOut { .. } | Self::FadeIn { .. } =>
+				"panels/fade.wgsl",
+		}
+	}
+
 	/// Returns this shader's name
 	pub fn name(self) -> &'static str {
 		match self {

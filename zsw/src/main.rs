@@ -173,10 +173,9 @@ async fn run(
 		return Err(app_error!("Shaders directory doesn't exist: {shaders_path:?}"));
 	}
 
-	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) =
-		PanelsRenderer::new(&wgpu_renderer, &wgpu_shared, shaders_path.join("panels/fade.wgsl"))
-			.await
-			.context("Unable to create panels renderer")?;
+	let (panels_renderer, panels_renderer_layout) = PanelsRenderer::new(config_dirs, &wgpu_renderer, &wgpu_shared)
+		.await
+		.context("Unable to create panels renderer")?;
 	let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
 
@@ -206,10 +205,11 @@ async fn run(
 		last_resize: AtomicCell::new(None),
 		// TODO: Not have a default of (0,0)?
 		cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
+		config_dirs: Arc::clone(config_dirs),
 		panels_manager,
 		image_requester,
 		cur_panels: Mutex::new(vec![]),
-		panels_renderer_shader: RwLock::new(panels_renderer_shader),
+		panels_shader: RwLock::new(PanelShader::None),
 		playlists: RwLock::new(playlists),
 	};
 	let shared = Arc::new(shared);
@@ -303,8 +303,7 @@ async fn load_default_panels(config: &Config, config_dirs: &ConfigDirs, shared: 
 
 	// Finally at the end set the shader
 	// TODO: Have this come from the config?
-	let mut panels_renderer_shader = shared.panels_renderer_shader.write().await;
-	panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
+	*shared.panels_shader.write().await = PanelShader::FadeOut { strength: 1.5 };
 
 	Ok(())
 }
@@ -359,15 +358,16 @@ async fn renderer(
 		{
 			let cur_panels = shared.cur_panels.lock().await;
 
-			let panels_renderer_shader = shared.panels_renderer_shader.read().await;
+			let shader = *shared.panels_shader.read().await;
 			panels_renderer
 				.render(
 					&mut frame,
+					&shared.config_dirs,
 					&wgpu_renderer,
 					&shared.wgpu,
 					&shared.panels_renderer_layout,
 					&*cur_panels,
-					&panels_renderer_shader,
+					shader,
 				)
 				.await
 				.context("Unable to render panels")?;

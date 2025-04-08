@@ -7,6 +7,7 @@ use std::{
 };
 
 /// Config directories
+#[derive(Debug)]
 pub struct ConfigDirs {
 	/// Root config directory
 	root: PathBuf,

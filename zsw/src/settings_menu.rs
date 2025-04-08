@@ -338,8 +338,7 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared) {
 	ui.label("Shader");
 
-	let mut panels_renderer_shader = shared.panels_renderer_shader.write().block_on();
-	let cur_shader = &mut panels_renderer_shader.shader;
+	let mut cur_shader = shared.panels_shader.write().block_on();
 	egui::ComboBox::from_id_salt("Shader selection menu")
 		.selected_text(cur_shader.name())
 		.show_ui(ui, |ui| {
@@ -352,11 +351,11 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared) {
 				PanelShader::FadeIn { strength: 0.2 },
 			];
 			for shader in shaders {
-				ui.selectable_value(cur_shader, shader, shader.name());
+				ui.selectable_value(&mut *cur_shader, shader, shader.name());
 			}
 		});
 
-	match cur_shader {
+	match &mut *cur_shader {
 		PanelShader::None | PanelShader::Fade => (),
 		PanelShader::FadeWhite { strength } => {
 			ui.horizontal(|ui| {
