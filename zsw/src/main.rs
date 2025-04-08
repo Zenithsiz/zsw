@@ -36,7 +36,7 @@ mod window;
 // Imports
 use {
 	self::{
-		config::{Config, ConfigPanel},
+		config::Config,
 		config_dirs::ConfigDirs,
 		panel::{Panel, PanelShader, PanelsManager, PanelsRenderer},
 		playlist::{PlaylistName, Playlists},
@@ -75,6 +75,7 @@ fn main() -> Result<(), AppError> {
 	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.toml"));
 	let config = Config::get_or_create_default(&config_path);
+	let config = Arc::new(config);
 	let config_dirs = ConfigDirs::new(
 		config_path
 			.parent()
@@ -117,7 +118,7 @@ fn main() -> Result<(), AppError> {
 
 struct WinitApp {
 	dirs:        ProjectDirs,
-	config:      Config,
+	config:      Arc<Config>,
 	config_dirs: Arc<ConfigDirs>,
 	event_rx:    Option<mpsc::UnboundedReceiver<(WindowId, WindowEvent)>>,
 	event_tx:    mpsc::UnboundedSender<(WindowId, WindowEvent)>,
@@ -153,7 +154,7 @@ impl winit::application::ApplicationHandler for WinitApp {
 
 async fn run(
 	dirs: &ProjectDirs,
-	config: &Config,
+	config: &Arc<Config>,
 	config_dirs: &Arc<ConfigDirs>,
 	event_loop: &winit::event_loop::ActiveEventLoop,
 	mut event_rx: mpsc::UnboundedReceiver<(WindowId, WindowEvent)>,
@@ -218,9 +219,9 @@ async fn run(
 
 	self::spawn_task("Load default panels", {
 		let shared = Arc::clone(&shared);
+		let config = Arc::clone(config);
 		let config_dirs = Arc::clone(config_dirs);
-		let default_panels = config.default_panels.clone();
-		|| async move { self::load_default_panels(&config_dirs, default_panels, shared).await }
+		|| async move { self::load_default_panels(&config, &config_dirs, shared).await }
 	});
 
 	self::spawn_task("Renderer", {
@@ -270,18 +271,16 @@ async fn run(
 }
 
 /// Loads the default panels
-async fn load_default_panels(
-	config_dirs: &ConfigDirs,
-	default_panels: Vec<ConfigPanel>,
-	shared: Arc<Shared>,
-) -> Result<(), AppError> {
+async fn load_default_panels(config: &Config, config_dirs: &ConfigDirs, shared: Arc<Shared>) -> Result<(), AppError> {
 	// Load the panels
 	let shared = &shared;
-	let loaded_panels = default_panels
-		.into_iter()
+	let loaded_panels = config
+		.default
+		.panels
+		.iter()
 		.map(|default_panel| async move {
-			let default_panel_path = config_dirs.panels().join(default_panel.panel);
-			let playlist_name = PlaylistName::from(default_panel.playlist);
+			let default_panel_path = config_dirs.panels().join(&default_panel.panel);
+			let playlist_name = PlaylistName::from(default_panel.playlist.clone());
 			shared
 				.panels_manager
 				.load(&default_panel_path, playlist_name, shared)

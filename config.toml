@@ -5,14 +5,14 @@ log_file = "latest.log"
 # upscale_cmd = "/upscale/cmd"
 # upscale_exclude = ["/path/to/exclude"]
 
-[[default_panels]]
+[[default.panels]]
 panel = "multiple.toml"
 playlist = "example1"
 
-[[default_panels]]
+[[default.panels]]
 panel = "quarter.toml"
 playlist = "example1"
 
-#[[default_panels]]
+#[[default.panels]]
 #panel = "full.toml"
 #playlist = "example1"

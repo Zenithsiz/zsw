@@ -44,9 +44,9 @@ pub struct Config {
 	#[serde(default)]
 	pub upscale_exclude: HashSet<PathBuf>,
 
-	/// Default panels
+	/// Default
 	#[serde(default)]
-	pub default_panels: Vec<ConfigPanel>,
+	pub default: ConfigDefault,
 }
 
 impl Config {
@@ -91,7 +91,7 @@ impl Config {
 	}
 }
 
-#[expect(clippy::derivable_impls)] // we want to be explicit with defaults
+#[expect(clippy::derivable_impls, reason = "We want to be explicit with defaults")]
 impl Default for Config {
 	fn default() -> Self {
 		Self {
@@ -101,8 +101,23 @@ impl Default for Config {
 			upscale_cache_dir:    None,
 			upscale_cmd:          None,
 			upscale_exclude:      HashSet::new(),
-			default_panels:       vec![],
+			default:              ConfigDefault::default(),
 		}
+	}
+}
+
+/// Config default
+#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ConfigDefault {
+	/// Panels
+	pub panels: Vec<ConfigPanel>,
+}
+
+#[expect(clippy::derivable_impls, reason = "We want to be explicit with defaults")]
+impl Default for ConfigDefault {
+	fn default() -> Self {
+		Self { panels: vec![] }
 	}
 }
 
