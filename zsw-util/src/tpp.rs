@@ -116,7 +116,7 @@ impl Tpp {
 	) -> Result<Option<Cow<'line, str>>, AppError> {
 		match cur_state {
 			// `#include`
-			State::Root { .. } if let Some(include_path_rel) = line.trim().strip_prefix("#include ") => {
+			_ if let Some(include_path_rel) = line.trim().strip_prefix("#include ") => {
 				let include_path_rel = Self::parse_quoted_string(include_path_rel)?;
 
 				// Then join it with the path's directory
@@ -145,14 +145,10 @@ impl Tpp {
 			},
 
 			// `#match`
-			State::Root { .. } if let Some(binding) = line.trim().strip_prefix("#match ") => {
+			State::Root { .. } | State::Matching { .. } if let Some(binding) = line.trim().strip_prefix("#match ") => {
 				let binding = binding.trim();
 				*cur_state = State::Matching {
-					value:       self
-						.bindings
-						.get(binding)
-						.with_context(|| format!("Unknown binding {binding:?}"))?
-						.clone(),
+					value:       self.bindings.get(binding).cloned(),
 					is_matching: None,
 					prev_state:  Box::new(cur_state.replace_poisoned()),
 				};
@@ -165,7 +161,7 @@ impl Tpp {
 				if let Some(match_value) = line.trim().strip_prefix("#match_case ") =>
 			{
 				let match_value = Self::parse_quoted_string(match_value)?;
-				*is_matching = Some(value == match_value);
+				*is_matching = Some(value.as_deref() == Some(match_value));
 
 				Ok(None)
 			},
@@ -176,7 +172,7 @@ impl Tpp {
 			{
 				let match_value = Self::parse_quoted_string(match_value)?;
 				match is_matching {
-					Some(is_matching) => *is_matching |= value == match_value,
+					Some(is_matching) => *is_matching |= value.as_deref() == Some(match_value),
 					None => zutil_app_error::bail!("Cannot use `#match_case_or` without a previous `#match_case`"),
 				}
 
@@ -202,7 +198,7 @@ impl Tpp {
 			},
 
 			// Unknown directive
-			State::Root { .. } if let Some(unknown) = line.trim().strip_prefix('#') => {
+			_ if let Some(unknown) = line.trim().strip_prefix('#') => {
 				zutil_app_error::bail!("Unknown directive: #{unknown}");
 			},
 
@@ -245,7 +241,7 @@ enum State {
 		include_once: bool,
 	},
 	Matching {
-		value:       String,
+		value:       Option<String>,
 		is_matching: Option<bool>,
 		prev_state:  Box<Self>,
 	},

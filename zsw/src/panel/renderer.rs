@@ -5,21 +5,20 @@ mod uniform;
 mod vertex;
 
 // Exports
-pub use self::{uniform::PanelUniforms, vertex::PanelVertex};
+pub use self::vertex::PanelVertex;
 
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
 	super::{Panel, PanelImage},
 	crate::panel::PanelGeometry,
-	zutil_app_error::Context,
 	cgmath::Vector2,
 	std::path::{Path, PathBuf},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
-	zutil_app_error::AppError,
 	zsw_util::Tpp,
 	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
+	zutil_app_error::{AppError, Context},
 };
 
 /// Panels renderer layouts
@@ -214,47 +213,8 @@ impl PanelsRenderer {
 			render_pass.set_bind_group(1, panel.images.image_bind_group(), &[]);
 
 			for geometry in &panel.geometries {
-				// Calculate the position matrix for the panel
-				let pos_matrix = geometry.pos_matrix(frame.surface_size);
-
-				let create_uniforms = |image: &PanelImage| {
-					let (size, swap_dir) = match *image {
-						PanelImage::Empty => (Vector2::new(0, 0), false),
-						PanelImage::Loaded { size, swap_dir, .. } => (size, swap_dir),
-					};
-
-					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);
-					PanelImageUniforms::new(ratio, swap_dir)
-				};
-
-				let uniforms_prev = create_uniforms(panel.images.prev());
-				let uniforms_cur = create_uniforms(panel.images.cur());
-				let uniforms_next = create_uniforms(panel.images.next());
-
-				/// Writes uniforms with `$extra` into `panel.uniforms`
-				macro write_uniforms($extra:expr) {{
-					let uniforms = PanelUniforms::new(
-						pos_matrix,
-						uniforms_prev,
-						uniforms_cur,
-						uniforms_next,
-						panel.state.fade_point_norm(),
-						panel.state.progress_norm(),
-						$extra,
-					);
-					wgpu_shared
-						.queue
-						.write_buffer(&geometry.uniforms, 0, uniforms.as_bytes())
-				}}
-
-				// Update the uniforms
-				match self.cur_shader {
-					PanelShader::None => write_uniforms!(uniform::NoneExtra {}),
-					PanelShader::Fade => write_uniforms!(uniform::FadeExtra {}),
-					PanelShader::FadeWhite { strength } => write_uniforms!(uniform::FadeWhiteExtra { strength }),
-					PanelShader::FadeOut { strength } => write_uniforms!(uniform::FadeOutExtra { strength }),
-					PanelShader::FadeIn { strength } => write_uniforms!(uniform::FadeInExtra { strength }),
-				};
+				// Write the uniforms
+				self.write_uniforms(wgpu_shared, frame.surface_size, panel, geometry);
 
 				// Then bind the geometry uniforms and draw
 				render_pass.set_bind_group(0, &geometry.uniforms_bind_group, &[]);
@@ -263,6 +223,84 @@ impl PanelsRenderer {
 		}
 
 		Ok(())
+	}
+
+	/// Writes the uniforms
+	pub fn write_uniforms(
+		&self,
+		wgpu_shared: &WgpuShared,
+		surface_size: PhysicalSize<u32>,
+		panel: &Panel,
+		geometry: &PanelGeometry,
+	) {
+		// Calculate the position matrix for the panel
+		let pos_matrix = geometry.pos_matrix(surface_size);
+		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
+
+		let image_uniforms = |image: &PanelImage| {
+			let (size, swap_dir) = match *image {
+				PanelImage::Empty => (Vector2::new(0, 0), false),
+				PanelImage::Loaded { size, swap_dir, .. } => (size, swap_dir),
+			};
+
+			let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);
+			PanelImageUniforms::new(ratio, swap_dir)
+		};
+
+		let prev = image_uniforms(panel.images.prev());
+		let cur = image_uniforms(panel.images.cur());
+		let next = image_uniforms(panel.images.next());
+
+		// Writes uniforms `uniforms`
+		let write_uniforms = |uniforms_bytes| wgpu_shared.queue.write_buffer(&geometry.uniforms, 0, uniforms_bytes);
+		macro write_uniforms($uniforms:expr) {
+			write_uniforms(bytemuck::bytes_of(&$uniforms))
+		}
+
+		let fade_point = panel.state.fade_point_norm();
+		let progress = panel.state.progress_norm();
+		match self.cur_shader {
+			PanelShader::None => write_uniforms!(uniform::None { pos_matrix }),
+			PanelShader::Fade => write_uniforms!(uniform::Fade {
+				pos_matrix,
+				prev,
+				cur,
+				next,
+				fade_point,
+				progress,
+				_unused: [0; 2],
+			}),
+			PanelShader::FadeWhite { strength } => write_uniforms!(uniform::FadeWhite {
+				pos_matrix,
+				prev,
+				cur,
+				next,
+				fade_point,
+				progress,
+				strength,
+				_unused: 0,
+			}),
+			PanelShader::FadeOut { strength } => write_uniforms!(uniform::FadeOut {
+				pos_matrix,
+				prev,
+				cur,
+				next,
+				fade_point,
+				progress,
+				strength,
+				_unused: 0,
+			}),
+			PanelShader::FadeIn { strength } => write_uniforms!(uniform::FadeIn {
+				pos_matrix,
+				prev,
+				cur,
+				next,
+				fade_point,
+				progress,
+				strength,
+				_unused: 0,
+			}),
+		};
 	}
 }
 
@@ -304,10 +342,22 @@ fn create_render_pipeline(
 	let mut tpp = Tpp::new();
 	match shader {
 		PanelShader::None => tpp.define("SHADER", "none"),
-		PanelShader::Fade => tpp.define("SHADER", "fade"),
-		PanelShader::FadeWhite { .. } => tpp.define("SHADER", "fade-white"),
-		PanelShader::FadeOut { .. } => tpp.define("SHADER", "fade-out"),
-		PanelShader::FadeIn { .. } => tpp.define("SHADER", "fade-in"),
+		PanelShader::Fade => {
+			tpp.define("SHADER", "fade");
+			tpp.define("SHADER_FADE_TYPE", "fade");
+		},
+		PanelShader::FadeWhite { .. } => {
+			tpp.define("SHADER", "fade");
+			tpp.define("SHADER_FADE_TYPE", "white");
+		},
+		PanelShader::FadeOut { .. } => {
+			tpp.define("SHADER", "fade");
+			tpp.define("SHADER_FADE_TYPE", "out");
+		},
+		PanelShader::FadeIn { .. } => {
+			tpp.define("SHADER", "fade");
+			tpp.define("SHADER_FADE_TYPE", "in");
+		},
 	};
 	let shader_contents = tpp
 		.process(shader_path)

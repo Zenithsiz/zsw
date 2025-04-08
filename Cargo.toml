@@ -129,6 +129,7 @@ clippy.option_if_let_else = "allow"
 clippy.self_named_module_files = "allow"
 clippy.items_after_statements = "allow"
 clippy.module_name_repetitions = "allow"
+clippy.struct_field_names = "allow"
 
 # Performance of floats isn't paramount
 clippy.suboptimal_flops = "allow"

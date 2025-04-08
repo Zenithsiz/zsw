@@ -9,24 +9,25 @@ struct ImageUniforms {
 
 /// Uniforms
 struct Uniforms {
-	pos_matrix: mat4x4<f32>,
-	prev: ImageUniforms,
-	cur: ImageUniforms,
-	next: ImageUniforms,
-	fade_point: f32,
-	progress: f32,
-
-	// Shader specific uniforms
 	#match SHADER
-	#match_case    "none"
-	#match_case_or "fade"
-		// Empty
+	#match_case "none"
+		pos_matrix: mat4x4<f32>,
 
-	#match_case    "fade-white"
-	#match_case_or "fade-out"
-	#match_case_or "fade-in"
-		strength: f32,
+	#match_case "fade"
+		pos_matrix: mat4x4<f32>,
+		prev: ImageUniforms,
+		cur: ImageUniforms,
+		next: ImageUniforms,
+		fade_point: f32,
+		progress: f32,
 
+		#match SHADER_FADE_TYPE
+		#match_case    "white"
+		#match_case_or "out"
+		#match_case_or "in"
+			strength: f32,
+
+		#match_end
 	#match_end
 };
 
