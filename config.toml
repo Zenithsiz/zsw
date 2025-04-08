@@ -1,9 +1,7 @@
 tokio_worker_threads = 2
 rayon_worker_threads = 2
 log_file = "latest.log"
-shaders_dir = "shaders/"
-playlists_dir = "playlists/"
 # upscale_cache_dir = "/path/to/cache"
 # upscale_cmd = "/upscale/cmd"
 # upscale_exclude = ["/path/to/exclude"]
-default_panels = ["panels/multiple.toml", "panels/quarter.toml"]
+default_panels = ["multiple.toml", "quarter.toml"]

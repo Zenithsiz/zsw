@@ -24,6 +24,7 @@
 // Modules
 mod args;
 mod config;
+mod config_dirs;
 mod image_loader;
 mod init;
 mod panel;
@@ -36,6 +37,7 @@ mod window;
 use {
 	self::{
 		config::Config,
+		config_dirs::ConfigDirs,
 		panel::{Panel, PanelShader, PanelsManager, PanelsRenderer},
 		playlist::Playlists,
 		settings_menu::SettingsMenu,
@@ -48,11 +50,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{stream::FuturesUnordered, Future, StreamExt},
-	std::{
-		fs,
-		path::{Path, PathBuf},
-		sync::Arc,
-	},
+	std::{fs, path::PathBuf, sync::Arc},
 	tokio::sync::{mpsc, Mutex, RwLock},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -77,6 +75,13 @@ fn main() -> Result<(), AppError> {
 	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.toml"));
 	let config = Config::get_or_create_default(&config_path);
+	let config_dirs = ConfigDirs::new(
+		config_path
+			.parent()
+			.expect("Config file had no parent directory")
+			.to_path_buf(),
+	);
+	let config_dirs = Arc::new(config_dirs);
 	init::logger::pre_init::debug(format!("config_path: {config_path:?}, config: {config:?}"));
 
 	// Initialize the logger properly now
@@ -100,8 +105,8 @@ fn main() -> Result<(), AppError> {
 	event_loop
 		.run_app(&mut WinitApp {
 			dirs,
-			config_path,
 			config,
+			config_dirs,
 			event_rx: Some(event_rx),
 			event_tx,
 		})
@@ -112,8 +117,8 @@ fn main() -> Result<(), AppError> {
 
 struct WinitApp {
 	dirs:        ProjectDirs,
-	config_path: PathBuf,
 	config:      Config,
+	config_dirs: Arc<ConfigDirs>,
 	event_rx:    Option<mpsc::UnboundedReceiver<(WindowId, WindowEvent)>>,
 	event_tx:    mpsc::UnboundedSender<(WindowId, WindowEvent)>,
 }
@@ -123,8 +128,8 @@ impl winit::application::ApplicationHandler for WinitApp {
 		// Try to initialize
 		let Err(err) = futures::executor::block_on(self::run(
 			&self.dirs,
-			&self.config_path,
 			&self.config,
+			&self.config_dirs,
 			event_loop,
 			self.event_rx.take().expect("Already resumed"),
 		)) else {
@@ -148,8 +153,8 @@ impl winit::application::ApplicationHandler for WinitApp {
 
 async fn run(
 	dirs: &ProjectDirs,
-	config_path: &Path,
 	config: &Config,
+	config_dirs: &Arc<ConfigDirs>,
 	event_loop: &winit::event_loop::ActiveEventLoop,
 	mut event_rx: mpsc::UnboundedReceiver<(WindowId, WindowEvent)>,
 ) -> Result<(), AppError> {
@@ -160,18 +165,10 @@ async fn run(
 		.await
 		.context("Unable to create wgpu renderer")?;
 
-	let shaders_path = config
-		.shaders_dir
-		.clone()
-		.unwrap_or_else(|| dirs.data_dir().join("shaders/"));
-	let playlists_path = config
-		.playlists_dir
-		.clone()
-		.unwrap_or_else(|| dirs.data_dir().join("playlists/"));
-
 	// If the shaders path doesn't exist, write it
 	// TODO: Use a virtual filesystem instead?
-	if !fs::exists(&shaders_path).context("Unable to check if shaders path exists")? {
+	let shaders_path = config_dirs.shaders();
+	if !fs::exists(shaders_path).context("Unable to check if shaders path exists")? {
 		return Err(anyhow::anyhow!("Shaders directory doesn't exist: {shaders_path:?}").into());
 	}
 
@@ -181,7 +178,7 @@ async fn run(
 	let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(window, &wgpu_renderer, &wgpu_shared);
 	let settings_menu = SettingsMenu::new();
 
-	let playlists = Playlists::load(playlists_path)
+	let playlists = Playlists::load(config_dirs.playlists().to_path_buf())
 		.await
 		.context("Unable to load playlists")?;
 
@@ -221,9 +218,9 @@ async fn run(
 
 	self::spawn_task("Load default panels", {
 		let shared = Arc::clone(&shared);
-		let config_path = config_path.to_path_buf();
+		let config_dirs = Arc::clone(config_dirs);
 		let default_panels = config.default_panels.clone();
-		|| async move { self::load_default_panels(&config_path, default_panels, shared).await }
+		|| async move { self::load_default_panels(&config_dirs, default_panels, shared).await }
 	});
 
 	self::spawn_task("Renderer", {
@@ -274,7 +271,7 @@ async fn run(
 
 /// Loads the default panels
 async fn load_default_panels(
-	config_path: &Path,
+	config_dirs: &ConfigDirs,
 	default_panels: Vec<PathBuf>,
 	shared: Arc<Shared>,
 ) -> Result<(), AppError> {
@@ -283,10 +280,7 @@ async fn load_default_panels(
 	let loaded_panels = default_panels
 		.iter()
 		.map(|default_panel| async move {
-			let default_panel_path = config_path
-				.parent()
-				.expect("Config path had no parent directory")
-				.join(default_panel);
+			let default_panel_path = config_dirs.panels().join(default_panel);
 			shared
 				.panels_manager
 				.load(&default_panel_path, shared)
