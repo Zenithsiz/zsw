@@ -13,19 +13,17 @@ struct Uniforms {
 	prev: ImageUniforms,
 	cur: ImageUniforms,
 	next: ImageUniforms,
-
-#ifdef SHADER_FADE
 	fade_point: f32,
 	progress: f32,
 
-	#ifdef SHADER_FADE_WHITE
+	// TODO: Reduce this repetition
+	#ifdef FADE_WHITE
 		strength: f32,
-	#else ifdef SHADER_FADE_OUT
+	#else ifdef FADE_OUT
 		strength: f32,
-	#else ifdef SHADER_FADE_IN
+	#else ifdef FADE_IN
 		strength: f32,
 	#endif
-#endif
 };
 
 // Uniforms

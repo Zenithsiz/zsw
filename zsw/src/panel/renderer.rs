@@ -406,24 +406,18 @@ async fn parse_shader(shader_path: &Path, shader: PanelShader) -> Result<naga::M
 	let mut shader_defs = HashSet::new();
 	#[expect(unused_results, reason = "We don't care about whether it exists or not")]
 	match shader {
-		PanelShader::None => {
-			shader_defs.insert("SHADER_NONE");
-		},
+		PanelShader::None => {},
 		PanelShader::Fade => {
-			shader_defs.insert("SHADER_FADE");
-			shader_defs.insert("SHADER_FADE_BASIC");
+			shader_defs.insert("FADE_BASIC");
 		},
 		PanelShader::FadeWhite { .. } => {
-			shader_defs.insert("SHADER_FADE");
-			shader_defs.insert("SHADER_FADE_WHITE");
+			shader_defs.insert("FADE_WHITE");
 		},
 		PanelShader::FadeOut { .. } => {
-			shader_defs.insert("SHADER_FADE");
-			shader_defs.insert("SHADER_FADE_OUT");
+			shader_defs.insert("FADE_OUT");
 		},
 		PanelShader::FadeIn { .. } => {
-			shader_defs.insert("SHADER_FADE");
-			shader_defs.insert("SHADER_FADE_IN");
+			shader_defs.insert("FADE_IN");
 		},
 	}
 
@@ -596,9 +590,8 @@ impl PanelShader {
 	/// Returns this shader's path, relative to the shaders path
 	pub fn path(self) -> &'static str {
 		match self {
-			// TODO: Make `None` have a custom file?
-			Self::None | Self::Fade | Self::FadeWhite { .. } | Self::FadeOut { .. } | Self::FadeIn { .. } =>
-				"panels/fade.wgsl",
+			Self::None => "panels/none.wgsl",
+			Self::Fade | Self::FadeWhite { .. } | Self::FadeOut { .. } | Self::FadeIn { .. } => "panels/fade.wgsl",
 		}
 	}
 
