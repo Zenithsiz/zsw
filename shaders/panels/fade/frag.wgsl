@@ -45,12 +45,15 @@ fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUnif
 fn main(in: VertexOutputFragInput) -> FragOutput {
 	var out: FragOutput;
 
-	let progress_prev = 1.0 - max((1.0 - uniforms.progress) - uniforms.fade_point, 0.0);
-	let progress_cur  = uniforms.progress;
-	let progress_next = max(uniforms.progress - uniforms.fade_point, 0.0);
+	let p = uniforms.progress;
+	let f = uniforms.fade_point;
 
-	let alpha_prev = max(((1.0 - progress_cur) - uniforms.fade_point) / (1.0 - uniforms.fade_point), 0.0);
-	let alpha_next = max((progress_cur - uniforms.fade_point) / (1.0 - uniforms.fade_point), 0.0);
+	let progress_prev = 1.0 - max((1.0 - p - f) / (3.0 - 2.0 * f), 0.0);
+	let progress_cur  = (p + 1.0 - f) / (3.0 - 2.0 * f);
+	let progress_next = max((p - f) / (3.0 - 2.0 * f), 0.0);
+
+	let alpha_prev = 0.5 * saturate(1.0 - (      p) / (1.0 - f));
+	let alpha_next = 0.5 * saturate(1.0 - (1.0 - p) / (1.0 - f));
 	let alpha_cur  = 1.0 - max(alpha_prev, alpha_next);
 
 	// Sample the textures

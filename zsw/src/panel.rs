@@ -253,7 +253,7 @@ impl Panel {
 			Some(next_progress) => match next_progress >= self.state.duration {
 				true => {
 					self.images.step_next(wgpu_shared, renderer_layouts).await;
-					self.state.progress = next_progress.saturating_sub(self.state.fade_point);
+					self.state.progress = next_progress.saturating_sub(self.state.duration);
 				},
 				false => {
 					let max_progress = match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
@@ -266,7 +266,7 @@ impl Panel {
 			},
 			None =>
 				if self.images.step_prev(wgpu_shared, renderer_layouts).await.is_ok() {
-					self.state.progress = self.state.fade_point.saturating_add_signed(frames);
+					self.state.progress = self.state.duration.saturating_add_signed(frames);
 				},
 		};
 
