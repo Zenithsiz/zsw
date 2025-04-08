@@ -4,34 +4,18 @@ name = "zsw-util"
 version = "0.1.0"
 
 [dependencies]
-
-# Zsw
-
-# Image
-image = { workspace = true }
-
-# Async
-futures = { workspace = true }
-tokio = { workspace = true }
-pin-project = { workspace = true }
-
-# Math
 cgmath = { workspace = true, features = ["serde"] }
-
-# Util
 duplicate = { workspace = true }
-itertools = { workspace = true }
 extend = { workspace = true }
-
-# Error
-zutil-app-error = { workspace = true }
-
-# Serde
+futures = { workspace = true }
+image = { workspace = true }
+itertools = { workspace = true }
+pin-project = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-
-# Logging
+tokio = { workspace = true }
 tracing = { workspace = true }
+zutil-app-error = { workspace = true }
 
 [lints]
 workspace = true

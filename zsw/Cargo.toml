@@ -19,6 +19,7 @@ num-rational = { workspace = true }
 opener = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
+rfd = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true }
 tokio = { workspace = true, features = ["full", "tracing"] }
@@ -28,10 +29,9 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 wgpu = { workspace = true }
 winit = { workspace = true, features = ["x11"] }
-rfd = { workspace = true }
+zsw-egui = { path = "../zsw-egui" }
 zsw-util = { path = "../zsw-util" }
 zsw-wgpu = { path = "../zsw-wgpu" }
-zsw-egui = { path = "../zsw-egui" }
 zutil-app-error = { workspace = true }
 
 [features]
