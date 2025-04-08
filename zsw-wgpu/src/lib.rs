@@ -71,18 +71,9 @@ async fn create_surface_and_adapter(
 	window: &'static Window,
 ) -> Result<(wgpu::Surface<'static>, wgpu::Adapter), AppError> {
 	// Get an instance with any backend
-	let instance_desc = wgpu::InstanceDescriptor {
-		backends:             wgpu::Backends::all(),
-		flags:                wgpu::InstanceFlags::default(),
-		dx12_shader_compiler: wgpu::Dx12Compiler::Dxc {
-			dxil_path: None,
-			dxc_path:  None,
-		},
-		gles_minor_version:   wgpu::Gles3MinorVersion::default(),
-	};
-	// TODO: Just use `?instance_desc` once it implements `Debug`
-	tracing::debug!(?instance_desc.backends, ?instance_desc.dx12_shader_compiler, "Requesting wgpu instance");
-	let instance = wgpu::Instance::new(instance_desc);
+	let instance_desc = wgpu::InstanceDescriptor::from_env_or_default();
+	tracing::debug!(?instance_desc, "Requesting wgpu instance");
+	let instance = wgpu::Instance::new(&instance_desc);
 	tracing::debug!(?instance, "Created wgpu instance");
 
 	// Create the surface

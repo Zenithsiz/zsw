@@ -10,11 +10,11 @@ use {
 		playlist::{Playlist, PlaylistItemKind, PlaylistName},
 		shared::Shared,
 	},
-	zutil_app_error::Context,
 	egui::Widget,
 	std::{path::Path, sync::Arc},
 	tokio::sync::RwLock,
 	zsw_util::{Rect, TokioTaskBlockOn},
+	zutil_app_error::Context,
 };
 
 /// Settings menu
@@ -212,7 +212,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 				//       skipping images when you hold it at the max value
 				ui.label("Cur progress");
 				egui::Slider::new(&mut panel.state.progress, 0..=panel.state.duration.saturating_sub(1))
-					.clamp_to_range(true)
+					.clamping(egui::SliderClamping::Always)
 					.ui(ui);
 
 				// Then clamp to the current max
@@ -340,7 +340,7 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared) {
 
 	let mut panels_renderer_shader = shared.panels_renderer_shader.write().block_on();
 	let cur_shader = &mut panels_renderer_shader.shader;
-	egui::ComboBox::from_id_source("Shader selection menu")
+	egui::ComboBox::from_id_salt("Shader selection menu")
 		.selected_text(cur_shader.name())
 		.show_ui(ui, |ui| {
 			// TODO: Not have default values here?

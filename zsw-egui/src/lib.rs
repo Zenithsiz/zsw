@@ -99,9 +99,9 @@ impl EguiPainter {
 		let mut platform = self.platform.lock().await;
 
 		// Draw the frame
-		platform.begin_frame();
+		platform.begin_pass();
 		let res = f(&platform.context());
-		let output = platform.end_frame(Some(window));
+		let output = platform.end_pass(Some(window));
 
 		res.map(|()| output)
 	}

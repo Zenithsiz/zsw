@@ -37,7 +37,7 @@ impl PlaylistPlayer {
 			cur_items:     VecDeque::new(),
 			max_old_items: 100,
 			cur_pos:       0,
-			rng:           StdRng::from_entropy(),
+			rng:           StdRng::from_os_rng(),
 		}
 	}
 

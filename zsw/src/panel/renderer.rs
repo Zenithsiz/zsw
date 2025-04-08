@@ -391,7 +391,7 @@ fn create_render_pipeline(
 
 		vertex:        wgpu::VertexState {
 			module:              &shader,
-			entry_point:         "vs_main",
+			entry_point:         Some("vs_main"),
 			buffers:             &[PanelVertex::buffer_layout()],
 			compilation_options: wgpu::PipelineCompilationOptions::default(),
 		},
@@ -412,7 +412,7 @@ fn create_render_pipeline(
 		},
 		fragment:      Some(wgpu::FragmentState {
 			module:              &shader,
-			entry_point:         "fs_main",
+			entry_point:         Some("fs_main"),
 			targets:             &color_targets,
 			compilation_options: wgpu::PipelineCompilationOptions::default(),
 		}),
