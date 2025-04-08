@@ -43,7 +43,8 @@
 		"walkdir",
 		"Wgsl",
 		"winit",
-		"zenithsiz"
+		"zenithsiz",
+		"zutil"
 	],
 	"[wgsl]": {
 		"editor.formatOnSave": false

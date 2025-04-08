@@ -24,7 +24,7 @@ itertools = { workspace = true }
 extend = { workspace = true }
 
 # Error
-anyhow = { workspace = true }
+zutil-app-error = { workspace = true }
 
 # Serde
 serde = { workspace = true }

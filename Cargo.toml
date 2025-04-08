@@ -1,10 +1,9 @@
 [workspace]
 
-members = ["zsw", "zsw-util", "zsw-wgpu", "zsw-error", "zsw-egui"]
+members = ["zsw", "zsw-util", "zsw-wgpu", "zsw-egui"]
 resolver = "2"
 
 [workspace.dependencies]
-anyhow = "1.0.89"
 async-channel = "2.3.1"
 async-once-cell = "0.5.3"
 bytemuck = { version = "1.18.0", features = ["derive"] }
@@ -41,6 +40,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 wgpu = { version = "22.1.0", features = [] }
 winit = "0.30.5"
+zutil-app-error = { git = "https://github.com/Zenithsiz/zutil", rev = "5363bba6ced162185a1eb5a132cce499bfc5d818" }
 
 # Compile `image` (and some it's dependencies, which actually load images) in release mode,
 # else it's too slow to meaningfully test other features

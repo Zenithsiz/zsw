@@ -10,7 +10,10 @@ mod renderer;
 pub use renderer::{FrameRender, WgpuRenderer};
 
 // Imports
-use {anyhow::Context, winit::window::Window, zsw_error::AppError};
+use {
+	winit::window::Window,
+	zutil_app_error::{AppError, Context},
+};
 
 /// Wgpu shared
 #[derive(Debug)]

@@ -2,10 +2,10 @@
 
 // Imports
 use {
-	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	serde::de,
 	std::{borrow::Cow, fmt, str::FromStr},
+	zutil_app_error::{AppError, Context},
 };
 
 /// A rectangle
@@ -115,7 +115,7 @@ impl fmt::Display for Rect<i32, u32> {
 }
 
 impl FromStr for Rect<i32, u32> {
-	type Err = anyhow::Error;
+	type Err = AppError;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		// Split at the first `+`, or just use it all, if there's no position

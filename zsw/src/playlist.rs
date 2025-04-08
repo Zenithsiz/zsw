@@ -10,7 +10,6 @@ pub use self::player::PlaylistPlayer;
 // Imports
 use {
 	crate::AppError,
-	anyhow::{anyhow, Context},
 	futures::{stream::FuturesUnordered, StreamExt},
 	std::{
 		borrow::Borrow,
@@ -23,6 +22,7 @@ use {
 	tokio::sync::RwLock,
 	tokio_stream::wrappers::ReadDirStream,
 	zsw_util::PathAppendExt,
+	zutil_app_error::{app_error, Context},
 };
 
 /// Playlists
@@ -37,7 +37,7 @@ pub struct Playlists {
 
 impl Playlists {
 	/// Loads all playlists from a directory
-	pub async fn load(root: PathBuf) -> Result<Self, anyhow::Error> {
+	pub async fn load(root: PathBuf) -> Result<Self, AppError> {
 		tokio::fs::create_dir_all(&root)
 			.await
 			.context("Unable to create playlists directory")?;
@@ -47,7 +47,7 @@ impl Playlists {
 			.map(ReadDirStream::new)
 			.context("Unable to read playlists directory")?
 			.then(|entry| async {
-				let res: Result<_, anyhow::Error> = try {
+				let res: Result<_, AppError> = try {
 					// Ignore directories and non `.toml` files
 					let entry = entry.context("Unable to get entry")?;
 					let entry_path = entry.path();
@@ -67,7 +67,7 @@ impl Playlists {
 						.to_os_string()
 						.into_string()
 						.map(PlaylistName::from)
-						.map_err(|file_name| anyhow!("Entry name was non-utf8: {file_name:?}"))?;
+						.map_err(|file_name| app_error!("Entry name was non-utf8: {file_name:?}"))?;
 
 					let playlist = self::load_playlist(&entry_path)
 						.await
@@ -119,14 +119,14 @@ impl Playlists {
 	/// Adds a playlist.
 	///
 	/// Saves the playlist to disk.
-	pub async fn add(&mut self, path: &Path) -> Result<(PlaylistName, Arc<RwLock<Playlist>>), anyhow::Error> {
+	pub async fn add(&mut self, path: &Path) -> Result<(PlaylistName, Arc<RwLock<Playlist>>), AppError> {
 		// Create the playlist path, ensuring we don't overwrite an existing path
 		let mut playlist_name = path
 			.file_name()
 			.context("Path has no file name")?
 			.to_os_string()
 			.into_string()
-			.map_err(|file_name| anyhow!("Playlist file name was non-utf8: {file_name:?}"))?;
+			.map_err(|file_name| app_error!("Playlist file name was non-utf8: {file_name:?}"))?;
 		while self.playlists.contains_key(playlist_name.as_str()) {
 			playlist_name.push_str("-new");
 		}
@@ -155,11 +155,11 @@ impl Playlists {
 	/// Saves a loaded playlist by name.
 	///
 	/// If the playlist doesn't exist, returns `Err`.
-	pub async fn save(&self, name: &PlaylistName) -> Result<(), anyhow::Error> {
+	pub async fn save(&self, name: &PlaylistName) -> Result<(), AppError> {
 		// Get the playlist
 		let playlist = match self.playlists.get(name) {
 			Some(playlist) => Arc::clone(playlist),
-			None => anyhow::bail!("Playlist {name:?} isn't loaded"),
+			None => zutil_app_error::bail!("Playlist {name:?} isn't loaded"),
 		};
 
 		// And save it

@@ -3,7 +3,7 @@
 // Imports
 use {
 	crate::panel::PanelGeometry,
-	anyhow::Context,
+	zutil_app_error::Context,
 	cgmath::Vector2,
 	futures::StreamExt,
 	image::DynamicImage,
@@ -14,7 +14,7 @@ use {
 	},
 	tokio::sync::{oneshot, Semaphore},
 	tracing::Instrument,
-	zsw_error::AppError,
+	zutil_app_error::AppError,
 	zsw_util::Rect,
 };
 

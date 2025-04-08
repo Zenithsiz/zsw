@@ -2,13 +2,12 @@
 
 // Imports
 use {
-	anyhow::Context,
 	std::{
 		num::NonZeroUsize,
 		sync::atomic::{self, AtomicUsize},
 		thread,
 	},
-	zsw_error::AppError,
+	zutil_app_error::{AppError, Context},
 };
 
 /// Creates the tokio runtime
@@ -29,5 +28,4 @@ pub fn create(worker_threads: Option<NonZeroUsize>) -> Result<tokio::runtime::Ru
 		.worker_threads(worker_threads)
 		.build()
 		.context("Unable to create runtime")
-		.map_err(AppError::Other)
 }

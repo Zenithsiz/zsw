@@ -2037,6 +2037,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4917,7 +4926,6 @@ dependencies = [
 name = "zsw"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-channel",
  "bytemuck",
  "cgmath",
@@ -4944,39 +4952,29 @@ dependencies = [
  "wgpu",
  "winit",
  "zsw-egui",
- "zsw-error",
  "zsw-util",
  "zsw-wgpu",
+ "zutil-app-error",
 ]
 
 [[package]]
 name = "zsw-egui"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "egui",
  "egui_wgpu_backend",
  "egui_winit_platform",
  "tokio",
  "tracing",
  "winit",
- "zsw-error",
  "zsw-wgpu",
-]
-
-[[package]]
-name = "zsw-error"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "thiserror",
+ "zutil-app-error",
 ]
 
 [[package]]
 name = "zsw-util"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "cgmath",
  "duplicate",
  "extend",
@@ -4988,18 +4986,18 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "zutil-app-error",
 ]
 
 [[package]]
 name = "zsw-wgpu"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "tokio",
  "tracing",
  "wgpu",
  "winit",
- "zsw-error",
+ "zutil-app-error",
 ]
 
 [[package]]
@@ -5024,6 +5022,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16099418600b4d8f028622f73ff6e3deaabdff330fb9a2a131dea781ee8b0768"
 dependencies = [
  "zune-core",
+]
+
+[[package]]
+name = "zutil-app-error"
+version = "0.1.0"
+source = "git+https://github.com/Zenithsiz/zutil?rev=5363bba6ced162185a1eb5a132cce499bfc5d818#5363bba6ced162185a1eb5a132cce499bfc5d818"
+dependencies = [
+ "itertools 0.14.0",
 ]
 
 [[package]]

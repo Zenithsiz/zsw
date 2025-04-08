@@ -4,15 +4,14 @@
 #[cfg(target_os = "linux")]
 use winit::platform::x11::{WindowAttributesExtX11, WindowType};
 use {
-	anyhow::Context,
 	cgmath::{Point2, Vector2},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::ActiveEventLoop,
 		window::{Window, WindowAttributes},
 	},
-	zsw_error::AppError,
 	zsw_util::Rect,
+	zutil_app_error::{AppError, Context},
 };
 
 /// Creates the window, as well as the associated event loop

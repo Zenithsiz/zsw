@@ -2,7 +2,6 @@
 
 // Imports
 use {
-	anyhow::Context,
 	itertools::Itertools,
 	std::{
 		borrow::Cow,
@@ -12,6 +11,7 @@ use {
 		mem,
 		path::{Path, PathBuf},
 	},
+	zutil_app_error::{AppError, Context},
 };
 
 /// Text preprocessor
@@ -50,7 +50,7 @@ impl Tpp {
 
 	/// Processes a file
 	// TODO: Don't clone result once the borrow checker accepts the early return
-	pub fn process(&mut self, path: impl AsRef<Path>) -> Result<String, anyhow::Error> {
+	pub fn process(&mut self, path: impl AsRef<Path>) -> Result<String, AppError> {
 		// Open the file and check if we already processed it
 		let path = path.as_ref().canonicalize().context("Unable to canonicalize file")?;
 		tracing::trace!(?path, "Processing file");
@@ -89,14 +89,14 @@ impl Tpp {
 				}
 			})
 			.flatten_ok()
-			.collect::<Result<Vec<_>, anyhow::Error>>()?
+			.collect::<Result<Vec<_>, AppError>>()?
 			.into_iter()
 			.join("\n");
 
 		// If the final state wasn't root, return Err
 		let include_once = match cur_state {
 			State::Root { include_once } => include_once,
-			State::Matching { .. } => anyhow::bail!("Missing `#match_end`"),
+			State::Matching { .. } => zutil_app_error::bail!("Missing `#match_end`"),
 			State::Poisoned => unreachable!("State was poisoned"),
 		};
 
@@ -113,7 +113,7 @@ impl Tpp {
 		cur_state: &mut State,
 		cur_path: &Path,
 		line: &'line str,
-	) -> Result<Option<Cow<'line, str>>, anyhow::Error> {
+	) -> Result<Option<Cow<'line, str>>, AppError> {
 		match cur_state {
 			// `#include`
 			State::Root { .. } if let Some(include_path_rel) = line.trim().strip_prefix("#include ") => {
@@ -132,12 +132,12 @@ impl Tpp {
 
 			// `#include_once`
 			State::Root { include_once } if let Some(rest) = line.trim().strip_prefix("#include_once") => {
-				anyhow::ensure!(
+				zutil_app_error::ensure!(
 					rest.trim().is_empty(),
 					"Unexpected tokens after `#include_once`: {rest:?}"
 				);
 				match include_once {
-					true => anyhow::bail!("Cannot specify `#include_once` twice"),
+					true => zutil_app_error::bail!("Cannot specify `#include_once` twice"),
 					false => *include_once = true,
 				}
 
@@ -177,7 +177,7 @@ impl Tpp {
 				let match_value = Self::parse_quoted_string(match_value)?;
 				match is_matching {
 					Some(is_matching) => *is_matching |= value == match_value,
-					None => anyhow::bail!("Cannot use `#match_case_or` without a previous `#match_case`"),
+					None => zutil_app_error::bail!("Cannot use `#match_case_or` without a previous `#match_case`"),
 				}
 
 				Ok(None)
@@ -185,7 +185,7 @@ impl Tpp {
 
 			// `#match_end`
 			State::Matching { prev_state, .. } if let Some(rest) = line.trim().strip_prefix("#match_end") => {
-				anyhow::ensure!(rest.trim().is_empty(), "Unexpected tokens after `#match_end`: {rest:?}");
+				zutil_app_error::ensure!(rest.trim().is_empty(), "Unexpected tokens after `#match_end`: {rest:?}");
 				*cur_state = prev_state.replace_poisoned();
 
 				Ok(None)
@@ -197,13 +197,13 @@ impl Tpp {
 				Some(false) => Ok(None),
 				None => match line.trim().is_empty() {
 					true => Ok(None),
-					false => anyhow::bail!("Cannot parse code in `#match` without a `#match_case`"),
+					false => zutil_app_error::bail!("Cannot parse code in `#match` without a `#match_case`"),
 				},
 			},
 
 			// Unknown directive
 			State::Root { .. } if let Some(unknown) = line.trim().strip_prefix('#') => {
-				anyhow::bail!("Unknown directive: #{unknown}");
+				zutil_app_error::bail!("Unknown directive: #{unknown}");
 			},
 
 			// Non-directive
@@ -214,7 +214,7 @@ impl Tpp {
 	}
 
 	/// Parses a quote-delimited string
-	fn parse_quoted_string(s: &str) -> Result<&str, anyhow::Error> {
+	fn parse_quoted_string(s: &str) -> Result<&str, AppError> {
 		s.trim()
 			.strip_prefix('"')
 			.and_then(|s| s.strip_suffix('"'))

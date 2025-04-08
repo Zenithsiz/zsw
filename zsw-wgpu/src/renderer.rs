@@ -3,9 +3,8 @@
 // Imports
 use {
 	super::WgpuShared,
-	anyhow::Context,
 	winit::{dpi::PhysicalSize, window::Window},
-	zsw_error::AppError,
+	zutil_app_error::{AppError, Context},
 };
 
 /// Wgpu renderer
@@ -98,7 +97,7 @@ impl WgpuRenderer {
 	}
 
 	/// Performs a resize
-	pub fn resize(&mut self, shared: &WgpuShared, size: PhysicalSize<u32>) -> Result<(), anyhow::Error> {
+	pub fn resize(&mut self, shared: &WgpuShared, size: PhysicalSize<u32>) -> Result<(), AppError> {
 		tracing::info!(?size, "Resizing wgpu surface");
 		// TODO: Don't ignore resizes to the same size?
 		if size.width > 0 && size.height > 0 && size != self.surface_size {

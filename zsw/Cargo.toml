@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { workspace = true }
 async-channel = { workspace = true }
 bytemuck = { workspace = true, features = ["derive"] }
 cgmath = { workspace = true }
@@ -30,10 +29,10 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 wgpu = { workspace = true }
 winit = { workspace = true, features = ["x11"] }
 rfd = { workspace = true }
-zsw-error = { path = "../zsw-error" }
 zsw-util = { path = "../zsw-util" }
 zsw-wgpu = { path = "../zsw-wgpu" }
 zsw-egui = { path = "../zsw-egui" }
+zutil-app-error = { workspace = true }
 
 [features]
 

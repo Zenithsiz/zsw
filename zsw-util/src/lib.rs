@@ -13,7 +13,8 @@
 	must_not_suspend,
 	impl_trait_in_assoc_type,
 	try_trait_v2,
-	assert_matches
+	assert_matches,
+	yeet_expr
 )]
 
 // Modules
@@ -35,7 +36,6 @@ pub use {
 
 // Imports
 use {
-	anyhow::Context,
 	image::DynamicImage,
 	std::{
 		ffi::OsStr,
@@ -43,10 +43,11 @@ use {
 		future::Future,
 		path::{Path, PathBuf},
 	},
+	zutil_app_error::{AppError, Context},
 };
 
 /// Parses json from a file
-pub fn parse_json_from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, anyhow::Error> {
+pub fn parse_json_from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, AppError> {
 	// Open the file
 	let file = fs::File::open(path).context("Unable to open file")?;
 
@@ -55,7 +56,7 @@ pub fn parse_json_from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Pat
 }
 
 /// Serializes json to a file
-pub fn serialize_json_to_file<T: serde::Serialize>(path: impl AsRef<Path>, value: &T) -> Result<(), anyhow::Error> {
+pub fn serialize_json_to_file<T: serde::Serialize>(path: impl AsRef<Path>, value: &T) -> Result<(), AppError> {
 	// Open the file
 	let file = fs::File::create(path).context("Unable to create file")?;
 

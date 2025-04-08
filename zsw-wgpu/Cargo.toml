@@ -4,12 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 wgpu = { workspace = true }
 winit = { workspace = true }
-zsw-error = { path = "../zsw-error" }
+zutil-app-error = { workspace = true }
 
 [lints]
 workspace = true

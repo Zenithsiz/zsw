@@ -4,15 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { workspace = true }
 egui = { workspace = true, features = ["default_fonts"] }
 egui_wgpu_backend = { workspace = true }
 egui_winit_platform = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 winit = { workspace = true }
-zsw-error = { path = "../zsw-error" }
 zsw-wgpu = { path = "../zsw-wgpu" }
+zutil-app-error = { workspace = true }
 
 [lints]
 workspace = true

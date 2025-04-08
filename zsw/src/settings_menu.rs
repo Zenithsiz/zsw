@@ -10,7 +10,7 @@ use {
 		playlist::{Playlist, PlaylistItemKind, PlaylistName},
 		shared::Shared,
 	},
-	anyhow::Context,
+	zutil_app_error::Context,
 	egui::Widget,
 	std::{path::Path, sync::Arc},
 	tokio::sync::RwLock,

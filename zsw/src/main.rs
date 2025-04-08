@@ -17,7 +17,8 @@
 	hash_raw_entry,
 	must_not_suspend,
 	anonymous_lifetime_in_impl_trait,
-	try_blocks
+	try_blocks,
+	yeet_expr
 )]
 #![expect(incomplete_features)]
 
@@ -43,7 +44,6 @@ use {
 		settings_menu::SettingsMenu,
 		shared::Shared,
 	},
-	anyhow::Context,
 	args::Args,
 	cgmath::Point2,
 	clap::Parser,
@@ -59,9 +59,9 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiPainter, EguiRenderer},
-	zsw_error::AppError,
 	zsw_util::{meetup, TokioTaskBlockOn},
 	zsw_wgpu::WgpuRenderer,
+	zutil_app_error::{app_error, AppError, Context},
 };
 
 
@@ -170,7 +170,7 @@ async fn run(
 	// TODO: Use a virtual filesystem instead?
 	let shaders_path = config_dirs.shaders();
 	if !fs::exists(shaders_path).context("Unable to check if shaders path exists")? {
-		return Err(anyhow::anyhow!("Shaders directory doesn't exist: {shaders_path:?}").into());
+		return Err(app_error!("Shaders directory doesn't exist: {shaders_path:?}"));
 	}
 
 	let (panels_renderer, panels_renderer_layout, panels_renderer_shader) =

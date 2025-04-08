@@ -23,7 +23,7 @@ use {
 		shared::Shared,
 		AppError,
 	},
-	anyhow::Context,
+	zutil_app_error::Context,
 	futures::{stream::FuturesUnordered, StreamExt},
 	std::{
 		path::{Path, PathBuf},
