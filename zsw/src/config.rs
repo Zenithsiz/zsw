@@ -46,7 +46,7 @@ pub struct Config {
 
 	/// Default panels
 	#[serde(default)]
-	pub default_panels: Vec<PathBuf>,
+	pub default_panels: Vec<ConfigPanel>,
 }
 
 impl Config {
@@ -104,4 +104,15 @@ impl Default for Config {
 			default_panels:       vec![],
 		}
 	}
+}
+
+/// Configuration panel
+#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ConfigPanel {
+	/// Panel path
+	pub panel: PathBuf,
+
+	/// Playlist
+	pub playlist: String,
 }

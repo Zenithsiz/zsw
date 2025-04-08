@@ -9,7 +9,6 @@ use zsw_util::Rect;
 pub struct Panel {
 	pub geometries: Vec<PanelGeometry>,
 	pub state:      PanelState,
-	pub playlist:   String,
 }
 
 /// Serialized panel geometry

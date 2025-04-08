@@ -45,7 +45,12 @@ impl PanelsManager {
 	}
 
 	/// Loads a panel from a path
-	pub async fn load(&self, path: &Path, shared: &Arc<Shared>) -> Result<Panel, AppError> {
+	pub async fn load(
+		&self,
+		path: &Path,
+		playlist_name: PlaylistName,
+		shared: &Arc<Shared>,
+	) -> Result<Panel, AppError> {
 		// Try to read the file
 		tracing::debug!(?path, "Loading panel");
 		let panel_toml = tokio::fs::read_to_string(path).await.context("Unable to open file")?;
@@ -61,7 +66,6 @@ impl PanelsManager {
 			duration:   panel.state.duration,
 			fade_point: panel.state.fade_point,
 		};
-		let playlist_name = PlaylistName::from(panel.playlist);
 
 		let panel = Panel::new(&shared.wgpu, &shared.panels_renderer_layout, geometries, state)
 			.context("Unable to create panel")?;

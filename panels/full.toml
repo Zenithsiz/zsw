@@ -1,5 +1,3 @@
-playlist = "example1"
-
 [[geometries]]
 geometry = "1366x768+0+0"
 

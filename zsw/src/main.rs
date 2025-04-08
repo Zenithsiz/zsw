@@ -36,10 +36,10 @@ mod window;
 // Imports
 use {
 	self::{
-		config::Config,
+		config::{Config, ConfigPanel},
 		config_dirs::ConfigDirs,
 		panel::{Panel, PanelShader, PanelsManager, PanelsRenderer},
-		playlist::Playlists,
+		playlist::{PlaylistName, Playlists},
 		settings_menu::SettingsMenu,
 		shared::Shared,
 	},
@@ -50,7 +50,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{stream::FuturesUnordered, Future, StreamExt},
-	std::{fs, path::PathBuf, sync::Arc},
+	std::{fs, sync::Arc},
 	tokio::sync::{mpsc, Mutex, RwLock},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -272,18 +272,19 @@ async fn run(
 /// Loads the default panels
 async fn load_default_panels(
 	config_dirs: &ConfigDirs,
-	default_panels: Vec<PathBuf>,
+	default_panels: Vec<ConfigPanel>,
 	shared: Arc<Shared>,
 ) -> Result<(), AppError> {
 	// Load the panels
 	let shared = &shared;
 	let loaded_panels = default_panels
-		.iter()
+		.into_iter()
 		.map(|default_panel| async move {
-			let default_panel_path = config_dirs.panels().join(default_panel);
+			let default_panel_path = config_dirs.panels().join(default_panel.panel);
+			let playlist_name = PlaylistName::from(default_panel.playlist);
 			shared
 				.panels_manager
-				.load(&default_panel_path, shared)
+				.load(&default_panel_path, playlist_name, shared)
 				.await
 				.inspect(|panel| tracing::debug!(?panel, "Loaded default panel"))
 				.inspect_err(|err| tracing::warn!("Unable to load default panel {default_panel_path:?}: {err:?}"))
@@ -300,11 +301,10 @@ async fn load_default_panels(
 		cur_panels.extend(loaded_panels);
 	}
 
-	// Finally at the end set the shader, if any panels were loaded
-	if !default_panels.is_empty() {
-		let mut panels_renderer_shader = shared.panels_renderer_shader.write().await;
-		panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
-	}
+	// Finally at the end set the shader
+	// TODO: Have this come from the config?
+	let mut panels_renderer_shader = shared.panels_renderer_shader.write().await;
+	panels_renderer_shader.shader = PanelShader::FadeOut { strength: 1.5 };
 
 	Ok(())
 }
