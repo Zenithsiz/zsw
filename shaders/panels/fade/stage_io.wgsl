@@ -1,5 +1,4 @@
 //! Stage Input/Output
-#define_import_path fade::stage_io
 
 // Vertex input
 struct VertexInput {

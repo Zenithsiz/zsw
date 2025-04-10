@@ -473,6 +473,7 @@ async fn parse_shader_module(
 			source: &module_source,
 			file_path: module_path,
 			language: naga_oil::compose::ShaderLanguage::Wgsl,
+			as_name: Some(module.import.clone()),
 			..Default::default()
 		})
 		.context("Unable to parse module")?;

@@ -1,5 +1,4 @@
 //! Frag shader
-#define_import_path fade::frag
 
 // Imports
 #import fade::stage_io::{VertexOutputFragInput, FragOutput}

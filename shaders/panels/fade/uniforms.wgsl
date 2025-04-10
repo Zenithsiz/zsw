@@ -1,5 +1,4 @@
 //! Uniforms
-#define_import_path fade::uniforms
 
 /// Uniforms for each image
 struct ImageUniforms {

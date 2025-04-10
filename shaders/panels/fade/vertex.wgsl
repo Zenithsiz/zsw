@@ -1,5 +1,4 @@
 //! Vertex shader
-#define_import_path fade::vertex
 
 // Imports
 #import fade::stage_io::{VertexInput, VertexOutputFragInput}
