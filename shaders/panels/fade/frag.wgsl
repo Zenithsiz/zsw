@@ -1,9 +1,9 @@
 //! Frag shader
-#define_import_path frag
+#define_import_path fade::frag
 
 // Imports
-#import stage_io::{VertexOutputFragInput, FragOutput}
-#import uniforms::{uniforms, ImageUniforms}
+#import fade::stage_io::{VertexOutputFragInput, FragOutput}
+#import fade::uniforms::{uniforms, ImageUniforms}
 
 // Bindings
 @group(1) @binding(0) var texture_prev: texture_2d<f32>;

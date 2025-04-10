@@ -13,6 +13,7 @@ use {
 	super::{Panel, PanelImage},
 	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	cgmath::Vector2,
+	itertools::Itertools,
 	naga_oil::compose::{ComposableModuleDescriptor, Composer, ImportDefinition, NagaModuleDescriptor, ShaderDefValue},
 	std::{borrow::Cow, collections::HashSet, path::Path},
 	tokio::fs,
@@ -387,7 +388,7 @@ async fn create_render_pipeline(
 /// Parses the shader
 async fn parse_shader(shader_path: &Path, shader: PanelShader) -> Result<naga::Module, AppError> {
 	// Read the initial shader
-	let shader_dir = shader_path.with_extension("");
+	let shader_dir = shader_path.parent().context("Shader path had no parent directory")?;
 	let shader_path = shader_path.as_os_str().to_str().context("Shader path must be UTF-8")?;
 	let shader_source = fs::read_to_string(shader_path)
 		.await
@@ -398,7 +399,7 @@ async fn parse_shader(shader_path: &Path, shader: PanelShader) -> Result<naga::M
 	let mut composer = Composer::default();
 	let (_, required_modules, _) = naga_oil::compose::get_preprocessor_data(&shader_source);
 	for module in required_modules {
-		self::parse_shader_module(&shader_dir, &mut composer, &module)
+		self::parse_shader_module(shader_dir, &mut composer, &module)
 			.await
 			.with_context(|| format!("Unable to build import {:?}", module.import))?;
 	}
@@ -450,7 +451,8 @@ async fn parse_shader_module(
 	}
 
 	// Else read the module
-	let module_path = shader_dir.join(&module.import).with_extension("wgsl");
+	let module_path_rel = module.import.split("::").join("/");
+	let module_path = shader_dir.join(&module_path_rel).with_extension("wgsl");
 	let module_path = module_path.to_str().context("Module file name was non-utf8")?;
 	let module_source = fs::read_to_string(module_path)
 		.await

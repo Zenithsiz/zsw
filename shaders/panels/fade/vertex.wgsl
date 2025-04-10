@@ -1,9 +1,9 @@
 //! Vertex shader
-#define_import_path vertex
+#define_import_path fade::vertex
 
 // Imports
-#import stage_io::{VertexInput, VertexOutputFragInput}
-#import uniforms::uniforms
+#import fade::stage_io::{VertexInput, VertexOutputFragInput}
+#import fade::uniforms::uniforms
 
 // Vertex entry
 fn main(in: VertexInput) -> VertexOutputFragInput {

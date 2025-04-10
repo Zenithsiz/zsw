@@ -1,9 +1,9 @@
 //! Fade shader
 
 // Imports
-#import vertex
-#import frag
-#import stage_io::{VertexInput, VertexOutputFragInput, FragOutput}
+#import fade::vertex
+#import fade::frag
+#import fade::stage_io::{VertexInput, VertexOutputFragInput, FragOutput}
 
 
 @vertex
