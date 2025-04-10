@@ -234,7 +234,9 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 
 			ui.horizontal(|ui| {
 				ui.label("Duration");
-				egui::Slider::new(&mut panel.state.duration, 0..=10800).ui(ui);
+				egui::Slider::new(&mut panel.state.duration, 0..=10800)
+					.clamping(egui::SliderClamping::Never)
+					.ui(ui);
 			});
 
 			ui.horizontal(|ui| {
