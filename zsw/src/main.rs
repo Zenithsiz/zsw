@@ -188,7 +188,7 @@ async fn run(
 	let upscale_cache_dir = config
 		.upscale_cache_dir
 		.clone()
-		.unwrap_or_else(|| dirs.data_dir().join("upscale_cache/"));
+		.unwrap_or_else(|| dirs.cache_dir().join("upscale_cache/"));
 	let (image_loader, image_requester) = image_loader::create(
 		upscale_cache_dir,
 		config.upscale_cmd.clone(),
