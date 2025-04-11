@@ -58,7 +58,7 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiPainter, EguiRenderer},
-	zsw_util::meetup,
+	zsw_util::{meetup, TokioTaskBlockOn},
 	zsw_wgpu::WgpuRenderer,
 	zutil_app_error::{app_error, AppError, Context},
 };
@@ -126,13 +126,14 @@ struct WinitApp {
 impl winit::application::ApplicationHandler for WinitApp {
 	fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
 		// Try to initialize
-		let Err(err) = futures::executor::block_on(self::run(
+		let Err(err) = self::run(
 			&self.dirs,
 			&self.config,
 			&self.config_dirs,
 			event_loop,
 			self.event_rx.take().expect("Already resumed"),
-		)) else {
+		)
+		.block_on() else {
 			return;
 		};
 
