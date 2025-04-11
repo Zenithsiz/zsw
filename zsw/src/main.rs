@@ -341,7 +341,9 @@ async fn renderer(
 	let mut egui_textures_delta = None;
 	loop {
 		// Meetup with the panels updater
-		let _ = panels_updater_output_rx.try_recv();
+		// Note: We just *try* to meetup, if it hasn't finished yet,
+		//       we just re-render the existing panels.
+		_ = panels_updater_output_rx.try_recv();
 
 		// Update egui, if available
 		if let Some((paint_jobs, textures_delta)) = egui_painter_output_rx.try_recv() {
