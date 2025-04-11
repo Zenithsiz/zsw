@@ -70,11 +70,11 @@ pub struct WalkDir {
 
 	/// Read directory future
 	#[pin]
-	read_dir_fut: Option<futs::ReadDirFut>,
+	read_dir_fut: Option<ReadDirFut>,
 
 	/// Read entry metadata
 	#[pin]
-	read_entry_metadata_fut: Option<futs::ReadMetadataFut>,
+	read_entry_metadata_fut: Option<ReadMetadataFut>,
 }
 
 impl WalkDir {
@@ -111,6 +111,7 @@ impl fmt::Debug for WalkDir {
 impl Stream for WalkDir {
 	type Item = Result<fs::DirEntry, io::Error>;
 
+	#[define_opaque(ReadDirFut, ReadMetadataFut)]
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Option<Self::Item>> {
 		let mut this = self.as_mut().project();
 
@@ -127,7 +128,7 @@ impl Stream for WalkDir {
 
 			// If we found a directory, read it
 			if metadata.is_dir() {
-				let read_dir_fut = futs::read_dir(entry_path);
+				let read_dir_fut = fs::read_dir(entry_path);
 				this.read_dir_fut.set(Some(read_dir_fut));
 			}
 		}
@@ -142,7 +143,7 @@ impl Stream for WalkDir {
 
 		// Get the bottom-most directory, or create it from root.
 		let Some(cur_dir) = this.stack.last_mut() else {
-			let read_dir_fut = futs::read_dir(this.root.clone());
+			let read_dir_fut = fs::read_dir(this.root.clone());
 			this.read_dir_fut.set(Some(read_dir_fut));
 			return self.poll_next(cx);
 		};
@@ -163,7 +164,16 @@ impl Stream for WalkDir {
 		if this.max_depth.is_none_or(|max_depth| this.stack.len() <= max_depth) {
 			// Note: If we don't want to recurse on symlinks, we want to make sure we don't
 			//       follow them, so we can detect them, and vice-versa
-			let read_entry_metadata_fut = futs::metadata(entry.path(), *this.recurse_symlink);
+			let entry_path = entry.path();
+			let follow_symlinks = *this.recurse_symlink;
+			let read_entry_metadata_fut = async move {
+				let metadata = match follow_symlinks {
+					true => fs::metadata(&entry_path).await?,
+					false => fs::symlink_metadata(&entry_path).await?,
+				};
+
+				Ok((entry_path, metadata))
+			};
 			this.read_entry_metadata_fut.set(Some(read_entry_metadata_fut));
 		}
 
@@ -171,30 +181,5 @@ impl Stream for WalkDir {
 	}
 }
 
-mod futs {
-	use super::*;
-
-	pub type ReadDirFut = impl Future<Output = Result<fs::ReadDir, io::Error>>;
-	#[define_opaque(ReadDirFut)]
-	pub fn read_dir(path: PathBuf) -> ReadDirFut {
-		fs::read_dir(path)
-	}
-
-	pub type ReadMetadataFut = impl Future<Output = Result<(PathBuf, std::fs::Metadata), io::Error>>;
-	#[define_opaque(ReadMetadataFut)]
-	pub fn metadata(path: PathBuf, follow_symlinks: bool) -> ReadMetadataFut {
-		metadata_inner(path, follow_symlinks)
-	}
-
-	async fn metadata_inner(
-		path: PathBuf,
-		follow_symlinks: bool,
-	) -> Result<(PathBuf, std::fs::Metadata), std::io::Error> {
-		let metadata = match follow_symlinks {
-			true => fs::metadata(&path).await?,
-			false => fs::symlink_metadata(&path).await?,
-		};
-
-		Ok((path, metadata))
-	}
-}
+pub type ReadDirFut = impl Future<Output = Result<fs::ReadDir, io::Error>>;
+pub type ReadMetadataFut = impl Future<Output = Result<(PathBuf, std::fs::Metadata), io::Error>>;
