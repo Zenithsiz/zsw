@@ -27,13 +27,17 @@ pub fn init(log_file: Option<&Path>) {
 	let term_env = self::get_env_filters("RUST_LOG", "info");
 	let term_layer = tracing_subscriber::fmt::layer()
 		.with_span_events(FmtSpan::CLOSE)
-		.with_ansi(term_use_colors)
-		.pretty()
-		.with_filter(
-			EnvFilter::builder()
-				.with_default_directive(LevelFilter::INFO.into())
-				.parse_lossy(term_env),
-		);
+		.with_ansi(term_use_colors);
+	#[cfg(debug_assertions)]
+	let term_layer = term_layer
+		.with_file(true)
+		.with_line_number(true)
+		.with_thread_names(true);
+	let term_layer = term_layer.with_filter(
+		EnvFilter::builder()
+			.with_default_directive(LevelFilter::INFO.into())
+			.parse_lossy(term_env),
+	);
 
 	// Create the file layer, if requested
 	let file_layer = log_file.and_then(|log_file| {
