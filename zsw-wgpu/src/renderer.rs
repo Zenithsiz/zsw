@@ -51,11 +51,13 @@ impl WgpuRenderer {
 	}
 
 	/// Returns the surface size
+	#[must_use]
 	pub fn surface_size(&self) -> PhysicalSize<u32> {
 		self.surface_size
 	}
 
 	/// Returns the surface config
+	#[must_use]
 	pub fn surface_config(&self) -> &wgpu::SurfaceConfiguration {
 		&self.surface_config
 	}

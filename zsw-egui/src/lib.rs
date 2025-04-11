@@ -140,6 +140,7 @@ impl EguiEventHandler {
 }
 
 /// Creates the egui service
+#[must_use]
 pub fn create(
 	window: &Window,
 	wgpu_renderer: &WgpuRenderer,
