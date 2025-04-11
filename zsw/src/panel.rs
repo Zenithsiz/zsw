@@ -218,7 +218,8 @@ impl Panel {
 			geometries: geometries
 				.into_iter()
 				.map(|geometry| PanelGeometry::new(wgpu_shared, renderer_layouts, geometry))
-				.collect(),
+				.collect::<Result<_, _>>()
+				.context("Unable to build geometries")?,
 			state,
 			images: PanelImages::new(wgpu_shared, renderer_layouts),
 		})

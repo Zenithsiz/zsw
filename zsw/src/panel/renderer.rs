@@ -5,7 +5,7 @@ mod uniform;
 mod vertex;
 
 // Exports
-pub use self::vertex::PanelVertex;
+pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 
 // Imports
 use {

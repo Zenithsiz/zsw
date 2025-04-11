@@ -14,7 +14,8 @@
 	impl_trait_in_assoc_type,
 	try_trait_v2,
 	assert_matches,
-	yeet_expr
+	yeet_expr,
+	const_trait_impl
 )]
 
 // Modules
@@ -118,3 +119,24 @@ pub macro log_error_panic( $($rest:tt)* ) {{
 
 	::std::panic!("{msg}");
 }}
+
+/// Returns the maximum value in an array as a `const fn`
+#[must_use]
+#[expect(clippy::missing_panics_doc, reason = "It's an internal panic")]
+pub const fn array_max<const N: usize>(values: &[usize; N]) -> Option<usize> {
+	let mut max = None;
+	let mut cur_idx = 0;
+	while cur_idx < values.len() {
+		#[expect(
+			clippy::unwrap_used,
+			reason = "We know it's `Some` in that branch and we can't use any pattern matching or `Option` methods"
+		)]
+		if max.is_none() || values[cur_idx] > max.unwrap() {
+			max = Some(values[cur_idx]);
+		}
+
+		cur_idx += 1;
+	}
+
+	max
+}

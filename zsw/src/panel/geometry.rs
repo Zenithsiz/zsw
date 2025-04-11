@@ -2,13 +2,13 @@
 
 // Imports
 use {
-	super::PanelsRendererLayouts,
+	super::{renderer::MAX_UNIFORM_SIZE, PanelsRendererLayouts},
 	cgmath::{Matrix4, Vector2, Vector3},
 	num_rational::Rational32,
-	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
 	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
+	zutil_app_error::{AppError, Context},
 };
 
 
@@ -26,16 +26,20 @@ pub struct PanelGeometry {
 }
 
 impl PanelGeometry {
-	pub fn new(wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, geometry: Rect<i32, u32>) -> Self {
+	pub fn new(
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+		geometry: Rect<i32, u32>,
+	) -> Result<Self, AppError> {
 		// Create the uniforms
-		// Note: Initial value doesn't matter
-		let uniforms_descriptor = wgpu::util::BufferInitDescriptor {
-			label:    None,
-			// TODO: Resize buffer as we go?
-			contents: &[0; 0x100],
-			usage:    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+		let uniforms_descriptor = wgpu::BufferDescriptor {
+			label:              None,
+			usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size:               u64::try_from(MAX_UNIFORM_SIZE)
+				.context("Maximum uniform size didn't fit into a `u64`")?,
+			mapped_at_creation: false,
 		};
-		let uniforms = wgpu_shared.device.create_buffer_init(&uniforms_descriptor);
+		let uniforms = wgpu_shared.device.create_buffer(&uniforms_descriptor);
 
 		// Create the uniform bind group
 		let uniforms_bind_group_descriptor = wgpu::BindGroupDescriptor {
@@ -48,11 +52,11 @@ impl PanelGeometry {
 		};
 		let uniforms_bind_group = wgpu_shared.device.create_bind_group(&uniforms_bind_group_descriptor);
 
-		Self {
+		Ok(Self {
 			geometry,
 			uniforms,
 			uniforms_bind_group,
-		}
+		})
 	}
 
 	/// Calculates this panel's position matrix

@@ -108,3 +108,13 @@ pub struct FadeIn {
 
 	pub _unused: u32,
 }
+
+/// The maximum uniform size
+pub const MAX_UNIFORM_SIZE: usize = zsw_util::array_max(&[
+	size_of::<None>(),
+	size_of::<Fade>(),
+	size_of::<FadeWhite>(),
+	size_of::<FadeOut>(),
+	size_of::<FadeIn>(),
+])
+.expect("No max uniform size");
