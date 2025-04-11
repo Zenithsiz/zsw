@@ -10,7 +10,7 @@ struct VertexInput {
 };
 
 // Vertex output / Frag Input
-struct VertexOutputFragInput {
+struct VertexOutput {
 	@builtin(position)
 	pos: vec4<f32>,
 

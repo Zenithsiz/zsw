@@ -1,7 +1,7 @@
 //! Frag shader
 
 // Imports
-#import fade::stage_io::{VertexOutputFragInput, FragOutput}
+#import fade::stage_io::{VertexOutput, FragOutput}
 #import fade::uniforms::{uniforms, ImageUniforms}
 
 // Bindings
@@ -41,7 +41,7 @@ fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUnif
 	return sampled;
 }
 
-fn main(in: VertexOutputFragInput) -> FragOutput {
+fn main(in: VertexOutput) -> FragOutput {
 	var out: FragOutput;
 
 	let p = uniforms.progress;
