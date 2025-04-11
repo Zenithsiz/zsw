@@ -10,6 +10,7 @@ use {
 		collections::{hash_map, HashMap},
 		env::{self, VarError},
 		fs,
+		io::{self, IsTerminal},
 		path::Path,
 	},
 	tracing::metadata::LevelFilter,
@@ -78,27 +79,14 @@ pub fn init(log_file: Option<&Path>) {
 }
 
 /// Returns whether to colors should be enabled for the terminal layer.
-// TODO: Check if we're being piped?
 fn colors_enabled() -> bool {
-	match env::var("RUST_LOG_COLOR").map(|var| var.to_lowercase()).as_deref() {
-		// By default / `1` / `yes` / `true`, use colors
-		Err(VarError::NotPresent) | Ok("1" | "yes" | "true") => true,
-
-		// On `0`, `no`, `false`, don't
-		Ok("0" | "no" | "false") => false,
-
-		// Else don't use colors, but warn
-		Ok(env) => {
-			pre_init::warn(format!(
-				"Ignoring unknown `RUST_LOG_COLOR` value: {env:?}, expected `0`, `1`, `yes`, `no`, `true`, `false`"
-			));
-			false
-		},
-		Err(VarError::NotUnicode(err)) => {
-			pre_init::warn(format!("Ignoring non-utf8 `RUST_LOG_COLOR`: {err:?}"));
-			false
-		},
+	// If `NO_COLOR` is set to non-empty, we shouldn't use colors
+	if env::var("NO_COLOR").is_ok_and(|var| !var.is_empty()) {
+		return false;
 	}
+
+	// Otherwise, enable colors if we're not being piped
+	io::stdout().is_terminal()
 }
 
 /// Returns the env filters of a variable.
