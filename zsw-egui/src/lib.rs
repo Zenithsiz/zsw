@@ -94,13 +94,13 @@ impl EguiPainter {
 	pub async fn draw<E>(
 		&self,
 		window: &Window,
-		f: impl FnOnce(&egui::Context) -> Result<(), E>,
+		f: impl AsyncFnOnce(&egui::Context) -> Result<(), E>,
 	) -> Result<egui::FullOutput, E> {
 		let mut platform = self.platform.lock().await;
 
 		// Draw the frame
 		platform.begin_pass();
-		let res = f(&platform.context());
+		let res = f(&platform.context()).await;
 		let output = platform.end_pass(Some(window));
 
 		res.map(|()| output)

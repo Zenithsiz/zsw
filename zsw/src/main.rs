@@ -58,7 +58,7 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiPainter, EguiRenderer},
-	zsw_util::{meetup, TokioTaskBlockOn},
+	zsw_util::meetup,
 	zsw_wgpu::WgpuRenderer,
 	zutil_app_error::{app_error, AppError, Context},
 };
@@ -424,7 +424,7 @@ async fn egui_painter(
 	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, AppError> {
 	loop {
-		let full_output_fut = egui_painter.draw(shared.window, |ctx| {
+		let full_output_fut = egui_painter.draw(shared.window, async |ctx| {
 			// Draw the settings menu
 			tokio::task::block_in_place(|| settings_menu.draw(ctx, &shared));
 
@@ -434,7 +434,7 @@ async fn egui_painter(
 			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let mut cur_panels = shared.cur_panels.lock().block_on();
+				let mut cur_panels = shared.cur_panels.lock().await;
 				for panel in &mut *cur_panels {
 					for geometry in &panel.geometries {
 						if geometry.geometry.contains(cursor_pos) {
@@ -452,7 +452,7 @@ async fn egui_painter(
 			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let mut cur_panels = shared.cur_panels.lock().block_on();
+				let mut cur_panels = shared.cur_panels.lock().await;
 				for panel in &mut *cur_panels {
 					if !panel
 						.geometries
@@ -464,7 +464,7 @@ async fn egui_painter(
 
 					panel
 						.skip(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester)
-						.block_on();
+						.await;
 				}
 			}
 
@@ -474,7 +474,7 @@ async fn egui_painter(
 				let delta = ctx.input(|input| input.smooth_scroll_delta.y);
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-				let mut cur_panels = shared.cur_panels.lock().block_on();
+				let mut cur_panels = shared.cur_panels.lock().await;
 				for panel in &mut *cur_panels {
 					if !panel
 						.geometries
@@ -494,7 +494,7 @@ async fn egui_painter(
 							&shared.image_requester,
 							frames,
 						)
-						.block_on();
+						.await;
 				}
 			}
 
