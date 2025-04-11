@@ -283,7 +283,7 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 							}
 						});
 					}
-				};
+				}
 
 				ui.collapsing("Items", |ui| {
 					egui::ScrollArea::new([false, true])

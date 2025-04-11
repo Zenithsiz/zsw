@@ -175,11 +175,13 @@ mod futs {
 	use super::*;
 
 	pub type ReadDirFut = impl Future<Output = Result<fs::ReadDir, io::Error>>;
+	#[define_opaque(ReadDirFut)]
 	pub fn read_dir(path: PathBuf) -> ReadDirFut {
 		fs::read_dir(path)
 	}
 
 	pub type ReadMetadataFut = impl Future<Output = Result<(PathBuf, std::fs::Metadata), io::Error>>;
+	#[define_opaque(ReadMetadataFut)]
 	pub fn metadata(path: PathBuf, follow_symlinks: bool) -> ReadMetadataFut {
 		metadata_inner(path, follow_symlinks)
 	}

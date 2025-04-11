@@ -14,7 +14,6 @@
 	exit_status_error,
 	closure_track_caller,
 	generic_const_exprs,
-	hash_raw_entry,
 	must_not_suspend,
 	anonymous_lifetime_in_impl_trait,
 	try_blocks,

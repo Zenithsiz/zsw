@@ -268,7 +268,7 @@ impl Panel {
 				if self.images.step_prev(wgpu_shared, renderer_layouts).await.is_ok() {
 					self.state.progress = self.state.duration.saturating_add_signed(frames);
 				},
-		};
+		}
 
 		// Then load any missing images
 		self.images

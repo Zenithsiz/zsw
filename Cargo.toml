@@ -172,3 +172,7 @@ clippy.wildcard_imports = "allow"
 # We can't configure it with the granularity we'd like, only by crate.
 # TODO: Turn on every once a while to check for actual use cases.
 #clippy.absolute_paths = "warn"
+
+# Despite it not being stable, we don't want to just display the string, and
+# instead want to display *any* debug representation
+clippy.unnecessary_debug_formatting = "allow"

@@ -281,7 +281,7 @@ impl PanelsRenderer {
 				strength,
 				_unused: 0,
 			}),
-		};
+		}
 	}
 }
 
