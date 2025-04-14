@@ -296,8 +296,6 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 							}
 						});
 				});
-
-				// TODO: Allow a "Go back" button. Or even a full playlist solution
 			});
 		});
 	}
