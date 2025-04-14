@@ -142,7 +142,7 @@ impl PanelsManager {
 										tracing::warn!(
 											?playlist_name,
 											?dir_path,
-											?err,
+											%err,
 											"Unable to read directory entry"
 										);
 									})
@@ -152,7 +152,7 @@ impl PanelsManager {
 								if fs::metadata(&path)
 									.await
 									.map_err(|err| {
-										tracing::warn!(?playlist_name, ?path, ?err, "Unable to get entry metadata");
+										tracing::warn!(?playlist_name, ?path, %err, "Unable to get entry metadata");
 									})
 									.unwrap_or_return()?
 									.is_dir()

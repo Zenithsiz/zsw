@@ -311,7 +311,7 @@ fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 		// TODO: Not use lossy conversion to display it?
 		if ui.link(path.to_string_lossy()).clicked() {
 			if let Err(err) = opener::open(path) {
-				tracing::warn!(?path, ?err, "Unable to open file");
+				tracing::warn!(?path, %err, "Unable to open file");
 			}
 		}
 	});

@@ -3,7 +3,6 @@
 // Imports
 use {
 	crate::panel::PanelGeometry,
-	zutil_app_error::Context,
 	cgmath::Vector2,
 	futures::StreamExt,
 	image::DynamicImage,
@@ -14,8 +13,8 @@ use {
 	},
 	tokio::sync::{oneshot, Semaphore},
 	tracing::Instrument,
-	zutil_app_error::AppError,
 	zsw_util::Rect,
+	zutil_app_error::{AppError, Context},
 };
 
 /// Image
@@ -135,8 +134,8 @@ impl ImageLoader {
 					tracing::warn!(?request, ?err, "Unable to load image");
 				}
 
-				if let Err(err) = response_tx.send(ImageResponse { request, image_res }) {
-					tracing::warn!(?err, "Unable to response to image request");
+				if let Err(response) = response_tx.send(ImageResponse { request, image_res }) {
+					tracing::warn!(?response.request, "Unable to send response to image request");
 				}
 			})
 			.collect::<()>()
