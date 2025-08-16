@@ -4,21 +4,7 @@
 //       Strangely doesn't occur on immediate, might be a driver issue.
 
 // Features
-#![feature(
-	never_type,
-	decl_macro,
-	assert_matches,
-	type_alias_impl_trait,
-	path_file_prefix,
-	exit_status_error,
-	closure_track_caller,
-	generic_const_exprs,
-	must_not_suspend,
-	anonymous_lifetime_in_impl_trait,
-	try_blocks,
-	yeet_expr
-)]
-#![expect(incomplete_features)]
+#![feature(never_type, decl_macro, exit_status_error, must_not_suspend, try_blocks, yeet_expr)]
 
 // Modules
 mod args;
