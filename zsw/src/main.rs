@@ -446,11 +446,13 @@ async fn egui_painter(
 				}
 			}
 
-			// Skip any ctrl-clicked panels
+			// Skip any ctrl-clicked/middle clicked panels
 			// TODO: Deduplicate this with the above and settings menu.
 			if !ctx.is_pointer_over_area() &&
-				ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl)
-			{
+				ctx.input(|input| {
+					(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
+						input.pointer.button_clicked(egui::PointerButton::Middle)
+				}) {
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().await;
