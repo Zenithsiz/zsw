@@ -10,7 +10,6 @@
 	assert_matches,
 	type_alias_impl_trait,
 	path_file_prefix,
-	let_chains,
 	exit_status_error,
 	closure_track_caller,
 	generic_const_exprs,
@@ -48,9 +47,9 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::{stream::FuturesUnordered, Future, StreamExt},
+	futures::{Future, StreamExt, stream::FuturesUnordered},
 	std::{fs, sync::Arc},
-	tokio::sync::{mpsc, Mutex, RwLock},
+	tokio::sync::{Mutex, RwLock, mpsc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
@@ -58,9 +57,9 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiPainter, EguiRenderer},
-	zsw_util::{meetup, TokioTaskBlockOn},
+	zsw_util::{TokioTaskBlockOn, meetup},
 	zsw_wgpu::WgpuRenderer,
-	zutil_app_error::{app_error, AppError, Context},
+	zutil_app_error::{AppError, Context, app_error},
 };
 
 

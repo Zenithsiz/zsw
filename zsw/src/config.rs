@@ -61,10 +61,10 @@ impl Config {
 
 				// If the config file doesn't exist, write the default
 				// Note: If we're unable to check for existence, we assume it does exist, so we don't override anything
-				if !fs::exists(path).unwrap_or(true) {
-					if let Err(err) = config.write(path) {
-						tracing::warn!("Unable to write default config: {err:?}");
-					}
+				if !fs::exists(path).unwrap_or(true) &&
+					let Err(err) = config.write(path)
+				{
+					tracing::warn!("Unable to write default config: {err:?}");
 				}
 
 				config

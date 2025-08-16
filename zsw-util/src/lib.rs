@@ -8,7 +8,6 @@
 	never_type,
 	type_alias_impl_trait,
 	if_let_guard,
-	let_chains,
 	extend_one,
 	must_not_suspend,
 	impl_trait_in_assoc_type,

@@ -13,6 +13,7 @@ use {
 	super::{Panel, PanelImage},
 	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	cgmath::Vector2,
+	core::future::Future,
 	itertools::Itertools,
 	naga_oil::compose::{ComposableModuleDescriptor, Composer, ImportDefinition, NagaModuleDescriptor, ShaderDefValue},
 	std::{borrow::Cow, collections::HashSet, path::Path},
@@ -440,45 +441,48 @@ async fn parse_shader(shader_path: &Path, shader: PanelShader) -> Result<naga::M
 }
 
 /// Parses a shader module
-async fn parse_shader_module(
+#[expect(clippy::manual_async_fn, reason = "We miss out on the `+ Send` bound if we do.")]
+fn parse_shader_module(
 	shader_dir: &Path,
 	composer: &mut Composer,
 	module: &ImportDefinition,
-) -> Result<(), AppError> {
-	// If we already have the module, continue
-	if composer.contains_module(&module.import) {
-		return Ok(());
-	}
+) -> impl Future<Output = Result<(), AppError>> + Send {
+	async move {
+		// If we already have the module, continue
+		if composer.contains_module(&module.import) {
+			return Ok(());
+		}
 
-	// Else read the module
-	let module_path_rel = module.import.split("::").join("/");
-	let module_path = shader_dir.join(&module_path_rel).with_extension("wgsl");
-	let module_path = module_path.to_str().context("Module file name was non-utf8")?;
-	let module_source = fs::read_to_string(module_path)
-		.await
-		.context("Unable to read module file")?;
-
-	// And get all required imports
-	let (_, required_modules, _) = naga_oil::compose::get_preprocessor_data(&module_source);
-	for module in required_modules {
-		Box::pin(self::parse_shader_module(shader_dir, composer, &module))
+		// Else read the module
+		let module_path_rel = module.import.split("::").join("/");
+		let module_path = shader_dir.join(&module_path_rel).with_extension("wgsl");
+		let module_path = module_path.to_str().context("Module file name was non-utf8")?;
+		let module_source = fs::read_to_string(module_path)
 			.await
-			.with_context(|| format!("Unable to build import {:?}", module.import))?;
+			.context("Unable to read module file")?;
+
+		// And get all required imports
+		let (_, required_modules, _) = naga_oil::compose::get_preprocessor_data(&module_source);
+		for module in required_modules {
+			Box::pin(self::parse_shader_module(shader_dir, composer, &module))
+				.await
+				.with_context(|| format!("Unable to build import {:?}", module.import))?;
+		}
+
+		// Then add it as a module
+		tracing::debug!(?module_path, "Processing shader module");
+		_ = composer
+			.add_composable_module(ComposableModuleDescriptor {
+				source: &module_source,
+				file_path: module_path,
+				language: naga_oil::compose::ShaderLanguage::Wgsl,
+				as_name: Some(module.import.clone()),
+				..Default::default()
+			})
+			.context("Unable to parse module")?;
+
+		Ok(())
 	}
-
-	// Then add it as a module
-	tracing::debug!(?module_path, "Processing shader module");
-	_ = composer
-		.add_composable_module(ComposableModuleDescriptor {
-			source: &module_source,
-			file_path: module_path,
-			language: naga_oil::compose::ShaderLanguage::Wgsl,
-			as_name: Some(module.import.clone()),
-			..Default::default()
-		})
-		.context("Unable to parse module")?;
-
-	Ok(())
 }
 
 /// Creates the msaa framebuffer
