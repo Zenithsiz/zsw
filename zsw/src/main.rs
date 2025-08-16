@@ -34,7 +34,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
-	std::{fs, sync::Arc},
+	std::{fs, process, sync::Arc},
 	tokio::sync::{Mutex, RwLock, mpsc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -124,7 +124,7 @@ impl winit::application::ApplicationHandler for WinitApp {
 
 		// If we get an error, print it and quit
 		tracing::error!(?err, "Unable to initialize");
-		std::process::exit(1);
+		process::exit(1);
 	}
 
 	fn window_event(

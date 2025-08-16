@@ -89,7 +89,6 @@ clippy.rest_pat_in_fully_bound_structs = "warn"
 clippy.same_name_method = "warn"
 clippy.mod_module_files = "warn"
 clippy.semicolon_inside_block = "warn"
-clippy.string_to_string = "warn"
 clippy.undocumented_unsafe_blocks = "warn"
 clippy.unnecessary_safety_comment = "warn"
 clippy.unnecessary_safety_doc = "warn"
@@ -155,11 +154,6 @@ rustdoc.private_intra_doc_links = "allow"
 
 # This is too prevalent on generic functions, which we don't want to ALWAYS be `Send`
 clippy.future_not_send = "allow"
-
-# Too many false positives
-# Triggers on `T: B + C` if `trait B: A` and `trait C: A`.
-# TODO: Turn back on once false positives are fixed
-clippy.trait_duplication_in_bounds = "allow"
 
 # Too many false positives
 clippy.significant_drop_tightening = "allow"
