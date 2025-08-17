@@ -3,11 +3,11 @@
 // Imports
 use {
 	crate::{
+		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
 		panel::{Panel, PanelShader, PanelsManager, PanelsRendererLayouts},
 		playlist::Playlists,
-		Resize,
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,

@@ -11,7 +11,7 @@ use {
 		shared::Shared,
 	},
 	egui::Widget,
-	std::{path::Path, sync::Arc},
+	std::{path::Path, process, sync::Arc},
 	tokio::sync::RwLock,
 	zsw_util::{Rect, TokioTaskBlockOn},
 	zutil_app_error::Context,
@@ -62,12 +62,14 @@ impl SettingsMenu {
 			ui.horizontal(|ui| {
 				ui.selectable_value(&mut self.cur_tab, Tab::Panels, "Panels");
 				ui.selectable_value(&mut self.cur_tab, Tab::Playlists, "Playlists");
+				ui.selectable_value(&mut self.cur_tab, Tab::Settings, "Settings");
 			});
 			ui.separator();
 
 			match self.cur_tab {
 				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared),
 				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared),
+				Tab::Settings => self::draw_settings(ui, shared),
 			}
 		});
 	}
@@ -302,6 +304,15 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 }
 
 
+/// Draws the settings tab
+fn draw_settings(ui: &mut egui::Ui, _shared: &Arc<Shared>) {
+	if ui.button("Quit").clicked() {
+		// TODO: Don't just quit the process? Allow the event loop
+		//       to end and our app to be dropped.
+		process::exit(0);
+	}
+}
+
 /// Draws an openable path
 fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 	ui.horizontal(|ui| {
@@ -397,6 +408,7 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>) {
 enum Tab {
 	Panels,
 	Playlists,
+	Settings,
 }
 
 /// State for adding a playlist
