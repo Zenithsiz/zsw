@@ -36,7 +36,7 @@ pub struct Shared {
 #[derive(Debug)]
 pub struct SharedWindow {
 	pub event_loop_proxy:       winit::event_loop::EventLoopProxy<AppEvent>,
-	pub window:                 &'static winit::window::Window,
+	pub window:                 Arc<winit::window::Window>,
 	pub wgpu:                   WgpuShared,
 	pub panels_renderer_layout: PanelsRendererLayouts,
 }

@@ -205,10 +205,9 @@ impl WinitApp {
 
 	/// Initializes the window related things
 	pub async fn init_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Result<(), AppError> {
-		// TODO: Not leak the window?
 		let window = window::create(event_loop).context("Unable to create winit event loop and window")?;
-		let window = Box::leak(Box::new(window));
-		let (wgpu_shared, wgpu_renderer) = zsw_wgpu::create(window)
+		let window = Arc::new(window);
+		let (wgpu_shared, wgpu_renderer) = zsw_wgpu::create(Arc::clone(&window))
 			.await
 			.context("Unable to create wgpu renderer")?;
 
@@ -216,7 +215,7 @@ impl WinitApp {
 			PanelsRenderer::new(&self.config_dirs, &wgpu_renderer, &wgpu_shared)
 				.await
 				.context("Unable to create panels renderer")?;
-		let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(window, &wgpu_renderer, &wgpu_shared);
+		let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(&window, &wgpu_renderer, &wgpu_shared);
 		let settings_menu = SettingsMenu::new();
 
 		let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
@@ -423,7 +422,7 @@ async fn renderer(
 		egui_renderer
 			.render_egui(
 				&mut frame,
-				shared_window.window,
+				&shared_window.window,
 				&shared_window.wgpu,
 				&egui_paint_jobs,
 				egui_textures_delta.take(),
@@ -478,7 +477,7 @@ async fn egui_painter(
 	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 ) -> Result<!, AppError> {
 	loop {
-		let full_output_fut = egui_painter.draw(shared_window.window, async |ctx| {
+		let full_output_fut = egui_painter.draw(&shared_window.window, async |ctx| {
 			// Draw the settings menu
 			tokio::task::block_in_place(|| settings_menu.draw(ctx, &shared, &shared_window));
 

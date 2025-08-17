@@ -11,6 +11,7 @@ pub use renderer::{FrameRender, WgpuRenderer};
 
 // Imports
 use {
+	std::sync::Arc,
 	winit::window::Window,
 	zutil_app_error::{AppError, Context},
 };
@@ -26,9 +27,11 @@ pub struct WgpuShared {
 }
 
 /// Creates the wgpu service
-pub async fn create(window: &'static Window) -> Result<(WgpuShared, WgpuRenderer), AppError> {
+pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), AppError> {
 	// Create the surface and adapter
-	let (surface, adapter) = self::create_surface_and_adapter(window).await?;
+	// SAFETY: `WgpuShared` keeps an `Arc<Window>` that it only drops
+	//         *after* dropping the surface.
+	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window) }.await?;
 
 	// Then create the device and it's queue
 	let (device, queue) = self::create_device(&adapter).await?;
@@ -67,8 +70,8 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 ///
 /// # Safety
 /// The returned surface *must* be dropped before the window.
-async fn create_surface_and_adapter(
-	window: &'static Window,
+async unsafe fn create_surface_and_adapter(
+	window: &Window,
 ) -> Result<(wgpu::Surface<'static>, wgpu::Adapter), AppError> {
 	// Get an instance with any backend
 	let instance_desc = wgpu::InstanceDescriptor::from_env_or_default();
@@ -78,7 +81,10 @@ async fn create_surface_and_adapter(
 
 	// Create the surface
 	tracing::debug!(?window, "Requesting wgpu surface");
-	let surface = instance.create_surface(window).context("Unable to request surface")?;
+	// SAFETY: User ensures that the surface is dropped before the window.
+	let target = unsafe { wgpu::SurfaceTargetUnsafe::from_window(window) }.context("Unable to get window target")?;
+	// SAFETY: User ensures that the surface is dropped before the window.
+	let surface = unsafe { instance.create_surface_unsafe(target) }.context("Unable to request surface")?;
 	tracing::debug!(?surface, "Created wgpu surface");
 
 	// Then request the adapter

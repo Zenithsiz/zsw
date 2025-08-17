@@ -3,6 +3,7 @@
 // Imports
 use {
 	super::WgpuShared,
+	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
 	zutil_app_error::{AppError, Context},
 };
@@ -28,11 +29,15 @@ pub struct WgpuRenderer {
 
 	/// Surface config
 	surface_config: wgpu::SurfaceConfiguration,
+
+	/// Window
+	// SAFETY: Must be dropped *after* the surface
+	_window: Arc<Window>,
 }
 
 impl WgpuRenderer {
 	pub(super) fn new(
-		window: &'static Window,
+		window: Arc<Window>,
 		surface: wgpu::Surface<'static>,
 		adapter: wgpu::Adapter,
 		device: &wgpu::Device,
@@ -47,6 +52,7 @@ impl WgpuRenderer {
 			surface,
 			surface_size,
 			surface_config,
+			_window: window,
 		})
 	}
 
@@ -72,10 +78,12 @@ impl WgpuRenderer {
 		// Note: If the application goes to sleep, this can fail spuriously due to a timeout,
 		//       so we keep retrying.
 		// TODO: Use an exponential timeout, with a max duration?
-		let surface_texture = tokio::task::block_in_place(|| loop {
-			match self.surface.get_current_texture() {
-				Ok(surface_texture) => break surface_texture,
-				Err(err) => tracing::warn!(%err, "Unable to retrieve current texture, retrying"),
+		let surface_texture = tokio::task::block_in_place(|| {
+			loop {
+				match self.surface.get_current_texture() {
+					Ok(surface_texture) => break surface_texture,
+					Err(err) => tracing::warn!(%err, "Unable to retrieve current texture, retrying"),
+				}
 			}
 		});
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
