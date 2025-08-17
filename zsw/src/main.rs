@@ -34,7 +34,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
-	std::{fs, process, sync::Arc},
+	std::{fs, sync::Arc},
 	tokio::sync::{Mutex, RwLock, mpsc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -113,29 +113,31 @@ struct WinitApp {
 }
 
 impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
-	fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-		// Try to initialize
-		let Err(err) = self::run(
-			&self.dirs,
-			&self.config,
-			&self.config_dirs,
-			event_loop,
-			self.event_rx.take().expect("Already resumed"),
-			self.event_loop_proxy.clone(),
-		)
-		.block_on() else {
-			return;
-		};
-
-		// If we get an error, print it and quit
-		tracing::error!(?err, "Unable to initialize");
-		process::exit(1);
+	fn new_events(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, cause: winit::event::StartCause) {
+		match cause {
+			// TODO: We should initialize everything except window stuff here,
+			//       and then in resume/suspend we should init/destroy all window
+			//       stuff to better match the API that winit expects.
+			winit::event::StartCause::Init => {
+				if let Err(err) = self::run(
+					&self.dirs,
+					&self.config,
+					&self.config_dirs,
+					event_loop,
+					self.event_rx.take().expect("Already resumed"),
+					self.event_loop_proxy.clone(),
+				)
+				.block_on()
+				{
+					tracing::warn!("Unable to initialize: {}", err.pretty());
+					event_loop.exit();
+				}
+			},
+			_ => tracing::debug!(?cause, "Ignoring event loop resume cause"),
+		}
 	}
 
-	fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-		tracing::error!("Suspending is not supported, quitting");
-		event_loop.exit();
-	}
+	fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {}
 
 	fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: AppEvent) {
 		match event {
