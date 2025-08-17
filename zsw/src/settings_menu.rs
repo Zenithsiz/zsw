@@ -8,7 +8,7 @@ use {
 	crate::{
 		panel::{PanelImage, PanelShader, PanelsManager},
 		playlist::{Playlist, PlaylistItemKind, PlaylistName},
-		shared::Shared,
+		shared::{Shared, SharedWindow},
 	},
 	egui::Widget,
 	std::{path::Path, sync::Arc},
@@ -41,9 +41,9 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	pub fn draw(&mut self, ctx: &egui::Context, shared: &Arc<Shared>) {
+	pub fn draw(&mut self, ctx: &egui::Context, shared: &Arc<Shared>, shared_window: &Arc<SharedWindow>) {
 		// Adjust cursor pos to account for the scale factor
-		let scale_factor = shared.window.scale_factor();
+		let scale_factor = shared_window.window.scale_factor();
 		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
 
 		// Create the window
@@ -67,16 +67,21 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared),
+				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared, shared_window),
 				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared),
-				Tab::Settings => self::draw_settings(ui, shared),
+				Tab::Settings => self::draw_settings(ui, shared_window),
 			}
 		});
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
-	self::draw_panels_editor(add_playlist_state, ui, shared);
+fn draw_panels_tab(
+	add_playlist_state: &mut AddPlaylistState,
+	ui: &mut egui::Ui,
+	shared: &Arc<Shared>,
+	shared_window: &Arc<SharedWindow>,
+) {
+	self::draw_panels_editor(add_playlist_state, ui, shared, shared_window);
 	ui.separator();
 	self::draw_shader_select(ui, shared);
 }
@@ -188,7 +193,12 @@ fn choose_load_playlist_from_file(
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
+fn draw_panels_editor(
+	add_playlist_state: &mut AddPlaylistState,
+	ui: &mut egui::Ui,
+	shared: &Arc<Shared>,
+	shared_window: &Arc<SharedWindow>,
+) {
 	let mut cur_panels = shared.cur_panels.lock().block_on();
 
 	if cur_panels.is_empty() {
@@ -245,7 +255,11 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
 					panel
-						.skip(&shared.wgpu, &shared.panels_renderer_layout, &shared.image_requester)
+						.skip(
+							&shared_window.wgpu,
+							&shared_window.panels_renderer_layout,
+							&shared.image_requester,
+						)
 						.block_on();
 				}
 			});
@@ -305,9 +319,9 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 
 
 /// Draws the settings tab
-fn draw_settings(ui: &mut egui::Ui, shared: &Arc<Shared>) {
+fn draw_settings(ui: &mut egui::Ui, shared_window: &Arc<SharedWindow>) {
 	if ui.button("Quit").clicked() {
-		shared
+		shared_window
 			.event_loop_proxy
 			.send_event(crate::AppEvent::Shutdown)
 			.expect("Unable to send shutdown event to event loop");

@@ -18,12 +18,12 @@ pub use self::{
 // Imports
 use {
 	crate::{
+		AppError,
 		image_loader::ImageRequester,
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer},
-		shared::Shared,
-		AppError,
+		shared::{Shared, SharedWindow},
 	},
-	futures::{stream::FuturesUnordered, StreamExt},
+	futures::{StreamExt, stream::FuturesUnordered},
 	std::{
 		path::{Path, PathBuf},
 		sync::Arc,
@@ -50,6 +50,7 @@ impl PanelsManager {
 		path: &Path,
 		playlist_name: PlaylistName,
 		shared: &Arc<Shared>,
+		shared_window: &Arc<SharedWindow>,
 	) -> Result<Panel, AppError> {
 		// Try to read the file
 		tracing::debug!(?path, "Loading panel");
@@ -67,8 +68,13 @@ impl PanelsManager {
 			fade_point: panel.state.fade_point,
 		};
 
-		let panel = Panel::new(&shared.wgpu, &shared.panels_renderer_layout, geometries, state)
-			.context("Unable to create panel")?;
+		let panel = Panel::new(
+			&shared_window.wgpu,
+			&shared_window.panels_renderer_layout,
+			geometries,
+			state,
+		)
+		.context("Unable to create panel")?;
 
 		crate::spawn_task(format!("Load panel playlist {path:?}: {playlist_name:?}"), {
 			let playlist_player = Arc::clone(panel.images.playlist_player());
