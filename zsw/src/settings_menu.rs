@@ -11,7 +11,7 @@ use {
 		shared::Shared,
 	},
 	egui::Widget,
-	std::{path::Path, process, sync::Arc},
+	std::{path::Path, sync::Arc},
 	tokio::sync::RwLock,
 	zsw_util::{Rect, TokioTaskBlockOn},
 	zutil_app_error::Context,
@@ -305,11 +305,12 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 
 
 /// Draws the settings tab
-fn draw_settings(ui: &mut egui::Ui, _shared: &Arc<Shared>) {
+fn draw_settings(ui: &mut egui::Ui, shared: &Arc<Shared>) {
 	if ui.button("Quit").clicked() {
-		// TODO: Don't just quit the process? Allow the event loop
-		//       to end and our app to be dropped.
-		process::exit(0);
+		shared
+			.event_loop_proxy
+			.send_event(crate::AppEvent::Shutdown)
+			.expect("Unable to send shutdown event to event loop");
 	}
 }
 

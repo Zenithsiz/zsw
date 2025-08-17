@@ -40,6 +40,7 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
 		event_loop::EventLoop,
+		platform::run_on_demand::EventLoopExtRunOnDemand,
 		window::WindowId,
 	},
 	zsw_egui::{EguiPainter, EguiRenderer},
@@ -81,34 +82,37 @@ fn main() -> Result<(), AppError> {
 	let _runtime_enter = tokio_runtime.enter();
 
 	// Create the event loop
-	let event_loop = EventLoop::builder()
+	let mut event_loop = EventLoop::with_user_event()
 		.build()
 		.context("Unable to build winit event loop")?;
 
 	// Finally run the app on the event loop
 	let (event_tx, event_rx) = mpsc::unbounded_channel();
 	event_loop
-		.run_app(&mut WinitApp {
+		.run_app_on_demand(&mut WinitApp {
 			dirs,
 			config,
 			config_dirs,
 			event_rx: Some(event_rx),
 			event_tx,
+			event_loop_proxy: event_loop.create_proxy(),
 		})
 		.context("Unable to run event loop")?;
 
+	tracing::info!("Successfully shutting down");
 	Ok(())
 }
 
 struct WinitApp {
-	dirs:        ProjectDirs,
-	config:      Arc<Config>,
-	config_dirs: Arc<ConfigDirs>,
-	event_rx:    Option<mpsc::UnboundedReceiver<(WindowId, WindowEvent)>>,
-	event_tx:    mpsc::UnboundedSender<(WindowId, WindowEvent)>,
+	dirs:             ProjectDirs,
+	config:           Arc<Config>,
+	config_dirs:      Arc<ConfigDirs>,
+	event_rx:         Option<mpsc::UnboundedReceiver<(WindowId, WindowEvent)>>,
+	event_tx:         mpsc::UnboundedSender<(WindowId, WindowEvent)>,
+	event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
 }
 
-impl winit::application::ApplicationHandler for WinitApp {
+impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
 	fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
 		// Try to initialize
 		let Err(err) = self::run(
@@ -117,6 +121,7 @@ impl winit::application::ApplicationHandler for WinitApp {
 			&self.config_dirs,
 			event_loop,
 			self.event_rx.take().expect("Already resumed"),
+			self.event_loop_proxy.clone(),
 		)
 		.block_on() else {
 			return;
@@ -125,6 +130,17 @@ impl winit::application::ApplicationHandler for WinitApp {
 		// If we get an error, print it and quit
 		tracing::error!(?err, "Unable to initialize");
 		process::exit(1);
+	}
+
+	fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+		tracing::error!("Suspending is not supported, quitting");
+		event_loop.exit();
+	}
+
+	fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: AppEvent) {
+		match event {
+			AppEvent::Shutdown => event_loop.exit(),
+		}
 	}
 
 	fn window_event(
@@ -143,6 +159,7 @@ async fn run(
 	config_dirs: &Arc<ConfigDirs>,
 	event_loop: &winit::event_loop::ActiveEventLoop,
 	mut event_rx: mpsc::UnboundedReceiver<(WindowId, WindowEvent)>,
+	event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
 ) -> Result<(), AppError> {
 	// TODO: Not leak the window?
 	let window = window::create(event_loop).context("Unable to create winit event loop and window")?;
@@ -184,6 +201,7 @@ async fn run(
 
 	// Shared state
 	let shared = Shared {
+		event_loop_proxy,
 		window,
 		wgpu: wgpu_shared,
 		panels_renderer_layout,
@@ -503,4 +521,11 @@ async fn egui_painter(
 pub struct Resize {
 	/// New size
 	size: PhysicalSize<u32>,
+}
+
+/// App event
+#[derive(Clone, Copy, Debug)]
+enum AppEvent {
+	/// Shutdown
+	Shutdown,
 }

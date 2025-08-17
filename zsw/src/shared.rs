@@ -3,6 +3,7 @@
 // Imports
 use {
 	crate::{
+		AppEvent,
 		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
@@ -19,6 +20,7 @@ use {
 /// Shared data
 #[derive(Debug)]
 pub struct Shared {
+	pub event_loop_proxy:       winit::event_loop::EventLoopProxy<AppEvent>,
 	pub window:                 &'static winit::window::Window,
 	pub wgpu:                   WgpuShared,
 	pub panels_renderer_layout: PanelsRendererLayouts,
