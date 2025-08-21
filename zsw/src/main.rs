@@ -23,7 +23,7 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{Panel, PanelName, PanelShader, PanelsManager, PanelsRenderer},
+		panel::{Panel, PanelName, PanelShader, PanelsManager, PanelsRenderer, PanelsRendererLayouts},
 		playlist::{PlaylistName, Playlists},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
@@ -162,6 +162,7 @@ impl WinitApp {
 		let wgpu_shared = zsw_wgpu::get_or_create_shared()
 			.await
 			.context("Unable to initialize wgpu")?;
+		let panels_renderer_layouts = PanelsRendererLayouts::new(wgpu_shared);
 
 		let playlists = Playlists::load(config_dirs.playlists().to_path_buf())
 			.await
@@ -188,6 +189,7 @@ impl WinitApp {
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 			config_dirs: Arc::clone(&config_dirs),
 			wgpu: wgpu_shared,
+			panels_renderer_layouts,
 			panels_manager,
 			image_requester,
 			cur_panels: Mutex::new(vec![]),
@@ -216,10 +218,14 @@ impl WinitApp {
 			.await
 			.context("Unable to create wgpu renderer")?;
 
-		let (panels_renderer, panels_renderer_layout) =
-			PanelsRenderer::new(&self.config_dirs, &wgpu_renderer, self.shared.wgpu)
-				.await
-				.context("Unable to create panels renderer")?;
+		let panels_renderer = PanelsRenderer::new(
+			&self.config_dirs,
+			&wgpu_renderer,
+			self.shared.wgpu,
+			&self.shared.panels_renderer_layouts,
+		)
+		.await
+		.context("Unable to create panels renderer")?;
 		let (egui_renderer, egui_painter, egui_event_handler) =
 			zsw_egui::create(&window, &wgpu_renderer, self.shared.wgpu);
 		let settings_menu = SettingsMenu::new();
@@ -230,7 +236,6 @@ impl WinitApp {
 		let shared_window = SharedWindow {
 			event_loop_proxy: self.event_loop_proxy.clone(),
 			window,
-			panels_renderer_layout,
 		};
 		let shared_window = Arc::new(shared_window);
 
@@ -238,9 +243,8 @@ impl WinitApp {
 		//       here instead?
 		self::spawn_task("Load default panels", {
 			let shared = Arc::clone(&self.shared);
-			let shared_window = Arc::clone(&shared_window);
 			let config = Arc::clone(&self.config);
-			|| async move { self::load_default_panels(&config, shared, shared_window).await }
+			|| async move { self::load_default_panels(&config, shared).await }
 		});
 
 		self::spawn_task("Renderer", {
@@ -261,8 +265,7 @@ impl WinitApp {
 
 		self::spawn_task("Panels updater", {
 			let shared = Arc::clone(&self.shared);
-			let shared_window = Arc::clone(&shared_window);
-			|| self::panels_updater(shared, shared_window, panels_updater_output_tx)
+			|| self::panels_updater(shared, panels_updater_output_tx)
 		});
 
 		self::spawn_task("Egui painter", {
@@ -312,14 +315,9 @@ impl WinitApp {
 }
 
 /// Loads the default panels
-async fn load_default_panels(
-	config: &Config,
-	shared: Arc<Shared>,
-	shared_window: Arc<SharedWindow>,
-) -> Result<(), AppError> {
+async fn load_default_panels(config: &Config, shared: Arc<Shared>) -> Result<(), AppError> {
 	// Load the panels
 	let shared = &shared;
-	let shared_window = &shared_window;
 	let loaded_panels = config
 		.default
 		.panels
@@ -329,7 +327,7 @@ async fn load_default_panels(
 			let playlist = PlaylistName::from(default_panel.playlist.clone());
 			shared
 				.panels_manager
-				.load(panel, playlist, shared, shared_window)
+				.load(panel, playlist, shared)
 				.await
 				.inspect(|panel| tracing::debug!(?panel, "Loaded default panel"))
 				.inspect_err(|err| tracing::warn!("Unable to load default panel {default_panel:?}: {err:?}"))
@@ -413,7 +411,7 @@ async fn renderer(
 					&shared.config_dirs,
 					&wgpu_renderer,
 					shared.wgpu,
-					&shared_window.panels_renderer_layout,
+					&shared.panels_renderer_layouts,
 					&*cur_panels,
 					shader,
 				)
@@ -451,22 +449,14 @@ async fn renderer(
 
 /// Panel updater task
 #[expect(clippy::infinite_loop, reason = "We need this type signature for `spawn_task`")]
-async fn panels_updater(
-	shared: Arc<Shared>,
-	shared_window: Arc<SharedWindow>,
-	panels_updater_output_tx: meetup::Sender<()>,
-) -> Result<!, AppError> {
+async fn panels_updater(shared: Arc<Shared>, panels_updater_output_tx: meetup::Sender<()>) -> Result<!, AppError> {
 	loop {
 		{
 			let mut cur_panels = shared.cur_panels.lock().await;
 
 			for panel in &mut *cur_panels {
 				panel
-					.update(
-						shared.wgpu,
-						&shared_window.panels_renderer_layout,
-						&shared.image_requester,
-					)
+					.update(shared.wgpu, &shared.panels_renderer_layouts, &shared.image_requester)
 					.await;
 			}
 		}
@@ -525,11 +515,7 @@ async fn egui_painter(
 					}
 
 					panel
-						.skip(
-							shared.wgpu,
-							&shared_window.panels_renderer_layout,
-							&shared.image_requester,
-						)
+						.skip(shared.wgpu, &shared.panels_renderer_layouts, &shared.image_requester)
 						.await;
 				}
 			}
@@ -556,7 +542,7 @@ async fn egui_painter(
 					panel
 						.step(
 							shared.wgpu,
-							&shared_window.panels_renderer_layout,
+							&shared.panels_renderer_layouts,
 							&shared.image_requester,
 							frames,
 						)

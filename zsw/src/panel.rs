@@ -21,7 +21,7 @@ use {
 		AppError,
 		image_loader::ImageRequester,
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer},
-		shared::{Shared, SharedWindow},
+		shared::Shared,
 	},
 	core::{borrow::Borrow, fmt},
 	futures::{StreamExt, stream::FuturesUnordered},
@@ -54,7 +54,6 @@ impl PanelsManager {
 		panel_name: PanelName,
 		playlist_name: PlaylistName,
 		shared: &Arc<Shared>,
-		shared_window: &Arc<SharedWindow>,
 	) -> Result<Panel, AppError> {
 		// Try to read the file
 		let panel_path = self.panel_path(&panel_name);
@@ -78,7 +77,7 @@ impl PanelsManager {
 		let panel = Panel::new(
 			panel_name.clone(),
 			shared.wgpu,
-			&shared_window.panels_renderer_layout,
+			&shared.panels_renderer_layouts,
 			geometries,
 			state,
 		)

@@ -67,7 +67,7 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared, shared_window),
+				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared),
 				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared),
 				Tab::Settings => self::draw_settings(ui, shared_window),
 			}
@@ -75,13 +75,8 @@ impl SettingsMenu {
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(
-	add_playlist_state: &mut AddPlaylistState,
-	ui: &mut egui::Ui,
-	shared: &Arc<Shared>,
-	shared_window: &Arc<SharedWindow>,
-) {
-	self::draw_panels_editor(add_playlist_state, ui, shared, shared_window);
+fn draw_panels_tab(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
+	self::draw_panels_editor(add_playlist_state, ui, shared);
 	ui.separator();
 	self::draw_shader_select(ui, shared);
 }
@@ -193,12 +188,7 @@ fn choose_load_playlist_from_file(
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(
-	add_playlist_state: &mut AddPlaylistState,
-	ui: &mut egui::Ui,
-	shared: &Arc<Shared>,
-	shared_window: &Arc<SharedWindow>,
-) {
+fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
 	let mut cur_panels = shared.cur_panels.lock().block_on();
 
 	if cur_panels.is_empty() {
@@ -255,11 +245,7 @@ fn draw_panels_editor(
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
 					panel
-						.skip(
-							shared.wgpu,
-							&shared_window.panels_renderer_layout,
-							&shared.image_requester,
-						)
+						.skip(shared.wgpu, &shared.panels_renderer_layouts, &shared.image_requester)
 						.block_on();
 				}
 			});

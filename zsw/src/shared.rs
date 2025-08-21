@@ -24,7 +24,8 @@ pub struct Shared {
 	pub cursor_pos:  AtomicCell<PhysicalPosition<f64>>,
 	pub config_dirs: Arc<ConfigDirs>,
 
-	pub wgpu: &'static WgpuShared,
+	pub wgpu:                    &'static WgpuShared,
+	pub panels_renderer_layouts: PanelsRendererLayouts,
 
 	pub panels_manager:  PanelsManager,
 	pub image_requester: ImageRequester,
@@ -37,7 +38,6 @@ pub struct Shared {
 /// Shared window state
 #[derive(Debug)]
 pub struct SharedWindow {
-	pub event_loop_proxy:       winit::event_loop::EventLoopProxy<AppEvent>,
-	pub window:                 Arc<winit::window::Window>,
-	pub panels_renderer_layout: PanelsRendererLayouts,
+	pub event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
+	pub window:           Arc<winit::window::Window>,
 }

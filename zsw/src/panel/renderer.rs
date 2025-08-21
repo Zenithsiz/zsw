@@ -34,6 +34,19 @@ pub struct PanelsRendererLayouts {
 	pub image_bind_group_layout: wgpu::BindGroupLayout,
 }
 
+impl PanelsRendererLayouts {
+	/// Creates new layouts for the panels renderer
+	pub fn new(wgpu_shared: &WgpuShared) -> Self {
+		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu_shared);
+		let image_bind_group_layout = self::create_image_bind_group_layout(wgpu_shared);
+
+		Self {
+			uniforms_bind_group_layout,
+			image_bind_group_layout,
+		}
+	}
+}
+
 /// Panels renderer
 ///
 /// Responsible for rendering all panels.
@@ -69,7 +82,8 @@ impl PanelsRenderer {
 		config_dirs: &ConfigDirs,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
-	) -> Result<(Self, PanelsRendererLayouts), AppError> {
+		renderer_layouts: &PanelsRendererLayouts,
+	) -> Result<Self, AppError> {
 		// Create the index / vertex buffer
 		let indices = self::create_indices(wgpu_shared);
 		let vertices = self::create_vertices(wgpu_shared);
@@ -77,35 +91,26 @@ impl PanelsRenderer {
 		// Create the framebuffer
 		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, wgpu_renderer.surface_size());
 
-		// Create the group layouts
-		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu_shared);
-		let image_bind_group_layout = self::create_image_bind_group_layout(wgpu_shared);
 
 		// By default use the empty shader
 		let shader = PanelShader::None;
 
-		Ok((
-			Self {
-				render_pipeline: self::create_render_pipeline(
-					config_dirs,
-					wgpu_renderer,
-					wgpu_shared,
-					&uniforms_bind_group_layout,
-					&image_bind_group_layout,
-					shader,
-				)
-				.await
-				.context("Unable to create render pipeline")?,
-				vertices,
-				indices,
-				msaa_framebuffer,
-				cur_shader: shader,
-			},
-			PanelsRendererLayouts {
-				uniforms_bind_group_layout,
-				image_bind_group_layout,
-			},
-		))
+		Ok(Self {
+			render_pipeline: self::create_render_pipeline(
+				config_dirs,
+				wgpu_renderer,
+				wgpu_shared,
+				&renderer_layouts.uniforms_bind_group_layout,
+				&renderer_layouts.image_bind_group_layout,
+				shader,
+			)
+			.await
+			.context("Unable to create render pipeline")?,
+			vertices,
+			indices,
+			msaa_framebuffer,
+			cur_shader: shader,
+		})
 	}
 
 	/// Resizes the buffer
