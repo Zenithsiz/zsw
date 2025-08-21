@@ -77,7 +77,7 @@ impl PanelsManager {
 
 		let panel = Panel::new(
 			panel_name.clone(),
-			&shared_window.wgpu,
+			shared_window.wgpu,
 			&shared_window.panels_renderer_layout,
 			geometries,
 			state,

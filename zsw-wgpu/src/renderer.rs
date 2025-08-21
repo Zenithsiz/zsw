@@ -11,9 +11,6 @@ use {
 /// Wgpu renderer
 #[derive(Debug)]
 pub struct WgpuRenderer {
-	/// Adapter
-	adapter: wgpu::Adapter,
-
 	/// Surface
 	surface: wgpu::Surface<'static>,
 
@@ -36,19 +33,18 @@ pub struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-	pub(super) fn new(
-		window: Arc<Window>,
-		surface: wgpu::Surface<'static>,
-		adapter: wgpu::Adapter,
-		device: &wgpu::Device,
-	) -> Result<Self, AppError> {
+	pub async fn new(window: Arc<Window>, shared: &WgpuShared) -> Result<Self, AppError> {
+		// Create the surface
+		// SAFETY: We keep an `Arc<Window>` that we only drop
+		//         *after* dropping the surface.
+		let surface = unsafe { self::create_surface(shared, &window) }.await?;
+
 		// Configure the surface and get the preferred texture format and surface size
 		let surface_size = window.inner_size();
-		let surface_config = self::configure_window_surface(&surface, &adapter, device, surface_size)
+		let surface_config = self::configure_window_surface(shared, &surface, surface_size)
 			.context("Unable to configure window surface")?;
 
 		Ok(Self {
-			adapter,
 			surface,
 			surface_size,
 			surface_config,
@@ -112,7 +108,7 @@ impl WgpuRenderer {
 		// TODO: Don't ignore resizes to the same size?
 		if size.width > 0 && size.height > 0 && size != self.surface_size {
 			// Update our surface
-			self.surface_config = self::configure_window_surface(&self.surface, &self.adapter, &shared.device, size)
+			self.surface_config = self::configure_window_surface(shared, &self.surface, size)
 				.context("Unable to configure window surface")?;
 			self.surface_size = size;
 		}
@@ -150,14 +146,13 @@ impl FrameRender {
 
 /// Configures the window surface and returns the configuration
 fn configure_window_surface(
+	shared: &WgpuShared,
 	surface: &wgpu::Surface<'static>,
-	adapter: &wgpu::Adapter,
-	device: &wgpu::Device,
 	size: PhysicalSize<u32>,
 ) -> Result<wgpu::SurfaceConfiguration, AppError> {
 	// Get the format
 	let mut config = surface
-		.get_default_config(adapter, size.width, size.height)
+		.get_default_config(&shared.adapter, size.width, size.height)
 		.context("Unable to get surface default config")?;
 	tracing::debug!(?config, "Found surface configuration");
 
@@ -166,7 +161,23 @@ fn configure_window_surface(
 	tracing::debug!(?config, "Updated surface configuration");
 
 	// Then configure it
-	surface.configure(device, &config);
+	surface.configure(&shared.device, &config);
 
 	Ok(config)
+}
+
+/// Creates the surface
+///
+/// # Safety
+/// The returned surface *must* be dropped before the window.
+async unsafe fn create_surface(shared: &WgpuShared, window: &Window) -> Result<wgpu::Surface<'static>, AppError> {
+	// Create the surface
+	tracing::debug!(?window, "Requesting wgpu surface");
+	// SAFETY: User ensures that the surface is dropped before the window.
+	let target = unsafe { wgpu::SurfaceTargetUnsafe::from_window(window) }.context("Unable to get window target")?;
+	// SAFETY: User ensures that the surface is dropped before the window.
+	let surface = unsafe { shared.instance.create_surface_unsafe(target) }.context("Unable to request surface")?;
+	tracing::debug!(?surface, "Created wgpu surface");
+
+	Ok(surface)
 }

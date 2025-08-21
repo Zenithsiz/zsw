@@ -11,14 +11,19 @@ pub use renderer::{FrameRender, WgpuRenderer};
 
 // Imports
 use {
-	std::sync::Arc,
-	winit::window::Window,
+	tokio::sync::OnceCell,
 	zutil_app_error::{AppError, Context},
 };
 
 /// Wgpu shared
 #[derive(Debug)]
 pub struct WgpuShared {
+	/// Instance
+	pub instance: wgpu::Instance,
+
+	/// Adapter
+	pub adapter: wgpu::Adapter,
+
 	/// Device
 	pub device: wgpu::Device,
 
@@ -26,22 +31,31 @@ pub struct WgpuShared {
 	pub queue: wgpu::Queue,
 }
 
-/// Creates the wgpu service
-pub async fn create(window: Arc<Window>) -> Result<(WgpuShared, WgpuRenderer), AppError> {
-	// Create the surface and adapter
-	// SAFETY: `WgpuShared` keeps an `Arc<Window>` that it only drops
-	//         *after* dropping the surface.
-	let (surface, adapter) = unsafe { self::create_surface_and_adapter(&window) }.await?;
+/// Shared
+// TODO: Is it a good idea to make this a global?
+//       Realistically, we can only have one per process anyway,
+//       so this models that correctly, but it might be bad API.
+static SHARED: OnceCell<WgpuShared> = OnceCell::const_new();
 
-	// Then create the device and it's queue
-	let (device, queue) = self::create_device(&adapter).await?;
+/// Gets or creates the shared state
+pub async fn get_or_create_shared() -> Result<&'static WgpuShared, AppError> {
+	SHARED
+		.get_or_try_init(async || {
+			let instance = self::create_instance().await.context("Unable to create instance")?;
+			let adapter = self::create_adapter(&instance)
+				.await
+				.context("Unable to create adaptor")?;
+			let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
 
-	// Then create the renderer
-	let renderer = WgpuRenderer::new(window, surface, adapter, &device).context("Unable to create renderer")?;
-
-	Ok((WgpuShared { device, queue }, renderer))
+			Ok::<_, AppError>(WgpuShared {
+				instance,
+				adapter,
+				device,
+				queue,
+			})
+		})
+		.await
 }
-
 
 /// Creates the device
 async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), AppError> {
@@ -66,32 +80,25 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 	Ok((device, queue))
 }
 
-/// Creates the surface and adapter
-///
-/// # Safety
-/// The returned surface *must* be dropped before the window.
-async unsafe fn create_surface_and_adapter(
-	window: &Window,
-) -> Result<(wgpu::Surface<'static>, wgpu::Adapter), AppError> {
-	// Get an instance with any backend
+/// Creates the instance
+async fn create_instance() -> Result<wgpu::Instance, AppError> {
 	let instance_desc = wgpu::InstanceDescriptor::from_env_or_default();
 	tracing::debug!(?instance_desc, "Requesting wgpu instance");
 	let instance = wgpu::Instance::new(&instance_desc);
 	tracing::debug!(?instance, "Created wgpu instance");
 
-	// Create the surface
-	tracing::debug!(?window, "Requesting wgpu surface");
-	// SAFETY: User ensures that the surface is dropped before the window.
-	let target = unsafe { wgpu::SurfaceTargetUnsafe::from_window(window) }.context("Unable to get window target")?;
-	// SAFETY: User ensures that the surface is dropped before the window.
-	let surface = unsafe { instance.create_surface_unsafe(target) }.context("Unable to request surface")?;
-	tracing::debug!(?surface, "Created wgpu surface");
+	Ok(instance)
+}
 
+/// Creates the adapter
+async fn create_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, AppError> {
 	// Then request the adapter
 	let adapter_options = wgpu::RequestAdapterOptions {
 		power_preference:       wgpu::PowerPreference::default(),
 		force_fallback_adapter: false,
-		compatible_surface:     Some(&surface),
+		// TODO: Is this fine? Should we at least try to create this
+		//       only after the first surface?
+		compatible_surface:     None,
 	};
 	tracing::debug!(?adapter_options, "Requesting wgpu adapter");
 	let adapter = instance
@@ -100,5 +107,5 @@ async unsafe fn create_surface_and_adapter(
 		.context("Unable to request adapter")?;
 	tracing::debug!(?adapter, "Created wgpu adapter");
 
-	Ok((surface, adapter))
+	Ok(adapter)
 }
