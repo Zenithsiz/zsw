@@ -41,9 +41,6 @@ impl PanelImageUniforms {
 #[repr(C)]
 pub struct None {
 	pub pos_matrix: Matrix4x4,
-	pub prev:       PanelImageUniforms,
-	pub cur:        PanelImageUniforms,
-	pub next:       PanelImageUniforms,
 }
 
 /// Fade

@@ -255,12 +255,7 @@ impl PanelsRenderer {
 		let fade_point = panel.state.fade_point_norm();
 		let progress = panel.state.progress_norm();
 		match panel.shader {
-			PanelShader::None => write_uniforms!(uniform::None {
-				pos_matrix,
-				prev,
-				cur,
-				next,
-			}),
+			PanelShader::None => write_uniforms!(uniform::None { pos_matrix }),
 			PanelShader::Fade => write_uniforms!(uniform::Fade {
 				pos_matrix,
 				prev,
