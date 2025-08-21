@@ -153,6 +153,7 @@ impl PanelsRenderer {
 		let render_pass_color_attachment = match MSAA_SAMPLES {
 			1 => wgpu::RenderPassColorAttachment {
 				view:           &frame.surface_view,
+				depth_slice:    None,
 				resolve_target: None,
 				ops:            wgpu::Operations {
 					load:  wgpu::LoadOp::Clear(wgpu::Color {
@@ -166,6 +167,7 @@ impl PanelsRenderer {
 			},
 			_ => wgpu::RenderPassColorAttachment {
 				view:           &self.msaa_framebuffer,
+				depth_slice:    None,
 				resolve_target: Some(&frame.surface_view),
 				ops:            wgpu::Operations {
 					load:  wgpu::LoadOp::Clear(wgpu::Color {

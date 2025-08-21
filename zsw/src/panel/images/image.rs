@@ -14,6 +14,10 @@ use {
 ///
 /// Represents a single image of a panel.
 #[derive(Debug)]
+#[expect(
+	clippy::large_enum_variant,
+	reason = "We eventually hit an indirection, so it's fine"
+)]
 pub enum PanelImage {
 	/// Empty
 	Empty,

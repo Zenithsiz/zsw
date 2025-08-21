@@ -65,10 +65,11 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 		required_features: wgpu::Features::default(),
 		required_limits:   wgpu::Limits::default(),
 		memory_hints:      wgpu::MemoryHints::default(),
+		trace:             wgpu::Trace::Off,
 	};
 	tracing::debug!(?device_descriptor, "Requesting wgpu device");
 	let (device, queue) = adapter
-		.request_device(&device_descriptor, None)
+		.request_device(&device_descriptor)
 		.await
 		.context("Unable to request device")?;
 
