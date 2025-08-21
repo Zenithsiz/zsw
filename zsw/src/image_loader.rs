@@ -11,9 +11,8 @@ use {
 		fs,
 		path::{Path, PathBuf},
 	},
-	tokio::sync::{oneshot, Semaphore},
+	tokio::sync::{Semaphore, oneshot},
 	tracing::Instrument,
-	zsw_util::Rect,
 	zutil_app_error::{AppError, Context},
 };
 
@@ -33,10 +32,10 @@ pub struct ImageRequest {
 	/// Path
 	pub path: PathBuf,
 
-	/// Geometries
+	/// Sizes
 	///
-	/// Image must fit within these geometries
-	pub geometries: Vec<Rect<i32, u32>>,
+	/// Image must fit within these dimensions
+	pub sizes: Vec<Vector2<u32>>,
 
 	/// Max image size
 	pub max_image_size: u32,
@@ -226,9 +225,9 @@ impl ImageLoader {
 		// Note: If none, we don't do anything else
 		let image_size = Vector2::new(image_width, image_height);
 		let minimum_size = request
-			.geometries
+			.sizes
 			.iter()
-			.map(|geometry| Self::minimum_image_size_for_panel(Vector2::new(image_width, image_height), geometry.size))
+			.map(|size| Self::minimum_image_size_for_panel(Vector2::new(image_width, image_height), *size))
 			.reduce(|lhs, rhs| Vector2::new(lhs.x.max(rhs.x), lhs.y.max(rhs.y)));
 		tracing::trace!(?request, ?minimum_size, "Minimum image size");
 		let Some(minimum_size) = minimum_size else {

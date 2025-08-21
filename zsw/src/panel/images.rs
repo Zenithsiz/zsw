@@ -201,7 +201,7 @@ impl PanelImages {
 		let wgpu_limits = wgpu_shared.device.limits();
 		self.scheduled_image_receiver = Some(image_requester.request(ImageRequest {
 			path: image_path.to_path_buf(),
-			geometries: geometries.iter().map(|geometry| geometry.geometry).collect(),
+			sizes: geometries.iter().map(|geometry| geometry.geometry.size).collect(),
 			max_image_size: wgpu_limits.max_texture_dimension_2d,
 			playlist_pos,
 		}));
