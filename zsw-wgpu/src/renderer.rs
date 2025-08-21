@@ -102,6 +102,17 @@ impl WgpuRenderer {
 		})
 	}
 
+	/// Re-configures the surface
+	pub fn reconfigure(&mut self, shared: &WgpuShared) -> Result<(), AppError> {
+		tracing::info!(size=?self.surface_size, "Reconfiguring wgpu surface");
+
+		// Update our surface
+		self.surface_config = self::configure_window_surface(shared, &self.surface, self.surface_size)
+			.context("Unable to configure window surface")?;
+
+		Ok(())
+	}
+
 	/// Performs a resize
 	pub fn resize(&mut self, shared: &WgpuShared, size: PhysicalSize<u32>) -> Result<(), AppError> {
 		tracing::info!(?size, "Resizing wgpu surface");
@@ -134,13 +145,19 @@ pub struct FrameRender {
 }
 
 impl FrameRender {
-	/// Finishes rendering this frame
-	pub fn finish(self, shared: &WgpuShared) {
+	/// Finishes rendering this frame.
+	///
+	/// Returns if a reconfigure is needed
+	#[must_use]
+	pub fn finish(self, shared: &WgpuShared) -> bool {
 		// Submit everything to the queue and present the surface's texture
 		// Note: Although not supposed to, `submit` calls can block, so we wrap it
 		//       in a tokio block-in-place
 		let _ = tokio::task::block_in_place(|| shared.queue.submit([self.encoder.finish()]));
+		let reconfigure = self.surface_texture.suboptimal;
 		self.surface_texture.present();
+
+		reconfigure
 	}
 }
 

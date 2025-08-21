@@ -431,7 +431,11 @@ async fn renderer(
 			.context("Unable to render egui")?;
 
 		// Finish the frame
-		frame.finish(shared_window.wgpu);
+		if frame.finish(shared_window.wgpu) {
+			wgpu_renderer
+				.reconfigure(shared_window.wgpu)
+				.context("Unable to reconfigure wgpu")?;
+		}
 
 		// Resize if we need to
 		if let Some(resize) = shared.last_resize.swap(None) {
