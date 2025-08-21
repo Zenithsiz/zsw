@@ -1,27 +1,24 @@
 //! Logger
 
-// Modules
-pub mod pre_init;
-
 // Imports
 use {
 	itertools::Itertools,
 	std::{
-		collections::{hash_map, HashMap},
+		collections::{HashMap, hash_map},
 		env::{self, VarError},
 		fs,
 		io::{self, IsTerminal},
 		path::Path,
 	},
 	tracing::metadata::LevelFilter,
-	tracing_subscriber::{fmt::format::FmtSpan, prelude::*, EnvFilter},
+	tracing_subscriber::{EnvFilter, fmt::format::FmtSpan, prelude::*},
 };
 
 
 /// Initializes the logger
 ///
 /// Logs to both stderr and `log_file`, if any
-pub fn init(log_file: Option<&Path>) {
+pub fn init(log_file: Option<&Path>) -> tracing::dispatcher::DefaultGuard {
 	// Create the terminal layer
 	let term_use_colors = self::colors_enabled();
 	let term_env = self::get_env_filters("RUST_LOG", "info");
@@ -45,7 +42,7 @@ pub fn init(log_file: Option<&Path>) {
 		let file = match fs::File::create(log_file) {
 			Ok(file) => file,
 			Err(err) => {
-				pre_init::warn(format!("Unable to create log file: {err}"));
+				tracing::warn!("Unable to create log file: {err}");
 				return None;
 			},
 		};
@@ -67,19 +64,10 @@ pub fn init(log_file: Option<&Path>) {
 	#[cfg(feature = "tokio-console")]
 	let registry = registry.with(console_subscriber::spawn());
 
-	registry.init();
+	let guard = registry.set_default();
 	tracing::debug!(?log_file, ?term_use_colors, "Initialized logging");
 
-	// And emit all pre-init warnings
-	for message in pre_init::take_traces() {
-		tracing::trace!("{message}");
-	}
-	for message in pre_init::take_debugs() {
-		tracing::debug!("{message}");
-	}
-	for message in pre_init::take_warnings() {
-		tracing::warn!("{message}");
-	}
+	guard
 }
 
 /// Returns whether to colors should be enabled for the terminal layer.
@@ -125,7 +113,7 @@ fn get_env_filters(env: &str, default: &str) -> String {
 		// If there were none, don't use any
 		Err(err) => {
 			if let VarError::NotUnicode(var) = err {
-				pre_init::warn(format!("Ignoring non-utf8 env variable {env:?}: {var:?}"));
+				tracing::warn!("Ignoring non-utf8 env variable {env:?}: {var:?}");
 			}
 
 			HashMap::new()
@@ -147,7 +135,7 @@ fn get_env_filters(env: &str, default: &str) -> String {
 			None => level.to_owned(),
 		})
 		.join(",");
-	pre_init::trace(format!("Using {env}={var}"));
+	tracing::trace!("Using {env}={var}");
 
 	var
 }

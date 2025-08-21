@@ -2,7 +2,6 @@
 
 // Imports
 use {
-	crate::init::logger,
 	std::{
 		collections::HashSet,
 		fs,
@@ -57,7 +56,7 @@ impl Config {
 		match Self::load(path) {
 			Ok(config) => config,
 			Err(err) => {
-				logger::pre_init::warn(format!("Unable to load config from {path:?}, using default: {err:?}"));
+				tracing::warn!("Unable to load config from {path:?}, using default: {err:?}");
 				let config = Self::default();
 
 				// If the config file doesn't exist, write the default
@@ -65,7 +64,7 @@ impl Config {
 				if !fs::exists(path).unwrap_or(true) &&
 					let Err(err) = config.write(path)
 				{
-					logger::pre_init::warn(format!("Unable to write default config to {path:?}: {err:?}"));
+					tracing::warn!("Unable to write default config to {path:?}: {err:?}");
 				}
 
 				config
@@ -75,7 +74,7 @@ impl Config {
 
 	/// Loads the config
 	fn load(path: &Path) -> Result<Self, AppError> {
-		logger::pre_init::debug(format!("Loading config from path: {path:?}"));
+		tracing::debug!("Loading config from path: {path:?}");
 
 		let config_toml = fs::read_to_string(path).context("Unable to open file")?;
 		let config = toml::from_str(&config_toml).context("Unable to parse config")?;

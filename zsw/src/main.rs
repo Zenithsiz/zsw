@@ -60,9 +60,12 @@ use {
 
 
 fn main() -> Result<(), AppError> {
+	// Initialize stderr-only logging
+	let _log_guard = init::logger::init(None);
+
 	// Get arguments
 	let args = Args::parse();
-	init::logger::pre_init::debug(format!("args: {args:?}"));
+	tracing::debug!("Args: {args:?}");
 
 	// Create the configuration then load the config
 	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
@@ -77,10 +80,10 @@ fn main() -> Result<(), AppError> {
 			.to_path_buf(),
 	);
 	let config_dirs = Arc::new(config_dirs);
-	init::logger::pre_init::debug(format!("config_path: {config_path:?}, config: {config:?}"));
+	tracing::debug!("config_path: {config_path:?}, config: {config:?}");
 
 	// Initialize the logger properly now
-	init::logger::init(args.log_file.as_deref().or(config.log_file.as_deref()));
+	let _log_guard = init::logger::init(args.log_file.as_deref().or(config.log_file.as_deref()));
 
 	// Initialize and create everything
 	init::rayon_pool::init(config.rayon_worker_threads).context("Unable to initialize rayon")?;
