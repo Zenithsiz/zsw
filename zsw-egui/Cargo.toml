@@ -4,13 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+
+# Workspace
+zsw-wgpu = { workspace = true }
+
+
 egui                = { features = ["default_fonts"], workspace = true }
 egui_wgpu_backend   = { workspace = true }
 egui_winit_platform = { workspace = true }
 tokio               = { workspace = true }
 tracing             = { workspace = true }
 winit               = { workspace = true }
-zsw-wgpu            = { path = "../zsw-wgpu" }
 zutil-app-error     = { workspace = true }
 
 [lints]

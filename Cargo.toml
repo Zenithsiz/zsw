@@ -4,6 +4,13 @@ members  = ["zsw", "zsw-egui", "zsw-util", "zsw-wgpu"]
 resolver = "2"
 
 [workspace.dependencies]
+
+# Workspace
+zsw      = { path = "zsw" }
+zsw-egui = { path = "zsw-egui" }
+zsw-util = { path = "zsw-util" }
+zsw-wgpu = { path = "zsw-wgpu" }
+
 async-channel       = "2.3.1"
 async-once-cell     = "0.5.3"
 bytemuck            = { features = ["derive"], version = "1.22.0" }
