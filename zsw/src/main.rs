@@ -114,7 +114,6 @@ fn main() -> Result<(), AppError> {
 struct WinitApp {
 	event_tx:               HashMap<WindowId, mpsc::UnboundedSender<WindowEvent>>,
 	panels_updater_barrier: InactiveSlaveBarrier,
-	event_loop_proxy:       winit::event_loop::EventLoopProxy<AppEvent>,
 
 	shared:        Arc<Shared>,
 	shared_window: Vec<Arc<SharedWindow>>,
@@ -191,6 +190,7 @@ impl WinitApp {
 
 		// Shared state
 		let shared = Shared {
+			event_loop_proxy,
 			last_resize: AtomicCell::new(None),
 			// TODO: Not have a default of (0,0)?
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
@@ -219,7 +219,6 @@ impl WinitApp {
 		});
 
 		Ok(Self {
-			event_loop_proxy,
 			event_tx: HashMap::new(),
 			panels_updater_barrier: panels_updater_slave_barrier,
 			shared,
@@ -247,7 +246,6 @@ impl WinitApp {
 			let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
 
 			let shared_window = SharedWindow {
-				event_loop_proxy: self.event_loop_proxy.clone(),
 				_monitor_name: app_window.monitor_name,
 				monitor_geometry: app_window.monitor_geometry,
 				window,

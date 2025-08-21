@@ -21,6 +21,8 @@ use {
 /// Shared data
 #[derive(Debug)]
 pub struct Shared {
+	pub event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
+
 	pub last_resize: AtomicCell<Option<Resize>>,
 	pub cursor_pos:  AtomicCell<PhysicalPosition<f64>>,
 	pub config_dirs: Arc<ConfigDirs>,
@@ -38,8 +40,6 @@ pub struct Shared {
 /// Shared window state
 #[derive(Debug)]
 pub struct SharedWindow {
-	// TODO: Move this to normal shared
-	pub event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
 	pub _monitor_name:    String,
 	pub monitor_geometry: Rect<i32, u32>,
 	pub window:           Arc<winit::window::Window>,

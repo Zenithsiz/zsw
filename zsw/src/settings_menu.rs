@@ -60,7 +60,7 @@ impl SettingsMenu {
 
 			match self.cur_tab {
 				Tab::Panels => self::draw_panels_tab(ui, shared, shared_window),
-				Tab::Settings => self::draw_settings(ui, shared_window),
+				Tab::Settings => self::draw_settings(ui, shared),
 			}
 		});
 	}
@@ -187,9 +187,9 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 
 /// Draws the settings tab
-fn draw_settings(ui: &mut egui::Ui, shared_window: &SharedWindow) {
+fn draw_settings(ui: &mut egui::Ui, shared: &Shared) {
 	if ui.button("Quit").clicked() {
-		shared_window
+		shared
 			.event_loop_proxy
 			.send_event(crate::AppEvent::Shutdown)
 			.expect("Unable to send shutdown event to event loop");
