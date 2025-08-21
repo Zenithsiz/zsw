@@ -206,8 +206,8 @@ fn draw_panels_editor(
 		return;
 	}
 
-	for (panel_idx, panel) in cur_panels.iter_mut().enumerate() {
-		ui.collapsing(format!("Panel {panel_idx}"), |ui| {
+	for panel in cur_panels.iter_mut() {
+		ui.collapsing(panel.name.to_string(), |ui| {
 			ui.checkbox(&mut panel.state.paused, "Paused");
 
 			ui.collapsing("Geometries", |ui| {

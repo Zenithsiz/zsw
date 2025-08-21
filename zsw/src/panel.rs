@@ -76,6 +76,7 @@ impl PanelsManager {
 		};
 
 		let panel = Panel::new(
+			panel_name.clone(),
 			&shared_window.wgpu,
 			&shared_window.panels_renderer_layout,
 			geometries,
@@ -214,6 +215,9 @@ impl PanelsManager {
 /// Panel
 #[derive(Debug)]
 pub struct Panel {
+	/// Name
+	pub name: PanelName,
+
 	/// Geometries
 	pub geometries: Vec<PanelGeometry>,
 
@@ -227,12 +231,14 @@ pub struct Panel {
 impl Panel {
 	/// Creates a new panel
 	pub fn new(
+		name: PanelName,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		geometries: Vec<Rect<i32, u32>>,
 		state: PanelState,
 	) -> Result<Self, AppError> {
 		Ok(Self {
+			name,
 			geometries: geometries
 				.into_iter()
 				.map(|geometry| PanelGeometry::new(wgpu_shared, renderer_layouts, geometry))
