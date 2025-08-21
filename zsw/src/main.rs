@@ -44,7 +44,11 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
-	zsw_util::{TokioTaskBlockOn, meetup},
+	zsw_util::{
+		TokioTaskBlockOn,
+		master_barrier::{self, MasterBarrier, SlaveBarrier},
+		meetup,
+	},
 	zsw_wgpu::WgpuRenderer,
 	zutil_app_error::{AppError, Context, app_error},
 };
@@ -232,7 +236,7 @@ impl WinitApp {
 		let settings_menu = SettingsMenu::new();
 
 		let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
-		let (panels_updater_output_tx, panels_updater_output_rx) = meetup::channel();
+		let (panels_updater_master_barrier, panels_updater_slave_barrier) = master_barrier::barrier();
 
 		let shared_window = SharedWindow {
 			event_loop_proxy: self.event_loop_proxy.clone(),
@@ -251,6 +255,7 @@ impl WinitApp {
 		self::spawn_task("Renderer", {
 			let shared = Arc::clone(&self.shared);
 			let shared_window = Arc::clone(&shared_window);
+			let panels_updater_barrier = panels_updater_slave_barrier.activate();
 			|| {
 				self::renderer(
 					shared,
@@ -259,14 +264,14 @@ impl WinitApp {
 					panels_renderer,
 					egui_renderer,
 					egui_painter_output_rx,
-					panels_updater_output_rx,
+					panels_updater_barrier,
 				)
 			}
 		});
 
 		self::spawn_task("Panels updater", {
 			let shared = Arc::clone(&self.shared);
-			|| self::panels_updater(shared, panels_updater_output_tx)
+			|| self::panels_updater(shared, panels_updater_master_barrier)
 		});
 
 		self::spawn_task("Egui painter", {
@@ -381,15 +386,13 @@ async fn renderer(
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
 	egui_painter_output_rx: meetup::Receiver<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
-	panels_updater_output_rx: meetup::Receiver<()>,
+	panels_updater_barrier: SlaveBarrier,
 ) -> Result<!, AppError> {
 	let mut egui_paint_jobs = vec![];
 	let mut egui_textures_delta = None;
 	loop {
 		// Meetup with the panels updater
-		// Note: We just *try* to meetup, if it hasn't finished yet,
-		//       we just re-render the existing panels.
-		_ = panels_updater_output_rx.try_recv();
+		panels_updater_barrier.meetup().await;
 
 		// Update egui, if available
 		if let Some((paint_jobs, textures_delta)) = egui_painter_output_rx.try_recv() {
@@ -450,7 +453,7 @@ async fn renderer(
 
 /// Panel updater task
 #[expect(clippy::infinite_loop, reason = "We need this type signature for `spawn_task`")]
-async fn panels_updater(shared: Arc<Shared>, panels_updater_output_tx: meetup::Sender<()>) -> Result<!, AppError> {
+async fn panels_updater(shared: Arc<Shared>, panels_updater_barrier: MasterBarrier) -> Result<!, AppError> {
 	loop {
 		{
 			let mut cur_panels = shared.cur_panels.lock().await;
@@ -462,7 +465,10 @@ async fn panels_updater(shared: Arc<Shared>, panels_updater_output_tx: meetup::S
 			}
 		}
 
-		panels_updater_output_tx.send(()).await;
+		// Meet up with all of the renderers
+		// TODO: If multiple renderers have different refresh rates, should we be waiting
+		//       for all?
+		panels_updater_barrier.meetup_all().await;
 	}
 }
 

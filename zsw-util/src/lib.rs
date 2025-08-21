@@ -14,10 +14,13 @@
 	try_trait_v2,
 	assert_matches,
 	yeet_expr,
-	const_trait_impl
+	const_trait_impl,
+	nonpoison_mutex,
+	sync_nonpoison
 )]
 
 // Modules
+pub mod master_barrier;
 pub mod meetup;
 mod rect;
 mod tuple_collect_res;
