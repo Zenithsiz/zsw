@@ -375,8 +375,8 @@ where
 		let id = tokio::task::id();
 		tracing::debug!(?name, ?id, "Spawning task");
 		match fut.await {
-			Ok(_) => tracing::debug!(?name, "Task finished"),
-			Err(err) => tracing::warn!(?name, ?err, "Task returned error"),
+			Ok(_) => tracing::debug!("Task {name:?} finished"),
+			Err(err) => tracing::warn!("Task {name:?} returned error: {}", err.pretty()),
 		}
 	});
 }
