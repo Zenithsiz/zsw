@@ -516,7 +516,7 @@ fn create_msaa_framebuffer(
 	};
 
 	let surface_config = wgpu_renderer.surface_config();
-	let msaa_frame_descriptor = &wgpu::TextureDescriptor {
+	let msaa_frame_descriptor = wgpu::TextureDescriptor {
 		size:            msaa_texture_extent,
 		mip_level_count: 1,
 		sample_count:    MSAA_SAMPLES,
@@ -529,7 +529,7 @@ fn create_msaa_framebuffer(
 
 	wgpu_shared
 		.device
-		.create_texture(msaa_frame_descriptor)
+		.create_texture(&msaa_frame_descriptor)
 		.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
