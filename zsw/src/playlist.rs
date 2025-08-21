@@ -10,7 +10,7 @@ pub use self::player::PlaylistPlayer;
 // Imports
 use {
 	crate::AppError,
-	futures::{stream::FuturesUnordered, StreamExt},
+	futures::{StreamExt, stream::FuturesUnordered},
 	std::{
 		borrow::Borrow,
 		collections::HashMap,
@@ -22,7 +22,7 @@ use {
 	tokio::sync::RwLock,
 	tokio_stream::wrappers::ReadDirStream,
 	zsw_util::PathAppendExt,
-	zutil_app_error::{app_error, Context},
+	zutil_app_error::{Context, app_error},
 };
 
 /// Playlists
@@ -122,11 +122,11 @@ impl Playlists {
 	pub async fn add(&mut self, path: &Path) -> Result<(PlaylistName, Arc<RwLock<Playlist>>), AppError> {
 		// Create the playlist path, ensuring we don't overwrite an existing path
 		let mut playlist_name = path
-			.file_name()
-			.context("Path has no file name")?
+			.file_stem()
+			.context("Path has no file stem")?
 			.to_os_string()
 			.into_string()
-			.map_err(|file_name| app_error!("Playlist file name was non-utf8: {file_name:?}"))?;
+			.map_err(|file_name| app_error!("Playlist file stem was non-utf8: {file_name:?}"))?;
 		while self.playlists.contains_key(playlist_name.as_str()) {
 			playlist_name.push_str("-new");
 		}
