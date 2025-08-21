@@ -154,7 +154,6 @@ fn draw_playlists(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, 
 	}
 
 	if ui.button("➕ (Add playlist)").clicked() {
-		// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
 		self::choose_load_playlist_from_file(add_playlist_state, shared);
 	}
 }
@@ -173,7 +172,6 @@ fn choose_load_playlist_from_file(
 		Some(playlist_path) => {
 			tracing::debug!(?playlist_path, "Loading playlist");
 
-			// DEADLOCK: We have the locker setup such that advancing from 0 to 2 cannot deadlock
 			let res = shared.playlists.blocking_write().add(&playlist_path).block_on();
 			match res {
 				Ok((playlist_name, playlist)) => {

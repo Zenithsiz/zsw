@@ -1,8 +1,5 @@
 //! Zenithsiz's scrolling wallpaper
 
-// TODO: When using mailbox (uncapped FPS), a deadlock occurs.
-//       Strangely doesn't occur on immediate, might be a driver issue.
-
 // Features
 #![feature(never_type, decl_macro, exit_status_error, must_not_suspend, try_blocks, yeet_expr)]
 
