@@ -6,13 +6,13 @@ log_file = "latest.log"
 # upscale_exclude = ["/path/to/exclude"]
 
 [[default.panels]]
-panel = "multiple.toml"
-playlist = "example2"
+panel = "multiple"
+playlist = "example1"
 
 [[default.panels]]
-panel = "quarter.toml"
-playlist = "example2"
+panel = "quarter"
+playlist = "example1"
 
 #[[default.panels]]
-#panel = "full.toml"
+#panel = "full"
 #playlist = "example1"

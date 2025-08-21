@@ -124,8 +124,8 @@ impl Default for ConfigDefault {
 #[derive(Clone, Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ConfigPanel {
-	/// Panel path
-	pub panel: PathBuf,
+	/// Panel
+	pub panel: String,
 
 	/// Playlist
 	pub playlist: String,

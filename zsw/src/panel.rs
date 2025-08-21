@@ -23,38 +23,45 @@ use {
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer},
 		shared::{Shared, SharedWindow},
 	},
+	core::{borrow::Borrow, fmt},
 	futures::{StreamExt, stream::FuturesUnordered},
 	std::{
 		path::{Path, PathBuf},
 		sync::Arc,
 	},
 	tokio::{fs, sync::RwLock},
-	zsw_util::{Rect, UnwrapOrReturnExt, WalkDir},
+	zsw_util::{PathAppendExt, Rect, UnwrapOrReturnExt, WalkDir},
 	zsw_wgpu::WgpuShared,
 	zutil_app_error::Context,
 };
 
 /// Panels manager
 #[derive(Debug)]
-pub struct PanelsManager {}
+pub struct PanelsManager {
+	/// Panels directory
+	root: PathBuf,
+}
 
 impl PanelsManager {
 	/// Creates a new panels manager
-	pub fn new() -> Self {
-		Self {}
+	pub fn new(root: PathBuf) -> Self {
+		Self { root }
 	}
 
-	/// Loads a panel from a path
+	/// Loads a panel from a name
 	pub async fn load(
 		&self,
-		path: &Path,
+		panel_name: PanelName,
 		playlist_name: PlaylistName,
 		shared: &Arc<Shared>,
 		shared_window: &Arc<SharedWindow>,
 	) -> Result<Panel, AppError> {
 		// Try to read the file
-		tracing::debug!(?path, "Loading panel");
-		let panel_toml = tokio::fs::read_to_string(path).await.context("Unable to open file")?;
+		let panel_path = self.panel_path(&panel_name);
+		tracing::debug!(%panel_name, ?panel_path, "Loading panel");
+		let panel_toml = tokio::fs::read_to_string(panel_path)
+			.await
+			.context("Unable to open file")?;
 
 		// Then parse it
 		let panel = toml::from_str::<ser::Panel>(&panel_toml).context("Unable to parse panel")?;
@@ -76,7 +83,7 @@ impl PanelsManager {
 		)
 		.context("Unable to create panel")?;
 
-		crate::spawn_task(format!("Load panel playlist {path:?}: {playlist_name:?}"), {
+		crate::spawn_task(format!("Load panel playlist {panel_name:?}: {playlist_name:?}"), {
 			let playlist_player = Arc::clone(panel.images.playlist_player());
 			let shared = Arc::clone(shared);
 			|| async move {
@@ -89,6 +96,11 @@ impl PanelsManager {
 		});
 
 		Ok(panel)
+	}
+
+	/// Returns a panel's path
+	pub fn panel_path(&self, name: &PanelName) -> PathBuf {
+		self.root.join(&*name.0).with_appended(".toml")
 	}
 
 	/// Loads `playlist` into `playlist_player`.
@@ -301,5 +313,27 @@ impl Panel {
 		}
 
 		self.step(wgpu_shared, renderer_layouts, image_requester, 1).await;
+	}
+}
+
+/// Panel name
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Debug)]
+pub struct PanelName(Arc<str>);
+
+impl From<String> for PanelName {
+	fn from(s: String) -> Self {
+		Self(s.into())
+	}
+}
+
+impl Borrow<str> for PanelName {
+	fn borrow(&self) -> &str {
+		&self.0
+	}
+}
+
+impl fmt::Display for PanelName {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.0.fmt(f)
 	}
 }

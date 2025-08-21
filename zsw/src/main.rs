@@ -23,7 +23,7 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{Panel, PanelShader, PanelsManager, PanelsRenderer},
+		panel::{Panel, PanelName, PanelShader, PanelsManager, PanelsRenderer},
 		playlist::{PlaylistName, Playlists},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
@@ -163,7 +163,7 @@ impl WinitApp {
 			.await
 			.context("Unable to load playlists")?;
 
-		let panels_manager = PanelsManager::new();
+		let panels_manager = PanelsManager::new(config_dirs.panels().to_path_buf());
 
 		let upscale_cache_dir = config
 			.upscale_cache_dir
@@ -235,8 +235,7 @@ impl WinitApp {
 			let shared = Arc::clone(&self.shared);
 			let shared_window = Arc::clone(&shared_window);
 			let config = Arc::clone(&self.config);
-			let config_dirs = Arc::clone(&self.config_dirs);
-			|| async move { self::load_default_panels(&config, &config_dirs, shared, shared_window).await }
+			|| async move { self::load_default_panels(&config, shared, shared_window).await }
 		});
 
 		self::spawn_task("Renderer", {
@@ -310,7 +309,6 @@ impl WinitApp {
 /// Loads the default panels
 async fn load_default_panels(
 	config: &Config,
-	config_dirs: &ConfigDirs,
 	shared: Arc<Shared>,
 	shared_window: Arc<SharedWindow>,
 ) -> Result<(), AppError> {
@@ -322,14 +320,14 @@ async fn load_default_panels(
 		.panels
 		.iter()
 		.map(|default_panel| async move {
-			let default_panel_path = config_dirs.panels().join(&default_panel.panel);
-			let playlist_name = PlaylistName::from(default_panel.playlist.clone());
+			let panel = PanelName::from(default_panel.panel.clone());
+			let playlist = PlaylistName::from(default_panel.playlist.clone());
 			shared
 				.panels_manager
-				.load(&default_panel_path, playlist_name, shared, shared_window)
+				.load(panel, playlist, shared, shared_window)
 				.await
 				.inspect(|panel| tracing::debug!(?panel, "Loaded default panel"))
-				.inspect_err(|err| tracing::warn!("Unable to load default panel {default_panel_path:?}: {err:?}"))
+				.inspect_err(|err| tracing::warn!("Unable to load default panel {default_panel:?}: {err:?}"))
 				.ok()
 		})
 		.collect::<FuturesUnordered<_>>()
