@@ -45,6 +45,7 @@ impl PanelsLoader {
 		&self,
 		panel_name: PanelName,
 		playlist_player: PlaylistPlayer,
+		shader: PanelShader,
 		shared: &Shared,
 	) -> Result<Panel, AppError> {
 		// Try to read the file
@@ -73,6 +74,7 @@ impl PanelsLoader {
 			&shared.panels_renderer_layouts,
 			geometries,
 			state,
+			shader,
 		)
 		.context("Unable to create panel")?;
 
@@ -99,6 +101,9 @@ pub struct Panel {
 
 	/// Images
 	pub images: PanelImages,
+
+	/// Shader
+	pub shader: PanelShader,
 }
 
 impl Panel {
@@ -110,6 +115,7 @@ impl Panel {
 		renderer_layouts: &PanelsRendererLayouts,
 		geometries: Vec<Rect<i32, u32>>,
 		state: PanelState,
+		shader: PanelShader,
 	) -> Result<Self, AppError> {
 		Ok(Self {
 			name,
@@ -120,6 +126,7 @@ impl Panel {
 				.context("Unable to build geometries")?,
 			state,
 			images: PanelImages::new(playlist_player, wgpu_shared, renderer_layouts),
+			shader,
 		})
 	}
 

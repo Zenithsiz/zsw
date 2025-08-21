@@ -112,19 +112,12 @@ impl Default for Config {
 pub struct ConfigDefault {
 	/// Panels
 	pub panels: Vec<ConfigPanel>,
-
-	/// Shader
-	#[serde(default)]
-	pub shader: Option<ConfigShader>,
 }
 
 #[expect(clippy::derivable_impls, reason = "We want to be explicit with defaults")]
 impl Default for ConfigDefault {
 	fn default() -> Self {
-		Self {
-			panels: vec![],
-			shader: None,
-		}
+		Self { panels: vec![] }
 	}
 }
 
@@ -137,6 +130,10 @@ pub struct ConfigPanel {
 
 	/// Playlist
 	pub playlist: String,
+
+	/// Shader
+	#[serde(default)]
+	pub shader: Option<ConfigShader>,
 }
 
 /// Configuration shader

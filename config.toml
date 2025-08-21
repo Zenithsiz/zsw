@@ -5,17 +5,17 @@ log_file             = "latest.log"
 # upscale_cmd = "/upscale/cmd"
 # upscale_exclude = ["/path/to/exclude"]
 
-[default]
+[[default.panels]]
+panel           = "multiple"
+playlist        = "example1"
 shader.type     = "fade-out"
 shader.strength = 1.0
 
 [[default.panels]]
-panel    = "multiple"
-playlist = "example1"
-
-[[default.panels]]
-panel    = "quarter"
-playlist = "example1"
+panel           = "quarter"
+playlist        = "example1"
+shader.type     = "fade-white"
+shader.strength = 1.0
 
 #[[default.panels]]
 #panel = "full"

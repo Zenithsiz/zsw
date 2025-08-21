@@ -1,7 +1,15 @@
 //! Zenithsiz's scrolling wallpaper
 
 // Features
-#![feature(never_type, decl_macro, exit_status_error, must_not_suspend, try_blocks, yeet_expr)]
+#![feature(
+	never_type,
+	decl_macro,
+	exit_status_error,
+	must_not_suspend,
+	try_blocks,
+	yeet_expr,
+	iter_partition_in_place
+)]
 
 // Modules
 mod args;
@@ -32,7 +40,7 @@ use {
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
 	std::{collections::HashMap, fs, sync::Arc},
-	tokio::sync::{Mutex, RwLock, mpsc},
+	tokio::sync::{Mutex, mpsc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
@@ -104,7 +112,6 @@ fn main() -> Result<(), AppError> {
 }
 
 struct WinitApp {
-	config_dirs:            Arc<ConfigDirs>,
 	event_tx:               HashMap<WindowId, mpsc::UnboundedSender<WindowEvent>>,
 	panels_updater_barrier: InactiveSlaveBarrier,
 	event_loop_proxy:       winit::event_loop::EventLoopProxy<AppEvent>,
@@ -194,7 +201,6 @@ impl WinitApp {
 			playlists_loader,
 			image_requester,
 			cur_panels: Mutex::new(vec![]),
-			panels_shader: RwLock::new(PanelShader::None),
 		};
 		let shared = Arc::new(shared);
 
@@ -213,7 +219,6 @@ impl WinitApp {
 		});
 
 		Ok(Self {
-			config_dirs,
 			event_loop_proxy,
 			event_tx: HashMap::new(),
 			panels_updater_barrier: panels_updater_slave_barrier,
@@ -231,14 +236,9 @@ impl WinitApp {
 				.await
 				.context("Unable to create wgpu renderer")?;
 
-			let panels_renderer = PanelsRenderer::new(
-				&self.config_dirs,
-				&wgpu_renderer,
-				self.shared.wgpu,
-				&self.shared.panels_renderer_layouts,
-			)
-			.await
-			.context("Unable to create panels renderer")?;
+			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu)
+				.await
+				.context("Unable to create panels renderer")?;
 			let egui_event_handler = EguiEventHandler::new(&window);
 			let egui_painter = EguiPainter::new(&egui_event_handler);
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
@@ -322,18 +322,6 @@ impl WinitApp {
 
 /// Loads the default panels
 async fn load_default_panels(config: &Config, shared: Arc<Shared>) -> Result<(), AppError> {
-	// Set the shader
-	*shared.panels_shader.write().await = match config.default.shader {
-		Some(config::ConfigShader::None) => PanelShader::None,
-		Some(config::ConfigShader::Fade) => PanelShader::Fade,
-		Some(config::ConfigShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
-		Some(config::ConfigShader::FadeOut { strength }) => PanelShader::FadeOut { strength },
-		Some(config::ConfigShader::FadeIn { strength }) => PanelShader::FadeIn { strength },
-
-		// TODO: Is this a good default?
-		None => PanelShader::FadeOut { strength: 1.5 },
-	};
-
 	// Load the panels
 	let shared = &shared;
 	config
@@ -373,9 +361,21 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Shared
 
 	let playlist_player = PlaylistPlayer::new(&playlist).await;
 
+	// Set the shader
+	let panel_shader = match default_panel.shader {
+		Some(config::ConfigShader::None) => PanelShader::None,
+		Some(config::ConfigShader::Fade) => PanelShader::Fade,
+		Some(config::ConfigShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
+		Some(config::ConfigShader::FadeOut { strength }) => PanelShader::FadeOut { strength },
+		Some(config::ConfigShader::FadeIn { strength }) => PanelShader::FadeIn { strength },
+
+		// TODO: Is this a good default?
+		None => PanelShader::FadeOut { strength: 1.5 },
+	};
+
 	let panel = shared
 		.panels_loader
-		.load(panel_name.clone(), playlist_player, shared)
+		.load(panel_name.clone(), playlist_player, panel_shader, shared)
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!(?panel, "Loaded default panel");
@@ -433,8 +433,6 @@ async fn renderer(
 		// Render the panels
 		{
 			let cur_panels = shared.cur_panels.lock().await;
-
-			let shader = *shared.panels_shader.read().await;
 			panels_renderer
 				.render(
 					&mut frame,
@@ -445,7 +443,6 @@ async fn renderer(
 					&shared_window.window,
 					&shared_window.monitor_geometry,
 					&*cur_panels,
-					shader,
 				)
 				.await
 				.context("Unable to render panels")?;

@@ -7,12 +7,12 @@ use {
 		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
-		panel::{Panel, PanelShader, PanelsLoader, PanelsRendererLayouts},
+		panel::{Panel, PanelsLoader, PanelsRendererLayouts},
 		playlist::PlaylistsLoader,
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
-	tokio::sync::{Mutex, RwLock},
+	tokio::sync::Mutex,
 	winit::dpi::PhysicalPosition,
 	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
@@ -32,8 +32,7 @@ pub struct Shared {
 	pub playlists_loader: PlaylistsLoader,
 	pub image_requester:  ImageRequester,
 
-	pub cur_panels:    Mutex<Vec<Panel>>,
-	pub panels_shader: RwLock<PanelShader>, // TODO: Replace with atomic cell
+	pub cur_panels: Mutex<Vec<Panel>>,
 }
 
 /// Shared window state

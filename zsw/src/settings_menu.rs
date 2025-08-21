@@ -69,7 +69,6 @@ impl SettingsMenu {
 fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
 	self::draw_panels_editor(ui, shared, shared_window);
 	ui.separator();
-	self::draw_shader_select(ui, shared);
 }
 
 /// Draws the panels editor
@@ -180,6 +179,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 						});
 				});
 			});
+
+			ui.collapsing("Shader", |ui| self::draw_shader_select(ui, &mut panel.shader));
 		});
 	}
 }
@@ -228,10 +229,7 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared) {
-	ui.label("Shader");
-
-	let mut cur_shader = shared.panels_shader.write().block_on();
+fn draw_shader_select(ui: &mut egui::Ui, cur_shader: &mut PanelShader) {
 	egui::ComboBox::from_id_salt("Shader selection menu")
 		.selected_text(cur_shader.name())
 		.show_ui(ui, |ui| {
@@ -244,7 +242,7 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared) {
 				PanelShader::FadeIn { strength: 0.2 },
 			];
 			for shader in shaders {
-				ui.selectable_value(&mut *cur_shader, shader, shader.name());
+				ui.selectable_value(cur_shader, shader, shader.name());
 			}
 		});
 

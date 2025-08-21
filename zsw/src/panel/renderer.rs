@@ -13,10 +13,17 @@ use {
 	super::{Panel, PanelImage},
 	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	cgmath::Vector2,
-	core::future::Future,
+	core::{
+		future::Future,
+		mem::{self, Discriminant},
+	},
 	itertools::Itertools,
 	naga_oil::compose::{ComposableModuleDescriptor, Composer, ImportDefinition, NagaModuleDescriptor, ShaderDefValue},
-	std::{borrow::Cow, collections::HashSet, path::Path},
+	std::{
+		borrow::Cow,
+		collections::{HashMap, HashSet, hash_map},
+		path::Path,
+	},
 	tokio::fs,
 	wgpu::{naga, util::DeviceExt},
 	winit::{dpi::PhysicalSize, window::Window},
@@ -61,8 +68,13 @@ impl PanelsRendererLayouts {
 //       via the uniforms.
 #[derive(Debug)]
 pub struct PanelsRenderer {
-	/// Render pipeline
-	render_pipeline: wgpu::RenderPipeline,
+	/// Render pipeline for each shader
+	// TODO: Prune ones that aren't used?
+	// TODO: Using `mem::discriminant` here could lead to some subtle bugs
+	//       where we expect a certain shader to update based on it's fields,
+	//       so we should probably convert this into something else that uniquely
+	//       determines whether a render pipeline update is required or not.
+	render_pipelines: HashMap<Discriminant<PanelShader>, wgpu::RenderPipeline>,
 
 	/// Vertex buffer
 	vertices: wgpu::Buffer,
@@ -72,19 +84,11 @@ pub struct PanelsRenderer {
 
 	/// Msaa frame-buffer
 	msaa_framebuffer: wgpu::TextureView,
-
-	/// Current shader
-	cur_shader: PanelShader,
 }
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
-	pub async fn new(
-		config_dirs: &ConfigDirs,
-		wgpu_renderer: &WgpuRenderer,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) -> Result<Self, AppError> {
+	pub async fn new(wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared) -> Result<Self, AppError> {
 		// Create the index / vertex buffer
 		let indices = self::create_indices(wgpu_shared);
 		let vertices = self::create_vertices(wgpu_shared);
@@ -92,25 +96,11 @@ impl PanelsRenderer {
 		// Create the framebuffer
 		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, wgpu_renderer.surface_size());
 
-
-		// By default use the empty shader
-		let shader = PanelShader::None;
-
 		Ok(Self {
-			render_pipeline: self::create_render_pipeline(
-				config_dirs,
-				wgpu_renderer,
-				wgpu_shared,
-				&renderer_layouts.uniforms_bind_group_layout,
-				&renderer_layouts.image_bind_group_layout,
-				shader,
-			)
-			.await
-			.context("Unable to create render pipeline")?,
+			render_pipelines: HashMap::new(),
 			vertices,
 			indices,
 			msaa_framebuffer,
-			cur_shader: shader,
 		})
 	}
 
@@ -132,23 +122,7 @@ impl PanelsRenderer {
 		window: &Window,
 		window_geometry: &Rect<i32, u32>,
 		panels: impl IntoIterator<Item = &'_ Panel>,
-		shader: PanelShader,
 	) -> Result<(), AppError> {
-		// Update the shader, if requested
-		if self.cur_shader != shader {
-			self.cur_shader = shader;
-			self.render_pipeline = self::create_render_pipeline(
-				config_dirs,
-				wgpu_renderer,
-				wgpu_shared,
-				&layouts.uniforms_bind_group_layout,
-				&layouts.image_bind_group_layout,
-				shader,
-			)
-			.await
-			.context("Unable to create render pipeline")?;
-		}
-
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match MSAA_SAMPLES {
 			1 => wgpu::RenderPassColorAttachment {
@@ -189,13 +163,32 @@ impl PanelsRenderer {
 		};
 		let mut render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
 
-		// Set our shared pipeline, indices, vertices and uniform bind group
-		render_pass.set_pipeline(&self.render_pipeline);
+		// Set our shared indices and vertices
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
-		// And draw each panel
 		for panel in panels {
+			let render_pipeline = match self.render_pipelines.entry(mem::discriminant(&panel.shader)) {
+				hash_map::Entry::Occupied(entry) => entry.into_mut(),
+				hash_map::Entry::Vacant(entry) => {
+					let render_pipeline = self::create_render_pipeline(
+						config_dirs,
+						wgpu_renderer,
+						wgpu_shared,
+						&layouts.uniforms_bind_group_layout,
+						&layouts.image_bind_group_layout,
+						panel.shader,
+					)
+					.await
+					.context("Unable to create render pipeline")?;
+
+					entry.insert(render_pipeline)
+				},
+			};
+
+			// Bind the pipeline for the specific shader
+			render_pass.set_pipeline(render_pipeline);
+
 			// Bind the panel-shared image bind group
 			render_pass.set_bind_group(1, panel.images.image_bind_group(), &[]);
 
@@ -208,7 +201,7 @@ impl PanelsRenderer {
 				let geometry_uniforms = geometry.uniforms(wgpu_shared, layouts, window.id()).await;
 
 				// Write the uniforms
-				self.write_uniforms(
+				Self::write_uniforms(
 					wgpu_shared,
 					frame.surface_size,
 					panel,
@@ -228,7 +221,6 @@ impl PanelsRenderer {
 
 	/// Writes the uniforms
 	pub fn write_uniforms(
-		&self,
 		wgpu_shared: &WgpuShared,
 		surface_size: PhysicalSize<u32>,
 		panel: &Panel,
@@ -262,7 +254,7 @@ impl PanelsRenderer {
 
 		let fade_point = panel.state.fade_point_norm();
 		let progress = panel.state.progress_norm();
-		match self.cur_shader {
+		match panel.shader {
 			PanelShader::None => write_uniforms!(uniform::None {
 				pos_matrix,
 				prev,
