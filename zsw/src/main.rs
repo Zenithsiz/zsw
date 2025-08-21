@@ -36,6 +36,7 @@ use {
 	args::Args,
 	cgmath::Point2,
 	clap::Parser,
+	core::sync::atomic::{self, AtomicBool},
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
@@ -197,6 +198,7 @@ impl WinitApp {
 			last_resize: AtomicCell::new(None),
 			// TODO: Not have a default of (0,0)?
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
+			panels_update_render_paused: AtomicBool::new(false),
 			config_dirs: Arc::clone(&config_dirs),
 			wgpu: wgpu_shared,
 			panels_renderer_layouts,
@@ -432,8 +434,10 @@ async fn renderer(
 		let mut frame = wgpu_renderer
 			.start_render(shared.wgpu)
 			.context("Unable to start frame")?;
-		// Render the panels
-		{
+
+		// TODO: Can we capture the frame before stopping and render that as
+		//       an image over and over?
+		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
 			let cur_panels = shared.cur_panels.lock().await;
 			panels_renderer
 				.render(
@@ -482,7 +486,8 @@ async fn renderer(
 #[expect(clippy::infinite_loop, reason = "We need this type signature for `spawn_task`")]
 async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) -> Result<!, AppError> {
 	loop {
-		{
+		// Update if we're not paused
+		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
 			let mut cur_panels = shared.cur_panels.lock().await;
 
 			for panel in &mut *cur_panels {

@@ -10,6 +10,7 @@ use {
 		panel::{Panel, PanelsLoader, PanelsRendererLayouts},
 		playlist::PlaylistsLoader,
 	},
+	core::sync::atomic::AtomicBool,
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
 	tokio::sync::Mutex,
@@ -25,6 +26,10 @@ pub struct Shared {
 
 	pub last_resize: AtomicCell<Option<Resize>>,
 	pub cursor_pos:  AtomicCell<PhysicalPosition<f64>>,
+
+	/// Controls whether the updating & rendering of panels is paused
+	pub panels_update_render_paused: AtomicBool,
+
 	pub config_dirs: Arc<ConfigDirs>,
 
 	pub wgpu:                    &'static WgpuShared,

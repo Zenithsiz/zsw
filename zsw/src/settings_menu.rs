@@ -9,6 +9,7 @@ use {
 		panel::{PanelImage, PanelShader},
 		shared::{Shared, SharedWindow},
 	},
+	core::sync::atomic,
 	egui::Widget,
 	std::path::Path,
 	zsw_util::{Rect, TokioTaskBlockOn},
@@ -193,6 +194,16 @@ fn draw_settings(ui: &mut egui::Ui, shared: &Shared) {
 			.event_loop_proxy
 			.send_event(crate::AppEvent::Shutdown)
 			.expect("Unable to send shutdown event to event loop");
+	}
+
+	let mut panels_update_render_paused = shared.panels_update_render_paused.load(atomic::Ordering::Acquire);
+	if ui
+		.checkbox(&mut panels_update_render_paused, "Panels update/render paused")
+		.changed()
+	{
+		shared
+			.panels_update_render_paused
+			.store(panels_update_render_paused, atomic::Ordering::Release);
 	}
 }
 
