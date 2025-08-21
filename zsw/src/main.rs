@@ -46,7 +46,7 @@ use {
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
 	zsw_util::{
 		TokioTaskBlockOn,
-		master_barrier::{self, MasterBarrier, SlaveBarrier},
+		master_barrier::{self, InactiveSlaveBarrier, MasterBarrier, SlaveBarrier},
 		meetup,
 	},
 	zsw_wgpu::WgpuRenderer,
@@ -105,10 +105,10 @@ fn main() -> Result<(), AppError> {
 }
 
 struct WinitApp {
-	config:           Arc<Config>,
-	config_dirs:      Arc<ConfigDirs>,
-	event_tx:         Option<mpsc::UnboundedSender<(WindowId, WindowEvent)>>,
-	event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
+	config_dirs:            Arc<ConfigDirs>,
+	event_tx:               Option<mpsc::UnboundedSender<(WindowId, WindowEvent)>>,
+	panels_updater_barrier: InactiveSlaveBarrier,
+	event_loop_proxy:       winit::event_loop::EventLoopProxy<AppEvent>,
 
 	shared:        Arc<Shared>,
 	shared_window: Option<Arc<SharedWindow>>,
@@ -204,11 +204,23 @@ impl WinitApp {
 
 		self::spawn_task("Image loader", || image_loader.run());
 
+		self::spawn_task("Load default panels", {
+			let shared = Arc::clone(&shared);
+			let config = Arc::clone(&config);
+			|| async move { self::load_default_panels(&config, shared).await }
+		});
+
+		let (panels_updater_master_barrier, panels_updater_slave_barrier) = master_barrier::barrier();
+		self::spawn_task("Panels updater", {
+			let shared = Arc::clone(&shared);
+			|| self::panels_updater(shared, panels_updater_master_barrier)
+		});
+
 		Ok(Self {
-			config,
 			config_dirs,
 			event_loop_proxy,
 			event_tx: None,
+			panels_updater_barrier: panels_updater_slave_barrier,
 			shared,
 			shared_window: None,
 		})
@@ -236,7 +248,6 @@ impl WinitApp {
 		let settings_menu = SettingsMenu::new();
 
 		let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
-		let (panels_updater_master_barrier, panels_updater_slave_barrier) = master_barrier::barrier();
 
 		let shared_window = SharedWindow {
 			event_loop_proxy: self.event_loop_proxy.clone(),
@@ -244,18 +255,10 @@ impl WinitApp {
 		};
 		let shared_window = Arc::new(shared_window);
 
-		// TODO: Start loading them in `new` and only write to the window
-		//       here instead?
-		self::spawn_task("Load default panels", {
-			let shared = Arc::clone(&self.shared);
-			let config = Arc::clone(&self.config);
-			|| async move { self::load_default_panels(&config, shared).await }
-		});
-
 		self::spawn_task("Renderer", {
 			let shared = Arc::clone(&self.shared);
 			let shared_window = Arc::clone(&shared_window);
-			let panels_updater_barrier = panels_updater_slave_barrier.activate();
+			let panels_updater_barrier = self.panels_updater_barrier.activate();
 			|| {
 				self::renderer(
 					shared,
@@ -269,10 +272,6 @@ impl WinitApp {
 			}
 		});
 
-		self::spawn_task("Panels updater", {
-			let shared = Arc::clone(&self.shared);
-			|| self::panels_updater(shared, panels_updater_master_barrier)
-		});
 
 		self::spawn_task("Egui painter", {
 			let shared = Arc::clone(&self.shared);
