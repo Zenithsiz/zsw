@@ -20,7 +20,7 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{Panel, PanelName, PanelShader, PanelsManager, PanelsRenderer, PanelsRendererLayouts},
+		panel::{Panel, PanelName, PanelShader, PanelsLoader, PanelsRenderer, PanelsRendererLayouts},
 		playlist::{PlaylistName, PlaylistPlayer, PlaylistsLoader},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
@@ -168,7 +168,7 @@ impl WinitApp {
 		let panels_renderer_layouts = PanelsRendererLayouts::new(wgpu_shared);
 
 		let playlists_loader = PlaylistsLoader::new(config_dirs.playlists().to_path_buf());
-		let panels_manager = PanelsManager::new(config_dirs.panels().to_path_buf());
+		let panels_loader = PanelsLoader::new(config_dirs.panels().to_path_buf());
 
 		let upscale_cache_dir = config
 			.upscale_cache_dir
@@ -190,7 +190,7 @@ impl WinitApp {
 			config_dirs: Arc::clone(&config_dirs),
 			wgpu: wgpu_shared,
 			panels_renderer_layouts,
-			panels_manager,
+			panels_loader,
 			playlists_loader,
 			image_requester,
 			cur_panels: Mutex::new(vec![]),
@@ -366,7 +366,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 	let playlist_player = PlaylistPlayer::new(&playlist).await;
 
 	let panel = shared
-		.panels_manager
+		.panels_loader
 		.load(panel_name.clone(), playlist_player, shared)
 		.await
 		.context("Unable to load panel")?;

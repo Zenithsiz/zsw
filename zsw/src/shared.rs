@@ -7,7 +7,7 @@ use {
 		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
-		panel::{Panel, PanelShader, PanelsManager, PanelsRendererLayouts},
+		panel::{Panel, PanelShader, PanelsLoader, PanelsRendererLayouts},
 		playlist::PlaylistsLoader,
 	},
 	crossbeam::atomic::AtomicCell,
@@ -28,7 +28,7 @@ pub struct Shared {
 	pub wgpu:                    &'static WgpuShared,
 	pub panels_renderer_layouts: PanelsRendererLayouts,
 
-	pub panels_manager:   PanelsManager,
+	pub panels_loader:    PanelsLoader,
 	pub playlists_loader: PlaylistsLoader,
 	pub image_requester:  ImageRequester,
 

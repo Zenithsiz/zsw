@@ -25,15 +25,15 @@ use {
 	zutil_app_error::Context,
 };
 
-/// Panels manager
+/// Panels loader
 #[derive(Debug)]
-pub struct PanelsManager {
+pub struct PanelsLoader {
 	/// Panels directory
 	root: PathBuf,
 }
 
-impl PanelsManager {
-	/// Creates a new panels manager
+impl PanelsLoader {
+	/// Creates a new panels loader
 	pub fn new(root: PathBuf) -> Self {
 		Self { root }
 	}
