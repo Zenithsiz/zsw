@@ -100,6 +100,21 @@ impl Rect<i32, u32> {
 			point.y >= self.pos.y &&
 			point.y <= self.pos.y.checked_add_unsigned(self.size.y).expect("Overflow")
 	}
+
+	/// Returns the intersection of this rectangle and another, if any
+	#[must_use]
+	pub fn intersection(self, other: Self) -> Option<Self> {
+		let lhs_min = self.min();
+		let rhs_min = other.min();
+
+		let lhs_max = self.max();
+		let rhs_max = other.max();
+
+		let min = Point2::new(lhs_min.x.max(rhs_min.x), lhs_min.y.max(rhs_min.y));
+		let max = Point2::new(lhs_max.x.min(rhs_max.x), lhs_max.y.min(rhs_max.y));
+
+		(min.x < max.x && min.y < max.y).then(|| Self::from_min_max(min, max))
+	}
 }
 
 impl fmt::Display for Rect<i32, u32> {
