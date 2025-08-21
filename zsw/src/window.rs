@@ -46,6 +46,7 @@ pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> 
 				.with_resizable(false)
 				.with_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(monitor))))
 				.with_window_level(winit::window::WindowLevel::AlwaysOnBottom)
+				.with_transparent(true)
 				.with_decorations(false);
 
 			// Finally build the window
