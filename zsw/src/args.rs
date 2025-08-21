@@ -16,7 +16,7 @@ pub struct Args {
 	/// Log file
 	///
 	/// Specifies a file to perform verbose logging to.
-	/// You can use `RUST_LOG_FILE` to set filtering options
+	/// You can use `RUST_FILE_LOG` to set filtering options
 	#[clap(long = "log-file")]
 	pub log_file: Option<PathBuf>,
 }
