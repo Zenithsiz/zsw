@@ -8,7 +8,7 @@ use {
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
 		panel::{Panel, PanelShader, PanelsManager, PanelsRendererLayouts},
-		playlist::Playlists,
+		playlist::PlaylistsLoader,
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
@@ -28,12 +28,12 @@ pub struct Shared {
 	pub wgpu:                    &'static WgpuShared,
 	pub panels_renderer_layouts: PanelsRendererLayouts,
 
-	pub panels_manager:  PanelsManager,
-	pub image_requester: ImageRequester,
+	pub panels_manager:   PanelsManager,
+	pub playlists_loader: PlaylistsLoader,
+	pub image_requester:  ImageRequester,
 
 	pub cur_panels:    Mutex<Vec<Panel>>,
 	pub panels_shader: RwLock<PanelShader>, // TODO: Replace with atomic cell
-	pub playlists:     RwLock<Playlists>,
 }
 
 /// Shared window state

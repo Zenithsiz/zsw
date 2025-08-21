@@ -17,20 +17,10 @@ pub use self::{
 
 // Imports
 use {
-	crate::{
-		AppError,
-		image_loader::ImageRequester,
-		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer},
-		shared::Shared,
-	},
+	crate::{AppError, image_loader::ImageRequester, playlist::PlaylistPlayer, shared::Shared},
 	core::{borrow::Borrow, fmt},
-	futures::{StreamExt, stream::FuturesUnordered},
-	std::{
-		path::{Path, PathBuf},
-		sync::Arc,
-	},
-	tokio::{fs, sync::RwLock},
-	zsw_util::{PathAppendExt, Rect, UnwrapOrReturnExt, WalkDir},
+	std::{path::PathBuf, sync::Arc},
+	zsw_util::{PathAppendExt, Rect},
 	zsw_wgpu::WgpuShared,
 	zutil_app_error::Context,
 };
@@ -54,7 +44,7 @@ impl PanelsManager {
 	pub async fn load(
 		&self,
 		panel_name: PanelName,
-		playlist_name: PlaylistName,
+		playlist_player: PlaylistPlayer,
 		shared: &Arc<Shared>,
 	) -> Result<Panel, AppError> {
 		// Try to read the file
@@ -78,6 +68,7 @@ impl PanelsManager {
 
 		let panel = Panel::new(
 			panel_name.clone(),
+			playlist_player,
 			shared.wgpu,
 			&shared.panels_renderer_layouts,
 			geometries,
@@ -85,131 +76,12 @@ impl PanelsManager {
 		)
 		.context("Unable to create panel")?;
 
-		crate::spawn_task(format!("Load panel playlist {panel_name:?}: {playlist_name:?}"), {
-			let playlist_player = Arc::clone(panel.images.playlist_player());
-			let shared = Arc::clone(shared);
-			|| async move {
-				Self::load_playlist_into(&playlist_player, &playlist_name, &shared)
-					.await
-					.context("Unable to load playlist")?;
-
-				Ok(())
-			}
-		});
-
 		Ok(panel)
 	}
 
 	/// Returns a panel's path
 	pub fn panel_path(&self, name: &PanelName) -> PathBuf {
 		self.root.join(&*name.0).with_appended(".toml")
-	}
-
-	/// Loads `playlist` into `playlist_player`.
-	// TODO: Not make `pub`?
-	pub async fn load_playlist_into(
-		playlist_player: &RwLock<PlaylistPlayer>,
-		playlist_name: &PlaylistName,
-		shared: &Shared,
-	) -> Result<(), AppError> {
-		/// Attempts to canonicalize `path`. If unable to, logs a warning and returns `None`
-		async fn try_canonicalize_path(path: &Path) -> Option<PathBuf> {
-			tokio::fs::canonicalize(path)
-				.await
-				.inspect_err(|err| tracing::warn!(?path, ?err, "Unable to canonicalize path"))
-				.ok()
-		}
-
-		let playlist_items = {
-			let playlists = shared.playlists.read().await;
-			let playlist = playlists
-				.get(playlist_name)
-				.with_context(|| format!("Unknown playlist: {playlist_name:?}"))?;
-			let playlist = playlist.read().await;
-			playlist.items()
-		};
-
-		playlist_items
-			.into_iter()
-			.map(|item| async move {
-				let item = {
-					let item = item.read().await;
-					item.clone()
-				};
-
-				// If not enabled, skip it
-				if !item.enabled {
-					tracing::trace!(?playlist_name, ?item, "Ignoring non-enabled playlist item");
-					return;
-				}
-
-				// Else check the kind of item
-				match item.kind {
-					PlaylistItemKind::Directory {
-						path: ref dir_path,
-						recursive,
-					} =>
-						WalkDir::builder()
-							.max_depth(match recursive {
-								true => None,
-								false => Some(0),
-							})
-							.recurse_symlink(true)
-							.build(dir_path.to_path_buf())
-							.map(|entry: Result<fs::DirEntry, _>| async move {
-								let entry = entry
-									.map_err(|err| {
-										tracing::warn!(
-											?playlist_name,
-											?dir_path,
-											%err,
-											"Unable to read directory entry"
-										);
-									})
-									.unwrap_or_return()?;
-
-								let path = entry.path();
-								if fs::metadata(&path)
-									.await
-									.map_err(|err| {
-										tracing::warn!(?playlist_name, ?path, %err, "Unable to get entry metadata");
-									})
-									.unwrap_or_return()?
-									.is_dir()
-								{
-									// If it's a directory, skip it
-									return;
-								}
-
-								let Some(path) = try_canonicalize_path(&path).await else {
-									return;
-								};
-
-								let mut playlist_player = playlist_player.write().await;
-								playlist_player.add(path.into());
-							})
-							.collect::<FuturesUnordered<_>>()
-							.await
-							.collect::<()>()
-							.await,
-					PlaylistItemKind::File { ref path } =>
-						if let Some(path) = try_canonicalize_path(path).await {
-							let mut playlist_player = playlist_player.write().await;
-							playlist_player.add(path.into());
-						},
-				}
-			})
-			.collect::<FuturesUnordered<_>>()
-			.collect::<()>()
-			.await;
-
-		// Once we're finished, step into the first (next) item.
-		{
-			let mut playlist_player = playlist_player.write().await;
-			playlist_player.step_next();
-		}
-
-		Ok(())
 	}
 }
 
@@ -233,6 +105,7 @@ impl Panel {
 	/// Creates a new panel
 	pub fn new(
 		name: PanelName,
+		playlist_player: PlaylistPlayer,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		geometries: Vec<Rect<i32, u32>>,
@@ -246,7 +119,7 @@ impl Panel {
 				.collect::<Result<_, _>>()
 				.context("Unable to build geometries")?,
 			state,
-			images: PanelImages::new(wgpu_shared, renderer_layouts),
+			images: PanelImages::new(playlist_player, wgpu_shared, renderer_layouts),
 		})
 	}
 

@@ -21,7 +21,7 @@ use {
 		config::Config,
 		config_dirs::ConfigDirs,
 		panel::{Panel, PanelName, PanelShader, PanelsManager, PanelsRenderer, PanelsRendererLayouts},
-		playlist::{PlaylistName, Playlists},
+		playlist::{PlaylistName, PlaylistPlayer, PlaylistsLoader},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
 	},
@@ -167,10 +167,7 @@ impl WinitApp {
 			.context("Unable to initialize wgpu")?;
 		let panels_renderer_layouts = PanelsRendererLayouts::new(wgpu_shared);
 
-		let playlists = Playlists::load(config_dirs.playlists().to_path_buf())
-			.await
-			.context("Unable to load playlists")?;
-
+		let playlists_loader = PlaylistsLoader::new(config_dirs.playlists().to_path_buf());
 		let panels_manager = PanelsManager::new(config_dirs.panels().to_path_buf());
 
 		let upscale_cache_dir = config
@@ -194,10 +191,10 @@ impl WinitApp {
 			wgpu: wgpu_shared,
 			panels_renderer_layouts,
 			panels_manager,
+			playlists_loader,
 			image_requester,
 			cur_panels: Mutex::new(vec![]),
 			panels_shader: RwLock::new(PanelShader::None),
-			playlists: RwLock::new(playlists),
 		};
 		let shared = Arc::new(shared);
 
@@ -325,39 +322,57 @@ impl WinitApp {
 
 /// Loads the default panels
 async fn load_default_panels(config: &Config, shared: Arc<Shared>) -> Result<(), AppError> {
-	// Load the panels
-	let shared = &shared;
-	let loaded_panels = config
-		.default
-		.panels
-		.iter()
-		.map(|default_panel| async move {
-			let panel = PanelName::from(default_panel.panel.clone());
-			let playlist = PlaylistName::from(default_panel.playlist.clone());
-			shared
-				.panels_manager
-				.load(panel, playlist, shared)
-				.await
-				.inspect(|panel| tracing::debug!(?panel, "Loaded default panel"))
-				.inspect_err(|err| tracing::warn!("Unable to load default panel {default_panel:?}: {err:?}"))
-				.ok()
-		})
-		.collect::<FuturesUnordered<_>>()
-		.filter_map(async move |opt| opt)
-		.collect::<Vec<Panel>>()
-		.await;
-
-	// Add the default panels to the current panels
-	{
-		let mut cur_panels = shared.cur_panels.lock().await;
-		cur_panels.extend(loaded_panels);
-	}
-
-	// Finally at the end set the shader
+	// Set the shader
 	// TODO: Have this come from the config?
 	*shared.panels_shader.write().await = PanelShader::FadeOut { strength: 1.5 };
 
+	// Load the panels
+	let shared = &shared;
+	config
+		.default
+		.panels
+		.iter()
+		.map(
+			async |default_panel| match self::load_default_panel(default_panel, shared).await {
+				Ok(panel) => shared.cur_panels.lock().await.push(panel),
+				Err(err) => tracing::warn!(
+					"Unable to load default panel {:?} (playlist: {:?}): {}",
+					default_panel.panel,
+					default_panel.playlist,
+					err.pretty()
+				),
+			},
+		)
+		.collect::<FuturesUnordered<_>>()
+		.collect::<()>()
+		.await;
+
 	Ok(())
+}
+
+/// Loads a default panel
+async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Shared>) -> Result<Panel, AppError> {
+	let panel_name = PanelName::from(default_panel.panel.clone());
+	let playlist_name = PlaylistName::from(default_panel.playlist.clone());
+
+	// TODO: Cache loaded playlists / panels to avoid duplicate work?
+	let playlist = shared
+		.playlists_loader
+		.load(playlist_name.clone())
+		.await
+		.context("Unable to load playlist")?;
+	tracing::debug!(?playlist, "Loaded default playlist");
+
+	let playlist_player = PlaylistPlayer::new(&playlist).await;
+
+	let panel = shared
+		.panels_manager
+		.load(panel_name.clone(), playlist_player, shared)
+		.await
+		.context("Unable to load panel")?;
+	tracing::debug!(?panel, "Loaded default panel");
+
+	Ok(panel)
 }
 
 /// Spawns a task

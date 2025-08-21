@@ -26,11 +26,9 @@ num-rational       = { workspace = true }
 opener             = { workspace = true }
 rand               = { workspace = true }
 rayon              = { workspace = true }
-rfd                = { workspace = true }
 serde              = { features = ["derive"], workspace = true }
 serde_with         = { workspace = true }
 tokio              = { features = ["full", "tracing"], workspace = true }
-tokio-stream       = { features = ["fs"], workspace = true }
 toml               = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { features = ["env-filter"], workspace = true }

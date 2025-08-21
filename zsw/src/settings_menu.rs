@@ -6,15 +6,12 @@
 // Imports
 use {
 	crate::{
-		panel::{PanelImage, PanelShader, PanelsManager},
-		playlist::{Playlist, PlaylistItemKind, PlaylistName},
+		panel::{PanelImage, PanelShader},
 		shared::{Shared, SharedWindow},
 	},
 	egui::Widget,
 	std::{path::Path, sync::Arc},
-	tokio::sync::RwLock,
 	zsw_util::{Rect, TokioTaskBlockOn},
-	zutil_app_error::Context,
 };
 
 /// Settings menu
@@ -25,18 +22,14 @@ pub struct SettingsMenu {
 
 	/// Current tab
 	cur_tab: Tab,
-
-	/// Add playlist state
-	add_playlist_state: AddPlaylistState,
 }
 
 impl SettingsMenu {
 	/// Creates the settings menu
 	pub fn new() -> Self {
 		Self {
-			open:               false,
-			cur_tab:            Tab::Panels,
-			add_playlist_state: AddPlaylistState::default(),
+			open:    false,
+			cur_tab: Tab::Panels,
 		}
 	}
 
@@ -61,143 +54,27 @@ impl SettingsMenu {
 		egui_window.open(&mut self.open).show(ctx, |ui| {
 			ui.horizontal(|ui| {
 				ui.selectable_value(&mut self.cur_tab, Tab::Panels, "Panels");
-				ui.selectable_value(&mut self.cur_tab, Tab::Playlists, "Playlists");
 				ui.selectable_value(&mut self.cur_tab, Tab::Settings, "Settings");
 			});
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared, shared_window),
-				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared),
+				Tab::Panels => self::draw_panels_tab(ui, shared, shared_window),
 				Tab::Settings => self::draw_settings(ui, shared_window),
 			}
 		});
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(
-	add_playlist_state: &mut AddPlaylistState,
-	ui: &mut egui::Ui,
-	shared: &Arc<Shared>,
-	shared_window: &Arc<SharedWindow>,
-) {
-	self::draw_panels_editor(add_playlist_state, ui, shared, shared_window);
+fn draw_panels_tab(ui: &mut egui::Ui, shared: &Arc<Shared>, shared_window: &Arc<SharedWindow>) {
+	self::draw_panels_editor(ui, shared, shared_window);
 	ui.separator();
 	self::draw_shader_select(ui, shared);
 }
 
-/// Draws the playlists tab
-fn draw_playlists(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
-	let playlists = shared.playlists.blocking_read().get_all();
-
-	for (playlist_name, playlist) in playlists {
-		let playlist_path = shared.playlists.blocking_read().playlist_path(&playlist_name);
-		ui.collapsing(format!("{playlist_name} ({playlist_path:?})"), |ui| {
-			let items = playlist.read().block_on().items();
-
-			for item in items {
-				let mut item = item.write().block_on();
-
-				ui.checkbox(&mut item.enabled, "Enabled");
-				match &mut item.kind {
-					PlaylistItemKind::Directory { path, recursive } => {
-						ui.horizontal(|ui| {
-							ui.label("Dir: ");
-							self::draw_openable_path(ui, path);
-						});
-
-						ui.checkbox(recursive, "Recursive");
-					},
-					PlaylistItemKind::File { path } => {
-						ui.horizontal(|ui| {
-							ui.label("File: ");
-							self::draw_openable_path(ui, path);
-						});
-					},
-				}
-
-				if ui.button("↻ (Reload)").clicked() {
-					let playlist_name = playlist_name.clone();
-					let shared = Arc::clone(shared);
-					crate::spawn_task(format!("Reload playlist {playlist_name:?}"), || async move {
-						shared
-							.playlists
-							.write()
-							.await
-							.reload(playlist_name)
-							.await
-							.context("Unable to reload playlist")?;
-
-						Ok(())
-					});
-				}
-
-				if ui.button("💾 (Save)").clicked() {
-					let playlist_name = playlist_name.clone();
-					let shared = Arc::clone(shared);
-					crate::spawn_task(format!("Saving playlist {playlist_name:?}"), || async move {
-						shared
-							.playlists
-							.read()
-							.await
-							.save(&playlist_name)
-							.await
-							.context("Unable to save playlist")?;
-
-						Ok(())
-					});
-				}
-
-				ui.separator();
-			}
-		});
-	}
-
-	if ui.button("➕ (Add playlist)").clicked() {
-		self::choose_load_playlist_from_file(add_playlist_state, shared);
-	}
-}
-
-/// Asks the user and loads a playlist from a file
-fn choose_load_playlist_from_file(
-	_add_playlist_state: &mut AddPlaylistState,
-	shared: &Arc<Shared>,
-) -> Option<(PlaylistName, Arc<RwLock<Playlist>>)> {
-	// TODO: Not have this toml filter here? Or at least allow files other than `.toml`
-	let file_dialog = rfd::FileDialog::new().add_filter("Playlist file", &["toml"]);
-
-	// Ask the user for a playlist file
-	match file_dialog.pick_file() {
-		// If we got it, try to load it
-		Some(playlist_path) => {
-			tracing::debug!(?playlist_path, "Loading playlist");
-
-			let res = shared.playlists.blocking_write().add(&playlist_path).block_on();
-			match res {
-				Ok((playlist_name, playlist)) => {
-					tracing::debug!(?playlist_name, ?playlist, "Successfully loaded playlist");
-					return Some((playlist_name, playlist));
-				},
-				Err(err) => tracing::warn!(?playlist_path, ?err, "Unable to load playlist"),
-			}
-		},
-
-		// Else just log that the user cancelled it
-		None => tracing::debug!("User cancelled load playlist"),
-	}
-
-	None
-}
-
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
-fn draw_panels_editor(
-	add_playlist_state: &mut AddPlaylistState,
-	ui: &mut egui::Ui,
-	shared: &Arc<Shared>,
-	shared_window: &Arc<SharedWindow>,
-) {
+fn draw_panels_editor(ui: &mut egui::Ui, shared: &Arc<Shared>, shared_window: &Arc<SharedWindow>) {
 	let mut cur_panels = shared.cur_panels.lock().block_on();
 
 	if cur_panels.is_empty() {
@@ -280,35 +157,16 @@ fn draw_panels_editor(
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let playlist_player = panel.images.playlist_player().write().block_on();
+				let playlist_player = panel.images.playlist_player().lock().block_on();
 
 				let row_height = ui.text_style_height(&egui::TextStyle::Body);
 
 				ui.label(format!("Position: {}", playlist_player.cur_pos()));
 
-				if ui.button("↹ (Replace)").clicked() {
-					// TODO: Stop everything that could be inserting items still?
-					if let Some((playlist_name, playlist)) =
-						self::choose_load_playlist_from_file(add_playlist_state, shared)
-					{
-						crate::spawn_task(format!("Replace playlist {playlist:?}"), {
-							let playlist_player = Arc::clone(panel.images.playlist_player());
-							let shared = Arc::clone(shared);
-							|| async move {
-								{
-									let mut playlist_player = playlist_player.write().await;
-									playlist_player.remove_all();
-								}
-
-								PanelsManager::load_playlist_into(&playlist_player, &playlist_name, &shared)
-									.await
-									.context("Unable to load playlist")?;
-
-								Ok(())
-							}
-						});
-					}
-				}
+				ui.label(format!(
+					"Remaining until shuffle: {}",
+					playlist_player.remaining_until_shuffle()
+				));
 
 				ui.collapsing("Items", |ui| {
 					egui::ScrollArea::new([false, true])
@@ -431,10 +289,5 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>) {
 #[derive(PartialEq, Debug)]
 enum Tab {
 	Panels,
-	Playlists,
 	Settings,
 }
-
-/// State for adding a playlist
-#[derive(Clone, Default, Debug)]
-struct AddPlaylistState {}
