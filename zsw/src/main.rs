@@ -209,13 +209,13 @@ impl WinitApp {
 		self::spawn_task("Load default panels", {
 			let shared = Arc::clone(&shared);
 			let config = Arc::clone(&config);
-			|| async move { self::load_default_panels(&config, shared).await }
+			async move || self::load_default_panels(&config, &shared).await
 		});
 
 		let (panels_updater_master_barrier, panels_updater_slave_barrier) = master_barrier::barrier();
 		self::spawn_task("Panels updater", {
 			let shared = Arc::clone(&shared);
-			|| self::panels_updater(shared, panels_updater_master_barrier)
+			async move || self::panels_updater(&shared, panels_updater_master_barrier).await
 		});
 
 		Ok(Self {
@@ -256,16 +256,17 @@ impl WinitApp {
 				let shared = Arc::clone(&self.shared);
 				let shared_window = Arc::clone(&shared_window);
 				let panels_updater_barrier = self.panels_updater_barrier.activate();
-				|| {
+				async move || {
 					self::renderer(
-						shared,
-						shared_window,
+						&shared,
+						&shared_window,
 						wgpu_renderer,
 						panels_renderer,
 						egui_renderer,
 						egui_painter_output_rx,
 						panels_updater_barrier,
 					)
+					.await
 				}
 			});
 
@@ -273,14 +274,15 @@ impl WinitApp {
 			self::spawn_task("Egui painter", {
 				let shared = Arc::clone(&self.shared);
 				let shared_window = Arc::clone(&shared_window);
-				|| {
+				async move || {
 					self::egui_painter(
-						shared,
-						shared_window,
+						&shared,
+						&shared_window,
 						egui_painter,
 						settings_menu,
 						egui_painter_output_tx,
 					)
+					.await
 				}
 			});
 
@@ -319,9 +321,8 @@ impl WinitApp {
 }
 
 /// Loads the default panels
-async fn load_default_panels(config: &Config, shared: Arc<Shared>) -> Result<(), AppError> {
+async fn load_default_panels(config: &Config, shared: &Shared) -> Result<(), AppError> {
 	// Load the panels
-	let shared = &shared;
 	config
 		.default
 		.panels
@@ -404,8 +405,8 @@ where
 
 /// Renderer task
 async fn renderer(
-	shared: Arc<Shared>,
-	shared_window: Arc<SharedWindow>,
+	shared: &Shared,
+	shared_window: &SharedWindow,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -476,7 +477,7 @@ async fn renderer(
 
 /// Panel updater task
 #[expect(clippy::infinite_loop, reason = "We need this type signature for `spawn_task`")]
-async fn panels_updater(shared: Arc<Shared>, panels_updater_barrier: MasterBarrier) -> Result<!, AppError> {
+async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) -> Result<!, AppError> {
 	loop {
 		{
 			let mut cur_panels = shared.cur_panels.lock().await;
@@ -497,8 +498,8 @@ async fn panels_updater(shared: Arc<Shared>, panels_updater_barrier: MasterBarri
 
 /// Egui painter task
 async fn egui_painter(
-	shared: Arc<Shared>,
-	shared_window: Arc<SharedWindow>,
+	shared: &Shared,
+	shared_window: &SharedWindow,
 	egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
@@ -506,7 +507,7 @@ async fn egui_painter(
 	loop {
 		let full_output_fut = egui_painter.draw(&shared_window.window, async |ctx| {
 			// Draw the settings menu
-			tokio::task::block_in_place(|| settings_menu.draw(ctx, &shared, &shared_window));
+			tokio::task::block_in_place(|| settings_menu.draw(ctx, shared, shared_window));
 
 			// Pause any double-clicked panels
 			if !ctx.is_pointer_over_area() &&
