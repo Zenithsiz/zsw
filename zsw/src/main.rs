@@ -40,7 +40,7 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
 		event_loop::EventLoop,
-		platform::run_on_demand::EventLoopExtRunOnDemand,
+		platform::{run_on_demand::EventLoopExtRunOnDemand, x11::EventLoopBuilderExtX11},
 		window::WindowId,
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
@@ -86,7 +86,9 @@ fn main() -> Result<(), AppError> {
 	let _runtime_enter = tokio_runtime.enter();
 
 	// Create the event loop
+	// TODO: Not force x11 once we can get wayland to lower our window on startup
 	let mut event_loop = EventLoop::with_user_event()
+		.with_x11()
 		.build()
 		.context("Unable to build winit event loop")?;
 
