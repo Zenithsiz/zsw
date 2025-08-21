@@ -323,8 +323,16 @@ impl WinitApp {
 /// Loads the default panels
 async fn load_default_panels(config: &Config, shared: Arc<Shared>) -> Result<(), AppError> {
 	// Set the shader
-	// TODO: Have this come from the config?
-	*shared.panels_shader.write().await = PanelShader::FadeOut { strength: 1.5 };
+	*shared.panels_shader.write().await = match config.default.shader {
+		Some(config::ConfigShader::None) => PanelShader::None,
+		Some(config::ConfigShader::Fade) => PanelShader::Fade,
+		Some(config::ConfigShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
+		Some(config::ConfigShader::FadeOut { strength }) => PanelShader::FadeOut { strength },
+		Some(config::ConfigShader::FadeIn { strength }) => PanelShader::FadeIn { strength },
+
+		// TODO: Is this a good default?
+		None => PanelShader::FadeOut { strength: 1.5 },
+	};
 
 	// Load the panels
 	let shared = &shared;

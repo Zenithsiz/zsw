@@ -5,6 +5,10 @@ log_file             = "latest.log"
 # upscale_cmd = "/upscale/cmd"
 # upscale_exclude = ["/path/to/exclude"]
 
+[default]
+shader.type     = "fade-out"
+shader.strength = 1.0
+
 [[default.panels]]
 panel    = "multiple"
 playlist = "example1"

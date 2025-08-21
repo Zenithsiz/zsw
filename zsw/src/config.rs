@@ -2,6 +2,7 @@
 
 // Imports
 use {
+	crate::init::logger,
 	std::{
 		collections::HashSet,
 		fs,
@@ -111,12 +112,19 @@ impl Default for Config {
 pub struct ConfigDefault {
 	/// Panels
 	pub panels: Vec<ConfigPanel>,
+
+	/// Shader
+	#[serde(default)]
+	pub shader: Option<ConfigShader>,
 }
 
 #[expect(clippy::derivable_impls, reason = "We want to be explicit with defaults")]
 impl Default for ConfigDefault {
 	fn default() -> Self {
-		Self { panels: vec![] }
+		Self {
+			panels: vec![],
+			shader: None,
+		}
 	}
 }
 
@@ -129,4 +137,25 @@ pub struct ConfigPanel {
 
 	/// Playlist
 	pub playlist: String,
+}
+
+/// Configuration shader
+#[derive(Clone, Copy, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type")]
+pub enum ConfigShader {
+	#[serde(rename = "none")]
+	None,
+
+	#[serde(rename = "fade")]
+	Fade,
+
+	#[serde(rename = "fade-white")]
+	FadeWhite { strength: f32 },
+
+	#[serde(rename = "fade-out")]
+	FadeOut { strength: f32 },
+
+	#[serde(rename = "fade-in")]
+	FadeIn { strength: f32 },
 }
