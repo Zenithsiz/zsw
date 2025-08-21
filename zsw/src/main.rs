@@ -159,6 +159,10 @@ impl WinitApp {
 			return Err(app_error!("Shaders directory doesn't exist: {shaders_path:?}"));
 		}
 
+		let wgpu_shared = zsw_wgpu::get_or_create_shared()
+			.await
+			.context("Unable to initialize wgpu")?;
+
 		let playlists = Playlists::load(config_dirs.playlists().to_path_buf())
 			.await
 			.context("Unable to load playlists")?;
@@ -183,6 +187,7 @@ impl WinitApp {
 			// TODO: Not have a default of (0,0)?
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 			config_dirs: Arc::clone(&config_dirs),
+			wgpu: wgpu_shared,
 			panels_manager,
 			image_requester,
 			cur_panels: Mutex::new(vec![]),
@@ -207,18 +212,16 @@ impl WinitApp {
 	pub async fn init_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Result<(), AppError> {
 		let window = window::create(event_loop).context("Unable to create winit event loop and window")?;
 		let window = Arc::new(window);
-		let wgpu_shared = zsw_wgpu::get_or_create_shared()
-			.await
-			.context("Unable to initialize wgpu")?;
-		let wgpu_renderer = WgpuRenderer::new(Arc::clone(&window), wgpu_shared)
+		let wgpu_renderer = WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu)
 			.await
 			.context("Unable to create wgpu renderer")?;
 
 		let (panels_renderer, panels_renderer_layout) =
-			PanelsRenderer::new(&self.config_dirs, &wgpu_renderer, wgpu_shared)
+			PanelsRenderer::new(&self.config_dirs, &wgpu_renderer, self.shared.wgpu)
 				.await
 				.context("Unable to create panels renderer")?;
-		let (egui_renderer, egui_painter, egui_event_handler) = zsw_egui::create(&window, &wgpu_renderer, wgpu_shared);
+		let (egui_renderer, egui_painter, egui_event_handler) =
+			zsw_egui::create(&window, &wgpu_renderer, self.shared.wgpu);
 		let settings_menu = SettingsMenu::new();
 
 		let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
@@ -227,7 +230,6 @@ impl WinitApp {
 		let shared_window = SharedWindow {
 			event_loop_proxy: self.event_loop_proxy.clone(),
 			window,
-			wgpu: wgpu_shared,
 			panels_renderer_layout,
 		};
 		let shared_window = Arc::new(shared_window);
@@ -398,7 +400,7 @@ async fn renderer(
 
 		// Start rendering
 		let mut frame = wgpu_renderer
-			.start_render(shared_window.wgpu)
+			.start_render(shared.wgpu)
 			.context("Unable to start frame")?;
 		// Render the panels
 		{
@@ -410,7 +412,7 @@ async fn renderer(
 					&mut frame,
 					&shared.config_dirs,
 					&wgpu_renderer,
-					shared_window.wgpu,
+					shared.wgpu,
 					&shared_window.panels_renderer_layout,
 					&*cur_panels,
 					shader,
@@ -424,25 +426,25 @@ async fn renderer(
 			.render_egui(
 				&mut frame,
 				&shared_window.window,
-				shared_window.wgpu,
+				shared.wgpu,
 				&egui_paint_jobs,
 				egui_textures_delta.take(),
 			)
 			.context("Unable to render egui")?;
 
 		// Finish the frame
-		if frame.finish(shared_window.wgpu) {
+		if frame.finish(shared.wgpu) {
 			wgpu_renderer
-				.reconfigure(shared_window.wgpu)
+				.reconfigure(shared.wgpu)
 				.context("Unable to reconfigure wgpu")?;
 		}
 
 		// Resize if we need to
 		if let Some(resize) = shared.last_resize.swap(None) {
 			wgpu_renderer
-				.resize(shared_window.wgpu, resize.size)
+				.resize(shared.wgpu, resize.size)
 				.context("Unable to resize wgpu")?;
-			panels_renderer.resize(&wgpu_renderer, shared_window.wgpu, resize.size);
+			panels_renderer.resize(&wgpu_renderer, shared.wgpu, resize.size);
 		}
 	}
 }
@@ -461,7 +463,7 @@ async fn panels_updater(
 			for panel in &mut *cur_panels {
 				panel
 					.update(
-						shared_window.wgpu,
+						shared.wgpu,
 						&shared_window.panels_renderer_layout,
 						&shared.image_requester,
 					)
@@ -524,7 +526,7 @@ async fn egui_painter(
 
 					panel
 						.skip(
-							shared_window.wgpu,
+							shared.wgpu,
 							&shared_window.panels_renderer_layout,
 							&shared.image_requester,
 						)
@@ -553,7 +555,7 @@ async fn egui_painter(
 					let frames = (-delta * speed) as i64;
 					panel
 						.step(
-							shared_window.wgpu,
+							shared.wgpu,
 							&shared_window.panels_renderer_layout,
 							&shared.image_requester,
 							frames,

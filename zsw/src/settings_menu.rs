@@ -256,7 +256,7 @@ fn draw_panels_editor(
 				if ui.button("🔄").clicked() {
 					panel
 						.skip(
-							shared_window.wgpu,
+							shared.wgpu,
 							&shared_window.panels_renderer_layout,
 							&shared.image_requester,
 						)
