@@ -139,9 +139,13 @@ pub struct ConfigPanel {
 #[derive(Clone, Copy, Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
+#[expect(variant_size_differences, reason = "16 bytes is still reasonable for this type")]
 pub enum ConfigShader {
 	#[serde(rename = "none")]
-	None,
+	None {
+		#[serde(default)]
+		background_color: [f32; 4],
+	},
 
 	#[serde(rename = "fade")]
 	Fade,

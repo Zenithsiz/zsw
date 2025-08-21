@@ -9,6 +9,12 @@ use bytemuck::{Pod, Zeroable};
 #[repr(C, align(8))]
 pub struct Vec2(pub [f32; 2]);
 
+/// `vec4<f32>`
+#[derive(PartialEq, Clone, Copy, Default, Debug)]
+#[derive(Zeroable, Pod)]
+#[repr(C, align(16))]
+pub struct Vec4(pub [f32; 4]);
+
 /// `mat4x4<f32>`
 #[derive(PartialEq, Clone, Copy, Default, Debug)]
 #[derive(Zeroable, Pod)]
@@ -40,7 +46,8 @@ impl PanelImageUniforms {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct None {
-	pub pos_matrix: Matrix4x4,
+	pub pos_matrix:       Matrix4x4,
+	pub background_color: Vec4,
 }
 
 /// Fade

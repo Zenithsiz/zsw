@@ -365,7 +365,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Shared
 
 	// Set the shader
 	let panel_shader = match default_panel.shader {
-		Some(config::ConfigShader::None) => PanelShader::None,
+		Some(config::ConfigShader::None { background_color }) => PanelShader::None { background_color },
 		Some(config::ConfigShader::Fade) => PanelShader::Fade,
 		Some(config::ConfigShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
 		Some(config::ConfigShader::FadeOut { strength }) => PanelShader::FadeOut { strength },

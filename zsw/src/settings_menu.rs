@@ -235,7 +235,9 @@ fn draw_shader_select(ui: &mut egui::Ui, cur_shader: &mut PanelShader) {
 		.show_ui(ui, |ui| {
 			// TODO: Not have default values here?
 			let shaders = [
-				PanelShader::None,
+				PanelShader::None {
+					background_color: [0.0; 4],
+				},
 				PanelShader::Fade,
 				PanelShader::FadeWhite { strength: 1.0 },
 				PanelShader::FadeOut { strength: 0.2 },
@@ -247,7 +249,17 @@ fn draw_shader_select(ui: &mut egui::Ui, cur_shader: &mut PanelShader) {
 		});
 
 	match &mut *cur_shader {
-		PanelShader::None | PanelShader::Fade => (),
+		PanelShader::None {
+			background_color: bg_color,
+		} => {
+			ui.horizontal(|ui| {
+				ui.label("Background color");
+				let mut color = egui::Rgba::from_rgba_premultiplied(bg_color[0], bg_color[1], bg_color[2], bg_color[3]);
+				egui::color_picker::color_edit_button_rgba(ui, &mut color, egui::color_picker::Alpha::OnlyBlend);
+				*bg_color = color.to_array();
+			});
+		},
+		PanelShader::Fade => (),
 		PanelShader::FadeWhite { strength } => {
 			ui.horizontal(|ui| {
 				ui.label("Strength");

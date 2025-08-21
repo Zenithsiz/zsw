@@ -3,6 +3,7 @@
 /// Uniforms
 struct Uniforms {
 	pos_matrix: mat4x4<f32>,
+	background_color: vec4<f32>,
 };
 
 // Uniforms
@@ -16,5 +17,5 @@ fn vs_main(@location(0) pos: vec2<f32>) -> @builtin(position) vec4<f32> {
 
 @fragment
 fn fs_main() -> @location(0) vec4<f32> {
-	return vec4(0.0, 0.0, 0.0, 0.0);
+	return uniforms.background_color;
 }

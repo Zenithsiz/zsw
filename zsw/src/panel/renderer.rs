@@ -255,7 +255,10 @@ impl PanelsRenderer {
 		let fade_point = panel.state.fade_point_norm();
 		let progress = panel.state.progress_norm();
 		match panel.shader {
-			PanelShader::None => write_uniforms!(uniform::None { pos_matrix }),
+			PanelShader::None { background_color } => write_uniforms!(uniform::None {
+				pos_matrix,
+				background_color: uniform::Vec4(background_color),
+			}),
 			PanelShader::Fade => write_uniforms!(uniform::Fade {
 				pos_matrix,
 				prev,
@@ -421,7 +424,7 @@ async fn parse_shader(shader_path: &Path, shader: PanelShader) -> Result<naga::M
 	let mut shader_defs = HashSet::new();
 	#[expect(unused_results, reason = "We don't care about whether it exists or not")]
 	match shader {
-		PanelShader::None => {},
+		PanelShader::None { .. } => {},
 		PanelShader::Fade => {
 			shader_defs.insert("FADE_BASIC");
 		},
@@ -599,8 +602,9 @@ fn create_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLa
 
 /// Shader
 #[derive(PartialEq, Clone, Copy, Debug)]
+#[expect(variant_size_differences, reason = "16 bytes is still reasonable for this type")]
 pub enum PanelShader {
-	None,
+	None { background_color: [f32; 4] },
 	Fade,
 	FadeWhite { strength: f32 },
 	FadeOut { strength: f32 },
@@ -610,7 +614,7 @@ impl PanelShader {
 	/// Returns this shader's path, relative to the shaders path
 	pub fn path(self) -> &'static str {
 		match self {
-			Self::None => "panels/none.wgsl",
+			Self::None { .. } => "panels/none.wgsl",
 			Self::Fade | Self::FadeWhite { .. } | Self::FadeOut { .. } | Self::FadeIn { .. } => "panels/fade.wgsl",
 		}
 	}
@@ -618,7 +622,7 @@ impl PanelShader {
 	/// Returns this shader's name
 	pub fn name(self) -> &'static str {
 		match self {
-			Self::None => "None",
+			Self::None { .. } => "None",
 			Self::Fade => "Fade",
 			Self::FadeWhite { .. } => "Fade white",
 			Self::FadeOut { .. } => "Fade out",
