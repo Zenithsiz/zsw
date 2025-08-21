@@ -113,8 +113,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				// Note: We only allow up until the duration - 1 so that you don't get stuck
 				//       skipping images when you hold it at the max value
 				ui.label("Cur progress");
-				egui::Slider::new(&mut panel.state.progress, 0..=panel.state.duration.saturating_sub(1))
-					.clamping(egui::SliderClamping::Always)
+				egui::Slider::new(&mut panel.state.progress, 0..=panel.state.duration.saturating_sub(2))
+					.clamping(egui::SliderClamping::Edits)
 					.ui(ui);
 
 				// Then clamp to the current max
@@ -130,8 +130,10 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			ui.horizontal(|ui| {
 				ui.label("Fade Point");
 				let min = panel.state.duration / 2;
-				let max = panel.state.duration.saturating_sub(1);
-				egui::Slider::new(&mut panel.state.fade_point, min..=max).ui(ui);
+				let max = panel.state.duration;
+				egui::Slider::new(&mut panel.state.fade_point, min..=max)
+					.clamping(egui::SliderClamping::Edits)
+					.ui(ui);
 			});
 
 			ui.horizontal(|ui| {
