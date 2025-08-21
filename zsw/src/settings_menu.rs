@@ -10,7 +10,7 @@ use {
 		shared::{Shared, SharedWindow},
 	},
 	egui::Widget,
-	std::{path::Path, sync::Arc},
+	std::path::Path,
 	zsw_util::{Rect, TokioTaskBlockOn},
 };
 
@@ -34,7 +34,7 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	pub fn draw(&mut self, ctx: &egui::Context, shared: &Arc<Shared>, shared_window: &Arc<SharedWindow>) {
+	pub fn draw(&mut self, ctx: &egui::Context, shared: &Shared, shared_window: &SharedWindow) {
 		// Adjust cursor pos to account for the scale factor
 		let scale_factor = shared_window.window.scale_factor();
 		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
@@ -66,7 +66,7 @@ impl SettingsMenu {
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(ui: &mut egui::Ui, shared: &Arc<Shared>, shared_window: &Arc<SharedWindow>) {
+fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
 	self::draw_panels_editor(ui, shared, shared_window);
 	ui.separator();
 	self::draw_shader_select(ui, shared);
@@ -74,7 +74,7 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Arc<Shared>, shared_window: &Arc<
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, shared: &Arc<Shared>, shared_window: &Arc<SharedWindow>) {
+fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
 	let mut cur_panels = shared.cur_panels.lock().block_on();
 
 	if cur_panels.is_empty() {
@@ -186,7 +186,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Arc<Shared>, shared_window: &A
 
 
 /// Draws the settings tab
-fn draw_settings(ui: &mut egui::Ui, shared_window: &Arc<SharedWindow>) {
+fn draw_settings(ui: &mut egui::Ui, shared_window: &SharedWindow) {
 	if ui.button("Quit").clicked() {
 		shared_window
 			.event_loop_proxy

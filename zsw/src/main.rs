@@ -351,7 +351,7 @@ async fn load_default_panels(config: &Config, shared: Arc<Shared>) -> Result<(),
 }
 
 /// Loads a default panel
-async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Shared>) -> Result<Panel, AppError> {
+async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Shared) -> Result<Panel, AppError> {
 	let panel_name = PanelName::from(default_panel.panel.clone());
 	let playlist_name = PlaylistName::from(default_panel.playlist.clone());
 

@@ -45,7 +45,7 @@ impl PanelsLoader {
 		&self,
 		panel_name: PanelName,
 		playlist_player: PlaylistPlayer,
-		shared: &Arc<Shared>,
+		shared: &Shared,
 	) -> Result<Panel, AppError> {
 		// Try to read the file
 		let panel_path = self.panel_path(&panel_name);
