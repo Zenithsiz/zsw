@@ -27,6 +27,16 @@ impl fmt::Debug for EguiRenderer {
 }
 
 impl EguiRenderer {
+	/// Creates a new egui renderer
+	#[must_use]
+	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared) -> Self {
+		// Create the egui render pass
+		let render_pass =
+			egui_wgpu_backend::RenderPass::new(&wgpu_shared.device, wgpu_renderer.surface_config().format, 1);
+
+		Self { render_pass }
+	}
+
 	/// Renders egui
 	pub fn render_egui(
 		&mut self,
@@ -90,6 +100,13 @@ impl fmt::Debug for EguiPainter {
 }
 
 impl EguiPainter {
+	#[must_use]
+	pub fn new(event_handler: &EguiEventHandler) -> Self {
+		Self {
+			platform: Arc::clone(&event_handler.platform),
+		}
+	}
+
 	/// Draws egui
 	pub async fn draw<E>(
 		&self,
@@ -133,38 +150,23 @@ impl fmt::Debug for EguiEventHandler {
 }
 
 impl EguiEventHandler {
+	#[must_use]
+	pub fn new(window: &Window) -> Self {
+		// Create the egui platform
+		let platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
+			physical_width:   window.inner_size().width,
+			physical_height:  window.inner_size().height,
+			scale_factor:     window.scale_factor(),
+			font_definitions: egui::FontDefinitions::default(),
+			style:            egui::Style::default(),
+		});
+		let platform = Arc::new(Mutex::new(platform));
+
+		Self { platform }
+	}
+
 	/// Handles an event
 	pub async fn handle_event(&self, event: &winit::event::WindowEvent) {
 		self.platform.lock().await.handle_event(event);
 	}
-}
-
-/// Creates the egui service
-#[must_use]
-pub fn create(
-	window: &Window,
-	wgpu_renderer: &WgpuRenderer,
-	wgpu_shared: &WgpuShared,
-) -> (EguiRenderer, EguiPainter, EguiEventHandler) {
-	// Create the egui platform
-	let surface_size = wgpu_renderer.surface_size();
-	let platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
-		physical_width:   surface_size.width,
-		physical_height:  surface_size.height,
-		scale_factor:     window.scale_factor(),
-		font_definitions: egui::FontDefinitions::default(),
-		style:            egui::Style::default(),
-	});
-	let platform = Arc::new(Mutex::new(platform));
-
-	// Create the egui render pass
-	let render_pass = egui_wgpu_backend::RenderPass::new(&wgpu_shared.device, wgpu_renderer.surface_config().format, 1);
-
-	(
-		EguiRenderer { render_pass },
-		EguiPainter {
-			platform: Arc::clone(&platform),
-		},
-		EguiEventHandler { platform },
-	)
 }

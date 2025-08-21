@@ -43,7 +43,7 @@ use {
 		platform::run_on_demand::EventLoopExtRunOnDemand,
 		window::WindowId,
 	},
-	zsw_egui::{EguiPainter, EguiRenderer},
+	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
 	zsw_util::{TokioTaskBlockOn, meetup},
 	zsw_wgpu::WgpuRenderer,
 	zutil_app_error::{AppError, Context, app_error},
@@ -226,8 +226,9 @@ impl WinitApp {
 		)
 		.await
 		.context("Unable to create panels renderer")?;
-		let (egui_renderer, egui_painter, egui_event_handler) =
-			zsw_egui::create(&window, &wgpu_renderer, self.shared.wgpu);
+		let egui_event_handler = EguiEventHandler::new(&window);
+		let egui_painter = EguiPainter::new(&egui_event_handler);
+		let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
 		let settings_menu = SettingsMenu::new();
 
 		let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
