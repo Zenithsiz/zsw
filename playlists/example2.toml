@@ -1,5 +1,5 @@
 [[items]]
-enabled = true
-type = "Directory"
-path = "/home/zenithsiz/.wallpaper/test/"
+enabled   = true
+type      = "Directory"
+path      = "/home/zenithsiz/.wallpaper/test/"
 recursive = true

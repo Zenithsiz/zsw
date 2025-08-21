@@ -1,43 +1,43 @@
 [package]
-name = "zsw"
+name    = "zsw"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-async-channel = { workspace = true }
-bytemuck = { workspace = true, features = ["derive"] }
-cgmath = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-console-subscriber = { workspace = true, optional = true }
-crossbeam = { workspace = true }
-directories = { workspace = true }
-egui = { workspace = true, features = ["default_fonts"] }
-futures = { workspace = true }
-image = { workspace = true }
-itertools = { workspace = true }
-naga_oil = { workspace = true }
-num-rational = { workspace = true }
-opener = { workspace = true }
-rand = { workspace = true }
-rayon = { workspace = true }
-rfd = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-serde_with = { workspace = true }
-tokio = { workspace = true, features = ["full", "tracing"] }
-tokio-stream = { workspace = true, features = ["fs"] }
-toml = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-wgpu = { workspace = true, features = ["naga-ir"] }
-winit = { workspace = true }
-zsw-egui = { path = "../zsw-egui" }
-zsw-util = { path = "../zsw-util" }
-zsw-wgpu = { path = "../zsw-wgpu" }
-zutil-app-error = { workspace = true }
+async-channel      = { workspace = true }
+bytemuck           = { features = ["derive"], workspace = true }
+cgmath             = { workspace = true }
+clap               = { features = ["derive"], workspace = true }
+console-subscriber = { optional = true, workspace = true }
+crossbeam          = { workspace = true }
+directories        = { workspace = true }
+egui               = { features = ["default_fonts"], workspace = true }
+futures            = { workspace = true }
+image              = { workspace = true }
+itertools          = { workspace = true }
+naga_oil           = { workspace = true }
+num-rational       = { workspace = true }
+opener             = { workspace = true }
+rand               = { workspace = true }
+rayon              = { workspace = true }
+rfd                = { workspace = true }
+serde              = { features = ["derive"], workspace = true }
+serde_with         = { workspace = true }
+tokio              = { features = ["full", "tracing"], workspace = true }
+tokio-stream       = { features = ["fs"], workspace = true }
+toml               = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { features = ["env-filter"], workspace = true }
+wgpu               = { features = ["naga-ir"], workspace = true }
+winit              = { workspace = true }
+zsw-egui           = { path = "../zsw-egui" }
+zsw-util           = { path = "../zsw-util" }
+zsw-wgpu           = { path = "../zsw-wgpu" }
+zutil-app-error    = { workspace = true }
 
 [features]
 
-tokio-console = ["dep:console-subscriber"]
+tokio-console     = ["dep:console-subscriber"]
 locker-validation = []
 
 [lints]

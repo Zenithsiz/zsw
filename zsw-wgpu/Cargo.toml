@@ -1,13 +1,13 @@
 [package]
-name = "zsw-wgpu"
+name    = "zsw-wgpu"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tokio = { workspace = true }
-tracing = { workspace = true }
-wgpu = { workspace = true }
-winit = { workspace = true }
+tokio           = { workspace = true }
+tracing         = { workspace = true }
+wgpu            = { workspace = true }
+winit           = { workspace = true }
 zutil-app-error = { workspace = true }
 
 [lints]
