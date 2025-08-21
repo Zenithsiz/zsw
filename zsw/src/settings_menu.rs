@@ -67,7 +67,7 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared),
+				Tab::Panels => self::draw_panels_tab(&mut self.add_playlist_state, ui, shared, shared_window),
 				Tab::Playlists => self::draw_playlists(&mut self.add_playlist_state, ui, shared),
 				Tab::Settings => self::draw_settings(ui, shared_window),
 			}
@@ -75,8 +75,13 @@ impl SettingsMenu {
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
-	self::draw_panels_editor(add_playlist_state, ui, shared);
+fn draw_panels_tab(
+	add_playlist_state: &mut AddPlaylistState,
+	ui: &mut egui::Ui,
+	shared: &Arc<Shared>,
+	shared_window: &Arc<SharedWindow>,
+) {
+	self::draw_panels_editor(add_playlist_state, ui, shared, shared_window);
 	ui.separator();
 	self::draw_shader_select(ui, shared);
 }
@@ -188,7 +193,13 @@ fn choose_load_playlist_from_file(
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::Ui, shared: &Arc<Shared>) {
+#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
+fn draw_panels_editor(
+	add_playlist_state: &mut AddPlaylistState,
+	ui: &mut egui::Ui,
+	shared: &Arc<Shared>,
+	shared_window: &Arc<SharedWindow>,
+) {
 	let mut cur_panels = shared.cur_panels.lock().block_on();
 
 	if cur_panels.is_empty() {
@@ -197,13 +208,27 @@ fn draw_panels_editor(add_playlist_state: &mut AddPlaylistState, ui: &mut egui::
 	}
 
 	for panel in cur_panels.iter_mut() {
-		ui.collapsing(panel.name.to_string(), |ui| {
+		let mut name = egui::WidgetText::from(panel.name.to_string());
+		if panel
+			.geometries
+			.iter()
+			.all(|geometry| shared_window.monitor_geometry.intersection(geometry.geometry).is_none())
+		{
+			name = name.weak();
+		}
+
+		ui.collapsing(name, |ui| {
 			ui.checkbox(&mut panel.state.paused, "Paused");
 
 			ui.collapsing("Geometries", |ui| {
 				for (geometry_idx, geometry) in panel.geometries.iter_mut().enumerate() {
 					ui.horizontal(|ui| {
-						ui.label(format!("#{}: ", geometry_idx + 1));
+						let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
+						if shared_window.monitor_geometry.intersection(geometry.geometry).is_none() {
+							name = name.weak();
+						}
+
+						ui.label(name);
 						self::draw_rect(ui, &mut geometry.geometry);
 					});
 				}

@@ -1,12 +1,9 @@
 //! Winit initialization
 
 // Imports
-#[cfg(target_os = "linux")]
-use winit::platform::x11::{WindowAttributesExtX11, WindowType};
 use {
 	cgmath::{Point2, Vector2},
 	winit::{
-		dpi::{PhysicalPosition, PhysicalSize},
 		event_loop::ActiveEventLoop,
 		window::{Window, WindowAttributes},
 	},
@@ -14,41 +11,56 @@ use {
 	zutil_app_error::{AppError, Context},
 };
 
-/// Creates the window, as well as the associated event loop
-pub fn create(event_loop: &ActiveEventLoop) -> Result<Window, AppError> {
-	// Find the window geometry
-	// Note: We just merge all monitors' geometry.
-	let window_geometry = event_loop
+/// Application window
+#[derive(Debug)]
+pub struct AppWindow {
+	/// Monitor name
+	pub monitor_name: String,
+
+	/// Monitor geometry
+	pub monitor_geometry: Rect<i32, u32>,
+
+	/// Window
+	pub window: Window,
+}
+
+/// Creates the windows for each monitor, as well as the associated event loop
+pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> {
+	event_loop
 		.available_monitors()
-		.map(|monitor| self::monitor_geometry(&monitor))
-		.reduce(Rect::merge)
-		.context("No monitors found")?;
-	tracing::debug!(?window_geometry, "Found window geometry");
+		.enumerate()
+		.map(|(monitor_idx, monitor)| {
+			let monitor_name = monitor
+				.name()
+				.unwrap_or_else(|| format!("Monitor #{}", monitor_idx + 1));
 
-	// Start building the window
-	let window_attrs = WindowAttributes::default()
-		.with_title("zsw")
-		.with_position(PhysicalPosition {
-			x: window_geometry.pos[0],
-			y: window_geometry.pos[1],
+			let monitor_geometry = self::monitor_geometry(&monitor);
+			tracing::debug!(?monitor_name, ?monitor_geometry, "Found monitor geometry");
+
+			// Start building the window
+			// TODO: `AlwaysOnBottom` doesn't work on wayland
+			let window_attrs = WindowAttributes::default()
+				.with_title("zsw")
+				.with_position(monitor.position())
+				.with_inner_size(monitor.size())
+				.with_resizable(false)
+				.with_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(monitor))))
+				.with_window_level(winit::window::WindowLevel::AlwaysOnBottom)
+				.with_decorations(false);
+
+			// Finally build the window
+			let window = event_loop
+				.create_window(window_attrs)
+				.context("Unable to build window")?;
+
+			Ok(AppWindow {
+				monitor_name,
+				monitor_geometry,
+				window,
+			})
 		})
-		.with_inner_size(PhysicalSize {
-			width:  window_geometry.size[0],
-			height: window_geometry.size[1],
-		})
-		.with_decorations(false);
-
-	// If on linux x11, add the `Desktop`
-	// TODO: Wayland, windows and macos?
-	#[cfg(target_os = "linux")]
-	let window_attrs = window_attrs.with_x11_window_type(vec![WindowType::Desktop]);
-
-	// Finally build the window
-	let window = event_loop
-		.create_window(window_attrs)
-		.context("Unable to build window")?;
-
-	Ok(window)
+		.collect::<Result<_, AppError>>()
+		.context("Unable to create all windows")
 }
 
 /// Returns a monitor's geometry

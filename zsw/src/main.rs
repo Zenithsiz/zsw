@@ -34,7 +34,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
-	std::{fs, sync::Arc},
+	std::{collections::HashMap, fs, sync::Arc},
 	tokio::sync::{Mutex, RwLock, mpsc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -106,12 +106,12 @@ fn main() -> Result<(), AppError> {
 
 struct WinitApp {
 	config_dirs:            Arc<ConfigDirs>,
-	event_tx:               Option<mpsc::UnboundedSender<(WindowId, WindowEvent)>>,
+	event_tx:               HashMap<WindowId, mpsc::UnboundedSender<WindowEvent>>,
 	panels_updater_barrier: InactiveSlaveBarrier,
 	event_loop_proxy:       winit::event_loop::EventLoopProxy<AppEvent>,
 
 	shared:        Arc<Shared>,
-	shared_window: Option<Arc<SharedWindow>>,
+	shared_window: Vec<Arc<SharedWindow>>,
 }
 
 impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
@@ -141,9 +141,9 @@ impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
 		window_id: WindowId,
 		event: WindowEvent,
 	) {
-		match &self.event_tx {
-			Some(event_tx) => _ = event_tx.send((window_id, event)),
-			None => tracing::warn!("Unable to process window event due to missing window initialization: {event:?}"),
+		match self.event_tx.get(&window_id) {
+			Some(event_tx) => _ = event_tx.send(event),
+			None => tracing::warn!(?window_id, ?event, "Received window event for unknown window"),
 		}
 	}
 }
@@ -219,94 +219,99 @@ impl WinitApp {
 		Ok(Self {
 			config_dirs,
 			event_loop_proxy,
-			event_tx: None,
+			event_tx: HashMap::new(),
 			panels_updater_barrier: panels_updater_slave_barrier,
 			shared,
-			shared_window: None,
+			shared_window: vec![],
 		})
 	}
 
 	/// Initializes the window related things
 	pub async fn init_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Result<(), AppError> {
-		let window = window::create(event_loop).context("Unable to create winit event loop and window")?;
-		let window = Arc::new(window);
-		let wgpu_renderer = WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu)
+		let windows = window::create(event_loop).context("Unable to create winit event loop and window")?;
+		for app_window in windows {
+			let window = Arc::new(app_window.window);
+			let wgpu_renderer = WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu)
+				.await
+				.context("Unable to create wgpu renderer")?;
+
+			let panels_renderer = PanelsRenderer::new(
+				&self.config_dirs,
+				&wgpu_renderer,
+				self.shared.wgpu,
+				&self.shared.panels_renderer_layouts,
+			)
 			.await
-			.context("Unable to create wgpu renderer")?;
+			.context("Unable to create panels renderer")?;
+			let egui_event_handler = EguiEventHandler::new(&window);
+			let egui_painter = EguiPainter::new(&egui_event_handler);
+			let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
+			let settings_menu = SettingsMenu::new();
 
-		let panels_renderer = PanelsRenderer::new(
-			&self.config_dirs,
-			&wgpu_renderer,
-			self.shared.wgpu,
-			&self.shared.panels_renderer_layouts,
-		)
-		.await
-		.context("Unable to create panels renderer")?;
-		let egui_event_handler = EguiEventHandler::new(&window);
-		let egui_painter = EguiPainter::new(&egui_event_handler);
-		let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
-		let settings_menu = SettingsMenu::new();
+			let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
 
-		let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
+			let shared_window = SharedWindow {
+				event_loop_proxy: self.event_loop_proxy.clone(),
+				_monitor_name: app_window.monitor_name,
+				monitor_geometry: app_window.monitor_geometry,
+				window,
+			};
+			let shared_window = Arc::new(shared_window);
 
-		let shared_window = SharedWindow {
-			event_loop_proxy: self.event_loop_proxy.clone(),
-			window,
-		};
-		let shared_window = Arc::new(shared_window);
-
-		self::spawn_task("Renderer", {
-			let shared = Arc::clone(&self.shared);
-			let shared_window = Arc::clone(&shared_window);
-			let panels_updater_barrier = self.panels_updater_barrier.activate();
-			|| {
-				self::renderer(
-					shared,
-					shared_window,
-					wgpu_renderer,
-					panels_renderer,
-					egui_renderer,
-					egui_painter_output_rx,
-					panels_updater_barrier,
-				)
-			}
-		});
+			self::spawn_task("Renderer", {
+				let shared = Arc::clone(&self.shared);
+				let shared_window = Arc::clone(&shared_window);
+				let panels_updater_barrier = self.panels_updater_barrier.activate();
+				|| {
+					self::renderer(
+						shared,
+						shared_window,
+						wgpu_renderer,
+						panels_renderer,
+						egui_renderer,
+						egui_painter_output_rx,
+						panels_updater_barrier,
+					)
+				}
+			});
 
 
-		self::spawn_task("Egui painter", {
-			let shared = Arc::clone(&self.shared);
-			let shared_window = Arc::clone(&shared_window);
-			|| {
-				self::egui_painter(
-					shared,
-					shared_window,
-					egui_painter,
-					settings_menu,
-					egui_painter_output_tx,
-				)
-			}
-		});
+			self::spawn_task("Egui painter", {
+				let shared = Arc::clone(&self.shared);
+				let shared_window = Arc::clone(&shared_window);
+				|| {
+					self::egui_painter(
+						shared,
+						shared_window,
+						egui_painter,
+						settings_menu,
+						egui_painter_output_tx,
+					)
+				}
+			});
 
-		let (event_tx, mut event_rx) = mpsc::unbounded_channel();
-		self.event_tx = Some(event_tx);
-		self::spawn_task("Event receiver", {
-			let shared = Arc::clone(&self.shared);
-			|| async move {
-				while let Some((_, event)) = event_rx.recv().await {
-					match event {
-						winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
-						winit::event::WindowEvent::CursorMoved { position, .. } => shared.cursor_pos.store(position),
-						_ => (),
+			let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+			_ = self.event_tx.insert(shared_window.window.id(), event_tx);
+			self::spawn_task("Event receiver", {
+				let shared = Arc::clone(&self.shared);
+				|| async move {
+					while let Some(event) = event_rx.recv().await {
+						match event {
+							winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
+							winit::event::WindowEvent::CursorMoved { position, .. } =>
+								shared.cursor_pos.store(position),
+							_ => (),
+						}
+
+						egui_event_handler.handle_event(&event).await;
 					}
 
-					egui_event_handler.handle_event(&event).await;
+					Ok(())
 				}
+			});
 
-				Ok(())
-			}
-		});
-
-		self.shared_window = Some(shared_window);
+			self.shared_window.push(shared_window);
+		}
 
 		Ok(())
 	}
@@ -415,6 +420,8 @@ async fn renderer(
 					&wgpu_renderer,
 					shared.wgpu,
 					&shared.panels_renderer_layouts,
+					&shared_window.window,
+					&shared_window.monitor_geometry,
 					&*cur_panels,
 					shader,
 				)
@@ -493,7 +500,10 @@ async fn egui_painter(
 				let mut cur_panels = shared.cur_panels.lock().await;
 				for panel in &mut *cur_panels {
 					for geometry in &panel.geometries {
-						if geometry.geometry.contains(cursor_pos) {
+						if geometry
+							.geometry_on(&shared_window.monitor_geometry)
+							.contains(cursor_pos)
+						{
 							panel.state.paused ^= true;
 							break;
 						}
@@ -512,11 +522,11 @@ async fn egui_painter(
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().await;
 				for panel in &mut *cur_panels {
-					if !panel
-						.geometries
-						.iter()
-						.any(|geometry| geometry.geometry.contains(cursor_pos))
-					{
+					if !panel.geometries.iter().any(|geometry| {
+						geometry
+							.geometry_on(&shared_window.monitor_geometry)
+							.contains(cursor_pos)
+					}) {
 						continue;
 					}
 
@@ -534,11 +544,11 @@ async fn egui_painter(
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().await;
 				for panel in &mut *cur_panels {
-					if !panel
-						.geometries
-						.iter()
-						.any(|geometry| geometry.geometry.contains(cursor_pos))
-					{
+					if !panel.geometries.iter().any(|geometry| {
+						geometry
+							.geometry_on(&shared_window.monitor_geometry)
+							.contains(cursor_pos)
+					}) {
 						continue;
 					}
 

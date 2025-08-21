@@ -48,7 +48,9 @@ impl PanelsManager {
 		Self { root }
 	}
 
-	/// Loads a panel from a name
+	/// Loads a panel from a name.
+	///
+	/// If the panel isn't for this window, returns `Ok(None)`
 	pub async fn load(
 		&self,
 		panel_name: PanelName,
@@ -240,7 +242,7 @@ impl Panel {
 			name,
 			geometries: geometries
 				.into_iter()
-				.map(|geometry| PanelGeometry::new(wgpu_shared, renderer_layouts, geometry))
+				.map(PanelGeometry::new)
 				.collect::<Result<_, _>>()
 				.context("Unable to build geometries")?,
 			state,

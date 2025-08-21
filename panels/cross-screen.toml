@@ -1,0 +1,10 @@
+[[geometries]]
+geometry = "960x1080+0+0"
+[[geometries]]
+geometry = "1920x1080+960+0"
+[[geometries]]
+geometry = "960x1080+2880+0"
+
+[state]
+duration = 300
+fade_point = 250

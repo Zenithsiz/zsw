@@ -19,7 +19,8 @@ use {
 	std::{borrow::Cow, collections::HashSet, path::Path},
 	tokio::fs,
 	wgpu::{naga, util::DeviceExt},
-	winit::dpi::PhysicalSize,
+	winit::{dpi::PhysicalSize, window::Window},
+	zsw_util::Rect,
 	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
 	zutil_app_error::{AppError, Context},
 };
@@ -128,6 +129,8 @@ impl PanelsRenderer {
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
+		window: &Window,
+		window_geometry: &Rect<i32, u32>,
 		panels: impl IntoIterator<Item = &'_ Panel>,
 		shader: PanelShader,
 	) -> Result<(), AppError> {
@@ -195,11 +198,25 @@ impl PanelsRenderer {
 			render_pass.set_bind_group(1, panel.images.image_bind_group(), &[]);
 
 			for geometry in &panel.geometries {
+				// If this geometry is outside our window, we can safely ignore it
+				if window_geometry.intersection(geometry.geometry).is_none() {
+					continue;
+				}
+
+				let geometry_uniforms = geometry.uniforms(wgpu_shared, layouts, window.id()).await;
+
 				// Write the uniforms
-				self.write_uniforms(wgpu_shared, frame.surface_size, panel, geometry);
+				self.write_uniforms(
+					wgpu_shared,
+					frame.surface_size,
+					panel,
+					window_geometry,
+					geometry,
+					&geometry_uniforms.buffer,
+				);
 
 				// Then bind the geometry uniforms and draw
-				render_pass.set_bind_group(0, &geometry.uniforms_bind_group, &[]);
+				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 				render_pass.draw_indexed(0..6, 0, 0..1);
 			}
 		}
@@ -213,10 +230,12 @@ impl PanelsRenderer {
 		wgpu_shared: &WgpuShared,
 		surface_size: PhysicalSize<u32>,
 		panel: &Panel,
+		window_geometry: &Rect<i32, u32>,
 		geometry: &PanelGeometry,
+		geometry_uniforms: &wgpu::Buffer,
 	) {
 		// Calculate the position matrix for the panel
-		let pos_matrix = geometry.pos_matrix(surface_size);
+		let pos_matrix = geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
 
 		let image_uniforms = |image: &PanelImage| {
@@ -234,7 +253,7 @@ impl PanelsRenderer {
 		let next = image_uniforms(panel.images.next());
 
 		// Writes uniforms `uniforms`
-		let write_uniforms = |uniforms_bytes| wgpu_shared.queue.write_buffer(&geometry.uniforms, 0, uniforms_bytes);
+		let write_uniforms = |uniforms_bytes| wgpu_shared.queue.write_buffer(geometry_uniforms, 0, uniforms_bytes);
 		macro write_uniforms($uniforms:expr) {
 			write_uniforms(bytemuck::bytes_of(&$uniforms))
 		}
