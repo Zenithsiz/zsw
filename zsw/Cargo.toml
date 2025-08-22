@@ -31,6 +31,7 @@ serde_with         = { workspace = true }
 tokio              = { features = ["full", "tracing"], workspace = true }
 toml               = { workspace = true }
 tracing            = { features = ["log"], workspace = true }
+tracing-log        = { workspace = true }
 tracing-subscriber = { features = ["env-filter"], workspace = true }
 wgpu               = { features = ["naga-ir"], workspace = true }
 winit              = { workspace = true }

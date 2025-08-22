@@ -8,7 +8,8 @@
 	must_not_suspend,
 	try_blocks,
 	yeet_expr,
-	iter_partition_in_place
+	iter_partition_in_place,
+	type_alias_impl_trait
 )]
 
 // Modules
@@ -70,7 +71,7 @@ use {
 
 fn main() -> Result<(), AppError> {
 	// Initialize stderr-only logging
-	let _log_guard = init::logger::init(None);
+	let logger = init::Logger::init_temp();
 
 	// Get arguments
 	let args = Args::parse();
@@ -92,7 +93,7 @@ fn main() -> Result<(), AppError> {
 	tracing::debug!("config_path: {config_path:?}, config: {config:?}");
 
 	// Initialize the logger properly now
-	let _log_guard = init::logger::init(args.log_file.as_deref().or(config.log_file.as_deref()));
+	logger.init_global(args.log_file.as_deref().or(config.log_file.as_deref()));
 
 	// Initialize and create everything
 	init::rayon_pool::init(config.rayon_worker_threads).context("Unable to initialize rayon")?;
