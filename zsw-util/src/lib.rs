@@ -102,6 +102,7 @@ pub macro where_assert($cond:expr) {
 #[extend::ext(name = TokioTaskBlockOn)]
 pub impl<F: Future> F {
 	/// Bocks on this future within a tokio task
+	#[track_caller]
 	fn block_on(self) -> F::Output {
 		let handle = tokio::runtime::Handle::current();
 		handle.block_on(self)
