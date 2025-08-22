@@ -9,7 +9,7 @@ use {
 };
 
 /// A rectangle
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 pub struct Rect<P, S = P> {
 	/// Position
 	pub pos: Point2<P>,
