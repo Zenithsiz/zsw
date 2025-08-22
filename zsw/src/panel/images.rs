@@ -10,7 +10,6 @@ pub use self::image::PanelImage;
 use {
 	super::{PanelGeometry, PanelsRendererLayouts, PlaylistPlayer},
 	crate::image_loader::{ImageReceiver, ImageRequest, ImageRequester},
-	futures::lock::Mutex,
 	std::{self, mem},
 	zsw_wgpu::WgpuShared,
 };
@@ -28,7 +27,7 @@ pub struct PanelImages {
 	next: PanelImage,
 
 	/// Playlist player
-	playlist_player: Mutex<PlaylistPlayer>,
+	playlist_player: PlaylistPlayer,
 
 	/// Texture sampler
 	texture_sampler: wgpu::Sampler,
@@ -69,7 +68,7 @@ impl PanelImages {
 			texture_sampler,
 			image_bind_group,
 			scheduled_image_receiver: None,
-			playlist_player: Mutex::new(playlist_player),
+			playlist_player,
 		}
 	}
 
@@ -79,7 +78,7 @@ impl PanelImages {
 	}
 
 	/// Returns the playlist player for these images
-	pub fn playlist_player(&self) -> &Mutex<PlaylistPlayer> {
+	pub fn playlist_player(&self) -> &PlaylistPlayer {
 		&self.playlist_player
 	}
 
@@ -91,7 +90,7 @@ impl PanelImages {
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 	) -> Result<(), ()> {
-		self.playlist_player.lock().await.step_prev()?;
+		self.playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = PanelImage::empty();
@@ -114,7 +113,7 @@ impl PanelImages {
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = PanelImage::empty();
-		self.playlist_player.lock().await.step_next();
+		self.playlist_player.step_next();
 		self.update_image_bind_group(wgpu_shared, renderer_layouts);
 
 		Ok(())
@@ -151,11 +150,8 @@ impl PanelImages {
 
 			// Else, log an error, remove the image and re-schedule it
 			Err(err) => {
-				{
-					tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
-					let mut playlist_player = self.playlist_player.lock().await;
-					playlist_player.remove(&response.request.path);
-				}
+				tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
+				self.playlist_player.remove(&response.request.path);
 
 				_ = self.schedule_load_image(wgpu_shared, image_requester, geometries).await;
 				return;
@@ -164,15 +160,14 @@ impl PanelImages {
 
 		// Get which slot to load the image into
 		let slot = {
-			let playlist_player = self.playlist_player.lock().await;
 			match response.request.playlist_pos {
-				pos if Some(pos) == playlist_player.prev_pos() => Some(Slot::Prev),
-				pos if pos == playlist_player.cur_pos() => Some(Slot::Cur),
-				pos if pos == playlist_player.next_pos() => Some(Slot::Next),
+				pos if Some(pos) == self.playlist_player.prev_pos() => Some(Slot::Prev),
+				pos if pos == self.playlist_player.cur_pos() => Some(Slot::Cur),
+				pos if pos == self.playlist_player.next_pos() => Some(Slot::Next),
 				pos => {
 					tracing::warn!(
 						pos,
-						playlist_pos = playlist_player.cur_pos(),
+						playlist_pos = self.playlist_player.cur_pos(),
 						"Discarding loaded image due to position being too far",
 					);
 					None
@@ -207,11 +202,10 @@ impl PanelImages {
 		}
 
 		// Get the playlist position and path to load
-		let mut playlist_player = self.playlist_player.lock().await;
 		let (playlist_pos, image_path) = match () {
-			() if !self.cur.is_loaded() => (playlist_player.cur_pos(), playlist_player.cur()?),
-			() if !self.next.is_loaded() => (playlist_player.next_pos(), playlist_player.next()?),
-			() if !self.prev.is_loaded() => (playlist_player.prev_pos()?, playlist_player.prev()?),
+			() if !self.cur.is_loaded() => (self.playlist_player.cur_pos(), self.playlist_player.cur()?),
+			() if !self.next.is_loaded() => (self.playlist_player.next_pos(), self.playlist_player.next()?),
+			() if !self.prev.is_loaded() => (self.playlist_player.prev_pos()?, self.playlist_player.prev()?),
 			() => return None,
 		};
 

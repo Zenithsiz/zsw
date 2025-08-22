@@ -159,7 +159,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let playlist_player = panel.images.playlist_player().lock().block_on();
+				let playlist_player = panel.images.playlist_player();
 
 				let row_height = ui.text_style_height(&egui::TextStyle::Body);
 
