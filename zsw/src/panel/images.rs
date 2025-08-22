@@ -84,6 +84,8 @@ impl PanelImages {
 	}
 
 	/// Steps to the previous image, if any
+	///
+	/// Returns `Err(())` if this would erase the current image.
 	pub async fn step_prev(
 		&mut self,
 		wgpu_shared: &WgpuShared,
@@ -97,13 +99,25 @@ impl PanelImages {
 		Ok(())
 	}
 
-	/// Steps to the next image
-	pub async fn step_next(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	/// Steps to the next image.
+	///
+	/// Returns `Err(())` if this would erase the current image.
+	pub async fn step_next(
+		&mut self,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+	) -> Result<(), ()> {
+		if !self.next.is_loaded() {
+			return Err(());
+		}
+
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = PanelImage::empty();
 		self.playlist_player.lock().await.step_next();
 		self.update_image_bind_group(wgpu_shared, renderer_layouts);
+
+		Ok(())
 	}
 
 	/// Loads any missing images, prioritizing the current, then next, then previous.

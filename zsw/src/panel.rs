@@ -130,6 +130,15 @@ impl Panel {
 		})
 	}
 
+	/// Returns the max duration for the current image
+	fn max_duration(&self) -> u64 {
+		match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
+			(false, false) => 0,
+			(true, false) => self.state.fade_point,
+			(_, true) => self.state.duration,
+		}
+	}
+
 	/// Skips to the next image
 	pub async fn skip(
 		&mut self,
@@ -137,8 +146,10 @@ impl Panel {
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
-		self.images.step_next(wgpu_shared, renderer_layouts).await;
-		self.state.progress = self.state.duration.saturating_sub(self.state.fade_point);
+		match self.images.step_next(wgpu_shared, renderer_layouts).await {
+			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_point),
+			Err(()) => self.state.progress = self.max_duration(),
+		}
 
 		// Then load any missing images
 		self.images
@@ -155,26 +166,23 @@ impl Panel {
 		frames: i64,
 	) {
 		// Update the progress, potentially rolling over to the previous/next image
-		match self.state.progress.checked_add_signed(frames) {
+		self.state.progress = match self.state.progress.checked_add_signed(frames) {
 			Some(next_progress) => match next_progress >= self.state.duration {
-				true => {
-					self.images.step_next(wgpu_shared, renderer_layouts).await;
-					self.state.progress = next_progress.saturating_sub(self.state.duration);
+				true => match self.images.step_next(wgpu_shared, renderer_layouts).await {
+					Ok(()) => next_progress.saturating_sub(self.state.duration),
+					Err(()) => self.max_duration(),
 				},
-				false => {
-					let max_progress = match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
-						(false, false) => 0,
-						(true, false) => self.state.fade_point,
-						(_, true) => self.state.duration,
-					};
-					self.state.progress = self.state.progress.saturating_add_signed(frames).clamp(0, max_progress);
-				},
+				false => self
+					.state
+					.progress
+					.saturating_add_signed(frames)
+					.clamp(0, self.max_duration()),
 			},
-			None =>
-				if self.images.step_prev(wgpu_shared, renderer_layouts).await.is_ok() {
-					self.state.progress = self.state.duration.saturating_add_signed(frames);
-				},
-		}
+			None => match self.images.step_prev(wgpu_shared, renderer_layouts).await {
+				Ok(()) => self.state.duration.saturating_add_signed(frames),
+				Err(()) => 0,
+			},
+		};
 
 		// Then load any missing images
 		self.images
