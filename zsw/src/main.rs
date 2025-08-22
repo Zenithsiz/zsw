@@ -28,7 +28,15 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{Panel, PanelName, PanelShader, PanelsLoader, PanelsRenderer, PanelsRendererLayouts},
+		panel::{
+			Panel,
+			PanelName,
+			PanelShader,
+			PanelsGeometryUniforms,
+			PanelsLoader,
+			PanelsRenderer,
+			PanelsRendererLayouts,
+		},
 		playlist::{PlaylistName, PlaylistPlayer, PlaylistsLoader},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
@@ -254,6 +262,7 @@ impl WinitApp {
 				_monitor_name: app_window.monitor_name,
 				monitor_geometry: app_window.monitor_geometry,
 				window,
+				panels_geometry_uniforms: Mutex::new(PanelsGeometryUniforms::new()),
 			};
 			let shared_window = Arc::new(shared_window);
 
@@ -439,6 +448,7 @@ async fn renderer(
 		//       an image over and over?
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
 			let cur_panels = shared.cur_panels.lock().await;
+			let mut panels_geometry_uniforms = shared_window.panels_geometry_uniforms.lock().await;
 			panels_renderer
 				.render(
 					&mut frame,
@@ -446,7 +456,7 @@ async fn renderer(
 					&wgpu_renderer,
 					shared.wgpu,
 					&shared.panels_renderer_layouts,
-					&shared_window.window,
+					&mut panels_geometry_uniforms,
 					&shared_window.monitor_geometry,
 					&*cur_panels,
 				)

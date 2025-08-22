@@ -11,7 +11,7 @@ mod state;
 pub use self::{
 	geometry::PanelGeometry,
 	images::{PanelImage, PanelImages},
-	renderer::{PanelShader, PanelsRenderer, PanelsRendererLayouts},
+	renderer::{PanelShader, PanelsGeometryUniforms, PanelsRenderer, PanelsRendererLayouts},
 	state::PanelState,
 };
 

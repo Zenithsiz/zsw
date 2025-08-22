@@ -2,14 +2,10 @@
 
 // Imports
 use {
-	super::{PanelsRendererLayouts, renderer::MAX_UNIFORM_SIZE},
 	cgmath::{Matrix4, Vector2, Vector3},
 	num_rational::Rational32,
-	std::collections::HashMap,
-	tokio::sync::{MappedMutexGuard, Mutex, MutexGuard},
-	winit::{dpi::PhysicalSize, window::WindowId},
+	winit::dpi::PhysicalSize,
 	zsw_util::Rect,
-	zsw_wgpu::WgpuShared,
 	zutil_app_error::AppError,
 };
 
@@ -21,62 +17,11 @@ pub struct PanelGeometry {
 	// TODO: Since this is unnormalized for the window, we should
 	//       maybe make this private?
 	pub geometry: Rect<i32, u32>,
-
-	/// Uniforms
-	pub uniforms: Mutex<HashMap<WindowId, PanelGeometryUniforms>>,
-}
-
-/// Panel geometry uniforms
-#[derive(Debug)]
-pub struct PanelGeometryUniforms {
-	/// Buffer
-	pub buffer: wgpu::Buffer,
-
-	/// Bind group
-	pub bind_group: wgpu::BindGroup,
 }
 
 impl PanelGeometry {
 	pub fn new(geometry: Rect<i32, u32>) -> Result<Self, AppError> {
-		Ok(Self {
-			geometry,
-			uniforms: Mutex::new(HashMap::new()),
-		})
-	}
-
-	/// Gets this geometry's uniforms by window id
-	pub async fn uniforms(
-		&self,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-		window_id: WindowId,
-	) -> MappedMutexGuard<'_, PanelGeometryUniforms> {
-		MutexGuard::map(self.uniforms.lock().await, |uniforms| {
-			uniforms.entry(window_id).or_insert_with(|| {
-				// Create the uniforms
-				let buffer_descriptor = wgpu::BufferDescriptor {
-					label:              None,
-					usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-					size:               u64::try_from(MAX_UNIFORM_SIZE)
-						.expect("Maximum uniform size didn't fit into a `u64`"),
-					mapped_at_creation: false,
-				};
-				let buffer = wgpu_shared.device.create_buffer(&buffer_descriptor);
-
-				// Create the uniform bind group
-				let bind_group_descriptor = wgpu::BindGroupDescriptor {
-					layout:  &renderer_layouts.uniforms_bind_group_layout,
-					entries: &[wgpu::BindGroupEntry {
-						binding:  0,
-						resource: buffer.as_entire_binding(),
-					}],
-					label:   None,
-				};
-				let bind_group = wgpu_shared.device.create_bind_group(&bind_group_descriptor);
-
-				PanelGeometryUniforms { buffer, bind_group }
-			})
-		})
+		Ok(Self { geometry })
 	}
 
 	/// Returns this geometry's rectangle for a certain window

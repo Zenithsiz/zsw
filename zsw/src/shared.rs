@@ -7,7 +7,7 @@ use {
 		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
-		panel::{Panel, PanelsLoader, PanelsRendererLayouts},
+		panel::{Panel, PanelsGeometryUniforms, PanelsLoader, PanelsRendererLayouts},
 		playlist::PlaylistsLoader,
 	},
 	core::sync::atomic::AtomicBool,
@@ -45,7 +45,8 @@ pub struct Shared {
 /// Shared window state
 #[derive(Debug)]
 pub struct SharedWindow {
-	pub _monitor_name:    String,
-	pub monitor_geometry: Rect<i32, u32>,
-	pub window:           Arc<winit::window::Window>,
+	pub _monitor_name:            String,
+	pub monitor_geometry:         Rect<i32, u32>,
+	pub window:                   Arc<winit::window::Window>,
+	pub panels_geometry_uniforms: Mutex<PanelsGeometryUniforms>,
 }
