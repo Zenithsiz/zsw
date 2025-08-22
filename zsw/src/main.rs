@@ -220,17 +220,17 @@ impl WinitApp {
 		};
 		let shared = Arc::new(shared);
 
-		self::spawn_task("Image loader", || image_loader.run());
+		self::spawn_task("Image loader", image_loader.run());
 
 		#[cloned(shared, config)]
-		self::spawn_task("Load default panels", async move || {
+		self::spawn_task("Load default panels", async move {
 			self::load_default_panels(&config, &shared).await
 		});
 
 		let (panels_updater_master_barrier, panels_updater_slave_barrier) = master_barrier::barrier();
 
 		#[cloned(shared)]
-		self::spawn_task("Panels updater", async move || {
+		self::spawn_task("Panels updater", async move {
 			self::panels_updater(&shared, panels_updater_master_barrier).await
 		});
 
@@ -272,7 +272,7 @@ impl WinitApp {
 			let panels_updater_barrier = self.panels_updater_barrier.activate();
 
 			#[cloned(shared = self.shared, shared_window)]
-			self::spawn_task("Renderer", async move || {
+			self::spawn_task("Renderer", async move {
 				self::renderer(
 					&shared,
 					&shared_window,
@@ -287,7 +287,7 @@ impl WinitApp {
 
 
 			#[cloned(shared = self.shared, shared_window)]
-			self::spawn_task("Egui painter", async move || {
+			self::spawn_task("Egui painter", async move {
 				self::egui_painter(
 					&shared,
 					&shared_window,
@@ -302,7 +302,7 @@ impl WinitApp {
 			_ = self.event_tx.insert(shared_window.window.id(), event_tx);
 
 			#[cloned(shared = self.shared)]
-			self::spawn_task("Event receiver", || async move {
+			self::spawn_task("Event receiver", async move {
 				while let Some(event) = event_rx.recv().await {
 					match event {
 						winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
@@ -394,20 +394,17 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Shared
 
 /// Spawns a task
 #[track_caller]
-pub fn spawn_task<Fut, F, T>(name: impl Into<String>, f: F)
+pub fn spawn_task<Fut>(name: impl Into<String>, fut: Fut)
 where
-	F: FnOnce() -> Fut + Send + 'static,
-	Fut: Future<Output = Result<T, AppError>> + Send + 'static,
+	Fut: Future<Output = Result<(), AppError>> + Send + 'static,
 {
 	let name = name.into();
 
 	let _ = tokio::task::Builder::new().name(&name.clone()).spawn(async move {
-		let fut = f();
-
 		let id = tokio::task::id();
 		tracing::debug!(?name, ?id, "Spawning task");
 		match fut.await {
-			Ok(_) => tracing::debug!("Task {name:?} finished"),
+			Ok(()) => tracing::debug!("Task {name:?} finished"),
 			Err(err) => tracing::warn!("Task {name:?} returned error: {}", err.pretty()),
 		}
 	});
@@ -422,7 +419,7 @@ async fn renderer(
 	mut egui_renderer: EguiRenderer,
 	egui_painter_output_rx: meetup::Receiver<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
 	panels_updater_barrier: SlaveBarrier,
-) -> Result<!, AppError> {
+) -> Result<(), AppError> {
 	let mut egui_paint_jobs = vec![];
 	let mut egui_textures_delta = None;
 	loop {
@@ -490,7 +487,7 @@ async fn renderer(
 
 /// Panel updater task
 #[expect(clippy::infinite_loop, reason = "We need this type signature for `spawn_task`")]
-async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) -> Result<!, AppError> {
+async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) -> Result<(), AppError> {
 	loop {
 		// Update if we're not paused
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
@@ -517,7 +514,7 @@ async fn egui_painter(
 	egui_painter: EguiPainter,
 	mut settings_menu: SettingsMenu,
 	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
-) -> Result<!, AppError> {
+) -> Result<(), AppError> {
 	loop {
 		let full_output_fut = egui_painter.draw(&shared_window.window, async |ctx| {
 			// Draw the settings menu
