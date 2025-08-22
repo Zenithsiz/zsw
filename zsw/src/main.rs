@@ -402,10 +402,10 @@ where
 
 	let _ = tokio::task::Builder::new().name(&name.clone()).spawn(async move {
 		let id = tokio::task::id();
-		tracing::debug!(?name, ?id, "Spawning task");
+		tracing::debug!("Spawning task {name:?} ({id:?})");
 		match fut.await {
-			Ok(()) => tracing::debug!("Task {name:?} finished"),
-			Err(err) => tracing::warn!("Task {name:?} returned error: {}", err.pretty()),
+			Ok(()) => tracing::debug!("Task {name:?} ({id:?}) finished"),
+			Err(err) => tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()),
 		}
 	});
 }
