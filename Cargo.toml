@@ -50,6 +50,8 @@ tracing-subscriber  = "0.3.19"
 wgpu                = "26.0.1"
 winit               = "0.30.12"
 zutil-app-error     = { git = "https://github.com/Zenithsiz/zutil", rev = "5363bba6ced162185a1eb5a132cce499bfc5d818" }
+zutil-cloned        = { git = "https://github.com/Zenithsiz/zutil", rev = "5363bba6ced162185a1eb5a132cce499bfc5d818" }
+
 
 # Compile all dependencies with optimizations in debug builds, since otherwise
 # the image loading is far too slow for us to debug other things.

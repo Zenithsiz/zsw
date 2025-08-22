@@ -2673,7 +2673,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn",
@@ -4767,6 +4767,7 @@ dependencies = [
  "zsw-util",
  "zsw-wgpu",
  "zutil-app-error",
+ "zutil-cloned",
 ]
 
 [[package]]
@@ -4840,4 +4841,13 @@ version = "0.1.0"
 source = "git+https://github.com/Zenithsiz/zutil?rev=5363bba6ced162185a1eb5a132cce499bfc5d818#5363bba6ced162185a1eb5a132cce499bfc5d818"
 dependencies = [
  "itertools 0.14.0",
+]
+
+[[package]]
+name = "zutil-cloned"
+version = "0.1.0"
+source = "git+https://github.com/Zenithsiz/zutil?rev=5363bba6ced162185a1eb5a132cce499bfc5d818#5363bba6ced162185a1eb5a132cce499bfc5d818"
+dependencies = [
+ "quote",
+ "syn",
 ]

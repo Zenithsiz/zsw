@@ -9,7 +9,8 @@
 	try_blocks,
 	yeet_expr,
 	iter_partition_in_place,
-	type_alias_impl_trait
+	type_alias_impl_trait,
+	proc_macro_hygiene
 )]
 
 // Modules
@@ -66,6 +67,7 @@ use {
 	},
 	zsw_wgpu::WgpuRenderer,
 	zutil_app_error::{AppError, Context, app_error},
+	zutil_cloned::cloned,
 };
 
 
@@ -220,16 +222,16 @@ impl WinitApp {
 
 		self::spawn_task("Image loader", || image_loader.run());
 
-		self::spawn_task("Load default panels", {
-			let shared = Arc::clone(&shared);
-			let config = Arc::clone(&config);
-			async move || self::load_default_panels(&config, &shared).await
+		#[cloned(shared, config)]
+		self::spawn_task("Load default panels", async move || {
+			self::load_default_panels(&config, &shared).await
 		});
 
 		let (panels_updater_master_barrier, panels_updater_slave_barrier) = master_barrier::barrier();
-		self::spawn_task("Panels updater", {
-			let shared = Arc::clone(&shared);
-			async move || self::panels_updater(&shared, panels_updater_master_barrier).await
+
+		#[cloned(shared)]
+		self::spawn_task("Panels updater", async move || {
+			self::panels_updater(&shared, panels_updater_master_barrier).await
 		});
 
 		Ok(Self {
@@ -267,58 +269,51 @@ impl WinitApp {
 			};
 			let shared_window = Arc::new(shared_window);
 
-			self::spawn_task("Renderer", {
-				let shared = Arc::clone(&self.shared);
-				let shared_window = Arc::clone(&shared_window);
-				let panels_updater_barrier = self.panels_updater_barrier.activate();
-				async move || {
-					self::renderer(
-						&shared,
-						&shared_window,
-						wgpu_renderer,
-						panels_renderer,
-						egui_renderer,
-						egui_painter_output_rx,
-						panels_updater_barrier,
-					)
-					.await
-				}
+			let panels_updater_barrier = self.panels_updater_barrier.activate();
+
+			#[cloned(shared = self.shared, shared_window)]
+			self::spawn_task("Renderer", async move || {
+				self::renderer(
+					&shared,
+					&shared_window,
+					wgpu_renderer,
+					panels_renderer,
+					egui_renderer,
+					egui_painter_output_rx,
+					panels_updater_barrier,
+				)
+				.await
 			});
 
 
-			self::spawn_task("Egui painter", {
-				let shared = Arc::clone(&self.shared);
-				let shared_window = Arc::clone(&shared_window);
-				async move || {
-					self::egui_painter(
-						&shared,
-						&shared_window,
-						egui_painter,
-						settings_menu,
-						egui_painter_output_tx,
-					)
-					.await
-				}
+			#[cloned(shared = self.shared, shared_window)]
+			self::spawn_task("Egui painter", async move || {
+				self::egui_painter(
+					&shared,
+					&shared_window,
+					egui_painter,
+					settings_menu,
+					egui_painter_output_tx,
+				)
+				.await
 			});
 
 			let (event_tx, mut event_rx) = mpsc::unbounded_channel();
 			_ = self.event_tx.insert(shared_window.window.id(), event_tx);
-			self::spawn_task("Event receiver", {
-				let shared = Arc::clone(&self.shared);
-				|| async move {
-					while let Some(event) = event_rx.recv().await {
-						match event {
-							winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
-							winit::event::WindowEvent::CursorMoved { position, .. } =>
-								shared.cursor_pos.store(position),
-							_ => (),
-						}
 
-						egui_event_handler.handle_event(&event).await;
+			#[cloned(shared = self.shared)]
+			self::spawn_task("Event receiver", || async move {
+				while let Some(event) = event_rx.recv().await {
+					match event {
+						winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
+						winit::event::WindowEvent::CursorMoved { position, .. } => shared.cursor_pos.store(position),
+						_ => (),
 					}
 
-					Ok(())
+					egui_event_handler.handle_event(&event).await;
 				}
+
+				Ok(())
 			});
 
 			self.shared_window.push(shared_window);

@@ -36,6 +36,7 @@ tracing-subscriber = { features = ["env-filter"], workspace = true }
 wgpu               = { features = ["naga-ir"], workspace = true }
 winit              = { workspace = true }
 zutil-app-error    = { workspace = true }
+zutil-cloned       = { workspace = true }
 
 [features]
 
