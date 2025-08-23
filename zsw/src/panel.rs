@@ -55,7 +55,7 @@ impl Panel {
 
 	/// Returns the max duration for the current image
 	fn max_duration(images: &PanelImages, state: &PanelState) -> u64 {
-		match (images.cur().is_loaded(), images.next().is_loaded()) {
+		match (images.cur.is_loaded(), images.next.is_loaded()) {
 			(false, false) => 0,
 			(true, false) => state.fade_point,
 			(_, true) => state.duration,

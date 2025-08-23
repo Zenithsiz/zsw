@@ -201,7 +201,7 @@ impl PanelsRenderer {
 			render_pass.set_pipeline(render_pipeline);
 
 			// Bind the panel-shared image bind group
-			render_pass.set_bind_group(1, panel_images.image_bind_group(), &[]);
+			render_pass.set_bind_group(1, &panel_images.image_bind_group, &[]);
 
 			for geometry in &panel.geometries {
 				// If this geometry is outside our window, we can safely ignore it
@@ -255,9 +255,9 @@ impl PanelsRenderer {
 			PanelImageUniforms::new(ratio, swap_dir)
 		};
 
-		let prev = image_uniforms(panel_images.prev());
-		let cur = image_uniforms(panel_images.cur());
-		let next = image_uniforms(panel_images.next());
+		let prev = image_uniforms(&panel_images.prev);
+		let cur = image_uniforms(&panel_images.cur);
+		let next = image_uniforms(&panel_images.next);
 
 		// Writes uniforms `uniforms`
 		let write_uniforms = |uniforms_bytes| wgpu_shared.queue.write_buffer(geometry_uniforms, 0, uniforms_bytes);

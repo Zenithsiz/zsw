@@ -18,25 +18,25 @@ use {
 #[derive(Debug)]
 pub struct PanelImages {
 	/// Previous image
-	prev: PanelImage,
+	pub prev: PanelImage,
 
 	/// Current image
-	cur: PanelImage,
+	pub cur: PanelImage,
 
 	/// Next image
-	next: PanelImage,
+	pub next: PanelImage,
 
 	/// Playlist player
-	playlist_player: PlaylistPlayer,
+	pub playlist_player: PlaylistPlayer,
 
 	/// Texture sampler
-	texture_sampler: wgpu::Sampler,
+	pub texture_sampler: wgpu::Sampler,
 
 	/// Texture bind group
-	image_bind_group: wgpu::BindGroup,
+	pub image_bind_group: wgpu::BindGroup,
 
 	/// Scheduled image receiver.
-	scheduled_image_receiver: Option<ImageReceiver>,
+	pub scheduled_image_receiver: Option<ImageReceiver>,
 }
 
 impl PanelImages {
@@ -70,16 +70,6 @@ impl PanelImages {
 			image_bind_group,
 			scheduled_image_receiver: None,
 		}
-	}
-
-	/// Returns the image bind group for these images
-	pub fn image_bind_group(&self) -> &wgpu::BindGroup {
-		&self.image_bind_group
-	}
-
-	/// Returns the playlist player for these images
-	pub fn playlist_player(&self) -> &PlaylistPlayer {
-		&self.playlist_player
 	}
 
 	/// Steps to the previous image, if any
@@ -222,7 +212,7 @@ impl PanelImages {
 	}
 
 	/// Updates the image bind group
-	fn update_image_bind_group(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub fn update_image_bind_group(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
 		self.image_bind_group = self::create_image_bind_group(
 			wgpu_shared,
 			&renderer_layouts.image_bind_group_layout,
@@ -238,36 +228,6 @@ impl PanelImages {
 		matches!(self.prev, PanelImage::Empty) &&
 			matches!(self.cur, PanelImage::Empty) &&
 			matches!(self.next, PanelImage::Empty)
-	}
-
-	/// Returns the previous image
-	pub fn prev(&self) -> &PanelImage {
-		&self.prev
-	}
-
-	/// Returns the previous image mutably
-	pub fn prev_mut(&mut self) -> &mut PanelImage {
-		&mut self.prev
-	}
-
-	/// Returns the current image
-	pub fn cur(&self) -> &PanelImage {
-		&self.cur
-	}
-
-	/// Returns the current image mutably
-	pub fn cur_mut(&mut self) -> &mut PanelImage {
-		&mut self.cur
-	}
-
-	/// Returns the next image
-	pub fn next(&self) -> &PanelImage {
-		&self.next
-	}
-
-	/// Returns the next image mutably
-	pub fn next_mut(&mut self) -> &mut PanelImage {
-		&mut self.next
 	}
 }
 
