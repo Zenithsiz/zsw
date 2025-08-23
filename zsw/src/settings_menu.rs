@@ -82,7 +82,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 		return;
 	}
 
-	for panel in cur_panels.iter_mut() {
+	for panel in cur_panels.values_mut() {
 		let mut name = egui::WidgetText::from(panel.name.to_string());
 		if panel
 			.geometries

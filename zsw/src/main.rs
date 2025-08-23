@@ -50,7 +50,11 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
-	std::{collections::HashMap, fs, sync::Arc},
+	std::{
+		collections::{BTreeMap, HashMap, btree_map},
+		fs,
+		sync::Arc,
+	},
 	tokio::sync::{Mutex, mpsc},
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -216,7 +220,7 @@ impl WinitApp {
 			panels_loader,
 			playlists_loader,
 			image_requester,
-			cur_panels: Mutex::new(vec![]),
+			cur_panels: Mutex::new(BTreeMap::new()),
 		};
 		let shared = Arc::new(shared);
 
@@ -339,7 +343,11 @@ async fn load_default_panels(config: &Config, shared: &Shared) -> Result<(), App
 		.iter()
 		.map(
 			async |default_panel| match self::load_default_panel(default_panel, shared).await {
-				Ok(panel) => shared.cur_panels.lock().await.push(panel),
+				Ok(panel) => match shared.cur_panels.lock().await.entry(panel.name.clone()) {
+					btree_map::Entry::Occupied(_) =>
+						tracing::warn!("Found duplicate panel name {:?}, ignoring new panel", panel.name),
+					btree_map::Entry::Vacant(entry) => _ = entry.insert(panel),
+				},
 				Err(err) => tracing::warn!(
 					"Unable to load default panel {:?} (playlist: {:?}): {}",
 					default_panel.panel,
@@ -451,7 +459,7 @@ async fn renderer(
 					&shared.panels_renderer_layouts,
 					&mut panels_geometry_uniforms,
 					&shared_window.monitor_geometry,
-					&*cur_panels,
+					cur_panels.values(),
 				)
 				.await
 				.context("Unable to render panels")?;
@@ -493,7 +501,7 @@ async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) 
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
 			let mut cur_panels = shared.cur_panels.lock().await;
 
-			for panel in &mut *cur_panels {
+			for panel in cur_panels.values_mut() {
 				panel
 					.update(shared.wgpu, &shared.panels_renderer_layouts, &shared.image_requester)
 					.await;
@@ -527,7 +535,7 @@ async fn egui_painter(
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().await;
-				for panel in &mut *cur_panels {
+				for panel in cur_panels.values_mut() {
 					for geometry in &panel.geometries {
 						if geometry
 							.geometry_on(&shared_window.monitor_geometry)
@@ -550,7 +558,7 @@ async fn egui_painter(
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().await;
-				for panel in &mut *cur_panels {
+				for panel in cur_panels.values_mut() {
 					if !panel.geometries.iter().any(|geometry| {
 						geometry
 							.geometry_on(&shared_window.monitor_geometry)
@@ -572,7 +580,7 @@ async fn egui_painter(
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 				let mut cur_panels = shared.cur_panels.lock().await;
-				for panel in &mut *cur_panels {
+				for panel in cur_panels.values_mut() {
 					if !panel.geometries.iter().any(|geometry| {
 						geometry
 							.geometry_on(&shared_window.monitor_geometry)

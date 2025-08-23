@@ -7,12 +7,12 @@ use {
 		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
-		panel::{Panel, PanelsGeometryUniforms, PanelsLoader, PanelsRendererLayouts},
+		panel::{Panel, PanelName, PanelsGeometryUniforms, PanelsLoader, PanelsRendererLayouts},
 		playlist::PlaylistsLoader,
 	},
 	core::sync::atomic::AtomicBool,
 	crossbeam::atomic::AtomicCell,
-	std::sync::Arc,
+	std::{collections::BTreeMap, sync::Arc},
 	tokio::sync::Mutex,
 	winit::dpi::PhysicalPosition,
 	zsw_util::Rect,
@@ -39,7 +39,7 @@ pub struct Shared {
 	pub playlists_loader: PlaylistsLoader,
 	pub image_requester:  ImageRequester,
 
-	pub cur_panels: Mutex<Vec<Panel>>,
+	pub cur_panels: Mutex<BTreeMap<PanelName, Panel>>,
 }
 
 /// Shared window state
