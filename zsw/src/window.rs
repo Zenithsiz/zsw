@@ -35,7 +35,7 @@ pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> 
 				.unwrap_or_else(|| format!("Monitor #{}", monitor_idx + 1));
 
 			let monitor_geometry = self::monitor_geometry(&monitor);
-			tracing::debug!(?monitor_name, ?monitor_geometry, "Found monitor geometry");
+			tracing::debug!("Found monitor {monitor_name:?} geometry: {monitor_geometry}");
 
 			// Start building the window
 			// TODO: `AlwaysOnBottom` doesn't work on wayland

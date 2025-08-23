@@ -412,7 +412,7 @@ async fn create_render_pipeline(
 ) -> Result<wgpu::RenderPipeline, AppError> {
 	let shader_path = config_dirs.shaders().join(shader.path());
 
-	tracing::debug!(?shader, ?shader_path, "Creating render pipeline for shader");
+	tracing::debug!("Creating render pipeline for shader {shader:?} from {shader_path:?}");
 
 	let shader_module = self::parse_shader(&shader_path, shader)
 		.await
@@ -562,7 +562,7 @@ fn parse_shader_module(
 		}
 
 		// Then add it as a module
-		tracing::debug!(?module_path, "Processing shader module");
+		tracing::trace!("Processing shader {shader_dir:?} module {module_path:?}");
 		_ = composer
 			.add_composable_module(ComposableModuleDescriptor {
 				source: &module_source,

@@ -140,7 +140,11 @@ impl PanelImages {
 
 			// Else, log an error, remove the image and re-schedule it
 			Err(err) => {
-				tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
+				tracing::warn!(
+					"Unable to load image {:?}, removing it from player: {}",
+					response.request.path,
+					err.pretty()
+				);
 				self.playlist_player.remove(&response.request.path);
 
 				_ = self.schedule_load_image(wgpu_shared, image_requester, geometries).await;

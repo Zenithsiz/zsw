@@ -75,7 +75,8 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 
 	// Configure the device to not panic on errors
 	device.on_uncaptured_error(Box::new(|err| {
-		tracing::error!("Wgpu error: {err}");
+		let err = AppError::<()>::new(&err);
+		tracing::error!("Wgpu error: {}", err.pretty());
 	}));
 
 	Ok((device, queue))

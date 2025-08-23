@@ -50,7 +50,7 @@ impl Panels {
 			.get_or_try_init(async move || {
 				// Try to read the file
 				let panel_path = self.path_of(&panel_name);
-				tracing::debug!(%panel_name, ?panel_path, "Loading panel");
+				tracing::debug!("Loading panel {panel_name:?} from {panel_path:?}");
 				let panel_toml = tokio::fs::read_to_string(panel_path)
 					.await
 					.context("Unable to open file")?;

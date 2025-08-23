@@ -44,7 +44,7 @@ impl Playlists {
 			.get_or_try_init(async move || {
 				// Try to read the file
 				let playlist_path = self.path_of(&playlist_name);
-				tracing::debug!(%playlist_name, ?playlist_path, "Loading playlist");
+				tracing::debug!("Loading playlist {playlist_name:?} from {playlist_path:?}");
 				let playlist_toml = tokio::fs::read_to_string(playlist_path)
 					.await
 					.context("Unable to open file")?;

@@ -78,7 +78,10 @@ impl WgpuRenderer {
 			loop {
 				match self.surface.get_current_texture() {
 					Ok(surface_texture) => break surface_texture,
-					Err(err) => tracing::warn!(%err, "Unable to retrieve current texture, retrying"),
+					Err(err) => {
+						let err = AppError::<()>::new(&err);
+						tracing::warn!("Unable to retrieve current texture, retrying: {}", err.pretty());
+					},
 				}
 			}
 		});
@@ -104,7 +107,11 @@ impl WgpuRenderer {
 
 	/// Re-configures the surface
 	pub fn reconfigure(&mut self, shared: &WgpuShared) -> Result<(), AppError> {
-		tracing::info!(size=?self.surface_size, "Reconfiguring wgpu surface");
+		tracing::info!(
+			"Reconfiguring wgpu surface to {}x{}",
+			self.surface_size.width,
+			self.surface_size.height
+		);
 
 		// Update our surface
 		self.surface_config = self::configure_window_surface(shared, &self.surface, self.surface_size)
@@ -115,7 +122,12 @@ impl WgpuRenderer {
 
 	/// Performs a resize
 	pub fn resize(&mut self, shared: &WgpuShared, size: PhysicalSize<u32>) -> Result<(), AppError> {
-		tracing::info!(?size, "Resizing wgpu surface");
+		tracing::info!(
+			"Resizing wgpu surface to {}x{}",
+			self.surface_size.width,
+			self.surface_size.height
+		);
+
 		// TODO: Don't ignore resizes to the same size?
 		if size.width > 0 && size.height > 0 && size != self.surface_size {
 			// Update our surface

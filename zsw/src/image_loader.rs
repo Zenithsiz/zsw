@@ -130,11 +130,11 @@ impl ImageLoader {
 				)
 				.await;
 				if let Err(err) = &image_res {
-					tracing::warn!(?request, ?err, "Unable to load image");
+					tracing::warn!("Unable to load image {:?}: {}", request.path, err.pretty());
 				}
 
 				if let Err(response) = response_tx.send(ImageResponse { request, image_res }) {
-					tracing::warn!(?response.request, "Unable to send response to image request");
+					tracing::warn!("Request for image {:?} was aborted", response.request.path);
 				}
 			})
 			.collect::<()>()
@@ -166,18 +166,18 @@ impl ImageLoader {
 		{
 			Ok(Some(upscaled_image_path)) => image_path = upscaled_image_path,
 			Ok(None) => (),
-			Err(err) => tracing::warn!(path = ?request.path, ?err, "Unable to upscale image"),
+			Err(err) => tracing::warn!("Unable to upscale image {:?}: {}", request.path, err.pretty()),
 		}
 
 
 		// Load the image
-		tracing::trace!(path = ?request.path, "Loading image");
+		tracing::trace!("Loading image {:?}", request.path);
 		let mut image = tokio::task::spawn_blocking(move || image::open(image_path))
 			.instrument(tracing::trace_span!("Loading image"))
 			.await
 			.context("Unable to join image load task")?
 			.context("Unable to open image")?;
-		tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), "Loaded image");
+		tracing::trace!("Loaded image {:?} ({}x{})", request.path, image.width(), image.height());
 
 		// TODO: Use `request.geometries?` for upscaling?
 
@@ -185,14 +185,24 @@ impl ImageLoader {
 		if image.width() >= request.max_image_size || image.height() >= request.max_image_size {
 			let max_image_size = request.max_image_size;
 
-			tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), ?max_image_size, "Resizing image");
+			tracing::trace!(
+				"Resizing image {:?} ({}x{}) to at most {max_image_size}x{max_image_size}",
+				request.path,
+				image.width(),
+				image.height()
+			);
 			image = tokio::task::spawn_blocking(move || {
 				image.resize(max_image_size, max_image_size, image::imageops::FilterType::Nearest)
 			})
 			.instrument(tracing::trace_span!("Resizing image"))
 			.await
 			.context("Failed to join image resize task")?;
-			tracing::trace!(path = ?request.path, image_width = ?image.width(), image_height = ?image.height(), "Resized image");
+			tracing::trace!(
+				"Resized image {:?} to {}x{}",
+				request.path,
+				image.width(),
+				image.height()
+			);
 		}
 
 		Ok(Image {
@@ -219,7 +229,6 @@ impl ImageLoader {
 		.await
 		.context("Unable to join image check size task")?
 		.context("Unable to get image size")?;
-		tracing::trace!(path = ?request.path, ?image_width, ?image_height, "Image size");
 
 		// Then compute the minimum size required.
 		// Note: If none, we don't do anything else
@@ -229,27 +238,36 @@ impl ImageLoader {
 			.iter()
 			.map(|size| Self::minimum_image_size_for_panel(Vector2::new(image_width, image_height), *size))
 			.reduce(|lhs, rhs| Vector2::new(lhs.x.max(rhs.x), lhs.y.max(rhs.y)));
-		tracing::trace!(?request, ?minimum_size, "Minimum image size");
 		let Some(minimum_size) = minimum_size else {
+			tracing::trace!(
+				"Image {:?} ({image_width}x{image_height}) had no minimum image size",
+				request.path,
+			);
 			return Ok(None);
 		};
 
 		// If the image isn't smaller, return
 		if image_width >= minimum_size.x && image_height >= minimum_size.y {
+			tracing::trace!(
+				"Image {:?} ({image_width}x{image_height}) is larger than smaller size {}x{}",
+				request.path,
+				minimum_size.x,
+				minimum_size.y
+			);
 			return Ok(None);
 		}
 
 		// If the image is in the excluded, return
 		if upscale_exclude.contains(&request.path) {
-			tracing::trace!(path = ?request.path, "Not upscaling due to excluded");
+			tracing::trace!("Not upscaling excluded image {:?}", request.path);
 			return Ok(None);
 		}
 
 		// Else get the upscale command
 		let Some(upscale_cmd) = upscale_cmd else {
 			tracing::trace!(
-				path = ?request.path,
-				"Not upscaling due to no upscaler command supplied and none cached found"
+				"Not upscaling image {:?} due to no upscaler command supplied and no cached image found",
+				request.path
 			);
 			return Ok(None);
 		};
@@ -288,7 +306,13 @@ impl ImageLoader {
 		)
 		.ceil() as u32;
 		let ratio = ratio.next_power_of_two();
-		tracing::trace!(?image_path, ?image_size, ?minimum_size, ?ratio, "Image upscaled ratio");
+		tracing::trace!(
+			"Using upscale ratio x{ratio} for image {image_path:?} ({}x{}) with minimum size {}x{}",
+			image_size.x,
+			image_size.y,
+			minimum_size.x,
+			minimum_size.y
+		);
 
 		// Calculate the upscaled image path
 		// TODO: Do this some other way?
@@ -303,7 +327,7 @@ impl ImageLoader {
 		}
 
 		let _permit = upscale_semaphore.acquire().await;
-		tracing::trace!(?image_path, ?upscaled_image_path, ?ratio, "Upscaling image");
+		tracing::trace!("Upscaling image {image_path:?} with scale x{ratio} to {upscaled_image_path:?}");
 		tokio::process::Command::new(upscale_cmd)
 			.arg("-i")
 			.arg(image_path)
@@ -320,7 +344,7 @@ impl ImageLoader {
 			.context("Unable to wait for upscaler to finish")?
 			.exit_ok()
 			.context("upscaler returned error")?;
-		tracing::trace!(?image_path, ?upscaled_image_path, "Upscaled image");
+		tracing::trace!("Upscaled image {image_path:?} to {upscaled_image_path:?}");
 
 		Ok(upscaled_image_path)
 	}

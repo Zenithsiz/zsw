@@ -88,7 +88,7 @@ fn main() -> Result<(), AppError> {
 			.to_path_buf(),
 	);
 	let config_dirs = Arc::new(config_dirs);
-	tracing::debug!("config_path: {config_path:?}, config: {config:?}");
+	tracing::debug!("Loaded config: {config:?}");
 
 	// Initialize the logger properly now
 	logger.init_global(args.log_file.as_deref().or(config.log_file.as_deref()));
@@ -159,7 +159,7 @@ impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
 	) {
 		match self.event_tx.get(&window_id) {
 			Some(event_tx) => _ = event_tx.send(event),
-			None => tracing::warn!(?window_id, ?event, "Received window event for unknown window"),
+			None => tracing::warn!("Received window event for unknown window {window_id:?}: {event:?}"),
 		}
 	}
 }
@@ -360,17 +360,17 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		.load(panel_name.clone())
 		.await
 		.context("Unable to load panel")?;
-	tracing::debug!(%panel_name, "Loaded default panel");
+	tracing::debug!("Loaded default panel {panel_name:?}");
 
 	// Finally spawn a task to load the playlist player
 	#[cloned(shared)]
-	self::spawn_task(format!("Load playlist for {panel_name}"), async move {
+	self::spawn_task(format!("Load playlist for {panel_name:?}"), async move {
 		let playlist = shared
 			.playlists
 			.load(playlist_name.clone())
 			.await
 			.context("Unable to load playlist")?;
-		tracing::debug!(?playlist_name, "Loaded default playlist");
+		tracing::debug!("Loaded default playlist {playlist_name:?}");
 
 		let playlist_player = PlaylistPlayer::new(&playlist).await;
 
@@ -380,7 +380,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 				tracing::warn!("Panel {panel_name:?} changed playlist before playlist {playlist_name:?} could load"),
 			hash_map::Entry::Vacant(entry) => _ = entry.insert(panel_images),
 		}
-		tracing::debug!(?panel_name, "Loaded default panel images");
+		tracing::debug!("Loaded default panel images {panel_name:?}");
 
 		Ok(())
 	});

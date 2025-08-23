@@ -37,7 +37,7 @@ impl ConfigDirs {
 	pub fn panels(&self) -> &Path {
 		self.panels.get_or_init(|| {
 			let path = self.root.join("panels");
-			tracing::info!(?path, "Panels path");
+			tracing::info!("Panels path: {path:?}");
 			path
 		})
 	}
@@ -46,7 +46,7 @@ impl ConfigDirs {
 	pub fn playlists(&self) -> &Path {
 		self.playlists.get_or_init(|| {
 			let path = self.root.join("playlists");
-			tracing::info!(?path, "Playlists path");
+			tracing::info!("Playlists path: {path:?}");
 			path
 		})
 	}
@@ -55,7 +55,7 @@ impl ConfigDirs {
 	pub fn shaders(&self) -> &Path {
 		self.shaders.get_or_init(|| {
 			let path = self.root.join("shaders");
-			tracing::info!(?path, "Shaders path");
+			tracing::info!("Shaders path: {path:?}");
 			path
 		})
 	}

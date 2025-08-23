@@ -13,6 +13,7 @@ use {
 	egui::Widget,
 	std::path::Path,
 	zsw_util::{Rect, TokioTaskBlockOn},
+	zutil_app_error::AppError,
 };
 
 /// Settings menu
@@ -246,7 +247,8 @@ fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 		if ui.link(path.to_string_lossy()).clicked() &&
 			let Err(err) = opener::open(path)
 		{
-			tracing::warn!(?path, %err, "Unable to open file");
+			let err = AppError::<()>::new(&err);
+			tracing::warn!("Unable to open file {path:?}: {}", err.pretty());
 		}
 	});
 }
