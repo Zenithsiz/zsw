@@ -168,7 +168,11 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		for panel in panels {
+			// If the panel images are missing or empty, skip this panel
 			let Some(panel_images) = &panel.images else { continue };
+			if panel_images.is_empty() {
+				continue;
+			}
 
 			let render_pipeline = match self.render_pipelines.entry(mem::discriminant(&panel.shader)) {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),

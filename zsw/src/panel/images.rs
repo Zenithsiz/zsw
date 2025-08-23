@@ -233,6 +233,13 @@ impl PanelImages {
 		);
 	}
 
+	/// Returns if all images are empty
+	pub fn is_empty(&self) -> bool {
+		matches!(self.prev, PanelImage::Empty) &&
+			matches!(self.cur, PanelImage::Empty) &&
+			matches!(self.next, PanelImage::Empty)
+	}
+
 	/// Returns the previous image
 	pub fn prev(&self) -> &PanelImage {
 		&self.prev
