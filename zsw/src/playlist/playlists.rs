@@ -1,4 +1,4 @@
-//! Playlist player
+//! Playlists
 
 // Imports
 use {
@@ -10,9 +10,9 @@ use {
 	zutil_app_error::{AppError, Context},
 };
 
-/// Playlist loader
+/// Playlists
 #[derive(Debug)]
-pub struct PlaylistsLoader {
+pub struct Playlists {
 	/// Playlists directory
 	root: PathBuf,
 
@@ -21,8 +21,8 @@ pub struct PlaylistsLoader {
 	playlists: Mutex<HashMap<PlaylistName, Arc<OnceCell<Arc<Playlist>>>>>,
 }
 
-impl PlaylistsLoader {
-	/// Creates a new playlists loader
+impl Playlists {
+	/// Creates a new playlists container
 	pub fn new(root: PathBuf) -> Self {
 		Self {
 			root,
@@ -43,7 +43,7 @@ impl PlaylistsLoader {
 		playlist_entry
 			.get_or_try_init(async move || {
 				// Try to read the file
-				let playlist_path = self.playlist_path(&playlist_name);
+				let playlist_path = self.path_of(&playlist_name);
 				tracing::debug!(%playlist_name, ?playlist_path, "Loading playlist");
 				let playlist_toml = tokio::fs::read_to_string(playlist_path)
 					.await
@@ -76,7 +76,7 @@ impl PlaylistsLoader {
 	}
 
 	/// Returns a playlist's path
-	pub fn playlist_path(&self, name: &PlaylistName) -> PathBuf {
+	pub fn path_of(&self, name: &PlaylistName) -> PathBuf {
 		self.root.join(&*name.0).with_appended(".toml")
 	}
 }

@@ -39,7 +39,7 @@ use {
 			PanelsRenderer,
 			PanelsRendererLayouts,
 		},
-		playlist::{PlaylistName, PlaylistPlayer, PlaylistsLoader},
+		playlist::{PlaylistName, PlaylistPlayer, Playlists},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
 	},
@@ -192,7 +192,7 @@ impl WinitApp {
 			.context("Unable to initialize wgpu")?;
 		let panels_renderer_layouts = PanelsRendererLayouts::new(wgpu_shared);
 
-		let playlists_loader = PlaylistsLoader::new(config_dirs.playlists().to_path_buf());
+		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
 		let panels = Panels::new(config_dirs.panels().to_path_buf());
 
 		let upscale_cache_dir = config
@@ -218,7 +218,7 @@ impl WinitApp {
 			wgpu: wgpu_shared,
 			panels_renderer_layouts,
 			panels,
-			playlists_loader,
+			playlists,
 			image_requester,
 			panels_images: Mutex::new(HashMap::new()),
 		};
@@ -386,7 +386,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 	#[cloned(shared)]
 	self::spawn_task(format!("Load playlist for {panel_name}"), async move {
 		let playlist = shared
-			.playlists_loader
+			.playlists
 			.load(playlist_name.clone())
 			.await
 			.context("Unable to load playlist")?;

@@ -1,12 +1,12 @@
 //! Playlist
 
 // Modules
-mod loader;
 mod player;
+mod playlists;
 mod ser;
 
 // Exports
-pub use self::{loader::PlaylistsLoader, player::PlaylistPlayer};
+pub use self::{player::PlaylistPlayer, playlists::Playlists};
 
 // Imports
 use std::{borrow::Borrow, fmt, path::Path, sync::Arc};
