@@ -151,7 +151,7 @@ impl Panel {
 }
 
 /// Panel name
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct PanelName(Arc<str>);
 
 impl From<String> for PanelName {
@@ -167,6 +167,12 @@ impl Borrow<str> for PanelName {
 }
 
 impl fmt::Display for PanelName {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.0.fmt(f)
+	}
+}
+
+impl fmt::Debug for PanelName {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.0.fmt(f)
 	}

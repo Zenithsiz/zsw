@@ -43,7 +43,7 @@ pub enum PlaylistItemKind {
 }
 
 /// Playlist name
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct PlaylistName(Arc<str>);
 
 impl From<String> for PlaylistName {
@@ -59,6 +59,12 @@ impl Borrow<str> for PlaylistName {
 }
 
 impl fmt::Display for PlaylistName {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.0.fmt(f)
+	}
+}
+
+impl fmt::Debug for PlaylistName {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.0.fmt(f)
 	}
