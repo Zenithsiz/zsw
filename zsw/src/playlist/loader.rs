@@ -32,11 +32,15 @@ impl PlaylistsLoader {
 
 	/// Loads a playlist by name
 	pub async fn load(&self, playlist_name: PlaylistName) -> Result<Arc<Playlist>, AppError> {
-		self.playlists
-			.lock()
-			.await
-			.entry(playlist_name.clone())
-			.or_insert_with(|| Arc::new(OnceCell::new()))
+		let playlist_entry = Arc::clone(
+			self.playlists
+				.lock()
+				.await
+				.entry(playlist_name.clone())
+				.or_insert_with(|| Arc::new(OnceCell::new())),
+		);
+
+		playlist_entry
 			.get_or_try_init(async move || {
 				// Try to read the file
 				let playlist_path = self.playlist_path(&playlist_name);
