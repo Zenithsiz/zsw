@@ -7,7 +7,7 @@ use {
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
 	tokio::sync::OnceCell,
 	zsw_util::PathAppendExt,
-	zutil_app_error::{AppError, Context},
+	app_error::{AppError, Context},
 };
 
 /// Playlists

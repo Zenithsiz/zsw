@@ -8,7 +8,7 @@ use {
 		window::{Window, WindowAttributes},
 	},
 	zsw_util::Rect,
-	zutil_app_error::{AppError, Context},
+	app_error::{AppError, Context},
 };
 
 /// Application window

@@ -37,6 +37,7 @@ pub use {
 
 // Imports
 use {
+	app_error::{AppError, Context},
 	image::DynamicImage,
 	std::{
 		ffi::OsStr,
@@ -44,7 +45,6 @@ use {
 		future::Future,
 		path::{Path, PathBuf},
 	},
-	zutil_app_error::{AppError, Context},
 };
 
 /// Parses json from a file

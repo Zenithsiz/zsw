@@ -9,13 +9,13 @@ edition = "2024"
 zsw-wgpu = { workspace = true }
 
 
+app-error           = { workspace = true }
 egui                = { features = ["default_fonts"], workspace = true }
 egui_wgpu_backend   = { workspace = true }
 egui_winit_platform = { workspace = true }
 tokio               = { workspace = true }
 tracing             = { workspace = true }
 winit               = { workspace = true }
-zutil-app-error     = { workspace = true }
 
 [lints]
 workspace = true

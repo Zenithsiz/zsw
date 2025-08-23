@@ -8,7 +8,7 @@ use {
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
 	tokio::sync::OnceCell,
 	zsw_util::PathAppendExt,
-	zutil_app_error::Context,
+	app_error::Context,
 };
 
 /// Panel storage

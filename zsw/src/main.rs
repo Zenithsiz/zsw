@@ -62,7 +62,7 @@ use {
 		meetup,
 	},
 	zsw_wgpu::WgpuRenderer,
-	zutil_app_error::{AppError, Context, app_error},
+	app_error::{AppError, Context, app_error},
 	zutil_cloned::cloned,
 };
 

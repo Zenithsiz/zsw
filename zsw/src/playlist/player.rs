@@ -12,7 +12,7 @@ use {
 	},
 	tokio::{fs, sync::Mutex},
 	zsw_util::{UnwrapOrReturnExt, WalkDir},
-	zutil_app_error::AppError,
+	app_error::AppError,
 };
 
 /// Playlist player

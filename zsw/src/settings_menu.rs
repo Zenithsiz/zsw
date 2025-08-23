@@ -13,7 +13,7 @@ use {
 	egui::Widget,
 	std::path::Path,
 	zsw_util::{Rect, TokioTaskBlockOn},
-	zutil_app_error::AppError,
+	app_error::AppError,
 };
 
 /// Settings menu

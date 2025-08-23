@@ -4,16 +4,16 @@ name    = "zsw-util"
 version = "0.1.0"
 
 [dependencies]
-cgmath          = { features = ["serde"], workspace = true }
-duplicate       = { workspace = true }
-extend          = { workspace = true }
-futures         = { workspace = true }
-image           = { workspace = true }
-pin-project     = { workspace = true }
-serde           = { workspace = true }
-serde_json      = { workspace = true }
-tokio           = { workspace = true }
-zutil-app-error = { workspace = true }
+app-error   = { workspace = true }
+cgmath      = { features = ["serde"], workspace = true }
+duplicate   = { workspace = true }
+extend      = { workspace = true }
+futures     = { workspace = true }
+image       = { workspace = true }
+pin-project = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+tokio       = { workspace = true }
 
 [lints]
 workspace = true

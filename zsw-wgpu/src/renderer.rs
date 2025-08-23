@@ -5,7 +5,7 @@ use {
 	super::WgpuShared,
 	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
-	zutil_app_error::{AppError, Context},
+	app_error::{AppError, Context},
 };
 
 /// Wgpu renderer

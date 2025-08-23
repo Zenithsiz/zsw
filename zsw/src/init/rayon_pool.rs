@@ -4,9 +4,9 @@
 
 // Imports
 use {
-	zutil_app_error::Context,
+	app_error::Context,
 	std::{num::NonZeroUsize, thread},
-	zutil_app_error::AppError,
+	app_error::AppError,
 };
 
 pub fn init(worker_threads: Option<NonZeroUsize>) -> Result<(), AppError> {

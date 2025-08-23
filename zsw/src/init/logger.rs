@@ -13,7 +13,7 @@ use {
 	},
 	tracing::{Dispatch, Subscriber, metadata::LevelFilter, subscriber::DefaultGuard},
 	tracing_subscriber::{EnvFilter, Layer, fmt::format::FmtSpan, prelude::*, registry::LookupSpan},
-	zutil_app_error::AppError,
+	app_error::AppError,
 };
 
 /// Temporary subscriber type

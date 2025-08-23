@@ -12,7 +12,7 @@ pub use renderer::{FrameRender, WgpuRenderer};
 // Imports
 use {
 	tokio::sync::OnceCell,
-	zutil_app_error::{AppError, Context},
+	app_error::{AppError, Context},
 };
 
 /// Wgpu shared

@@ -2,10 +2,10 @@
 
 // Imports
 use {
+	app_error::{AppError, Context},
 	cgmath::{Point2, Vector2},
 	serde::de,
 	std::{borrow::Cow, fmt, str::FromStr},
-	zutil_app_error::{AppError, Context},
 };
 
 /// A rectangle

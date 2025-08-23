@@ -7,7 +7,7 @@ use {
 		sync::atomic::{self, AtomicUsize},
 		thread,
 	},
-	zutil_app_error::{AppError, Context},
+	app_error::{AppError, Context},
 };
 
 /// Creates the tokio runtime

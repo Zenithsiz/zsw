@@ -10,6 +10,7 @@ zsw-egui = { workspace = true }
 zsw-util = { workspace = true }
 zsw-wgpu = { workspace = true }
 
+app-error          = { workspace = true }
 async-channel      = { workspace = true }
 bytemuck           = { features = ["derive"], workspace = true }
 cgmath             = { workspace = true }
@@ -35,7 +36,6 @@ tracing-log        = { workspace = true }
 tracing-subscriber = { features = ["env-filter"], workspace = true }
 wgpu               = { features = ["naga-ir"], workspace = true }
 winit              = { workspace = true }
-zutil-app-error    = { workspace = true }
 zutil-cloned       = { workspace = true }
 
 [features]

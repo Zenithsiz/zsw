@@ -8,7 +8,7 @@ use {
 		num::NonZeroUsize,
 		path::{Path, PathBuf},
 	},
-	zutil_app_error::{AppError, Context},
+	app_error::{AppError, Context},
 };
 
 /// Configuration
