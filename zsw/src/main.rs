@@ -335,7 +335,7 @@ impl WinitApp {
 }
 
 /// Loads the default panels
-async fn load_default_panels(config: &Config, shared: &Shared) -> Result<(), AppError> {
+async fn load_default_panels(config: &Config, shared: &Arc<Shared>) -> Result<(), AppError> {
 	// Load the panels
 	config
 		.default
@@ -364,19 +364,9 @@ async fn load_default_panels(config: &Config, shared: &Shared) -> Result<(), App
 }
 
 /// Loads a default panel
-async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Shared) -> Result<Panel, AppError> {
+async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Shared>) -> Result<Panel, AppError> {
 	let panel_name = PanelName::from(default_panel.panel.clone());
 	let playlist_name = PlaylistName::from(default_panel.playlist.clone());
-
-	// TODO: Cache loaded playlists / panels to avoid duplicate work?
-	let playlist = shared
-		.playlists_loader
-		.load(playlist_name.clone())
-		.await
-		.context("Unable to load playlist")?;
-	tracing::debug!(?playlist, "Loaded default playlist");
-
-	let playlist_player = PlaylistPlayer::new(&playlist).await;
 
 	// Set the shader
 	let panel_shader = match default_panel.shader {
@@ -392,10 +382,33 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Shared
 
 	let panel = shared
 		.panels_loader
-		.load(panel_name.clone(), playlist_player, panel_shader, shared)
+		.load(panel_name.clone(), panel_shader, shared)
 		.await
 		.context("Unable to load panel")?;
-	tracing::debug!(?panel, "Loaded default panel");
+	tracing::debug!(%panel_name, "Loaded default panel");
+
+	// Finally spawn a task to load the playlist player
+	#[cloned(shared)]
+	self::spawn_task(format!("Load playlist for {panel_name}"), async move {
+		let playlist = shared
+			.playlists_loader
+			.load(playlist_name.clone())
+			.await
+			.context("Unable to load playlist")?;
+		tracing::debug!(?playlist, "Loaded default playlist");
+
+		let playlist_player = PlaylistPlayer::new(&playlist).await;
+
+		let mut panels = shared.cur_panels.lock().await;
+		let Some(panel) = panels.get_mut(&panel_name) else {
+			tracing::warn!("Panel {panel_name:?} was removed before playlist {playlist_name:?} could load");
+			return Ok(());
+		};
+
+		panel.images.set_playlist_player(playlist_player);
+
+		Ok(())
+	});
 
 	Ok(panel)
 }

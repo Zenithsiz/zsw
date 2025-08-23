@@ -41,13 +41,7 @@ impl PanelsLoader {
 	/// Loads a panel from a name.
 	///
 	/// If the panel isn't for this window, returns `Ok(None)`
-	pub async fn load(
-		&self,
-		panel_name: PanelName,
-		playlist_player: PlaylistPlayer,
-		shader: PanelShader,
-		shared: &Shared,
-	) -> Result<Panel, AppError> {
+	pub async fn load(&self, panel_name: PanelName, shader: PanelShader, shared: &Shared) -> Result<Panel, AppError> {
 		// Try to read the file
 		let panel_path = self.panel_path(&panel_name);
 		tracing::debug!(%panel_name, ?panel_path, "Loading panel");
@@ -69,7 +63,6 @@ impl PanelsLoader {
 
 		let panel = Panel::new(
 			panel_name.clone(),
-			playlist_player,
 			shared.wgpu,
 			&shared.panels_renderer_layouts,
 			geometries,
@@ -110,7 +103,6 @@ impl Panel {
 	/// Creates a new panel
 	pub fn new(
 		name: PanelName,
-		playlist_player: PlaylistPlayer,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		geometries: Vec<Rect<i32, u32>>,
@@ -125,7 +117,7 @@ impl Panel {
 				.collect::<Result<_, _>>()
 				.context("Unable to build geometries")?,
 			state,
-			images: PanelImages::new(playlist_player, wgpu_shared, renderer_layouts),
+			images: PanelImages::new(wgpu_shared, renderer_layouts),
 			shader,
 		})
 	}
