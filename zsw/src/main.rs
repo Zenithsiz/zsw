@@ -51,7 +51,7 @@ use {
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
 	std::{
-		collections::{BTreeMap, HashMap, btree_map, hash_map},
+		collections::{HashMap, hash_map},
 		fs,
 		sync::Arc,
 	},
@@ -220,7 +220,6 @@ impl WinitApp {
 			panels_loader,
 			playlists_loader,
 			image_requester,
-			cur_panels: Mutex::new(BTreeMap::new()),
 			panels_images: Mutex::new(HashMap::new()),
 		};
 		let shared = Arc::new(shared);
@@ -376,18 +375,12 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		None => PanelShader::FadeOut { strength: 1.5 },
 	};
 
-	let panel = shared
+	_ = shared
 		.panels_loader
 		.load(panel_name.clone(), panel_shader)
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!(%panel_name, "Loaded default panel");
-
-	match shared.cur_panels.lock().await.entry(panel.name.clone()) {
-		btree_map::Entry::Occupied(_) =>
-			tracing::warn!("Found duplicate panel name {:?}, ignoring new panel", panel.name),
-		btree_map::Entry::Vacant(entry) => _ = entry.insert(panel),
-	}
 
 	// Finally spawn a task to load the playlist player
 	#[cloned(shared)]
@@ -463,15 +456,9 @@ async fn renderer(
 		// TODO: Can we capture the frame before stopping and render that as
 		//       an image over and over?
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
-			let cur_panels = shared.cur_panels.lock().await;
 			let panels_images = shared.panels_images.lock().await;
 
 			let mut panels_geometry_uniforms = shared_window.panels_geometry_uniforms.lock().await;
-
-			let panels = cur_panels
-				.values()
-				.map(|panel| (panel, panels_images.get(&panel.name)))
-				.collect::<Vec<_>>();
 
 			panels_renderer
 				.render(
@@ -482,7 +469,8 @@ async fn renderer(
 					&shared.panels_renderer_layouts,
 					&mut panels_geometry_uniforms,
 					&shared_window.monitor_geometry,
-					panels,
+					&shared.panels_loader,
+					&panels_images,
 				)
 				.await
 				.context("Unable to render panels")?;
@@ -522,10 +510,11 @@ async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) 
 	loop {
 		// Update if we're not paused
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
-			let mut cur_panels = shared.cur_panels.lock().await;
 			let mut panels_images = shared.panels_images.lock().await;
 
-			for panel in cur_panels.values_mut() {
+			for panel in shared.panels_loader.panels().await {
+				let mut panel = panel.lock().await;
+
 				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 					continue;
 				};
@@ -567,9 +556,9 @@ async fn egui_painter(
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 
-				let mut cur_panels = shared.cur_panels.lock().await;
+				for panel in shared.panels_loader.panels().await {
+					let mut panel = panel.lock().await;
 
-				for panel in cur_panels.values_mut() {
 					for geometry in &panel.geometries {
 						if geometry
 							.geometry_on(&shared_window.monitor_geometry)
@@ -592,10 +581,11 @@ async fn egui_painter(
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 
-				let mut cur_panels = shared.cur_panels.lock().await;
 				let mut panels_images = shared.panels_images.lock().await;
 
-				for panel in cur_panels.values_mut() {
+				for panel in shared.panels_loader.panels().await {
+					let mut panel = panel.lock().await;
+
 					if !panel.geometries.iter().any(|geometry| {
 						geometry
 							.geometry_on(&shared_window.monitor_geometry)
@@ -625,10 +615,11 @@ async fn egui_painter(
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 
-				let mut cur_panels = shared.cur_panels.lock().await;
 				let mut panels_images = shared.panels_images.lock().await;
 
-				for panel in cur_panels.values_mut() {
+				for panel in shared.panels_loader.panels().await {
+					let mut panel = panel.lock().await;
+
 					if !panel.geometries.iter().any(|geometry| {
 						geometry
 							.geometry_on(&shared_window.monitor_geometry)

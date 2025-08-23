@@ -4,50 +4,86 @@
 use {
 	super::{Panel, PanelName, PanelShader, PanelState, ser},
 	crate::AppError,
-	std::path::PathBuf,
+	futures::lock::Mutex,
+	std::{collections::HashMap, path::PathBuf, sync::Arc},
+	tokio::sync::OnceCell,
 	zsw_util::PathAppendExt,
 	zutil_app_error::Context,
 };
+
+/// Panel storage
+type PanelStorage = Arc<Mutex<Panel>>;
 
 /// Panels loader
 #[derive(Debug)]
 pub struct PanelsLoader {
 	/// Panels directory
 	root: PathBuf,
+
+	/// Loaded panels
+	// TODO: Limit the size of this?
+	panels: Mutex<HashMap<PanelName, Arc<OnceCell<PanelStorage>>>>,
 }
 
 impl PanelsLoader {
 	/// Creates a new panels loader
 	pub fn new(root: PathBuf) -> Self {
-		Self { root }
+		Self {
+			root,
+			panels: Mutex::new(HashMap::new()),
+		}
 	}
 
 	/// Loads a panel from a name.
 	///
 	/// If the panel isn't for this window, returns `Ok(None)`
-	pub async fn load(&self, panel_name: PanelName, shader: PanelShader) -> Result<Panel, AppError> {
-		// Try to read the file
-		let panel_path = self.panel_path(&panel_name);
-		tracing::debug!(%panel_name, ?panel_path, "Loading panel");
-		let panel_toml = tokio::fs::read_to_string(panel_path)
+	pub async fn load(&self, panel_name: PanelName, shader: PanelShader) -> Result<Arc<Mutex<Panel>>, AppError> {
+		let panel_entry = Arc::clone(
+			self.panels
+				.lock()
+				.await
+				.entry(panel_name.clone())
+				.or_insert_with(|| Arc::new(OnceCell::new())),
+		);
+
+		panel_entry
+			.get_or_try_init(async move || {
+				// Try to read the file
+				let panel_path = self.panel_path(&panel_name);
+				tracing::debug!(%panel_name, ?panel_path, "Loading panel");
+				let panel_toml = tokio::fs::read_to_string(panel_path)
+					.await
+					.context("Unable to open file")?;
+
+				// Then parse it
+				let panel = toml::from_str::<ser::Panel>(&panel_toml).context("Unable to parse panel")?;
+
+				// Finally convert it
+				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
+				let state = PanelState {
+					paused:     false,
+					progress:   0,
+					duration:   panel.state.duration,
+					fade_point: panel.state.fade_point,
+				};
+
+				let panel = Panel::new(panel_name.clone(), geometries, state, shader);
+
+				Ok(Arc::new(Mutex::new(panel)))
+			})
 			.await
-			.context("Unable to open file")?;
+			.map(Arc::clone)
+	}
 
-		// Then parse it
-		let panel = toml::from_str::<ser::Panel>(&panel_toml).context("Unable to parse panel")?;
-
-		// Finally convert it
-		let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
-		let state = PanelState {
-			paused:     false,
-			progress:   0,
-			duration:   panel.state.duration,
-			fade_point: panel.state.fade_point,
-		};
-
-		let panel = Panel::new(panel_name.clone(), geometries, state, shader);
-
-		Ok(panel)
+	/// Returns all panels
+	pub async fn panels(&self) -> Vec<PanelStorage> {
+		self.panels
+			.lock()
+			.await
+			.values()
+			.filter_map(|panel| panel.get())
+			.map(Arc::clone)
+			.collect()
 	}
 
 	/// Returns a panel's path

@@ -7,15 +7,12 @@ use {
 		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
-		panel::{Panel, PanelImages, PanelName, PanelsGeometryUniforms, PanelsLoader, PanelsRendererLayouts},
+		panel::{PanelImages, PanelName, PanelsGeometryUniforms, PanelsLoader, PanelsRendererLayouts},
 		playlist::PlaylistsLoader,
 	},
 	core::sync::atomic::AtomicBool,
 	crossbeam::atomic::AtomicCell,
-	std::{
-		collections::{BTreeMap, HashMap},
-		sync::Arc,
-	},
+	std::{collections::HashMap, sync::Arc},
 	tokio::sync::Mutex,
 	winit::dpi::PhysicalPosition,
 	zsw_util::Rect,
@@ -42,7 +39,6 @@ pub struct Shared {
 	pub playlists_loader: PlaylistsLoader,
 	pub image_requester:  ImageRequester,
 
-	pub cur_panels:    Mutex<BTreeMap<PanelName, Panel>>,
 	pub panels_images: Mutex<HashMap<PanelName, PanelImages>>,
 }
 

@@ -10,7 +10,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{Panel, PanelImage, PanelImages, PanelName},
+	super::{Panel, PanelImage, PanelImages, PanelName, PanelsLoader},
 	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	cgmath::Vector2,
 	core::{
@@ -121,7 +121,8 @@ impl PanelsRenderer {
 		layouts: &PanelsRendererLayouts,
 		geometry_uniforms: &mut PanelsGeometryUniforms,
 		window_geometry: &Rect<i32, u32>,
-		panels: impl IntoIterator<Item = (&'_ Panel, Option<&PanelImages>)>,
+		panels_loader: &PanelsLoader,
+		panels_images: &HashMap<PanelName, PanelImages>,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match MSAA_SAMPLES {
@@ -167,9 +168,13 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
-		for (panel, panel_images) in panels {
+		for panel in panels_loader.panels().await {
+			let panel = panel.lock().await;
+
 			// If the panel images are missing or empty, skip this panel
-			let Some(panel_images) = panel_images else { continue };
+			let Some(panel_images) = panels_images.get(&panel.name) else {
+				continue;
+			};
 			if panel_images.is_empty() {
 				continue;
 			}
@@ -210,7 +215,7 @@ impl PanelsRenderer {
 				Self::write_uniforms(
 					wgpu_shared,
 					frame.surface_size,
-					panel,
+					&panel,
 					panel_images,
 					window_geometry,
 					geometry,
