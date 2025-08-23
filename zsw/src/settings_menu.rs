@@ -77,15 +77,14 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWin
 #[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
 	let mut cur_panels = shared.cur_panels.lock().block_on();
+	let mut panels_images = shared.panels_images.lock().block_on();
 
 	if cur_panels.is_empty() {
 		ui.label("None loaded");
 		return;
 	}
 
-	for shared_panel in cur_panels.values_mut() {
-		let panel = &mut shared_panel.panel;
-
+	for panel in cur_panels.values_mut() {
 		let mut name = egui::WidgetText::from(panel.name.to_string());
 		if panel
 			.geometries
@@ -122,7 +121,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 				// Then clamp to the current max
 				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
-				let cur_max = match &shared_panel.images {
+				let cur_max = match panels_images.get(&panel.name) {
 					Some(panel_images) => match (panel_images.cur().is_loaded(), panel_images.next().is_loaded()) {
 						(false, false) => 0,
 						(true, false) => panel.state.fade_point,
@@ -150,7 +149,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.horizontal(|ui| {
-				let Some(panel_images) = &mut shared_panel.images else {
+				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 					return;
 				};
 
@@ -168,7 +167,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Images", |ui| {
-				let Some(panel_images) = &mut shared_panel.images else {
+				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 					ui.weak("Not loaded");
 					return;
 				};
@@ -178,7 +177,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let Some(panel_images) = &mut shared_panel.images else {
+				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 					ui.weak("Not loaded");
 					return;
 				};

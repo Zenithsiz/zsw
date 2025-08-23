@@ -41,7 +41,7 @@ use {
 		},
 		playlist::{PlaylistName, PlaylistPlayer, PlaylistsLoader},
 		settings_menu::SettingsMenu,
-		shared::{Shared, SharedPanel, SharedWindow},
+		shared::{Shared, SharedWindow},
 	},
 	args::Args,
 	cgmath::Point2,
@@ -51,7 +51,7 @@ use {
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
 	std::{
-		collections::{BTreeMap, HashMap, btree_map},
+		collections::{BTreeMap, HashMap, btree_map, hash_map},
 		fs,
 		sync::Arc,
 	},
@@ -221,6 +221,7 @@ impl WinitApp {
 			playlists_loader,
 			image_requester,
 			cur_panels: Mutex::new(BTreeMap::new()),
+			panels_images: Mutex::new(HashMap::new()),
 		};
 		let shared = Arc::new(shared);
 
@@ -385,7 +386,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 	match shared.cur_panels.lock().await.entry(panel.name.clone()) {
 		btree_map::Entry::Occupied(_) =>
 			tracing::warn!("Found duplicate panel name {:?}, ignoring new panel", panel.name),
-		btree_map::Entry::Vacant(entry) => _ = entry.insert(SharedPanel { panel, images: None }),
+		btree_map::Entry::Vacant(entry) => _ = entry.insert(panel),
 	}
 
 	// Finally spawn a task to load the playlist player
@@ -400,17 +401,12 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 
 		let playlist_player = PlaylistPlayer::new(&playlist).await;
 
-		let mut panels = shared.cur_panels.lock().await;
-		let Some(panel) = panels.get_mut(&panel_name) else {
-			tracing::warn!("Panel {panel_name:?} was removed before playlist {playlist_name:?} could load");
-			return Ok(());
-		};
-
-		panel.images = Some(PanelImages::new(
-			playlist_player,
-			shared.wgpu,
-			&shared.panels_renderer_layouts,
-		));
+		let panel_images = PanelImages::new(playlist_player, shared.wgpu, &shared.panels_renderer_layouts);
+		match shared.panels_images.lock().await.entry(panel_name.clone()) {
+			hash_map::Entry::Occupied(_) =>
+				tracing::warn!("Panel {panel_name:?} changed playlist before playlist {playlist_name:?} could load"),
+			hash_map::Entry::Vacant(entry) => _ = entry.insert(panel_images),
+		}
 		tracing::debug!(?panel_name, "Loaded default panel images");
 
 		Ok(())
@@ -468,7 +464,15 @@ async fn renderer(
 		//       an image over and over?
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
 			let cur_panels = shared.cur_panels.lock().await;
+			let panels_images = shared.panels_images.lock().await;
+
 			let mut panels_geometry_uniforms = shared_window.panels_geometry_uniforms.lock().await;
+
+			let panels = cur_panels
+				.values()
+				.map(|panel| (panel, panels_images.get(&panel.name)))
+				.collect::<Vec<_>>();
+
 			panels_renderer
 				.render(
 					&mut frame,
@@ -478,7 +482,7 @@ async fn renderer(
 					&shared.panels_renderer_layouts,
 					&mut panels_geometry_uniforms,
 					&shared_window.monitor_geometry,
-					cur_panels.values(),
+					panels,
 				)
 				.await
 				.context("Unable to render panels")?;
@@ -519,13 +523,15 @@ async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) 
 		// Update if we're not paused
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
 			let mut cur_panels = shared.cur_panels.lock().await;
+			let mut panels_images = shared.panels_images.lock().await;
 
 			for panel in cur_panels.values_mut() {
-				let Some(images) = &mut panel.images else { continue };
+				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
+					continue;
+				};
 				panel
-					.panel
 					.update(
-						images,
+						panel_images,
 						shared.wgpu,
 						&shared.panels_renderer_layouts,
 						&shared.image_requester,
@@ -560,14 +566,16 @@ async fn egui_painter(
 			{
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+
 				let mut cur_panels = shared.cur_panels.lock().await;
-				for shared_panel in cur_panels.values_mut() {
-					for geometry in &shared_panel.panel.geometries {
+
+				for panel in cur_panels.values_mut() {
+					for geometry in &panel.geometries {
 						if geometry
 							.geometry_on(&shared_window.monitor_geometry)
 							.contains(cursor_pos)
 						{
-							shared_panel.panel.state.paused ^= true;
+							panel.state.paused ^= true;
 							break;
 						}
 					}
@@ -583,9 +591,12 @@ async fn egui_painter(
 				}) {
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+
 				let mut cur_panels = shared.cur_panels.lock().await;
-				for shared_panel in cur_panels.values_mut() {
-					if !shared_panel.panel.geometries.iter().any(|geometry| {
+				let mut panels_images = shared.panels_images.lock().await;
+
+				for panel in cur_panels.values_mut() {
+					if !panel.geometries.iter().any(|geometry| {
 						geometry
 							.geometry_on(&shared_window.monitor_geometry)
 							.contains(cursor_pos)
@@ -593,13 +604,12 @@ async fn egui_painter(
 						continue;
 					}
 
-					let Some(images) = &mut shared_panel.images else {
+					let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 						continue;
 					};
-					shared_panel
-						.panel
+					panel
 						.skip(
-							images,
+							panel_images,
 							shared.wgpu,
 							&shared.panels_renderer_layouts,
 							&shared.image_requester,
@@ -614,9 +624,12 @@ async fn egui_painter(
 				let delta = ctx.input(|input| input.smooth_scroll_delta.y);
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+
 				let mut cur_panels = shared.cur_panels.lock().await;
-				for shared_panel in cur_panels.values_mut() {
-					if !shared_panel.panel.geometries.iter().any(|geometry| {
+				let mut panels_images = shared.panels_images.lock().await;
+
+				for panel in cur_panels.values_mut() {
+					if !panel.geometries.iter().any(|geometry| {
 						geometry
 							.geometry_on(&shared_window.monitor_geometry)
 							.contains(cursor_pos)
@@ -625,15 +638,15 @@ async fn egui_painter(
 					}
 
 					// TODO: Make this "speed" configurable
-					let speed = (shared_panel.panel.state.duration as f32) / 1000.0;
+					let speed = (panel.state.duration as f32) / 1000.0;
 					let frames = (-delta * speed) as i64;
-					let Some(images) = &mut shared_panel.images else {
+
+					let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 						continue;
 					};
-					shared_panel
-						.panel
+					panel
 						.step(
-							images,
+							panel_images,
 							shared.wgpu,
 							&shared.panels_renderer_layouts,
 							&shared.image_requester,

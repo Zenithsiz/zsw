@@ -176,3 +176,6 @@ clippy.wildcard_imports            = "allow"
 # Despite it not being stable, we don't want to just display the string, and
 # instead want to display *any* debug representation
 clippy.unnecessary_debug_formatting = "allow"
+
+# TODO: Are they actually confusing?
+clippy.similar_names = "allow"

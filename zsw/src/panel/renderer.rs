@@ -11,7 +11,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 use {
 	self::uniform::PanelImageUniforms,
 	super::{Panel, PanelImage, PanelImages, PanelName},
-	crate::{config_dirs::ConfigDirs, panel::PanelGeometry, shared::SharedPanel},
+	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	cgmath::Vector2,
 	core::{
 		future::Future,
@@ -121,7 +121,7 @@ impl PanelsRenderer {
 		layouts: &PanelsRendererLayouts,
 		geometry_uniforms: &mut PanelsGeometryUniforms,
 		window_geometry: &Rect<i32, u32>,
-		panels: impl IntoIterator<Item = &'_ SharedPanel>,
+		panels: impl IntoIterator<Item = (&'_ Panel, Option<&PanelImages>)>,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match MSAA_SAMPLES {
@@ -167,19 +167,14 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
-		for shared_panel in panels {
+		for (panel, panel_images) in panels {
 			// If the panel images are missing or empty, skip this panel
-			let Some(panel_images) = &shared_panel.images else {
-				continue;
-			};
+			let Some(panel_images) = panel_images else { continue };
 			if panel_images.is_empty() {
 				continue;
 			}
 
-			let render_pipeline = match self
-				.render_pipelines
-				.entry(mem::discriminant(&shared_panel.panel.shader))
-			{
+			let render_pipeline = match self.render_pipelines.entry(mem::discriminant(&panel.shader)) {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),
 				hash_map::Entry::Vacant(entry) => {
 					let render_pipeline = self::create_render_pipeline(
@@ -188,7 +183,7 @@ impl PanelsRenderer {
 						wgpu_shared,
 						&layouts.uniforms_bind_group_layout,
 						&layouts.image_bind_group_layout,
-						shared_panel.panel.shader,
+						panel.shader,
 					)
 					.await
 					.context("Unable to create render pipeline")?;
@@ -203,20 +198,19 @@ impl PanelsRenderer {
 			// Bind the panel-shared image bind group
 			render_pass.set_bind_group(1, panel_images.image_bind_group(), &[]);
 
-			for geometry in &shared_panel.panel.geometries {
+			for geometry in &panel.geometries {
 				// If this geometry is outside our window, we can safely ignore it
 				if window_geometry.intersection(geometry.geometry).is_none() {
 					continue;
 				}
 
-				let geometry_uniforms =
-					geometry_uniforms.get(&shared_panel.panel.name, &geometry.geometry, wgpu_shared, layouts);
+				let geometry_uniforms = geometry_uniforms.get(&panel.name, &geometry.geometry, wgpu_shared, layouts);
 
 				// Write the uniforms
 				Self::write_uniforms(
 					wgpu_shared,
 					frame.surface_size,
-					&shared_panel.panel,
+					panel,
 					panel_images,
 					window_geometry,
 					geometry,

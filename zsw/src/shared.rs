@@ -12,7 +12,10 @@ use {
 	},
 	core::sync::atomic::AtomicBool,
 	crossbeam::atomic::AtomicCell,
-	std::{collections::BTreeMap, sync::Arc},
+	std::{
+		collections::{BTreeMap, HashMap},
+		sync::Arc,
+	},
 	tokio::sync::Mutex,
 	winit::dpi::PhysicalPosition,
 	zsw_util::Rect,
@@ -39,17 +42,8 @@ pub struct Shared {
 	pub playlists_loader: PlaylistsLoader,
 	pub image_requester:  ImageRequester,
 
-	pub cur_panels: Mutex<BTreeMap<PanelName, SharedPanel>>,
-}
-
-/// Shared panel state
-#[derive(Debug)]
-pub struct SharedPanel {
-	/// Panel
-	pub panel: Panel,
-
-	/// Images
-	pub images: Option<PanelImages>,
+	pub cur_panels:    Mutex<BTreeMap<PanelName, Panel>>,
+	pub panels_images: Mutex<HashMap<PanelName, PanelImages>>,
 }
 
 /// Shared window state
