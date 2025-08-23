@@ -76,7 +76,7 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWin
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
 #[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
-	let panels = shared.panels_loader.panels().block_on();
+	let panels = shared.panels.get_all().block_on();
 	let mut panels_images = shared.panels_images.lock().block_on();
 
 	if panels.is_empty() {

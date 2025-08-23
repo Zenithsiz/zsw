@@ -10,7 +10,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{Panel, PanelImage, PanelImages, PanelName, PanelsLoader},
+	super::{Panel, PanelImage, PanelImages, PanelName, Panels},
 	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	cgmath::Vector2,
 	core::{
@@ -121,7 +121,7 @@ impl PanelsRenderer {
 		layouts: &PanelsRendererLayouts,
 		geometry_uniforms: &mut PanelsGeometryUniforms,
 		window_geometry: &Rect<i32, u32>,
-		panels_loader: &PanelsLoader,
+		panels: &Panels,
 		panels_images: &HashMap<PanelName, PanelImages>,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
@@ -168,7 +168,7 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
-		for panel in panels_loader.panels().await {
+		for panel in panels.get_all().await {
 			let panel = panel.lock().await;
 
 			// If the panel images are missing or empty, skip this panel

@@ -1,4 +1,4 @@
-//! Panels loader
+//! Panels
 
 // Imports
 use {
@@ -14,9 +14,9 @@ use {
 /// Panel storage
 type PanelStorage = Arc<Mutex<Panel>>;
 
-/// Panels loader
+/// Panels
 #[derive(Debug)]
-pub struct PanelsLoader {
+pub struct Panels {
 	/// Panels directory
 	root: PathBuf,
 
@@ -25,8 +25,8 @@ pub struct PanelsLoader {
 	panels: Mutex<HashMap<PanelName, Arc<OnceCell<PanelStorage>>>>,
 }
 
-impl PanelsLoader {
-	/// Creates a new panels loader
+impl Panels {
+	/// Creates a new panels container
 	pub fn new(root: PathBuf) -> Self {
 		Self {
 			root,
@@ -49,7 +49,7 @@ impl PanelsLoader {
 		panel_entry
 			.get_or_try_init(async move || {
 				// Try to read the file
-				let panel_path = self.panel_path(&panel_name);
+				let panel_path = self.path_of(&panel_name);
 				tracing::debug!(%panel_name, ?panel_path, "Loading panel");
 				let panel_toml = tokio::fs::read_to_string(panel_path)
 					.await
@@ -76,7 +76,7 @@ impl PanelsLoader {
 	}
 
 	/// Returns all panels
-	pub async fn panels(&self) -> Vec<PanelStorage> {
+	pub async fn get_all(&self) -> Vec<PanelStorage> {
 		self.panels
 			.lock()
 			.await
@@ -87,7 +87,7 @@ impl PanelsLoader {
 	}
 
 	/// Returns a panel's path
-	pub fn panel_path(&self, name: &PanelName) -> PathBuf {
+	pub fn path_of(&self, name: &PanelName) -> PathBuf {
 		self.root.join(&*name.0).with_appended(".toml")
 	}
 }

@@ -34,8 +34,8 @@ use {
 			PanelImages,
 			PanelName,
 			PanelShader,
+			Panels,
 			PanelsGeometryUniforms,
-			PanelsLoader,
 			PanelsRenderer,
 			PanelsRendererLayouts,
 		},
@@ -193,7 +193,7 @@ impl WinitApp {
 		let panels_renderer_layouts = PanelsRendererLayouts::new(wgpu_shared);
 
 		let playlists_loader = PlaylistsLoader::new(config_dirs.playlists().to_path_buf());
-		let panels_loader = PanelsLoader::new(config_dirs.panels().to_path_buf());
+		let panels = Panels::new(config_dirs.panels().to_path_buf());
 
 		let upscale_cache_dir = config
 			.upscale_cache_dir
@@ -217,7 +217,7 @@ impl WinitApp {
 			config_dirs: Arc::clone(&config_dirs),
 			wgpu: wgpu_shared,
 			panels_renderer_layouts,
-			panels_loader,
+			panels,
 			playlists_loader,
 			image_requester,
 			panels_images: Mutex::new(HashMap::new()),
@@ -376,7 +376,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 	};
 
 	_ = shared
-		.panels_loader
+		.panels
 		.load(panel_name.clone(), panel_shader)
 		.await
 		.context("Unable to load panel")?;
@@ -469,7 +469,7 @@ async fn renderer(
 					&shared.panels_renderer_layouts,
 					&mut panels_geometry_uniforms,
 					&shared_window.monitor_geometry,
-					&shared.panels_loader,
+					&shared.panels,
 					&panels_images,
 				)
 				.await
@@ -512,7 +512,7 @@ async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) 
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
 			let mut panels_images = shared.panels_images.lock().await;
 
-			for panel in shared.panels_loader.panels().await {
+			for panel in shared.panels.get_all().await {
 				let mut panel = panel.lock().await;
 
 				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
@@ -556,7 +556,7 @@ async fn egui_painter(
 				let cursor_pos = shared.cursor_pos.load();
 				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 
-				for panel in shared.panels_loader.panels().await {
+				for panel in shared.panels.get_all().await {
 					let mut panel = panel.lock().await;
 
 					for geometry in &panel.geometries {
@@ -583,7 +583,7 @@ async fn egui_painter(
 
 				let mut panels_images = shared.panels_images.lock().await;
 
-				for panel in shared.panels_loader.panels().await {
+				for panel in shared.panels.get_all().await {
 					let mut panel = panel.lock().await;
 
 					if !panel.geometries.iter().any(|geometry| {
@@ -617,7 +617,7 @@ async fn egui_painter(
 
 				let mut panels_images = shared.panels_images.lock().await;
 
-				for panel in shared.panels_loader.panels().await {
+				for panel in shared.panels.get_all().await {
 					let mut panel = panel.lock().await;
 
 					if !panel.geometries.iter().any(|geometry| {

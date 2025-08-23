@@ -7,7 +7,7 @@ use {
 		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
-		panel::{PanelImages, PanelName, PanelsGeometryUniforms, PanelsLoader, PanelsRendererLayouts},
+		panel::{PanelImages, PanelName, Panels, PanelsGeometryUniforms, PanelsRendererLayouts},
 		playlist::PlaylistsLoader,
 	},
 	core::sync::atomic::AtomicBool,
@@ -35,7 +35,7 @@ pub struct Shared {
 	pub wgpu:                    &'static WgpuShared,
 	pub panels_renderer_layouts: PanelsRendererLayouts,
 
-	pub panels_loader:    PanelsLoader,
+	pub panels:           Panels,
 	pub playlists_loader: PlaylistsLoader,
 	pub image_requester:  ImageRequester,
 

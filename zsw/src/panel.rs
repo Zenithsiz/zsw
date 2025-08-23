@@ -3,7 +3,7 @@
 // Modules
 mod geometry;
 mod images;
-mod loader;
+mod panels;
 mod renderer;
 mod ser;
 mod state;
@@ -12,7 +12,7 @@ mod state;
 pub use self::{
 	geometry::PanelGeometry,
 	images::{PanelImage, PanelImages},
-	loader::PanelsLoader,
+	panels::Panels,
 	renderer::{PanelShader, PanelsGeometryUniforms, PanelsRenderer, PanelsRendererLayouts},
 	state::PanelState,
 };
