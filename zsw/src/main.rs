@@ -32,6 +32,7 @@ use {
 		config_dirs::ConfigDirs,
 		panel::{
 			Panel,
+			PanelImages,
 			PanelName,
 			PanelShader,
 			PanelsGeometryUniforms,
@@ -382,7 +383,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 
 	let panel = shared
 		.panels_loader
-		.load(panel_name.clone(), panel_shader, shared)
+		.load(panel_name.clone(), panel_shader)
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!(%panel_name, "Loaded default panel");
@@ -395,7 +396,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 			.load(playlist_name.clone())
 			.await
 			.context("Unable to load playlist")?;
-		tracing::debug!(?playlist, "Loaded default playlist");
+		tracing::debug!(?playlist_name, "Loaded default playlist");
 
 		let playlist_player = PlaylistPlayer::new(&playlist).await;
 
@@ -405,7 +406,12 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 			return Ok(());
 		};
 
-		panel.images.set_playlist_player(playlist_player);
+		panel.images = Some(PanelImages::new(
+			playlist_player,
+			shared.wgpu,
+			&shared.panels_renderer_layouts,
+		));
+		tracing::debug!(?panel_name, "Loaded default panel images");
 
 		Ok(())
 	});

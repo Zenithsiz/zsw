@@ -27,7 +27,7 @@ pub struct PanelImages {
 	next: PanelImage,
 
 	/// Playlist player
-	playlist_player: Option<PlaylistPlayer>,
+	playlist_player: PlaylistPlayer,
 
 	/// Texture sampler
 	texture_sampler: wgpu::Sampler,
@@ -42,7 +42,11 @@ pub struct PanelImages {
 impl PanelImages {
 	/// Creates a new panel
 	#[must_use]
-	pub fn new(wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Self {
+	pub fn new(
+		playlist_player: PlaylistPlayer,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+	) -> Self {
 		// Create the textures
 		let image_prev = PanelImage::empty();
 		let image_cur = PanelImage::empty();
@@ -61,7 +65,7 @@ impl PanelImages {
 			prev: image_prev,
 			cur: image_cur,
 			next: image_next,
-			playlist_player: None,
+			playlist_player,
 			texture_sampler,
 			image_bind_group,
 			scheduled_image_receiver: None,
@@ -74,27 +78,19 @@ impl PanelImages {
 	}
 
 	/// Returns the playlist player for these images
-	pub fn playlist_player(&self) -> Option<&PlaylistPlayer> {
-		self.playlist_player.as_ref()
-	}
-
-	/// Adds a new playlist player to this panel
-	pub fn set_playlist_player(&mut self, playlist_player: PlaylistPlayer) {
-		// TODO: Should we discard any currently scheduled image from
-		//       the previous player, to enforce consistency?
-		self.playlist_player = Some(playlist_player);
+	pub fn playlist_player(&self) -> &PlaylistPlayer {
+		&self.playlist_player
 	}
 
 	/// Steps to the previous image, if any
 	///
-	/// Returns `Err(())` if no playlist player exists, or if
-	/// this would erase the current image.
+	/// Returns `Err(())` if this would erase the current image.
 	pub async fn step_prev(
 		&mut self,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 	) -> Result<(), ()> {
-		self.playlist_player.as_mut().ok_or(())?.step_prev()?;
+		self.playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = PanelImage::empty();
@@ -104,8 +100,7 @@ impl PanelImages {
 
 	/// Steps to the next image.
 	///
-	/// Returns `Err(())` if no playlist player exists, or if
-	/// this would erase the current image.
+	/// Returns `Err(())` if this would erase the current image.
 	pub async fn step_next(
 		&mut self,
 		wgpu_shared: &WgpuShared,
@@ -115,7 +110,7 @@ impl PanelImages {
 			return Err(());
 		}
 
-		self.playlist_player.as_mut().ok_or(())?.step_next();
+		self.playlist_player.step_next();
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = PanelImage::empty();
@@ -134,11 +129,6 @@ impl PanelImages {
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
 	) {
-		// If we don't have a playlist player, there's nothing we can do
-		let Some(playlist_player) = &mut self.playlist_player else {
-			return;
-		};
-
 		// Get the image receiver, or schedule it.
 		let Some(image_receiver) = self.scheduled_image_receiver.as_mut() else {
 			_ = self.schedule_load_image(wgpu_shared, image_requester, geometries).await;
@@ -161,7 +151,7 @@ impl PanelImages {
 			// Else, log an error, remove the image and re-schedule it
 			Err(err) => {
 				tracing::warn!(image_path = ?response.request.path, ?err, "Unable to load image, removing it from player");
-				playlist_player.remove(&response.request.path);
+				self.playlist_player.remove(&response.request.path);
 
 				_ = self.schedule_load_image(wgpu_shared, image_requester, geometries).await;
 				return;
@@ -171,13 +161,13 @@ impl PanelImages {
 		// Get which slot to load the image into
 		let slot = {
 			match response.request.playlist_pos {
-				pos if Some(pos) == playlist_player.prev_pos() => Some(Slot::Prev),
-				pos if pos == playlist_player.cur_pos() => Some(Slot::Cur),
-				pos if pos == playlist_player.next_pos() => Some(Slot::Next),
+				pos if Some(pos) == self.playlist_player.prev_pos() => Some(Slot::Prev),
+				pos if pos == self.playlist_player.cur_pos() => Some(Slot::Cur),
+				pos if pos == self.playlist_player.next_pos() => Some(Slot::Next),
 				pos => {
 					tracing::warn!(
 						pos,
-						playlist_pos = playlist_player.cur_pos(),
+						playlist_pos = self.playlist_player.cur_pos(),
 						"Discarding loaded image due to position being too far",
 					);
 					None
@@ -207,11 +197,6 @@ impl PanelImages {
 		image_requester: &ImageRequester,
 		geometries: &[PanelGeometry],
 	) -> Option<usize> {
-		// If we don't have a playlist player, there's nothing we can do
-		let Some(playlist_player) = &mut self.playlist_player else {
-			return None;
-		};
-
 		// If we already have an image scheduled, don't schedule another
 		if self.scheduled_image_receiver.is_some() {
 			return None;
@@ -219,9 +204,9 @@ impl PanelImages {
 
 		// Get the playlist position and path to load
 		let (playlist_pos, image_path) = match () {
-			() if !self.cur.is_loaded() => (playlist_player.cur_pos(), playlist_player.cur()?),
-			() if !self.next.is_loaded() => (playlist_player.next_pos(), playlist_player.next()?),
-			() if !self.prev.is_loaded() => (playlist_player.prev_pos()?, playlist_player.prev()?),
+			() if !self.cur.is_loaded() => (self.playlist_player.cur_pos(), self.playlist_player.cur()?),
+			() if !self.next.is_loaded() => (self.playlist_player.next_pos(), self.playlist_player.next()?),
+			() if !self.prev.is_loaded() => (self.playlist_player.prev_pos()?, self.playlist_player.prev()?),
 			() => return None,
 		};
 

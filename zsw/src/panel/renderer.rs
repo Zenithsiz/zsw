@@ -10,7 +10,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{Panel, PanelImage, PanelName},
+	super::{Panel, PanelImage, PanelImages, PanelName},
 	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	cgmath::Vector2,
 	core::{
@@ -168,6 +168,8 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		for panel in panels {
+			let Some(panel_images) = &panel.images else { continue };
+
 			let render_pipeline = match self.render_pipelines.entry(mem::discriminant(&panel.shader)) {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),
 				hash_map::Entry::Vacant(entry) => {
@@ -190,7 +192,7 @@ impl PanelsRenderer {
 			render_pass.set_pipeline(render_pipeline);
 
 			// Bind the panel-shared image bind group
-			render_pass.set_bind_group(1, panel.images.image_bind_group(), &[]);
+			render_pass.set_bind_group(1, panel_images.image_bind_group(), &[]);
 
 			for geometry in &panel.geometries {
 				// If this geometry is outside our window, we can safely ignore it
@@ -205,6 +207,7 @@ impl PanelsRenderer {
 					wgpu_shared,
 					frame.surface_size,
 					panel,
+					panel_images,
 					window_geometry,
 					geometry,
 					&geometry_uniforms.buffer,
@@ -224,6 +227,7 @@ impl PanelsRenderer {
 		wgpu_shared: &WgpuShared,
 		surface_size: PhysicalSize<u32>,
 		panel: &Panel,
+		panel_images: &PanelImages,
 		window_geometry: &Rect<i32, u32>,
 		geometry: &PanelGeometry,
 		geometry_uniforms: &wgpu::Buffer,
@@ -242,9 +246,9 @@ impl PanelsRenderer {
 			PanelImageUniforms::new(ratio, swap_dir)
 		};
 
-		let prev = image_uniforms(panel.images.prev());
-		let cur = image_uniforms(panel.images.cur());
-		let next = image_uniforms(panel.images.next());
+		let prev = image_uniforms(panel_images.prev());
+		let cur = image_uniforms(panel_images.cur());
+		let next = image_uniforms(panel_images.next());
 
 		// Writes uniforms `uniforms`
 		let write_uniforms = |uniforms_bytes| wgpu_shared.queue.write_buffer(geometry_uniforms, 0, uniforms_bytes);

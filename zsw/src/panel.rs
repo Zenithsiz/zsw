@@ -17,7 +17,7 @@ pub use self::{
 
 // Imports
 use {
-	crate::{AppError, image_loader::ImageRequester, playlist::PlaylistPlayer, shared::Shared},
+	crate::{AppError, image_loader::ImageRequester, playlist::PlaylistPlayer},
 	core::{borrow::Borrow, fmt},
 	std::{path::PathBuf, sync::Arc},
 	zsw_util::{PathAppendExt, Rect},
@@ -41,7 +41,7 @@ impl PanelsLoader {
 	/// Loads a panel from a name.
 	///
 	/// If the panel isn't for this window, returns `Ok(None)`
-	pub async fn load(&self, panel_name: PanelName, shader: PanelShader, shared: &Shared) -> Result<Panel, AppError> {
+	pub async fn load(&self, panel_name: PanelName, shader: PanelShader) -> Result<Panel, AppError> {
 		// Try to read the file
 		let panel_path = self.panel_path(&panel_name);
 		tracing::debug!(%panel_name, ?panel_path, "Loading panel");
@@ -61,15 +61,7 @@ impl PanelsLoader {
 			fade_point: panel.state.fade_point,
 		};
 
-		let panel = Panel::new(
-			panel_name.clone(),
-			shared.wgpu,
-			&shared.panels_renderer_layouts,
-			geometries,
-			state,
-			shader,
-		)
-		.context("Unable to create panel")?;
+		let panel = Panel::new(panel_name.clone(), geometries, state, shader);
 
 		Ok(panel)
 	}
@@ -93,7 +85,7 @@ pub struct Panel {
 	pub state: PanelState,
 
 	/// Images
-	pub images: PanelImages,
+	pub images: Option<PanelImages>,
 
 	/// Shader
 	pub shader: PanelShader,
@@ -101,55 +93,50 @@ pub struct Panel {
 
 impl Panel {
 	/// Creates a new panel
-	pub fn new(
-		name: PanelName,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-		geometries: Vec<Rect<i32, u32>>,
-		state: PanelState,
-		shader: PanelShader,
-	) -> Result<Self, AppError> {
-		Ok(Self {
+	pub fn new(name: PanelName, geometries: Vec<Rect<i32, u32>>, state: PanelState, shader: PanelShader) -> Self {
+		Self {
 			name,
-			geometries: geometries
-				.into_iter()
-				.map(PanelGeometry::new)
-				.collect::<Result<_, _>>()
-				.context("Unable to build geometries")?,
+			geometries: geometries.into_iter().map(PanelGeometry::new).collect(),
 			state,
-			images: PanelImages::new(wgpu_shared, renderer_layouts),
+			images: None,
 			shader,
-		})
-	}
-
-	/// Returns the max duration for the current image
-	fn max_duration(&self) -> u64 {
-		match (self.images.cur().is_loaded(), self.images.next().is_loaded()) {
-			(false, false) => 0,
-			(true, false) => self.state.fade_point,
-			(_, true) => self.state.duration,
 		}
 	}
 
-	/// Skips to the next image
+	/// Returns the max duration for the current image
+	fn max_duration(images: &PanelImages, state: &PanelState) -> u64 {
+		match (images.cur().is_loaded(), images.next().is_loaded()) {
+			(false, false) => 0,
+			(true, false) => state.fade_point,
+			(_, true) => state.duration,
+		}
+	}
+
+	/// Skips to the next image.
+	///
+	/// If the images aren't loaded, does nothing
 	pub async fn skip(
 		&mut self,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
-		match self.images.step_next(wgpu_shared, renderer_layouts).await {
+		let Some(images) = &mut self.images else { return };
+
+		match images.step_next(wgpu_shared, renderer_layouts).await {
 			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_point),
-			Err(()) => self.state.progress = self.max_duration(),
+			Err(()) => self.state.progress = Self::max_duration(images, &self.state),
 		}
 
 		// Then load any missing images
-		self.images
+		images
 			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
 			.await;
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
+	///
+	/// If the images aren't loaded, does nothing
 	pub async fn step(
 		&mut self,
 		wgpu_shared: &WgpuShared,
@@ -157,40 +144,46 @@ impl Panel {
 		image_requester: &ImageRequester,
 		frames: i64,
 	) {
+		let Some(images) = &mut self.images else { return };
+
 		// Update the progress, potentially rolling over to the previous/next image
 		self.state.progress = match self.state.progress.checked_add_signed(frames) {
 			Some(next_progress) => match next_progress >= self.state.duration {
-				true => match self.images.step_next(wgpu_shared, renderer_layouts).await {
+				true => match images.step_next(wgpu_shared, renderer_layouts).await {
 					Ok(()) => next_progress.saturating_sub(self.state.duration),
-					Err(()) => self.max_duration(),
+					Err(()) => Self::max_duration(images, &self.state),
 				},
 				false => self
 					.state
 					.progress
 					.saturating_add_signed(frames)
-					.clamp(0, self.max_duration()),
+					.clamp(0, Self::max_duration(images, &self.state)),
 			},
-			None => match self.images.step_prev(wgpu_shared, renderer_layouts).await {
+			None => match images.step_prev(wgpu_shared, renderer_layouts).await {
 				Ok(()) => self.state.duration.saturating_add_signed(frames),
 				Err(()) => 0,
 			},
 		};
 
 		// Then load any missing images
-		self.images
+		images
 			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
 			.await;
 	}
 
 	/// Updates this panel's state
+	///
+	/// If the images aren't loaded, does nothing
 	pub async fn update(
 		&mut self,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
+		let Some(images) = &mut self.images else { return };
+
 		// Then load any missing images
-		self.images
+		images
 			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
 			.await;
 

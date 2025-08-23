@@ -74,6 +74,7 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWin
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
+#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
 	let mut cur_panels = shared.cur_panels.lock().block_on();
 
@@ -119,10 +120,13 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 				// Then clamp to the current max
 				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
-				let cur_max = match (panel.images.cur().is_loaded(), panel.images.next().is_loaded()) {
-					(false, false) => 0,
-					(true, false) => panel.state.fade_point,
-					(_, true) => panel.state.duration,
+				let cur_max = match &panel.images {
+					Some(panel_images) => match (panel_images.cur().is_loaded(), panel_images.next().is_loaded()) {
+						(false, false) => 0,
+						(true, false) => panel.state.fade_point,
+						(_, true) => panel.state.duration,
+					},
+					None => 0,
 				};
 				panel.state.progress = panel.state.progress.clamp(0, cur_max);
 			});
@@ -153,16 +157,21 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Images", |ui| {
-				ui.collapsing("Previous", |ui| self::draw_panel_image(ui, panel.images.prev_mut()));
-				ui.collapsing("Current", |ui| self::draw_panel_image(ui, panel.images.cur_mut()));
-				ui.collapsing("Next", |ui| self::draw_panel_image(ui, panel.images.next_mut()));
+				let Some(panel_images) = &mut panel.images else {
+					ui.weak("Not loaded");
+					return;
+				};
+				ui.collapsing("Previous", |ui| self::draw_panel_image(ui, panel_images.prev_mut()));
+				ui.collapsing("Current", |ui| self::draw_panel_image(ui, panel_images.cur_mut()));
+				ui.collapsing("Next", |ui| self::draw_panel_image(ui, panel_images.next_mut()));
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let Some(playlist_player) = panel.images.playlist_player() else {
-					ui.weak("<Unloaded>");
+				let Some(panel_images) = &mut panel.images else {
+					ui.weak("Not loaded");
 					return;
 				};
+				let playlist_player = panel_images.playlist_player();
 
 				let row_height = ui.text_style_height(&egui::TextStyle::Body);
 

@@ -6,7 +6,6 @@ use {
 	num_rational::Rational32,
 	winit::dpi::PhysicalSize,
 	zsw_util::Rect,
-	zutil_app_error::AppError,
 };
 
 
@@ -20,8 +19,8 @@ pub struct PanelGeometry {
 }
 
 impl PanelGeometry {
-	pub fn new(geometry: Rect<i32, u32>) -> Result<Self, AppError> {
-		Ok(Self { geometry })
+	pub fn new(geometry: Rect<i32, u32>) -> Self {
+		Self { geometry }
 	}
 
 	/// Returns this geometry's rectangle for a certain window
