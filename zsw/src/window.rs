@@ -2,13 +2,13 @@
 
 // Imports
 use {
+	app_error::Context,
 	cgmath::{Point2, Vector2},
 	winit::{
 		event_loop::ActiveEventLoop,
 		window::{Window, WindowAttributes},
 	},
-	zsw_util::Rect,
-	app_error::{AppError, Context},
+	zsw_util::{AppError, Rect},
 };
 
 /// Application window

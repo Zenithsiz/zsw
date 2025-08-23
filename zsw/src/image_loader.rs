@@ -13,7 +13,7 @@ use {
 	},
 	tokio::sync::{Semaphore, oneshot},
 	tracing::Instrument,
-	app_error::{AppError, Context},
+	app_error::Context, zsw_util::AppError,
 };
 
 /// Image

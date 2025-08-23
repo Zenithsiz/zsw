@@ -6,8 +6,8 @@ edition = "2024"
 [dependencies]
 
 # Workspace
+zsw-util = { workspace = true }
 zsw-wgpu = { workspace = true }
-
 
 app-error           = { workspace = true }
 egui                = { features = ["default_fonts"], workspace = true }

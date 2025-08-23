@@ -6,7 +6,7 @@
 use {
 	app_error::Context,
 	std::{num::NonZeroUsize, thread},
-	app_error::AppError,
+	zsw_util::AppError,
 };
 
 pub fn init(worker_threads: Option<NonZeroUsize>) -> Result<(), AppError> {

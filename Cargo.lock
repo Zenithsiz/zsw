@@ -4789,6 +4789,7 @@ dependencies = [
  "tokio",
  "tracing",
  "winit",
+ "zsw-util",
  "zsw-wgpu",
 ]
 
@@ -4817,6 +4818,7 @@ dependencies = [
  "tracing",
  "wgpu",
  "winit",
+ "zsw-util",
 ]
 
 [[package]]

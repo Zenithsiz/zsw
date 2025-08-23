@@ -3,6 +3,7 @@
 // Imports
 use {
 	super::{Playlist, PlaylistItemKind},
+	zsw_util::AppError,
 	futures::{StreamExt, stream::FuturesUnordered},
 	rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
 	std::{
@@ -12,7 +13,6 @@ use {
 	},
 	tokio::{fs, sync::Mutex},
 	zsw_util::{UnwrapOrReturnExt, WalkDir},
-	app_error::AppError,
 };
 
 /// Playlist player
@@ -65,7 +65,7 @@ impl PlaylistPlayer {
 								let entry = match entry {
 									Ok(entry) => entry,
 									Err(err) => {
-										let err = AppError::<()>::new(&err);
+										let err = AppError::new(&err);
 										tracing::warn!("Unable to read directory entry: {}", err.pretty());
 										return;
 									},
@@ -75,7 +75,7 @@ impl PlaylistPlayer {
 								if fs::metadata(&path)
 									.await
 									.map_err(|err| {
-										let err = AppError::<()>::new(&err);
+										let err = AppError::new(&err);
 										tracing::warn!(
 											"Unable to get playlist entry {path:?} metadata: {}",
 											err.pretty()
@@ -91,7 +91,7 @@ impl PlaylistPlayer {
 								match tokio::fs::canonicalize(&path).await {
 									Ok(entry) => _ = all_items.lock().await.insert(entry.into()),
 									Err(err) => {
-										let err = AppError::<()>::new(&err);
+										let err = AppError::new(&err);
 										tracing::warn!("Unable to read playlist entry {path:?}: {}", err.pretty());
 									},
 								}
@@ -104,7 +104,7 @@ impl PlaylistPlayer {
 					PlaylistItemKind::File { ref path } => match tokio::fs::canonicalize(path).await {
 						Ok(path) => _ = all_items.lock().await.insert(path.into()),
 						Err(err) => {
-							let err = AppError::<()>::new(&err);
+							let err = AppError::new(&err);
 							tracing::warn!("Unable to canonicalize playlist entry {path:?}: {}", err.pretty());
 						},
 					},

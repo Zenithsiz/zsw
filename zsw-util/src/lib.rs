@@ -37,7 +37,7 @@ pub use {
 
 // Imports
 use {
-	app_error::{AppError, Context},
+	app_error::Context,
 	image::DynamicImage,
 	std::{
 		ffi::OsStr,
@@ -46,6 +46,9 @@ use {
 		path::{Path, PathBuf},
 	},
 };
+
+/// App error export with our data
+pub type AppError = app_error::AppError<()>;
 
 /// Parses json from a file
 pub fn parse_json_from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, AppError> {

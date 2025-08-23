@@ -11,7 +11,7 @@ use {
 	tracing as _,
 	winit::window::Window,
 	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
-	app_error::{AppError, Context},
+	app_error::Context, zsw_util::AppError,
 };
 
 /// Egui Renderer

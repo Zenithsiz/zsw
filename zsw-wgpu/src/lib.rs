@@ -10,10 +10,7 @@ mod renderer;
 pub use renderer::{FrameRender, WgpuRenderer};
 
 // Imports
-use {
-	tokio::sync::OnceCell,
-	app_error::{AppError, Context},
-};
+use {app_error::Context, tokio::sync::OnceCell, zsw_util::AppError};
 
 /// Wgpu shared
 #[derive(Debug)]
@@ -75,7 +72,7 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 
 	// Configure the device to not panic on errors
 	device.on_uncaptured_error(Box::new(|err| {
-		let err = AppError::<()>::new(&err);
+		let err = AppError::new(&err);
 		tracing::error!("Wgpu error: {}", err.pretty());
 	}));
 

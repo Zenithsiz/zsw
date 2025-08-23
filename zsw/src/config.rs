@@ -2,13 +2,14 @@
 
 // Imports
 use {
+	app_error::Context,
 	std::{
 		collections::HashSet,
 		fs,
 		num::NonZeroUsize,
 		path::{Path, PathBuf},
 	},
-	app_error::{AppError, Context},
+	zsw_util::AppError,
 };
 
 /// Configuration

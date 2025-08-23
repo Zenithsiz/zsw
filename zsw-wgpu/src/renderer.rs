@@ -3,9 +3,10 @@
 // Imports
 use {
 	super::WgpuShared,
+	app_error::Context,
 	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
-	app_error::{AppError, Context},
+	zsw_util::AppError,
 };
 
 /// Wgpu renderer
@@ -79,7 +80,7 @@ impl WgpuRenderer {
 				match self.surface.get_current_texture() {
 					Ok(surface_texture) => break surface_texture,
 					Err(err) => {
-						let err = AppError::<()>::new(&err);
+						let err = AppError::new(&err);
 						tracing::warn!("Unable to retrieve current texture, retrying: {}", err.pretty());
 					},
 				}

@@ -13,7 +13,7 @@ use {
 	},
 	tracing::{Dispatch, Subscriber, metadata::LevelFilter, subscriber::DefaultGuard},
 	tracing_subscriber::{EnvFilter, Layer, fmt::format::FmtSpan, prelude::*, registry::LookupSpan},
-	app_error::AppError,
+	zsw_util::AppError,
 };
 
 /// Temporary subscriber type
@@ -136,7 +136,7 @@ where
 			file
 		},
 		Err(err) => {
-			let err = AppError::<()>::new(&err);
+			let err = AppError::new(&err);
 			tracing::warn!("Unable to create log file {log_file:?}: {}", err.pretty());
 			return None;
 		},

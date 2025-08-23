@@ -29,7 +29,7 @@ use {
 	winit::dpi::PhysicalSize,
 	zsw_util::Rect,
 	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
-	app_error::{AppError, Context},
+	app_error::Context, zsw_util::AppError,
 };
 
 /// Panels renderer layouts

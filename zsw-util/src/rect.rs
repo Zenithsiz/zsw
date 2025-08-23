@@ -2,7 +2,8 @@
 
 // Imports
 use {
-	app_error::{AppError, Context},
+	crate::AppError,
+	app_error::Context,
 	cgmath::{Point2, Vector2},
 	serde::de,
 	std::{borrow::Cow, fmt, str::FromStr},
