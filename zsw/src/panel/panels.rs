@@ -37,7 +37,7 @@ impl Panels {
 	/// Loads a panel from a name.
 	///
 	/// If the panel isn't for this window, returns `Ok(None)`
-	pub async fn load(&self, panel_name: PanelName, shader: PanelShader) -> Result<Arc<Mutex<Panel>>, AppError> {
+	pub async fn load(&self, panel_name: PanelName) -> Result<Arc<Mutex<Panel>>, AppError> {
 		let panel_entry = Arc::clone(
 			self.panels
 				.lock()
@@ -65,6 +65,18 @@ impl Panels {
 					progress:   0,
 					duration:   panel.state.duration,
 					fade_point: panel.state.fade_point,
+				};
+
+				// Get the shader
+				let shader = match panel.shader {
+					Some(ser::PanelShader::None { background_color }) => PanelShader::None { background_color },
+					Some(ser::PanelShader::Fade) => PanelShader::Fade,
+					Some(ser::PanelShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
+					Some(ser::PanelShader::FadeOut { strength }) => PanelShader::FadeOut { strength },
+					Some(ser::PanelShader::FadeIn { strength }) => PanelShader::FadeIn { strength },
+
+					// TODO: Is this a good default?
+					None => PanelShader::FadeOut { strength: 1.5 },
 				};
 
 				let panel = Panel::new(panel_name.clone(), geometries, state, shader);

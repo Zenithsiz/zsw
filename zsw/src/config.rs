@@ -129,33 +129,4 @@ pub struct ConfigPanel {
 
 	/// Playlist
 	pub playlist: String,
-
-	/// Shader
-	#[serde(default)]
-	pub shader: Option<ConfigShader>,
-}
-
-/// Configuration shader
-#[derive(Clone, Copy, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
-#[expect(variant_size_differences, reason = "16 bytes is still reasonable for this type")]
-pub enum ConfigShader {
-	#[serde(rename = "none")]
-	None {
-		#[serde(default)]
-		background_color: [f32; 4],
-	},
-
-	#[serde(rename = "fade")]
-	Fade,
-
-	#[serde(rename = "fade-white")]
-	FadeWhite { strength: f32 },
-
-	#[serde(rename = "fade-out")]
-	FadeOut { strength: f32 },
-
-	#[serde(rename = "fade-in")]
-	FadeIn { strength: f32 },
 }

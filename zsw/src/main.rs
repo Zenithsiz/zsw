@@ -30,15 +30,7 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{
-			PanelImages,
-			PanelName,
-			PanelShader,
-			Panels,
-			PanelsGeometryUniforms,
-			PanelsRenderer,
-			PanelsRendererLayouts,
-		},
+		panel::{PanelImages, PanelName, Panels, PanelsGeometryUniforms, PanelsRenderer, PanelsRendererLayouts},
 		playlist::{PlaylistName, PlaylistPlayer, Playlists},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
@@ -363,21 +355,9 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 	let panel_name = PanelName::from(default_panel.panel.clone());
 	let playlist_name = PlaylistName::from(default_panel.playlist.clone());
 
-	// Set the shader
-	let panel_shader = match default_panel.shader {
-		Some(config::ConfigShader::None { background_color }) => PanelShader::None { background_color },
-		Some(config::ConfigShader::Fade) => PanelShader::Fade,
-		Some(config::ConfigShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
-		Some(config::ConfigShader::FadeOut { strength }) => PanelShader::FadeOut { strength },
-		Some(config::ConfigShader::FadeIn { strength }) => PanelShader::FadeIn { strength },
-
-		// TODO: Is this a good default?
-		None => PanelShader::FadeOut { strength: 1.5 },
-	};
-
 	_ = shared
 		.panels
-		.load(panel_name.clone(), panel_shader)
+		.load(panel_name.clone())
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!(%panel_name, "Loaded default panel");

@@ -7,3 +7,7 @@ geometry = "960x1080+960+0"
 [state]
 duration   = 300
 fade_point = 250
+
+[shader]
+type     = "fade-out"
+strength = 1.0
