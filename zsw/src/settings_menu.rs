@@ -83,7 +83,9 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 		return;
 	}
 
-	for panel in cur_panels.values_mut() {
+	for shared_panel in cur_panels.values_mut() {
+		let panel = &mut shared_panel.panel;
+
 		let mut name = egui::WidgetText::from(panel.name.to_string());
 		if panel
 			.geometries
@@ -120,7 +122,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 				// Then clamp to the current max
 				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
-				let cur_max = match &panel.images {
+				let cur_max = match &shared_panel.images {
 					Some(panel_images) => match (panel_images.cur().is_loaded(), panel_images.next().is_loaded()) {
 						(false, false) => 0,
 						(true, false) => panel.state.fade_point,
@@ -148,16 +150,25 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.horizontal(|ui| {
+				let Some(panel_images) = &mut shared_panel.images else {
+					return;
+				};
+
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
 					panel
-						.skip(shared.wgpu, &shared.panels_renderer_layouts, &shared.image_requester)
+						.skip(
+							panel_images,
+							shared.wgpu,
+							&shared.panels_renderer_layouts,
+							&shared.image_requester,
+						)
 						.block_on();
 				}
 			});
 
 			ui.collapsing("Images", |ui| {
-				let Some(panel_images) = &mut panel.images else {
+				let Some(panel_images) = &mut shared_panel.images else {
 					ui.weak("Not loaded");
 					return;
 				};
@@ -167,7 +178,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let Some(panel_images) = &mut panel.images else {
+				let Some(panel_images) = &mut shared_panel.images else {
 					ui.weak("Not loaded");
 					return;
 				};

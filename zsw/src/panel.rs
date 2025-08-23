@@ -38,9 +38,6 @@ pub struct Panel {
 	/// State
 	pub state: PanelState,
 
-	/// Images
-	pub images: Option<PanelImages>,
-
 	/// Shader
 	pub shader: PanelShader,
 }
@@ -52,7 +49,6 @@ impl Panel {
 			name,
 			geometries: geometries.into_iter().map(PanelGeometry::new).collect(),
 			state,
-			images: None,
 			shader,
 		}
 	}
@@ -71,12 +67,11 @@ impl Panel {
 	/// If the images aren't loaded, does nothing
 	pub async fn skip(
 		&mut self,
+		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
-		let Some(images) = &mut self.images else { return };
-
 		match images.step_next(wgpu_shared, renderer_layouts).await {
 			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_point),
 			Err(()) => self.state.progress = Self::max_duration(images, &self.state),
@@ -93,13 +88,12 @@ impl Panel {
 	/// If the images aren't loaded, does nothing
 	pub async fn step(
 		&mut self,
+		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 		frames: i64,
 	) {
-		let Some(images) = &mut self.images else { return };
-
 		// Update the progress, potentially rolling over to the previous/next image
 		self.state.progress = match self.state.progress.checked_add_signed(frames) {
 			Some(next_progress) => match next_progress >= self.state.duration {
@@ -130,12 +124,11 @@ impl Panel {
 	/// If the images aren't loaded, does nothing
 	pub async fn update(
 		&mut self,
+		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
 	) {
-		let Some(images) = &mut self.images else { return };
-
 		// Then load any missing images
 		images
 			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
@@ -146,7 +139,8 @@ impl Panel {
 			return;
 		}
 
-		self.step(wgpu_shared, renderer_layouts, image_requester, 1).await;
+		self.step(images, wgpu_shared, renderer_layouts, image_requester, 1)
+			.await;
 	}
 }
 

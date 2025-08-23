@@ -7,7 +7,7 @@ use {
 		Resize,
 		config_dirs::ConfigDirs,
 		image_loader::ImageRequester,
-		panel::{Panel, PanelName, PanelsGeometryUniforms, PanelsLoader, PanelsRendererLayouts},
+		panel::{Panel, PanelImages, PanelName, PanelsGeometryUniforms, PanelsLoader, PanelsRendererLayouts},
 		playlist::PlaylistsLoader,
 	},
 	core::sync::atomic::AtomicBool,
@@ -39,7 +39,17 @@ pub struct Shared {
 	pub playlists_loader: PlaylistsLoader,
 	pub image_requester:  ImageRequester,
 
-	pub cur_panels: Mutex<BTreeMap<PanelName, Panel>>,
+	pub cur_panels: Mutex<BTreeMap<PanelName, SharedPanel>>,
+}
+
+/// Shared panel state
+#[derive(Debug)]
+pub struct SharedPanel {
+	/// Panel
+	pub panel: Panel,
+
+	/// Images
+	pub images: Option<PanelImages>,
 }
 
 /// Shared window state
