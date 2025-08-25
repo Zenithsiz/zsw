@@ -5,8 +5,9 @@ use {
 	super::{Panel, PanelName, PanelShader, PanelState, ser},
 	crate::AppError,
 	app_error::Context,
+	core::time::Duration,
 	futures::lock::Mutex,
-	std::{collections::HashMap, path::PathBuf, sync::Arc},
+	std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant},
 	tokio::sync::OnceCell,
 	zsw_util::PathAppendExt,
 };
@@ -62,7 +63,8 @@ impl Panels {
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
 				let state = PanelState {
 					paused:        false,
-					progress:      0,
+					last_update:   Instant::now(),
+					progress:      Duration::ZERO,
 					duration:      panel.state.duration,
 					fade_duration: panel.state.fade_duration,
 				};

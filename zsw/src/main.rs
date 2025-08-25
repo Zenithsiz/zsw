@@ -35,8 +35,10 @@ use {
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
 	},
+	app_error::{AppError, Context, app_error},
 	args::Args,
 	cgmath::Point2,
+	chrono::TimeDelta,
 	clap::Parser,
 	core::sync::atomic::{self, AtomicBool},
 	crossbeam::atomic::AtomicCell,
@@ -46,6 +48,7 @@ use {
 		collections::{HashMap, hash_map},
 		fs,
 		sync::Arc,
+		time::Instant,
 	},
 	tokio::sync::{Mutex, mpsc},
 	winit::{
@@ -62,7 +65,6 @@ use {
 		meetup,
 	},
 	zsw_wgpu::WgpuRenderer,
-	app_error::{AppError, Context, app_error},
 	zutil_cloned::cloned,
 };
 
@@ -498,12 +500,22 @@ async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) 
 				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 					continue;
 				};
+
+				// Calculate the delta since the last update and update it
+				// TODO: This can fall out of sync after a lot of cycles due to precision,
+				//       should we do it in some other way?
+				let now = Instant::now();
+				let delta = now.duration_since(panel.state.last_update);
+				panel.state.last_update = now;
+				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
+
 				panel
 					.update(
 						panel_images,
 						shared.wgpu,
 						&shared.panels_renderer_layouts,
 						&shared.image_requester,
+						delta,
 					)
 					.await;
 			}
@@ -609,8 +621,15 @@ async fn egui_painter(
 					}
 
 					// TODO: Make this "speed" configurable
-					let speed = (panel.state.duration as f32) / 1000.0;
-					let frames = (-delta * speed) as i64;
+					// TODO: Perform the conversion better without going through nanos
+					let speed = 1.0 / 1000.0;
+					let time_delta_abs = panel.state.duration.mul_f32(delta.abs() * speed);
+					let time_delta_abs =
+						TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
+					let time_delta = match delta.is_sign_positive() {
+						true => -time_delta_abs,
+						false => time_delta_abs,
+					};
 
 					let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 						continue;
@@ -621,7 +640,7 @@ async fn egui_painter(
 							shared.wgpu,
 							&shared.panels_renderer_layouts,
 							&shared.image_requester,
-							frames,
+							time_delta,
 						)
 						.await;
 				}

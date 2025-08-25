@@ -20,7 +20,8 @@ pub use self::{
 // Imports
 use {
 	crate::{image_loader::ImageRequester, playlist::PlaylistPlayer},
-	core::{borrow::Borrow, fmt},
+	chrono::TimeDelta,
+	core::{borrow::Borrow, fmt, time::Duration},
 	std::sync::Arc,
 	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
@@ -54,9 +55,9 @@ impl Panel {
 	}
 
 	/// Returns the max duration for the current image
-	fn max_duration(images: &PanelImages, state: &PanelState) -> u64 {
+	fn max_duration(images: &PanelImages, state: &PanelState) -> Duration {
 		match (images.cur.is_loaded(), images.next.is_loaded()) {
-			(false, false) => 0,
+			(false, false) => Duration::ZERO,
 			(true, false) => state.fade_duration,
 			(_, true) => state.duration,
 		}
@@ -92,24 +93,32 @@ impl Panel {
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
-		frames: i64,
+		delta: TimeDelta,
 	) {
+		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
+		let next_progress = match delta_is_positive {
+			true => Some(self.state.progress.saturating_add(delta_abs)),
+			false => self.state.progress.checked_sub(delta_abs),
+		};
+
 		// Update the progress, potentially rolling over to the previous/next image
-		self.state.progress = match self.state.progress.checked_add_signed(frames) {
+		self.state.progress = match next_progress {
 			Some(next_progress) => match next_progress >= self.state.duration {
 				true => match images.step_next(wgpu_shared, renderer_layouts).await {
-					Ok(()) => next_progress.saturating_sub(self.state.duration),
+					Ok(()) => next_progress - self.state.duration,
 					Err(()) => Self::max_duration(images, &self.state),
 				},
-				false => self
-					.state
-					.progress
-					.saturating_add_signed(frames)
-					.clamp(0, Self::max_duration(images, &self.state)),
+				false => next_progress.clamp(Duration::ZERO, Self::max_duration(images, &self.state)),
 			},
 			None => match images.step_prev(wgpu_shared, renderer_layouts).await {
-				Ok(()) => self.state.duration.saturating_add_signed(frames),
-				Err(()) => 0,
+				// Note: This branch is only taken when `delta` is negative, so we can always
+				//       subtract without checking `delta_is_positive`.
+				Ok(()) => match (self.state.duration + self.state.progress).checked_sub(delta_abs) {
+					Some(next_progress) => next_progress,
+					None => self.state.fade_duration,
+				},
+
+				Err(()) => Duration::ZERO,
 			},
 		};
 
@@ -128,6 +137,7 @@ impl Panel {
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
+		delta: TimeDelta,
 	) {
 		// Then load any missing images
 		images
@@ -139,7 +149,7 @@ impl Panel {
 			return;
 		}
 
-		self.step(images, wgpu_shared, renderer_layouts, image_requester, 1)
+		self.step(images, wgpu_shared, renderer_layouts, image_requester, delta)
 			.await;
 	}
 }
@@ -169,5 +179,13 @@ impl fmt::Display for PanelName {
 impl fmt::Debug for PanelName {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.0.fmt(f)
+	}
+}
+
+/// Converts a chrono time delta into a duration, indicating whether it's positive or negative
+fn time_delta_to_duration(delta: TimeDelta) -> (Duration, bool) {
+	match delta.to_std() {
+		Ok(delta) => (delta, true),
+		Err(_) => ((-delta).to_std().expect("Duration should fit"), false),
 	}
 }

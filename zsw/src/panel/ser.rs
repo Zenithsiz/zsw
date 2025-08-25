@@ -1,7 +1,11 @@
 //! Panel serialization / deserialization
 
 // Imports
-use zsw_util::Rect;
+use {
+	core::time::Duration,
+	serde_with::{DurationSecondsWithFrac, serde_as},
+	zsw_util::Rect,
+};
 
 /// Serialized panel
 #[derive(Debug)]
@@ -26,11 +30,16 @@ pub struct PanelGeometry {
 
 
 /// Serialized panel state
+// TODO: Instead allow deserializing from strings such as "500ms", "5s", "1m2s", etc.
 #[derive(Debug)]
+#[serde_as]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct PanelState {
-	pub duration:      u64,
-	pub fade_duration: u64,
+	#[serde_as(as = "DurationSecondsWithFrac<f64>")]
+	pub duration: Duration,
+
+	#[serde_as(as = "DurationSecondsWithFrac<f64>")]
+	pub fade_duration: Duration,
 }
 
 /// Configuration shader

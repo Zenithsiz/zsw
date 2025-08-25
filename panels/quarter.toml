@@ -2,8 +2,8 @@
 geometry = "960x540+0+0"
 
 [state]
-duration      = 300
-fade_duration = 50
+duration      = 5.0
+fade_duration = 1.0
 
 [shader]
 type     = "fade-white"

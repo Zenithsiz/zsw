@@ -6,5 +6,5 @@ geometry = "1920x1080+960+0"
 geometry = "960x1080+2880+0"
 
 [state]
-duration      = 300
-fade_duration = 50
+duration      = 5.0
+fade_duration = 1.0

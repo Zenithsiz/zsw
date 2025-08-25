@@ -1,19 +1,25 @@
 //! Panel state
 
+// Imports
+use {core::time::Duration, std::time::Instant};
+
 /// Panel state
 #[derive(Debug)]
 pub struct PanelState {
 	/// If paused
 	pub paused: bool,
 
-	/// Current progress (in frames)
-	pub progress: u64,
+	/// Last update
+	pub last_update: Instant,
 
-	/// Duration (in frames)
-	pub duration: u64,
+	/// Current progress
+	pub progress: Duration,
 
-	/// Fade duration (in frames)
-	pub fade_duration: u64,
+	/// Duration
+	pub duration: Duration,
+
+	/// Fade duration
+	pub fade_duration: Duration,
 }
 
 impl PanelState {
@@ -21,12 +27,12 @@ impl PanelState {
 	#[must_use]
 	pub fn progress_norm(&self) -> f32 {
 		// Note: Image progress is linear throughout the full cycle
-		self.progress as f32 / self.duration as f32
+		self.progress.div_duration_f32(self.duration)
 	}
 
 	/// Returns the fade duration normalized
 	pub fn fade_duration_norm(&self) -> f32 {
 		// Note: Image progress is linear throughout the full cycle
-		self.fade_duration as f32 / self.duration as f32
+		self.fade_duration.div_duration_f32(self.duration)
 	}
 }

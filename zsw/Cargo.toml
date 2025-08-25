@@ -14,6 +14,7 @@ app-error          = { workspace = true }
 async-channel      = { workspace = true }
 bytemuck           = { features = ["derive"], workspace = true }
 cgmath             = { workspace = true }
+chrono             = { workspace = true }
 clap               = { features = ["derive"], workspace = true }
 console-subscriber = { optional = true, workspace = true }
 crossbeam          = { workspace = true }

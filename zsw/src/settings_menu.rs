@@ -9,7 +9,7 @@ use {
 		panel::{PanelImage, PanelShader},
 		shared::{Shared, SharedWindow},
 	},
-	core::sync::atomic,
+	core::{ops::RangeInclusive, sync::atomic, time::Duration},
 	egui::Widget,
 	std::path::Path,
 	zsw_util::{AppError, Rect, TokioTaskBlockOn},
@@ -118,39 +118,44 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				// Note: We only allow up until the duration - 1 so that you don't get stuck
 				//       skipping images when you hold it at the max value
 				ui.label("Cur progress");
-				egui::Slider::new(&mut panel.state.progress, 0..=panel.state.duration.saturating_sub(2))
-					.clamping(egui::SliderClamping::Edits)
-					.ui(ui);
+				self::draw_duration(
+					ui,
+					&mut panel.state.progress,
+					// TODO: This max needs to be `duration - min_frame_duration` to not skip ahead.
+					Duration::ZERO..=panel.state.duration.mul_f32(0.99),
+				);
+
 
 				// Then clamp to the current max
 				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
 				let cur_max = match panels_images.get(&panel.name) {
 					Some(panel_images) => match (panel_images.cur.is_loaded(), panel_images.next.is_loaded()) {
-						(false, false) => 0,
+						(false, false) => Duration::ZERO,
 						(true, false) => panel.state.fade_duration,
 						(_, true) => panel.state.duration,
 					},
-					None => 0,
+					None => Duration::ZERO,
 				};
 
 				// TODO: This should be done elsewhere.
-				panel.state.progress = panel.state.progress.clamp(0, cur_max);
+				panel.state.progress = panel.state.progress.clamp(Duration::ZERO, cur_max);
 			});
 
 			ui.horizontal(|ui| {
 				ui.label("Fade Duration");
-				let min = 0;
+				let min = Duration::ZERO;
 				let max = panel.state.duration / 2;
-				egui::Slider::new(&mut panel.state.fade_duration, min..=max)
-					.clamping(egui::SliderClamping::Edits)
-					.ui(ui);
+
+				self::draw_duration(ui, &mut panel.state.fade_duration, min..=max);
 			});
 
 			ui.horizontal(|ui| {
 				ui.label("Duration");
-				egui::Slider::new(&mut panel.state.duration, 0..=10800)
-					.clamping(egui::SliderClamping::Never)
-					.ui(ui);
+				self::draw_duration(
+					ui,
+					&mut panel.state.duration,
+					Duration::ZERO..=Duration::from_secs_f32(180.0),
+				);
 			});
 
 			ui.horizontal(|ui| {
@@ -339,6 +344,19 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>) {
 	});
 }
 
+/// Draws a duration slider
+// TODO: Allow setting the clamping mode by using a builder instead
+fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusive<Duration>) {
+	let mut secs = duration.as_secs_f32();
+
+	let start = range.start().as_secs_f32();
+	let end = range.end().as_secs_f32();
+	egui::Slider::new(&mut secs, start..=end)
+		.suffix("s")
+		.clamping(egui::SliderClamping::Edits)
+		.ui(ui);
+	*duration = Duration::from_secs_f32(secs);
+}
 
 /// Tab
 #[derive(PartialEq, Debug)]
