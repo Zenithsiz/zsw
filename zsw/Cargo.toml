@@ -11,7 +11,6 @@ zsw-util = { workspace = true }
 zsw-wgpu = { workspace = true }
 
 app-error          = { workspace = true }
-async-channel      = { workspace = true }
 bytemuck           = { features = ["derive"], workspace = true }
 cgmath             = { workspace = true }
 chrono             = { workspace = true }

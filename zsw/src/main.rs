@@ -18,7 +18,6 @@
 mod args;
 mod config;
 mod config_dirs;
-mod image_loader;
 mod init;
 mod panel;
 mod playlist;
@@ -181,8 +180,6 @@ impl WinitApp {
 		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
 		let panels = Panels::new(config_dirs.panels().to_path_buf());
 
-		let (image_loader, image_requester) = image_loader::create().await.context("Unable to create image loader")?;
-
 		// Shared state
 		let shared = Shared {
 			event_loop_proxy,
@@ -194,12 +191,9 @@ impl WinitApp {
 			panels_renderer_layouts,
 			panels,
 			playlists,
-			image_requester,
 			panels_images: Mutex::new(HashMap::new()),
 		};
 		let shared = Arc::new(shared);
-
-		self::spawn_task("Image loader", image_loader.run());
 
 		#[cloned(shared, config)]
 		self::spawn_task("Load default panels", async move {
@@ -416,7 +410,6 @@ async fn renderer(
 					&shared_window.monitor_geometry,
 					&shared.panels,
 					&mut panels_images,
-					&shared.image_requester,
 				)
 				.await
 				.context("Unable to render panels")?;
@@ -512,12 +505,7 @@ async fn egui_painter(
 						continue;
 					};
 					panel
-						.skip(
-							panel_images,
-							shared.wgpu,
-							&shared.panels_renderer_layouts,
-							&shared.image_requester,
-						)
+						.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts)
 						.await;
 				}
 			}
@@ -557,13 +545,7 @@ async fn egui_painter(
 						continue;
 					};
 					panel
-						.step(
-							panel_images,
-							shared.wgpu,
-							&shared.panels_renderer_layouts,
-							&shared.image_requester,
-							time_delta,
-						)
+						.step(panel_images, shared.wgpu, &shared.panels_renderer_layouts, time_delta)
 						.await;
 				}
 			}

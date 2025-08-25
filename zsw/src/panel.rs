@@ -19,7 +19,7 @@ pub use self::{
 
 // Imports
 use {
-	crate::{image_loader::ImageRequester, playlist::PlaylistPlayer},
+	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
 	core::{borrow::Borrow, fmt, time::Duration},
 	std::sync::Arc,
@@ -71,7 +71,6 @@ impl Panel {
 		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
-		image_requester: &ImageRequester,
 	) {
 		match images.step_next(wgpu_shared, renderer_layouts).await {
 			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_duration),
@@ -79,9 +78,7 @@ impl Panel {
 		}
 
 		// Then load any missing images
-		images
-			.load_missing(wgpu_shared, renderer_layouts, image_requester)
-			.await;
+		images.load_missing(wgpu_shared, renderer_layouts).await;
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
@@ -92,7 +89,7 @@ impl Panel {
 		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
-		image_requester: &ImageRequester,
+
 		delta: TimeDelta,
 	) {
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
@@ -123,9 +120,7 @@ impl Panel {
 		};
 
 		// Then load any missing images
-		images
-			.load_missing(wgpu_shared, renderer_layouts, image_requester)
-			.await;
+		images.load_missing(wgpu_shared, renderer_layouts).await;
 	}
 
 	/// Updates this panel's state
@@ -136,21 +131,18 @@ impl Panel {
 		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
-		image_requester: &ImageRequester,
+
 		delta: TimeDelta,
 	) {
 		// Then load any missing images
-		images
-			.load_missing(wgpu_shared, renderer_layouts, image_requester)
-			.await;
+		images.load_missing(wgpu_shared, renderer_layouts).await;
 
 		// If we're paused, don't update anything
 		if self.state.paused {
 			return;
 		}
 
-		self.step(images, wgpu_shared, renderer_layouts, image_requester, delta)
-			.await;
+		self.step(images, wgpu_shared, renderer_layouts, delta).await;
 	}
 }
 

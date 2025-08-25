@@ -2,10 +2,12 @@
 
 // Imports
 use {
-	crate::image_loader::Image,
 	cgmath::Vector2,
 	image::DynamicImage,
-	std::{path::PathBuf, sync::OnceLock},
+	std::{
+		path::Path,
+		sync::{Arc, OnceLock},
+	},
 	wgpu::util::DeviceExt,
 	zsw_wgpu::WgpuShared,
 };
@@ -14,10 +16,6 @@ use {
 ///
 /// Represents a single image of a panel.
 #[derive(Debug)]
-#[expect(
-	clippy::large_enum_variant,
-	reason = "We eventually hit an indirection, so it's fine"
-)]
 pub enum PanelImage {
 	/// Empty
 	Empty,
@@ -37,7 +35,7 @@ pub enum PanelImage {
 		swap_dir: bool,
 
 		/// Image path
-		image_path: PathBuf,
+		image_path: Arc<Path>,
 	},
 }
 
@@ -50,16 +48,16 @@ impl PanelImage {
 
 	/// Creates a new panel image from an image
 	#[must_use]
-	pub fn new(wgpu_shared: &WgpuShared, image: Image) -> Self {
-		let size = Vector2::new(image.image.width(), image.image.height());
-		let (texture, texture_view) = self::create_image_texture(wgpu_shared, image.image);
+	pub fn new(wgpu_shared: &WgpuShared, image_path: Arc<Path>, image: DynamicImage) -> Self {
+		let size = Vector2::new(image.width(), image.height());
+		let (texture, texture_view) = self::create_image_texture(wgpu_shared, image);
 
 		Self::Loaded {
 			_texture: texture,
 			texture_view,
 			size,
 			swap_dir: rand::random(),
-			image_path: image.path,
+			image_path,
 		}
 	}
 

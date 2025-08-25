@@ -166,12 +166,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
 					panel
-						.skip(
-							panel_images,
-							shared.wgpu,
-							&shared.panels_renderer_layouts,
-							&shared.image_requester,
-						)
+						.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts)
 						.block_on();
 				}
 			});

@@ -6,7 +6,6 @@ use {
 		AppEvent,
 		Resize,
 		config_dirs::ConfigDirs,
-		image_loader::ImageRequester,
 		panel::{PanelImages, PanelName, Panels, PanelsGeometryUniforms, PanelsRendererLayouts},
 		playlist::Playlists,
 	},
@@ -31,9 +30,8 @@ pub struct Shared {
 	pub wgpu:                    &'static WgpuShared,
 	pub panels_renderer_layouts: PanelsRendererLayouts,
 
-	pub panels:          Panels,
-	pub playlists:       Playlists,
-	pub image_requester: ImageRequester,
+	pub panels:    Panels,
+	pub playlists: Playlists,
 
 	pub panels_images: Mutex<HashMap<PanelName, PanelImages>>,
 }

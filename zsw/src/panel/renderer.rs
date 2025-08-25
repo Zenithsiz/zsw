@@ -11,7 +11,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 use {
 	self::uniform::PanelImageUniforms,
 	super::{Panel, PanelImage, PanelImages, PanelName, Panels},
-	crate::{config_dirs::ConfigDirs, image_loader::ImageRequester, panel::PanelGeometry},
+	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
 	app_error::Context,
 	cgmath::Vector2,
 	chrono::TimeDelta,
@@ -125,7 +125,6 @@ impl PanelsRenderer {
 		window_geometry: &Rect<i32, u32>,
 		panels: &Panels,
 		panels_images: &mut HashMap<PanelName, PanelImages>,
-		image_requester: &ImageRequester,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match MSAA_SAMPLES {
@@ -193,9 +192,7 @@ impl PanelsRenderer {
 				panel.state.last_update = now;
 				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
-				panel
-					.update(panel_images, wgpu_shared, layouts, image_requester, delta)
-					.await;
+				panel.update(panel_images, wgpu_shared, layouts, delta).await;
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either

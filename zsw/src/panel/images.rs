@@ -9,9 +9,15 @@ pub use self::image::PanelImage;
 // Imports
 use {
 	super::{PanelsRendererLayouts, PlaylistPlayer},
-	crate::image_loader::{ImageReceiver, ImageRequest, ImageRequester},
-	std::{self, mem},
+	::image::DynamicImage,
+	app_error::Context,
+	core::task::Poll,
+	futures::FutureExt,
+	std::{self, mem, path::Path, sync::Arc},
+	tracing::Instrument,
+	zsw_util::AppError,
 	zsw_wgpu::WgpuShared,
+	zutil_cloned::cloned,
 };
 
 /// Panel images
@@ -36,7 +42,7 @@ pub struct PanelImages {
 	pub image_bind_group: wgpu::BindGroup,
 
 	/// Scheduled image receiver.
-	pub scheduled_image_receiver: Option<ImageReceiver>,
+	pub scheduled_image_receiver: Option<tokio::task::JoinHandle<ImageLoadRes>>,
 }
 
 impl PanelImages {
@@ -112,28 +118,31 @@ impl PanelImages {
 	/// Loads any missing images, prioritizing the current, then next, then previous.
 	///
 	/// Requests images if missing any.
-	pub async fn load_missing(
-		&mut self,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-		image_requester: &ImageRequester,
-	) {
+	pub async fn load_missing(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
 		// Get the image receiver, or schedule it.
 		let Some(image_receiver) = self.scheduled_image_receiver.as_mut() else {
-			_ = self.schedule_load_image(wgpu_shared, image_requester).await;
+			_ = self.schedule_load_image(wgpu_shared).await;
 			return;
 		};
 
 		// Then try to get the response
-		let Some(response) = image_receiver.try_recv() else {
+		let Poll::Ready(res) = image_receiver.poll_unpin(&mut std::task::Context::from_waker(std::task::Waker::noop()))
+		else {
 			return;
 		};
-
-		// Remove the exhausted receiver
 		self.scheduled_image_receiver = None;
 
+		let res = match res {
+			Ok(res) => res,
+			Err(err) => {
+				let err = AppError::new(&err);
+				tracing::warn!("Scheduled image loader was cancelled: {}", err.pretty());
+				return;
+			},
+		};
+
 		// Then check if we got the image
-		let image = match response.image_res {
+		let image = match res.image_res {
 			// If so, return it
 			Ok(image) => image,
 
@@ -141,19 +150,19 @@ impl PanelImages {
 			Err(err) => {
 				tracing::warn!(
 					"Unable to load image {:?}, removing it from player: {}",
-					response.request.path,
+					res.path,
 					err.pretty()
 				);
-				self.playlist_player.remove(&response.request.path);
+				self.playlist_player.remove(&res.path);
 
-				_ = self.schedule_load_image(wgpu_shared, image_requester).await;
+				_ = self.schedule_load_image(wgpu_shared).await;
 				return;
 			},
 		};
 
 		// Get which slot to load the image into
 		let slot = {
-			match response.request.playlist_pos {
+			match res.playlist_pos {
 				pos if Some(pos) == self.playlist_player.prev_pos() => Some(Slot::Prev),
 				pos if pos == self.playlist_player.cur_pos() => Some(Slot::Cur),
 				pos if pos == self.playlist_player.next_pos() => Some(Slot::Next),
@@ -170,9 +179,9 @@ impl PanelImages {
 
 		if let Some(slot) = slot {
 			match slot {
-				Slot::Prev => self.prev = PanelImage::new(wgpu_shared, image),
-				Slot::Cur => self.cur = PanelImage::new(wgpu_shared, image),
-				Slot::Next => self.next = PanelImage::new(wgpu_shared, image),
+				Slot::Prev => self.prev = PanelImage::new(wgpu_shared, res.path, image),
+				Slot::Cur => self.cur = PanelImage::new(wgpu_shared, res.path, image),
+				Slot::Next => self.next = PanelImage::new(wgpu_shared, res.path, image),
 			}
 			self.update_image_bind_group(wgpu_shared, renderer_layouts);
 		}
@@ -184,18 +193,14 @@ impl PanelImages {
 	///
 	/// If the playlist player is empty, does not schedule.
 	/// If already scheduled, returns
-	async fn schedule_load_image(
-		&mut self,
-		wgpu_shared: &WgpuShared,
-		image_requester: &ImageRequester,
-	) -> Option<usize> {
+	async fn schedule_load_image(&mut self, wgpu_shared: &WgpuShared) -> Option<usize> {
 		// If we already have an image scheduled, don't schedule another
 		if self.scheduled_image_receiver.is_some() {
 			return None;
 		}
 
 		// Get the playlist position and path to load
-		let (playlist_pos, image_path) = match () {
+		let (playlist_pos, path) = match () {
 			() if !self.cur.is_loaded() => (self.playlist_player.cur_pos(), self.playlist_player.cur()?),
 			() if !self.next.is_loaded() => (self.playlist_player.next_pos(), self.playlist_player.next()?),
 			() if !self.prev.is_loaded() => (self.playlist_player.prev_pos()?, self.playlist_player.prev()?),
@@ -203,10 +208,13 @@ impl PanelImages {
 		};
 
 		let wgpu_limits = wgpu_shared.device.limits();
-		self.scheduled_image_receiver = Some(image_requester.request(ImageRequest {
-			path: image_path.to_path_buf(),
-			max_image_size: wgpu_limits.max_texture_dimension_2d,
-			playlist_pos,
+		self.scheduled_image_receiver = Some(tokio::task::spawn(async move {
+			let image_res = self::load(&path, wgpu_limits.max_texture_dimension_2d).await;
+			ImageLoadRes {
+				path,
+				playlist_pos,
+				image_res,
+			}
 		}));
 
 		Some(playlist_pos)
@@ -287,4 +295,43 @@ fn create_image_bind_group(
 		label:   None,
 	};
 	wgpu_shared.device.create_bind_group(&descriptor)
+}
+
+#[derive(Debug)]
+pub struct ImageLoadRes {
+	path:         Arc<Path>,
+	playlist_pos: usize,
+	image_res:    Result<DynamicImage, AppError>,
+}
+
+/// Loads an image
+pub async fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppError> {
+	// Load the image
+	tracing::trace!("Loading image {:?}", path);
+	#[cloned(path)]
+	let mut image = tokio::task::spawn_blocking(move || ::image::open(path))
+		.instrument(tracing::trace_span!("Loading image"))
+		.await
+		.context("Unable to join image load task")?
+		.context("Unable to open image")?;
+	tracing::trace!("Loaded image {:?} ({}x{})", path, image.width(), image.height());
+
+	// If the image is too big, resize it
+	if image.width() >= max_image_size || image.height() >= max_image_size {
+		tracing::trace!(
+			"Resizing image {:?} ({}x{}) to at most {max_image_size}x{max_image_size}",
+			path,
+			image.width(),
+			image.height()
+		);
+		image = tokio::task::spawn_blocking(move || {
+			image.resize(max_image_size, max_image_size, ::image::imageops::FilterType::Nearest)
+		})
+		.instrument(tracing::trace_span!("Resizing image"))
+		.await
+		.context("Failed to join image resize task")?;
+		tracing::trace!("Resized image {:?} to {}x{}", path, image.width(), image.height());
+	}
+
+	Ok(image)
 }
