@@ -41,8 +41,8 @@ pub struct PanelImages {
 	/// Texture bind group
 	pub image_bind_group: wgpu::BindGroup,
 
-	/// Scheduled image receiver.
-	pub scheduled_image_receiver: Option<tokio::task::JoinHandle<ImageLoadRes>>,
+	/// Image loading task
+	pub image_load_task: Option<tokio::task::JoinHandle<ImageLoadRes>>,
 }
 
 impl PanelImages {
@@ -74,7 +74,7 @@ impl PanelImages {
 			playlist_player,
 			texture_sampler,
 			image_bind_group,
-			scheduled_image_receiver: None,
+			image_load_task: None,
 		}
 	}
 
@@ -111,26 +111,9 @@ impl PanelImages {
 	///
 	/// Requests images if missing any.
 	pub fn load_missing(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
-		// Get the image receiver, or schedule it.
-		let Some(image_receiver) = self.scheduled_image_receiver.as_mut() else {
-			_ = self.schedule_load_image(wgpu_shared);
+		// Get the next image, if we can
+		let Some(res) = self.next_image(wgpu_shared) else {
 			return;
-		};
-
-		// Then try to get the response
-		let Poll::Ready(res) = image_receiver.poll_unpin(&mut std::task::Context::from_waker(std::task::Waker::noop()))
-		else {
-			return;
-		};
-		self.scheduled_image_receiver = None;
-
-		let res = match res {
-			Ok(res) => res,
-			Err(err) => {
-				let err = AppError::new(&err);
-				tracing::warn!("Scheduled image loader was cancelled: {}", err.pretty());
-				return;
-			},
 		};
 
 		// Then check if we got the image
@@ -179,37 +162,65 @@ impl PanelImages {
 		}
 	}
 
-	/// Schedules a new image.
+	/// Gets the next image, if any.
 	///
-	/// Returns the position in the playlist we're loading
-	///
-	/// If the playlist player is empty, does not schedule.
-	/// If already scheduled, returns
-	fn schedule_load_image(&mut self, wgpu_shared: &WgpuShared) -> Option<usize> {
-		// If we already have an image scheduled, don't schedule another
-		if self.scheduled_image_receiver.is_some() {
-			return None;
-		}
+	/// If an image is not scheduled, schedules it, even after
+	/// successfully returning an image
+	fn next_image(&mut self, wgpu_shared: &WgpuShared) -> Option<ImageLoadRes> {
+		// Get the load task
+		let task = self.schedule_load_image(wgpu_shared)?;
 
-		// Get the playlist position and path to load
-		let (playlist_pos, path) = match () {
-			() if !self.cur.is_loaded() => (self.playlist_player.cur_pos(), self.playlist_player.cur()?),
-			() if !self.next.is_loaded() => (self.playlist_player.next_pos(), self.playlist_player.next()?),
-			() if !self.prev.is_loaded() => (self.playlist_player.prev_pos()?, self.playlist_player.prev()?),
-			() => return None,
+		// Then try to get the response
+		// Note: If we did it, immediately invalidate the exhausted future
+		//       and schedule a new image to be loaded
+		let Poll::Ready(res) = task.poll_unpin(&mut std::task::Context::from_waker(std::task::Waker::noop())) else {
+			return None;
+		};
+		self.image_load_task = None;
+		_ = self.schedule_load_image(wgpu_shared);
+
+		// Finally make sure the task didn't get cancelled
+		let res = match res {
+			Ok(res) => res,
+			Err(err) => {
+				let err = AppError::new(&err);
+				tracing::warn!("Scheduled image loader was cancelled: {}", err.pretty());
+				return None;
+			},
 		};
 
-		let wgpu_limits = wgpu_shared.device.limits();
-		self.scheduled_image_receiver = Some(tokio::task::spawn(async move {
-			let image_res = self::load(&path, wgpu_limits.max_texture_dimension_2d).await;
-			ImageLoadRes {
-				path,
-				playlist_pos,
-				image_res,
-			}
-		}));
+		Some(res)
+	}
 
-		Some(playlist_pos)
+	/// Schedules a new image.
+	///
+	/// Returns the handle to the load task
+	fn schedule_load_image(&mut self, wgpu_shared: &WgpuShared) -> Option<&mut tokio::task::JoinHandle<ImageLoadRes>> {
+		match self.image_load_task {
+			// TODO: This is required because of the borrow checker
+			Some(_) => Some(self.image_load_task.as_mut().expect("Just checked")),
+			None => {
+				// Get the playlist position and path to load
+				let (playlist_pos, path) = match () {
+					() if !self.cur.is_loaded() => (self.playlist_player.cur_pos(), self.playlist_player.cur()?),
+					() if !self.next.is_loaded() => (self.playlist_player.next_pos(), self.playlist_player.next()?),
+					() if !self.prev.is_loaded() => (self.playlist_player.prev_pos()?, self.playlist_player.prev()?),
+					() => return None,
+				};
+
+				let wgpu_limits = wgpu_shared.device.limits();
+				let handle = self.image_load_task.insert(tokio::task::spawn(async move {
+					let image_res = self::load(&path, wgpu_limits.max_texture_dimension_2d).await;
+					ImageLoadRes {
+						path,
+						playlist_pos,
+						image_res,
+					}
+				}));
+
+				Some(handle)
+			},
+		}
 	}
 
 	/// Updates the image bind group
