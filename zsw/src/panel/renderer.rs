@@ -11,9 +11,10 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 use {
 	self::uniform::PanelImageUniforms,
 	super::{Panel, PanelImage, PanelImages, PanelName, Panels},
-	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
+	crate::{config_dirs::ConfigDirs, image_loader::ImageRequester, panel::PanelGeometry},
 	app_error::Context,
 	cgmath::Vector2,
+	chrono::TimeDelta,
 	core::{
 		future::Future,
 		mem::{self, Discriminant},
@@ -24,6 +25,7 @@ use {
 		borrow::Cow,
 		collections::{HashMap, HashSet, hash_map},
 		path::Path,
+		time::Instant,
 	},
 	tokio::fs,
 	wgpu::{naga, util::DeviceExt},
@@ -122,7 +124,8 @@ impl PanelsRenderer {
 		geometry_uniforms: &mut PanelsGeometryUniforms,
 		window_geometry: &Rect<i32, u32>,
 		panels: &Panels,
-		panels_images: &HashMap<PanelName, PanelImages>,
+		panels_images: &mut HashMap<PanelName, PanelImages>,
+		image_requester: &ImageRequester,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match MSAA_SAMPLES {
@@ -169,12 +172,33 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		for panel in panels.get_all().await {
-			let panel = panel.lock().await;
+			let mut panel = panel.lock().await;
 
-			// If the panel images are missing or empty, skip this panel
-			let Some(panel_images) = panels_images.get(&panel.name) else {
+			// If the panel images are missing, skip it
+			let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 				continue;
 			};
+
+			// Update the panel before drawing it
+			// TODO: If the delta is small enough (<1ms), skip updating?
+			//       This happens when we have multiple renderers rendering
+			//       at the same time, one to try to update immediately after
+			//       the other has updated.
+			{
+				// Calculate the delta since the last update and update it
+				// TODO: This can fall out of sync after a lot of cycles due to precision,
+				//       should we do it in some other way?
+				let now = Instant::now();
+				let delta = now.duration_since(panel.state.last_update);
+				panel.state.last_update = now;
+				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
+
+				panel
+					.update(panel_images, wgpu_shared, layouts, image_requester, delta)
+					.await;
+			}
+
+			// If the panel images are empty, there's no sense in rendering it either
 			if panel_images.is_empty() {
 				continue;
 			}

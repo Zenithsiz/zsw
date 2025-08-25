@@ -48,7 +48,6 @@ use {
 		collections::{HashMap, hash_map},
 		fs,
 		sync::Arc,
-		time::Instant,
 	},
 	tokio::sync::{Mutex, mpsc},
 	winit::{
@@ -59,11 +58,7 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
-	zsw_util::{
-		TokioTaskBlockOn,
-		master_barrier::{self, InactiveSlaveBarrier, MasterBarrier, SlaveBarrier},
-		meetup,
-	},
+	zsw_util::{TokioTaskBlockOn, meetup},
 	zsw_wgpu::WgpuRenderer,
 	zutil_cloned::cloned,
 };
@@ -125,9 +120,7 @@ fn main() -> Result<(), AppError> {
 }
 
 struct WinitApp {
-	event_tx:               HashMap<WindowId, mpsc::UnboundedSender<WindowEvent>>,
-	panels_updater_barrier: InactiveSlaveBarrier,
-
+	event_tx:      HashMap<WindowId, mpsc::UnboundedSender<WindowEvent>>,
 	shared:        Arc<Shared>,
 	shared_window: Vec<Arc<SharedWindow>>,
 }
@@ -225,16 +218,8 @@ impl WinitApp {
 			self::load_default_panels(&config, &shared).await
 		});
 
-		let (panels_updater_master_barrier, panels_updater_slave_barrier) = master_barrier::barrier();
-
-		#[cloned(shared)]
-		self::spawn_task("Panels updater", async move {
-			self::panels_updater(&shared, panels_updater_master_barrier).await
-		});
-
 		Ok(Self {
 			event_tx: HashMap::new(),
-			panels_updater_barrier: panels_updater_slave_barrier,
 			shared,
 			shared_window: vec![],
 		})
@@ -267,8 +252,6 @@ impl WinitApp {
 			};
 			let shared_window = Arc::new(shared_window);
 
-			let panels_updater_barrier = self.panels_updater_barrier.activate();
-
 			#[cloned(shared = self.shared, shared_window)]
 			self::spawn_task("Renderer", async move {
 				self::renderer(
@@ -278,7 +261,6 @@ impl WinitApp {
 					panels_renderer,
 					egui_renderer,
 					egui_painter_output_rx,
-					panels_updater_barrier,
 				)
 				.await
 			});
@@ -416,14 +398,10 @@ async fn renderer(
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
 	egui_painter_output_rx: meetup::Receiver<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
-	panels_updater_barrier: SlaveBarrier,
 ) -> Result<(), AppError> {
 	let mut egui_paint_jobs = vec![];
 	let mut egui_textures_delta = None;
 	loop {
-		// Meetup with the panels updater
-		panels_updater_barrier.meetup().await;
-
 		// Update egui, if available
 		if let Some((paint_jobs, textures_delta)) = egui_painter_output_rx.try_recv() {
 			egui_paint_jobs = paint_jobs;
@@ -438,8 +416,7 @@ async fn renderer(
 		// TODO: Can we capture the frame before stopping and render that as
 		//       an image over and over?
 		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
-			let panels_images = shared.panels_images.lock().await;
-
+			let mut panels_images = shared.panels_images.lock().await;
 			let mut panels_geometry_uniforms = shared_window.panels_geometry_uniforms.lock().await;
 
 			panels_renderer
@@ -452,7 +429,8 @@ async fn renderer(
 					&mut panels_geometry_uniforms,
 					&shared_window.monitor_geometry,
 					&shared.panels,
-					&panels_images,
+					&mut panels_images,
+					&shared.image_requester,
 				)
 				.await
 				.context("Unable to render panels")?;
@@ -483,48 +461,6 @@ async fn renderer(
 				.context("Unable to resize wgpu")?;
 			panels_renderer.resize(&wgpu_renderer, shared.wgpu, resize.size);
 		}
-	}
-}
-
-/// Panel updater task
-#[expect(clippy::infinite_loop, reason = "We need this type signature for `spawn_task`")]
-async fn panels_updater(shared: &Shared, panels_updater_barrier: MasterBarrier) -> Result<(), AppError> {
-	loop {
-		// Update if we're not paused
-		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
-			let mut panels_images = shared.panels_images.lock().await;
-
-			for panel in shared.panels.get_all().await {
-				let mut panel = panel.lock().await;
-
-				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
-					continue;
-				};
-
-				// Calculate the delta since the last update and update it
-				// TODO: This can fall out of sync after a lot of cycles due to precision,
-				//       should we do it in some other way?
-				let now = Instant::now();
-				let delta = now.duration_since(panel.state.last_update);
-				panel.state.last_update = now;
-				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
-
-				panel
-					.update(
-						panel_images,
-						shared.wgpu,
-						&shared.panels_renderer_layouts,
-						&shared.image_requester,
-						delta,
-					)
-					.await;
-			}
-		}
-
-		// Meet up with all of the renderers
-		// TODO: If multiple renderers have different refresh rates, should we be waiting
-		//       for all?
-		panels_updater_barrier.meetup_all().await;
 	}
 }
 
