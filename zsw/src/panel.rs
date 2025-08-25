@@ -58,7 +58,7 @@ impl Panel {
 	fn max_duration(images: &PanelImages, state: &PanelState) -> Duration {
 		match (images.cur.is_loaded(), images.next.is_loaded()) {
 			(false, false) => Duration::ZERO,
-			(true, false) => state.fade_duration,
+			(true, false) => state.duration - state.fade_duration,
 			(_, true) => state.duration,
 		}
 	}
