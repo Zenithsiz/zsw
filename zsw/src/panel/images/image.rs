@@ -4,10 +4,7 @@
 use {
 	cgmath::Vector2,
 	image::DynamicImage,
-	std::{
-		path::Path,
-		sync::{Arc, OnceLock},
-	},
+	std::{path::Path, sync::Arc},
 	wgpu::util::DeviceExt,
 	zsw_wgpu::WgpuShared,
 };
@@ -62,9 +59,9 @@ impl PanelImage {
 	}
 
 	/// Returns the texture view for this image.
-	pub fn texture_view<'a>(&'a self, wgpu_shared: &'_ WgpuShared) -> &'a wgpu::TextureView {
+	pub fn texture_view<'a>(&'a self, wgpu_shared: &'a WgpuShared) -> &'a wgpu::TextureView {
 		match self {
-			Self::Empty => &self::get_empty_image_texture(wgpu_shared).1,
+			Self::Empty => &wgpu_shared.empty_texture_view,
 			Self::Loaded { texture_view, .. } => texture_view,
 		}
 	}
@@ -73,24 +70,6 @@ impl PanelImage {
 	pub fn is_loaded(&self) -> bool {
 		matches!(self, Self::Loaded { .. })
 	}
-}
-
-/// Empty texture
-static EMPTY_TEXTURE: OnceLock<(wgpu::Texture, wgpu::TextureView)> = OnceLock::new();
-
-/// Gets an empty texture
-fn get_empty_image_texture(wgpu_shared: &WgpuShared) -> &'static (wgpu::Texture, wgpu::TextureView) {
-	EMPTY_TEXTURE.get_or_init(|| {
-		// TODO: Pass some view formats?
-		let texture_descriptor =
-			self::texture_descriptor("[zsw::panel] Null image", 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb, &[
-			]);
-		let texture = wgpu_shared.device.create_texture(&texture_descriptor);
-		let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
-		let texture_view = texture.create_view(&texture_view_descriptor);
-
-		(texture, texture_view)
-	})
 }
 
 /// Creates the image texture and view
@@ -123,10 +102,21 @@ fn create_image_texture(
 		"Loaded image was too big {image_width}x{image_height} (max: {max_image_size})",
 	);
 
-	// TODO: Pass some view formats?
-	let texture_descriptor_label = format!("[zsw::panel_img] Image ({image_path:?})");
-	let texture_descriptor =
-		self::texture_descriptor(&texture_descriptor_label, image.width(), image.height(), format, &[]);
+	let texture_descriptor = wgpu::TextureDescriptor {
+		label: Some(&format!("[zsw::panel_img] Image ({image_path:?})")),
+		size: wgpu::Extent3d {
+			width:                 image.width(),
+			height:                image.height(),
+			depth_or_array_layers: 1,
+		},
+		mip_level_count: 1,
+		sample_count: 1,
+		dimension: wgpu::TextureDimension::D2,
+		format,
+		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		// TODO: Pass some view formats?
+		view_formats: &[],
+	};
 	let texture = wgpu_shared.device.create_texture_with_data(
 		&wgpu_shared.queue,
 		&texture_descriptor,
@@ -136,28 +126,4 @@ fn create_image_texture(
 	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
 	let texture_view = texture.create_view(&texture_view_descriptor);
 	(texture, texture_view)
-}
-
-/// Builds the texture descriptor
-fn texture_descriptor<'a>(
-	label: &'a str,
-	width: u32,
-	height: u32,
-	format: wgpu::TextureFormat,
-	view_formats: &'a [wgpu::TextureFormat],
-) -> wgpu::TextureDescriptor<'a> {
-	wgpu::TextureDescriptor {
-		label: Some(label),
-		size: wgpu::Extent3d {
-			width,
-			height,
-			depth_or_array_layers: 1,
-		},
-		mip_level_count: 1,
-		sample_count: 1,
-		dimension: wgpu::TextureDimension::D2,
-		format,
-		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-		view_formats,
-	}
 }

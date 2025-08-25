@@ -26,6 +26,12 @@ pub struct WgpuShared {
 
 	/// Queue
 	pub queue: wgpu::Queue,
+
+	/// Empty texture
+	pub empty_texture: wgpu::Texture,
+
+	/// Empty texture view
+	pub empty_texture_view: wgpu::TextureView,
 }
 
 /// Shared
@@ -44,11 +50,15 @@ pub async fn get_or_create_shared() -> Result<&'static WgpuShared, AppError> {
 				.context("Unable to create adaptor")?;
 			let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
 
+			let (empty_texture, empty_texture_view) = self::create_empty_image_texture(&device);
+
 			Ok::<_, AppError>(WgpuShared {
 				instance,
 				adapter,
 				device,
 				queue,
+				empty_texture,
+				empty_texture_view,
 			})
 		})
 		.await
@@ -107,4 +117,29 @@ async fn create_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, AppE
 	tracing::debug!(?adapter, "Created wgpu adapter");
 
 	Ok(adapter)
+}
+
+/// Gets an empty texture
+fn create_empty_image_texture(device: &wgpu::Device) -> (wgpu::Texture, wgpu::TextureView) {
+	// TODO: Pass some view formats?
+	let texture_descriptor = wgpu::TextureDescriptor {
+		label:           Some("[zsw] Empty image"),
+		size:            wgpu::Extent3d {
+			width:                 1,
+			height:                1,
+			depth_or_array_layers: 1,
+		},
+		mip_level_count: 1,
+		sample_count:    1,
+		dimension:       wgpu::TextureDimension::D2,
+		format:          wgpu::TextureFormat::Rgba8UnormSrgb,
+		usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		view_formats:    &[],
+	};
+
+	let texture = device.create_texture(&texture_descriptor);
+	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+	let texture_view = texture.create_view(&texture_view_descriptor);
+
+	(texture, texture_view)
 }
