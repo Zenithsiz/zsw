@@ -40,7 +40,6 @@ use {
 	cgmath::Point2,
 	chrono::TimeDelta,
 	clap::Parser,
-	core::sync::atomic::{self, AtomicBool},
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
@@ -200,7 +199,6 @@ impl WinitApp {
 			last_resize: AtomicCell::new(None),
 			// TODO: Not have a default of (0,0)?
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
-			panels_update_render_paused: AtomicBool::new(false),
 			config_dirs: Arc::clone(&config_dirs),
 			wgpu: wgpu_shared,
 			panels_renderer_layouts,
@@ -413,9 +411,7 @@ async fn renderer(
 			.start_render(shared.wgpu)
 			.context("Unable to start frame")?;
 
-		// TODO: Can we capture the frame before stopping and render that as
-		//       an image over and over?
-		if !shared.panels_update_render_paused.load(atomic::Ordering::Acquire) {
+		{
 			let mut panels_images = shared.panels_images.lock().await;
 			let mut panels_geometry_uniforms = shared_window.panels_geometry_uniforms.lock().await;
 
