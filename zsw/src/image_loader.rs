@@ -2,18 +2,14 @@
 
 // Imports
 use {
-	crate::panel::PanelGeometry,
-	cgmath::Vector2,
+	app_error::Context,
 	futures::StreamExt,
 	image::DynamicImage,
-	std::{
-		collections::HashSet,
-		fs,
-		path::{Path, PathBuf},
-	},
-	tokio::sync::{Semaphore, oneshot},
+	std::path::PathBuf,
+	tokio::sync::oneshot,
 	tracing::Instrument,
-	app_error::Context, zsw_util::AppError,
+	zsw_util::AppError,
+	zutil_cloned::cloned,
 };
 
 /// Image
@@ -31,11 +27,6 @@ pub struct Image {
 pub struct ImageRequest {
 	/// Path
 	pub path: PathBuf,
-
-	/// Sizes
-	///
-	/// Image must fit within these dimensions
-	pub sizes: Vec<Vector2<u32>>,
 
 	/// Max image size
 	pub max_image_size: u32,
@@ -100,18 +91,6 @@ pub struct ImageLoader {
 	/// Request receiver
 	// TODO: Receive this as an argument instead?
 	req_rx: async_channel::Receiver<(ImageRequest, oneshot::Sender<ImageResponse>)>,
-
-	/// Upscale cache directory
-	upscale_cache_dir: PathBuf,
-
-	/// Upscale command
-	upscale_cmd: Option<PathBuf>,
-
-	/// Upscale excluded
-	upscale_exclude: HashSet<PathBuf>,
-
-	/// Upscale semaphore
-	upscale_semaphore: Semaphore,
 }
 
 impl ImageLoader {
@@ -121,14 +100,7 @@ impl ImageLoader {
 		self.req_rx
 			.then(|(request, response_tx)| async {
 				// Load the image, then send it
-				let image_res = Self::load(
-					&self.upscale_cache_dir,
-					self.upscale_cmd.as_deref(),
-					&self.upscale_exclude,
-					&self.upscale_semaphore,
-					&request,
-				)
-				.await;
+				let image_res = Self::load(&request).await;
 				if let Err(err) = &image_res {
 					tracing::warn!("Unable to load image {:?}: {}", request.path, err.pretty());
 				}
@@ -144,42 +116,16 @@ impl ImageLoader {
 	}
 
 	/// Loads an image by request
-	async fn load(
-		upscale_cache_dir: &Path,
-		upscale_cmd: Option<&Path>,
-		upscale_exclude: &HashSet<PathBuf>,
-		upscale_semaphore: &Semaphore,
-		request: &ImageRequest,
-	) -> Result<Image, AppError> {
-		// Default image path
-		let mut image_path = request.path.clone();
-
-		// Check if we should upscale the image
-		match Self::check_upscale(
-			request,
-			upscale_exclude,
-			upscale_cache_dir,
-			upscale_cmd,
-			upscale_semaphore,
-		)
-		.await
-		{
-			Ok(Some(upscaled_image_path)) => image_path = upscaled_image_path,
-			Ok(None) => (),
-			Err(err) => tracing::warn!("Unable to upscale image {:?}: {}", request.path, err.pretty()),
-		}
-
-
+	async fn load(request: &ImageRequest) -> Result<Image, AppError> {
 		// Load the image
 		tracing::trace!("Loading image {:?}", request.path);
+		#[cloned(image_path = request.path)]
 		let mut image = tokio::task::spawn_blocking(move || image::open(image_path))
 			.instrument(tracing::trace_span!("Loading image"))
 			.await
 			.context("Unable to join image load task")?
 			.context("Unable to open image")?;
 		tracing::trace!("Loaded image {:?} ({}x{})", request.path, image.width(), image.height());
-
-		// TODO: Use `request.geometries?` for upscaling?
 
 		// If the image is too big, resize it
 		if image.width() >= request.max_image_size || image.height() >= request.max_image_size {
@@ -210,178 +156,10 @@ impl ImageLoader {
 			image,
 		})
 	}
-
-	/// Checks if an upscale is required and performs it, if so.
-	///
-	/// Returns the path of the upscaled image, if any
-	async fn check_upscale(
-		request: &ImageRequest,
-		upscale_exclude: &HashSet<PathBuf>,
-		upscale_cache_dir: &Path,
-		upscale_cmd: Option<&Path>,
-		upscale_semaphore: &Semaphore,
-	) -> Result<Option<PathBuf>, AppError> {
-		// Get the image size
-		let (image_width, image_height) = tokio::task::spawn_blocking({
-			let image_path = request.path.clone();
-			move || image::image_dimensions(image_path)
-		})
-		.await
-		.context("Unable to join image check size task")?
-		.context("Unable to get image size")?;
-
-		// Then compute the minimum size required.
-		// Note: If none, we don't do anything else
-		let image_size = Vector2::new(image_width, image_height);
-		let minimum_size = request
-			.sizes
-			.iter()
-			.map(|size| Self::minimum_image_size_for_panel(Vector2::new(image_width, image_height), *size))
-			.reduce(|lhs, rhs| Vector2::new(lhs.x.max(rhs.x), lhs.y.max(rhs.y)));
-		let Some(minimum_size) = minimum_size else {
-			tracing::trace!(
-				"Image {:?} ({image_width}x{image_height}) had no minimum image size",
-				request.path,
-			);
-			return Ok(None);
-		};
-
-		// If the image isn't smaller, return
-		if image_width >= minimum_size.x && image_height >= minimum_size.y {
-			tracing::trace!(
-				"Image {:?} ({image_width}x{image_height}) is larger than smaller size {}x{}",
-				request.path,
-				minimum_size.x,
-				minimum_size.y
-			);
-			return Ok(None);
-		}
-
-		// If the image is in the excluded, return
-		if upscale_exclude.contains(&request.path) {
-			tracing::trace!("Not upscaling excluded image {:?}", request.path);
-			return Ok(None);
-		}
-
-		// Else get the upscale command
-		let Some(upscale_cmd) = upscale_cmd else {
-			tracing::trace!(
-				"Not upscaling image {:?} due to no upscaler command supplied and no cached image found",
-				request.path
-			);
-			return Ok(None);
-		};
-
-		// Else try to upscale
-		let upscaled_image_path = Self::upscale_image(
-			&request.path,
-			upscale_cache_dir,
-			upscale_cmd,
-			upscale_semaphore,
-			image_size,
-			minimum_size,
-		)
-		.await?;
-
-		Ok(Some(upscaled_image_path))
-	}
-
-	/// Upscales an image and returns it's path
-	///
-	/// Returns the path of the upscaled image, if any
-	async fn upscale_image(
-		image_path: &PathBuf,
-		upscale_cache_dir: &Path,
-		upscale_cmd: &Path,
-		upscale_semaphore: &Semaphore,
-		image_size: Vector2<u32>,
-		minimum_size: Vector2<u32>,
-	) -> Result<PathBuf, AppError> {
-		// Calculate the ratio
-		// Note: Needs to be a power of two for upscaler so we round it up, if necessary
-		#[expect(clippy::cast_sign_loss)] // They're all positive
-		let ratio = f32::max(
-			minimum_size.x as f32 / image_size.x as f32,
-			minimum_size.y as f32 / image_size.y as f32,
-		)
-		.ceil() as u32;
-		let ratio = ratio.next_power_of_two();
-		tracing::trace!(
-			"Using upscale ratio x{ratio} for image {image_path:?} ({}x{}) with minimum size {}x{}",
-			image_size.x,
-			image_size.y,
-			minimum_size.x,
-			minimum_size.y
-		);
-
-		// Calculate the upscaled image path
-		// TODO: Do this some other way?
-		let upscaled_image_path = upscale_cache_dir.join(format!(
-			"{}-x{ratio}.png",
-			image_path.with_extension("").to_string_lossy().replace('/', "／")
-		));
-
-		// If the path already exists, use it
-		if fs::exists(&upscaled_image_path).context("Unable to check if upscaled image exists")? {
-			return Ok(upscaled_image_path);
-		}
-
-		let _permit = upscale_semaphore.acquire().await;
-		tracing::trace!("Upscaling image {image_path:?} with scale x{ratio} to {upscaled_image_path:?}");
-		tokio::process::Command::new(upscale_cmd)
-			.arg("-i")
-			.arg(image_path)
-			.arg("-o")
-			.arg(&upscaled_image_path)
-			.arg("-s")
-			.arg(ratio.to_string())
-			.kill_on_drop(true)
-			.spawn()
-			.context("Unable to run upscaler")?
-			.wait()
-			.instrument(tracing::trace_span!("Upscaling image"))
-			.await
-			.context("Unable to wait for upscaler to finish")?
-			.exit_ok()
-			.context("upscaler returned error")?;
-		tracing::trace!("Upscaled image {image_path:?} to {upscaled_image_path:?}");
-
-		Ok(upscaled_image_path)
-	}
-
-	/// Determines the minimum size for an image for a panel
-	fn minimum_image_size_for_panel(image_size: Vector2<u32>, panel_size: Vector2<u32>) -> Vector2<u32> {
-		let ratio = PanelGeometry::image_ratio(panel_size, image_size);
-
-		#[expect(clippy::cast_sign_loss)] // The sizes and ratio are positive
-		Vector2::new(
-			(panel_size.x as f32 / ratio.x).ceil() as u32,
-			(panel_size.y as f32 / ratio.y).ceil() as u32,
-		)
-	}
 }
 
 /// Creates the image loader service
-pub async fn create(
-	upscale_cache_dir: PathBuf,
-	upscale_cmd: Option<PathBuf>,
-	upscale_exclude: HashSet<PathBuf>,
-) -> Result<(ImageLoader, ImageRequester), AppError> {
-	// Create the upscale cache directory
-	tokio::fs::create_dir_all(&upscale_cache_dir)
-		.await
-		.context("Unable to create upscale cache directory")?;
-
-
+pub async fn create() -> Result<(ImageLoader, ImageRequester), AppError> {
 	let (req_tx, req_rx) = async_channel::unbounded();
-	Ok((
-		ImageLoader {
-			req_rx,
-			upscale_cache_dir,
-			upscale_cmd,
-			upscale_exclude,
-			upscale_semaphore: Semaphore::new(1),
-		},
-		ImageRequester { req_tx },
-	))
+	Ok((ImageLoader { req_rx }, ImageRequester { req_tx }))
 }

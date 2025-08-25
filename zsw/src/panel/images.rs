@@ -8,7 +8,7 @@ pub use self::image::PanelImage;
 
 // Imports
 use {
-	super::{PanelGeometry, PanelsRendererLayouts, PlaylistPlayer},
+	super::{PanelsRendererLayouts, PlaylistPlayer},
 	crate::image_loader::{ImageReceiver, ImageRequest, ImageRequester},
 	std::{self, mem},
 	zsw_wgpu::WgpuShared,
@@ -117,11 +117,10 @@ impl PanelImages {
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 		image_requester: &ImageRequester,
-		geometries: &[PanelGeometry],
 	) {
 		// Get the image receiver, or schedule it.
 		let Some(image_receiver) = self.scheduled_image_receiver.as_mut() else {
-			_ = self.schedule_load_image(wgpu_shared, image_requester, geometries).await;
+			_ = self.schedule_load_image(wgpu_shared, image_requester).await;
 			return;
 		};
 
@@ -147,7 +146,7 @@ impl PanelImages {
 				);
 				self.playlist_player.remove(&response.request.path);
 
-				_ = self.schedule_load_image(wgpu_shared, image_requester, geometries).await;
+				_ = self.schedule_load_image(wgpu_shared, image_requester).await;
 				return;
 			},
 		};
@@ -189,7 +188,6 @@ impl PanelImages {
 		&mut self,
 		wgpu_shared: &WgpuShared,
 		image_requester: &ImageRequester,
-		geometries: &[PanelGeometry],
 	) -> Option<usize> {
 		// If we already have an image scheduled, don't schedule another
 		if self.scheduled_image_receiver.is_some() {
@@ -207,7 +205,6 @@ impl PanelImages {
 		let wgpu_limits = wgpu_shared.device.limits();
 		self.scheduled_image_receiver = Some(image_requester.request(ImageRequest {
 			path: image_path.to_path_buf(),
-			sizes: geometries.iter().map(|geometry| geometry.geometry.size).collect(),
 			max_image_size: wgpu_limits.max_texture_dimension_2d,
 			playlist_pos,
 		}));

@@ -80,7 +80,7 @@ impl Panel {
 
 		// Then load any missing images
 		images
-			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
+			.load_missing(wgpu_shared, renderer_layouts, image_requester)
 			.await;
 	}
 
@@ -124,7 +124,7 @@ impl Panel {
 
 		// Then load any missing images
 		images
-			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
+			.load_missing(wgpu_shared, renderer_layouts, image_requester)
 			.await;
 	}
 
@@ -141,7 +141,7 @@ impl Panel {
 	) {
 		// Then load any missing images
 		images
-			.load_missing(wgpu_shared, renderer_layouts, image_requester, &self.geometries)
+			.load_missing(wgpu_shared, renderer_layouts, image_requester)
 			.await;
 
 		// If we're paused, don't update anything

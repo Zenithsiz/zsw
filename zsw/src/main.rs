@@ -10,7 +10,8 @@
 	yeet_expr,
 	iter_partition_in_place,
 	type_alias_impl_trait,
-	proc_macro_hygiene
+	proc_macro_hygiene,
+	stmt_expr_attributes
 )]
 
 // Modules
@@ -105,7 +106,7 @@ fn main() -> Result<(), AppError> {
 		.context("Unable to build winit event loop")?;
 
 	// Initialize the app
-	let mut app = WinitApp::new(dirs, config, config_dirs, event_loop.create_proxy())
+	let mut app = WinitApp::new(config, config_dirs, event_loop.create_proxy())
 		.block_on()
 		.context("Unable to create winit app")?;
 
@@ -161,7 +162,6 @@ impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
 impl WinitApp {
 	/// Creates a new app
 	pub async fn new(
-		dirs: ProjectDirs,
 		config: Arc<Config>,
 		config_dirs: Arc<ConfigDirs>,
 		event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
@@ -181,17 +181,7 @@ impl WinitApp {
 		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
 		let panels = Panels::new(config_dirs.panels().to_path_buf());
 
-		let upscale_cache_dir = config
-			.upscale_cache_dir
-			.clone()
-			.unwrap_or_else(|| dirs.cache_dir().join("upscale_cache/"));
-		let (image_loader, image_requester) = image_loader::create(
-			upscale_cache_dir,
-			config.upscale_cmd.clone(),
-			config.upscale_exclude.clone(),
-		)
-		.await
-		.context("Unable to create image loader")?;
+		let (image_loader, image_requester) = image_loader::create().await.context("Unable to create image loader")?;
 
 		// Shared state
 		let shared = Shared {

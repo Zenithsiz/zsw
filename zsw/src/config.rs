@@ -4,7 +4,6 @@
 use {
 	app_error::Context,
 	std::{
-		collections::HashSet,
 		fs,
 		num::NonZeroUsize,
 		path::{Path, PathBuf},
@@ -29,20 +28,6 @@ pub struct Config {
 	/// Will be overridden by command-line arguments
 	#[serde(default)]
 	pub log_file: Option<PathBuf>,
-
-	/// Upscale cache directory
-	#[serde(default)]
-	pub upscale_cache_dir: Option<PathBuf>,
-
-	/// Upscaling command, if any.
-	///
-	/// Will be called with arguments `["-i", <input-file>, "-o", <output-file>, "-s", <integer-power-of-two-scale>]`
-	#[serde(default)]
-	pub upscale_cmd: Option<PathBuf>,
-
-	/// Upscaling excluded (by absolute path)
-	#[serde(default)]
-	pub upscale_exclude: HashSet<PathBuf>,
 
 	/// Default
 	#[serde(default)]
@@ -98,9 +83,6 @@ impl Default for Config {
 			tokio_worker_threads: None,
 			rayon_worker_threads: None,
 			log_file:             None,
-			upscale_cache_dir:    None,
-			upscale_cmd:          None,
-			upscale_exclude:      HashSet::new(),
 			default:              ConfigDefault::default(),
 		}
 	}
