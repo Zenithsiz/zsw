@@ -66,25 +66,25 @@ impl Panel {
 	/// Skips to the next image.
 	///
 	/// If the images aren't loaded, does nothing
-	pub async fn skip(
+	pub fn skip(
 		&mut self,
 		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 	) {
-		match images.step_next(wgpu_shared, renderer_layouts).await {
+		match images.step_next(wgpu_shared, renderer_layouts) {
 			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_duration),
 			Err(()) => self.state.progress = Self::max_duration(images, &self.state),
 		}
 
 		// Then load any missing images
-		images.load_missing(wgpu_shared, renderer_layouts).await;
+		images.load_missing(wgpu_shared, renderer_layouts);
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	///
 	/// If the images aren't loaded, does nothing
-	pub async fn step(
+	pub fn step(
 		&mut self,
 		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
@@ -101,13 +101,13 @@ impl Panel {
 		// Update the progress, potentially rolling over to the previous/next image
 		self.state.progress = match next_progress {
 			Some(next_progress) => match next_progress >= self.state.duration {
-				true => match images.step_next(wgpu_shared, renderer_layouts).await {
+				true => match images.step_next(wgpu_shared, renderer_layouts) {
 					Ok(()) => next_progress - self.state.duration,
 					Err(()) => Self::max_duration(images, &self.state),
 				},
 				false => next_progress.clamp(Duration::ZERO, Self::max_duration(images, &self.state)),
 			},
-			None => match images.step_prev(wgpu_shared, renderer_layouts).await {
+			None => match images.step_prev(wgpu_shared, renderer_layouts) {
 				// Note: This branch is only taken when `delta` is negative, so we can always
 				//       subtract without checking `delta_is_positive`.
 				Ok(()) => match (self.state.duration + self.state.progress).checked_sub(delta_abs) {
@@ -120,13 +120,13 @@ impl Panel {
 		};
 
 		// Then load any missing images
-		images.load_missing(wgpu_shared, renderer_layouts).await;
+		images.load_missing(wgpu_shared, renderer_layouts);
 	}
 
 	/// Updates this panel's state
 	///
 	/// If the images aren't loaded, does nothing
-	pub async fn update(
+	pub fn update(
 		&mut self,
 		images: &mut PanelImages,
 		wgpu_shared: &WgpuShared,
@@ -135,14 +135,14 @@ impl Panel {
 		delta: TimeDelta,
 	) {
 		// Then load any missing images
-		images.load_missing(wgpu_shared, renderer_layouts).await;
+		images.load_missing(wgpu_shared, renderer_layouts);
 
 		// If we're paused, don't update anything
 		if self.state.paused {
 			return;
 		}
 
-		self.step(images, wgpu_shared, renderer_layouts, delta).await;
+		self.step(images, wgpu_shared, renderer_layouts, delta);
 	}
 }
 

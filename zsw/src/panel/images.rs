@@ -81,11 +81,7 @@ impl PanelImages {
 	/// Steps to the previous image, if any
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub async fn step_prev(
-		&mut self,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) -> Result<(), ()> {
+	pub fn step_prev(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Result<(), ()> {
 		self.playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
@@ -97,11 +93,7 @@ impl PanelImages {
 	/// Steps to the next image.
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub async fn step_next(
-		&mut self,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) -> Result<(), ()> {
+	pub fn step_next(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Result<(), ()> {
 		if !self.next.is_loaded() {
 			return Err(());
 		}
@@ -118,10 +110,10 @@ impl PanelImages {
 	/// Loads any missing images, prioritizing the current, then next, then previous.
 	///
 	/// Requests images if missing any.
-	pub async fn load_missing(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub fn load_missing(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
 		// Get the image receiver, or schedule it.
 		let Some(image_receiver) = self.scheduled_image_receiver.as_mut() else {
-			_ = self.schedule_load_image(wgpu_shared).await;
+			_ = self.schedule_load_image(wgpu_shared);
 			return;
 		};
 
@@ -155,7 +147,7 @@ impl PanelImages {
 				);
 				self.playlist_player.remove(&res.path);
 
-				_ = self.schedule_load_image(wgpu_shared).await;
+				_ = self.schedule_load_image(wgpu_shared);
 				return;
 			},
 		};
@@ -193,7 +185,7 @@ impl PanelImages {
 	///
 	/// If the playlist player is empty, does not schedule.
 	/// If already scheduled, returns
-	async fn schedule_load_image(&mut self, wgpu_shared: &WgpuShared) -> Option<usize> {
+	fn schedule_load_image(&mut self, wgpu_shared: &WgpuShared) -> Option<usize> {
 		// If we already have an image scheduled, don't schedule another
 		if self.scheduled_image_receiver.is_some() {
 			return None;

@@ -38,7 +38,7 @@ static SHARED: OnceCell<WgpuShared> = OnceCell::const_new();
 pub async fn get_or_create_shared() -> Result<&'static WgpuShared, AppError> {
 	SHARED
 		.get_or_try_init(async || {
-			let instance = self::create_instance().await.context("Unable to create instance")?;
+			let instance = self::create_instance().context("Unable to create instance")?;
 			let adapter = self::create_adapter(&instance)
 				.await
 				.context("Unable to create adaptor")?;
@@ -80,7 +80,7 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 }
 
 /// Creates the instance
-async fn create_instance() -> Result<wgpu::Instance, AppError> {
+fn create_instance() -> Result<wgpu::Instance, AppError> {
 	let instance_desc = wgpu::InstanceDescriptor::from_env_or_default();
 	tracing::debug!(?instance_desc, "Requesting wgpu instance");
 	let instance = wgpu::Instance::new(&instance_desc);

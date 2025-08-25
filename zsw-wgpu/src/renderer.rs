@@ -34,11 +34,11 @@ pub struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-	pub async fn new(window: Arc<Window>, shared: &WgpuShared) -> Result<Self, AppError> {
+	pub fn new(window: Arc<Window>, shared: &WgpuShared) -> Result<Self, AppError> {
 		// Create the surface
 		// SAFETY: We keep an `Arc<Window>` that we only drop
 		//         *after* dropping the surface.
-		let surface = unsafe { self::create_surface(shared, &window) }.await?;
+		let surface = unsafe { self::create_surface(shared, &window) }?;
 
 		// Configure the surface and get the preferred texture format and surface size
 		let surface_size = window.inner_size();
@@ -201,7 +201,7 @@ fn configure_window_surface(
 ///
 /// # Safety
 /// The returned surface *must* be dropped before the window.
-async unsafe fn create_surface(shared: &WgpuShared, window: &Window) -> Result<wgpu::Surface<'static>, AppError> {
+unsafe fn create_surface(shared: &WgpuShared, window: &Window) -> Result<wgpu::Surface<'static>, AppError> {
 	// Create the surface
 	tracing::debug!(?window, "Requesting wgpu surface");
 	// SAFETY: User ensures that the surface is dropped before the window.

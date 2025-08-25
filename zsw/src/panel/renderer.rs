@@ -90,7 +90,7 @@ pub struct PanelsRenderer {
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
-	pub async fn new(wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared) -> Result<Self, AppError> {
+	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared) -> Result<Self, AppError> {
 		// Create the index / vertex buffer
 		let indices = self::create_indices(wgpu_shared);
 		let vertices = self::create_vertices(wgpu_shared);
@@ -192,7 +192,7 @@ impl PanelsRenderer {
 				panel.state.last_update = now;
 				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
-				panel.update(panel_images, wgpu_shared, layouts, delta).await;
+				panel.update(panel_images, wgpu_shared, layouts, delta);
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either

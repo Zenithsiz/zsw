@@ -141,9 +141,8 @@ clippy.struct_field_names      = "allow"
 # Performance of floats isn't paramount
 clippy.suboptimal_flops = "allow"
 
-# Some functions might return an error / be async in the future
+# Some functions might return an error in the future
 clippy.unnecessary_wraps = "allow"
-clippy.unused_async      = "allow"
 
 # Due to working with windows and rendering, which use `u32` / `f32` liberally
 # and interchangeably, we can't do much aside from casting and accepting possible

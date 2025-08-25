@@ -126,14 +126,14 @@ struct WinitApp {
 
 impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
 	fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-		if let Err(err) = self.init_window(event_loop).block_on() {
+		if let Err(err) = self.init_window(event_loop) {
 			tracing::warn!("Unable to initialize window: {}", err.pretty());
 			event_loop.exit();
 		}
 	}
 
 	fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-		if let Err(err) = self.destroy_window().block_on() {
+		if let Err(err) = self.destroy_window() {
 			tracing::warn!("Unable to destroy window: {}", err.pretty());
 			event_loop.exit();
 		}
@@ -208,17 +208,15 @@ impl WinitApp {
 	}
 
 	/// Initializes the window related things
-	pub async fn init_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Result<(), AppError> {
+	pub fn init_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Result<(), AppError> {
 		let windows = window::create(event_loop).context("Unable to create winit event loop and window")?;
 		for app_window in windows {
 			let window = Arc::new(app_window.window);
-			let wgpu_renderer = WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu)
-				.await
-				.context("Unable to create wgpu renderer")?;
+			let wgpu_renderer =
+				WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu).context("Unable to create wgpu renderer")?;
 
-			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu)
-				.await
-				.context("Unable to create panels renderer")?;
+			let panels_renderer =
+				PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu).context("Unable to create panels renderer")?;
 			let egui_event_handler = EguiEventHandler::new(&window);
 			let egui_painter = EguiPainter::new(&egui_event_handler);
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
@@ -286,7 +284,7 @@ impl WinitApp {
 
 	/// Destroys the window related things
 	#[expect(clippy::needless_pass_by_ref_mut, reason = "We'll use it in the future")]
-	pub async fn destroy_window(&mut self) -> Result<(), AppError> {
+	pub fn destroy_window(&mut self) -> Result<(), AppError> {
 		// TODO: Handle destroying all tasks that use the window
 		todo!();
 	}
@@ -504,9 +502,7 @@ async fn egui_painter(
 					let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 						continue;
 					};
-					panel
-						.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts)
-						.await;
+					panel.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts);
 				}
 			}
 
@@ -544,9 +540,7 @@ async fn egui_painter(
 					let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 						continue;
 					};
-					panel
-						.step(panel_images, shared.wgpu, &shared.panels_renderer_layouts, time_delta)
-						.await;
+					panel.step(panel_images, shared.wgpu, &shared.panels_renderer_layouts, time_delta);
 				}
 			}
 
