@@ -5,8 +5,8 @@ geometry = "960x540+0+540"
 geometry = "960x1080+960+0"
 
 [state]
-duration   = 300
-fade_point = 250
+duration      = 300
+fade_duration = 50
 
 [shader]
 type     = "fade-out"

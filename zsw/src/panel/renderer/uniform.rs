@@ -55,12 +55,12 @@ pub struct None {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct Fade {
-	pub pos_matrix: Matrix4x4,
-	pub prev:       PanelImageUniforms,
-	pub cur:        PanelImageUniforms,
-	pub next:       PanelImageUniforms,
-	pub fade_point: f32,
-	pub progress:   f32,
+	pub pos_matrix:    Matrix4x4,
+	pub prev:          PanelImageUniforms,
+	pub cur:           PanelImageUniforms,
+	pub next:          PanelImageUniforms,
+	pub fade_duration: f32,
+	pub progress:      f32,
 
 	pub _unused: [u32; 2],
 }
@@ -70,13 +70,13 @@ pub struct Fade {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeWhite {
-	pub pos_matrix: Matrix4x4,
-	pub prev:       PanelImageUniforms,
-	pub cur:        PanelImageUniforms,
-	pub next:       PanelImageUniforms,
-	pub fade_point: f32,
-	pub progress:   f32,
-	pub strength:   f32,
+	pub pos_matrix:    Matrix4x4,
+	pub prev:          PanelImageUniforms,
+	pub cur:           PanelImageUniforms,
+	pub next:          PanelImageUniforms,
+	pub fade_duration: f32,
+	pub progress:      f32,
+	pub strength:      f32,
 
 	pub _unused: u32,
 }
@@ -86,13 +86,13 @@ pub struct FadeWhite {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeOut {
-	pub pos_matrix: Matrix4x4,
-	pub prev:       PanelImageUniforms,
-	pub cur:        PanelImageUniforms,
-	pub next:       PanelImageUniforms,
-	pub fade_point: f32,
-	pub progress:   f32,
-	pub strength:   f32,
+	pub pos_matrix:    Matrix4x4,
+	pub prev:          PanelImageUniforms,
+	pub cur:           PanelImageUniforms,
+	pub next:          PanelImageUniforms,
+	pub fade_duration: f32,
+	pub progress:      f32,
+	pub strength:      f32,
 
 	pub _unused: u32,
 }
@@ -102,13 +102,13 @@ pub struct FadeOut {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeIn {
-	pub pos_matrix: Matrix4x4,
-	pub prev:       PanelImageUniforms,
-	pub cur:        PanelImageUniforms,
-	pub next:       PanelImageUniforms,
-	pub fade_point: f32,
-	pub progress:   f32,
-	pub strength:   f32,
+	pub pos_matrix:    Matrix4x4,
+	pub prev:          PanelImageUniforms,
+	pub cur:           PanelImageUniforms,
+	pub next:          PanelImageUniforms,
+	pub fade_duration: f32,
+	pub progress:      f32,
+	pub strength:      f32,
 
 	pub _unused: u32,
 }

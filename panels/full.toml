@@ -2,5 +2,5 @@
 geometry = "1366x768+0+0"
 
 [state]
-duration   = 300
-fade_point = 250
+duration      = 300
+fade_duration = 50

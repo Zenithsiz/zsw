@@ -57,7 +57,7 @@ impl Panel {
 	fn max_duration(images: &PanelImages, state: &PanelState) -> u64 {
 		match (images.cur.is_loaded(), images.next.is_loaded()) {
 			(false, false) => 0,
-			(true, false) => state.fade_point,
+			(true, false) => state.fade_duration,
 			(_, true) => state.duration,
 		}
 	}
@@ -73,7 +73,7 @@ impl Panel {
 		image_requester: &ImageRequester,
 	) {
 		match images.step_next(wgpu_shared, renderer_layouts).await {
-			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_point),
+			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_duration),
 			Err(()) => self.state.progress = Self::max_duration(images, &self.state),
 		}
 

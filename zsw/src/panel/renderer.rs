@@ -12,6 +12,7 @@ use {
 	self::uniform::PanelImageUniforms,
 	super::{Panel, PanelImage, PanelImages, PanelName, Panels},
 	crate::{config_dirs::ConfigDirs, panel::PanelGeometry},
+	app_error::Context,
 	cgmath::Vector2,
 	core::{
 		future::Future,
@@ -27,9 +28,8 @@ use {
 	tokio::fs,
 	wgpu::{naga, util::DeviceExt},
 	winit::dpi::PhysicalSize,
-	zsw_util::Rect,
+	zsw_util::{AppError, Rect},
 	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
-	app_error::Context, zsw_util::AppError,
 };
 
 /// Panels renderer layouts
@@ -265,7 +265,7 @@ impl PanelsRenderer {
 			write_uniforms(bytemuck::bytes_of(&$uniforms))
 		}
 
-		let fade_point = panel.state.fade_point_norm();
+		let fade_duration = panel.state.fade_duration_norm();
 		let progress = panel.state.progress_norm();
 		match panel.shader {
 			PanelShader::None { background_color } => write_uniforms!(uniform::None {
@@ -277,7 +277,7 @@ impl PanelsRenderer {
 				prev,
 				cur,
 				next,
-				fade_point,
+				fade_duration,
 				progress,
 				_unused: [0; 2],
 			}),
@@ -286,7 +286,7 @@ impl PanelsRenderer {
 				prev,
 				cur,
 				next,
-				fade_point,
+				fade_duration,
 				progress,
 				strength,
 				_unused: 0,
@@ -296,7 +296,7 @@ impl PanelsRenderer {
 				prev,
 				cur,
 				next,
-				fade_point,
+				fade_duration,
 				progress,
 				strength,
 				_unused: 0,
@@ -306,7 +306,7 @@ impl PanelsRenderer {
 				prev,
 				cur,
 				next,
-				fade_point,
+				fade_duration,
 				progress,
 				strength,
 				_unused: 0,

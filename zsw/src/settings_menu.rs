@@ -127,19 +127,21 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				let cur_max = match panels_images.get(&panel.name) {
 					Some(panel_images) => match (panel_images.cur.is_loaded(), panel_images.next.is_loaded()) {
 						(false, false) => 0,
-						(true, false) => panel.state.fade_point,
+						(true, false) => panel.state.fade_duration,
 						(_, true) => panel.state.duration,
 					},
 					None => 0,
 				};
+
+				// TODO: This should be done elsewhere.
 				panel.state.progress = panel.state.progress.clamp(0, cur_max);
 			});
 
 			ui.horizontal(|ui| {
-				ui.label("Fade Point");
-				let min = panel.state.duration / 2;
-				let max = panel.state.duration;
-				egui::Slider::new(&mut panel.state.fade_point, min..=max)
+				ui.label("Fade Duration");
+				let min = 0;
+				let max = panel.state.duration / 2;
+				egui::Slider::new(&mut panel.state.fade_duration, min..=max)
 					.clamping(egui::SliderClamping::Edits)
 					.ui(ui);
 			});

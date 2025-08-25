@@ -4,11 +4,11 @@
 use {
 	super::{Panel, PanelName, PanelShader, PanelState, ser},
 	crate::AppError,
+	app_error::Context,
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
 	tokio::sync::OnceCell,
 	zsw_util::PathAppendExt,
-	app_error::Context,
 };
 
 /// Panel storage
@@ -61,10 +61,10 @@ impl Panels {
 				// Finally convert it
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
 				let state = PanelState {
-					paused:     false,
-					progress:   0,
-					duration:   panel.state.duration,
-					fade_point: panel.state.fade_point,
+					paused:        false,
+					progress:      0,
+					duration:      panel.state.duration,
+					fade_duration: panel.state.fade_duration,
 				};
 
 				// Get the shader

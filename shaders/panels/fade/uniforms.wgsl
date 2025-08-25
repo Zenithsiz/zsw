@@ -12,7 +12,7 @@ struct Uniforms {
 	prev: ImageUniforms,
 	cur: ImageUniforms,
 	next: ImageUniforms,
-	fade_point: f32,
+	fade_duration: f32,
 	progress: f32,
 
 	// TODO: Reduce this repetition

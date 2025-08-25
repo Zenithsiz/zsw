@@ -29,8 +29,8 @@ pub struct PanelGeometry {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct PanelState {
-	pub duration:   u64,
-	pub fade_point: u64,
+	pub duration:      u64,
+	pub fade_duration: u64,
 }
 
 /// Configuration shader

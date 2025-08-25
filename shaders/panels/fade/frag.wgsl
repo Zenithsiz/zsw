@@ -45,14 +45,17 @@ fn main(in: VertexOutput) -> FragOutput {
 	var out: FragOutput;
 
 	let p = uniforms.progress;
-	let f = uniforms.fade_point;
+	let f = uniforms.fade_duration;
 
-	let progress_prev = 1.0 - max((1.0 - p - f) / (3.0 - 2.0 * f), 0.0);
-	let progress_cur  = (p + 1.0 - f) / (3.0 - 2.0 * f);
-	let progress_next = max((p - f) / (3.0 - 2.0 * f), 0.0);
+	// Full duration an image is on screen (including the fades)
+	let d = 1.0 + 2.0 * f;
 
-	let alpha_prev = 0.5 * saturate(1.0 - (      p) / (1.0 - f));
-	let alpha_next = 0.5 * saturate(1.0 - (1.0 - p) / (1.0 - f));
+	let progress_prev = 1.0 - max((f - p) / d, 0.0);
+	let progress_cur  = (p + f) / d;
+	let progress_next = max((p - 1.0 + f) / d, 0.0);
+
+	let alpha_prev = 0.5 * saturate(1.0 - (      p) / f);
+	let alpha_next = 0.5 * saturate(1.0 - (1.0 - p) / f);
 	let alpha_cur  = 1.0 - max(alpha_prev, alpha_next);
 
 	// Sample the textures
