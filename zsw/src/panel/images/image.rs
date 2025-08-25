@@ -50,7 +50,7 @@ impl PanelImage {
 	#[must_use]
 	pub fn new(wgpu_shared: &WgpuShared, image_path: Arc<Path>, image: DynamicImage) -> Self {
 		let size = Vector2::new(image.width(), image.height());
-		let (texture, texture_view) = self::create_image_texture(wgpu_shared, image);
+		let (texture, texture_view) = self::create_image_texture(wgpu_shared, &image_path, image);
 
 		Self::Loaded {
 			_texture: texture,
@@ -94,7 +94,11 @@ fn get_empty_image_texture(wgpu_shared: &WgpuShared) -> &'static (wgpu::Texture,
 }
 
 /// Creates the image texture and view
-fn create_image_texture(wgpu_shared: &WgpuShared, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
+fn create_image_texture(
+	wgpu_shared: &WgpuShared,
+	image_path: &Path,
+	image: DynamicImage,
+) -> (wgpu::Texture, wgpu::TextureView) {
 	// Get the image's format, converting if necessary.
 	let (image, format) = match image {
 		// With `rgba8` we can simply use the image
@@ -120,8 +124,9 @@ fn create_image_texture(wgpu_shared: &WgpuShared, image: DynamicImage) -> (wgpu:
 	);
 
 	// TODO: Pass some view formats?
+	let texture_descriptor_label = format!("[zsw::panel_img] Image ({image_path:?})");
 	let texture_descriptor =
-		self::texture_descriptor("[zsw::panel_img] Image", image.width(), image.height(), format, &[]);
+		self::texture_descriptor(&texture_descriptor_label, image.width(), image.height(), format, &[]);
 	let texture = wgpu_shared.device.create_texture_with_data(
 		&wgpu_shared.queue,
 		&texture_descriptor,

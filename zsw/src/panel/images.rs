@@ -254,7 +254,7 @@ enum Slot {
 /// Creates the texture sampler
 fn create_texture_sampler(wgpu_shared: &WgpuShared) -> wgpu::Sampler {
 	let descriptor = wgpu::SamplerDescriptor {
-		label: Some("[zsw::panel] Texture sampler"),
+		label: Some("[zsw::panel] Image sampler"),
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
 		address_mode_v: wgpu::AddressMode::ClampToEdge,
 		address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -295,7 +295,7 @@ fn create_image_bind_group(
 				resource: wgpu::BindingResource::Sampler(sampler),
 			},
 		],
-		label:   None,
+		label:   Some("[zsw::panel] Image bind group"),
 	};
 	wgpu_shared.device.create_bind_group(&descriptor)
 }
