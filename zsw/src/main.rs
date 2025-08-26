@@ -197,7 +197,7 @@ impl WinitApp {
 		#[cloned(shared, config)]
 		self::spawn_task("Load default panels", async move {
 			self::load_default_panels(&config, &shared).await
-		});
+		})?;
 
 		Ok(Self {
 			window_event_handlers: HashMap::new(),
@@ -241,7 +241,7 @@ impl WinitApp {
 					settings_menu,
 				)
 				.await
-			});
+			})?;
 
 			_ = self
 				.window_event_handlers
@@ -317,27 +317,36 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		tracing::debug!("Loaded default panel images {panel_name:?}");
 
 		Ok(())
-	});
+	})?;
 
 	Ok(())
 }
 
 /// Spawns a task
 #[track_caller]
-pub fn spawn_task<Fut>(name: impl Into<String>, fut: Fut)
+pub fn spawn_task<T, Fut>(
+	name: impl Into<String>,
+	fut: Fut,
+) -> Result<tokio::task::JoinHandle<Result<T, AppError>>, AppError>
 where
-	Fut: Future<Output = Result<(), AppError>> + Send + 'static,
+	Fut: Future<Output = Result<T, AppError>> + Send + 'static,
+	T: Send + 'static,
 {
 	let name = name.into();
 
-	let _ = tokio::task::Builder::new().name(&name.clone()).spawn(async move {
-		let id = tokio::task::id();
-		tracing::debug!("Spawning task {name:?} ({id:?})");
-		match fut.await {
-			Ok(()) => tracing::debug!("Task {name:?} ({id:?}) finished"),
-			Err(err) => tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()),
-		}
-	});
+	tokio::task::Builder::new()
+		.name(&name.clone())
+		.spawn(
+			#[cloned(name)]
+			async move {
+				let id = tokio::task::id();
+				tracing::debug!("Spawning task {name:?} ({id:?})");
+				fut.await
+					.inspect(|_| tracing::debug!("Task {name:?} ({id:?}) finished"))
+					.inspect_err(|err| tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()))
+			},
+		)
+		.with_context(|| format!("Unable to spawn task {name:?}"))
 }
 
 /// Renderer task
