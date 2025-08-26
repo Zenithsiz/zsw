@@ -17,9 +17,6 @@ pub struct ConfigDirs {
 
 	/// Playlist directory
 	playlists: OnceLock<PathBuf>,
-
-	/// Shaders directory
-	shaders: OnceLock<PathBuf>,
 }
 
 impl ConfigDirs {
@@ -29,7 +26,6 @@ impl ConfigDirs {
 			root,
 			panels: OnceLock::new(),
 			playlists: OnceLock::new(),
-			shaders: OnceLock::new(),
 		}
 	}
 
@@ -47,15 +43,6 @@ impl ConfigDirs {
 		self.playlists.get_or_init(|| {
 			let path = self.root.join("playlists");
 			tracing::info!("Playlists path: {path:?}");
-			path
-		})
-	}
-
-	/// Returns the shaders directory
-	pub fn shaders(&self) -> &Path {
-		self.shaders.get_or_init(|| {
-			let path = self.root.join("shaders");
-			tracing::info!("Shaders path: {path:?}");
 			path
 		})
 	}

@@ -5,7 +5,6 @@ use {
 	crate::{
 		AppEvent,
 		Resize,
-		config_dirs::ConfigDirs,
 		panel::{PanelImages, PanelName, Panels, PanelsGeometryUniforms, PanelsRendererLayouts},
 		playlist::Playlists,
 	},
@@ -24,8 +23,6 @@ pub struct Shared {
 
 	pub last_resize: AtomicCell<Option<Resize>>,
 	pub cursor_pos:  AtomicCell<PhysicalPosition<f64>>,
-
-	pub config_dirs: Arc<ConfigDirs>,
 
 	pub wgpu:                    &'static WgpuShared,
 	pub panels_renderer_layouts: PanelsRendererLayouts,

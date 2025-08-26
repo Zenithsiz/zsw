@@ -35,7 +35,7 @@ use {
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
 	},
-	app_error::{AppError, Context, app_error},
+	app_error::{AppError, Context},
 	args::Args,
 	cgmath::Point2,
 	chrono::TimeDelta,
@@ -165,13 +165,6 @@ impl WinitApp {
 		config_dirs: Arc<ConfigDirs>,
 		event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
-		// If the shaders path doesn't exist, write it
-		// TODO: Use a virtual filesystem instead?
-		let shaders_path = config_dirs.shaders();
-		if !fs::exists(shaders_path).context("Unable to check if shaders path exists")? {
-			return Err(app_error!("Shaders directory doesn't exist: {shaders_path:?}"));
-		}
-
 		let wgpu_shared = zsw_wgpu::get_or_create_shared()
 			.await
 			.context("Unable to initialize wgpu")?;
@@ -186,7 +179,6 @@ impl WinitApp {
 			last_resize: AtomicCell::new(None),
 			// TODO: Not have a default of (0,0)?
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
-			config_dirs: Arc::clone(&config_dirs),
 			wgpu: wgpu_shared,
 			panels_renderer_layouts,
 			panels,
@@ -400,7 +392,6 @@ async fn renderer(
 			panels_renderer
 				.render(
 					&mut frame,
-					&shared.config_dirs,
 					&wgpu_renderer,
 					shared.wgpu,
 					&shared.panels_renderer_layouts,
