@@ -58,7 +58,7 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
-	zsw_util::{TokioTaskBlockOn, meetup},
+	zsw_util::TokioTaskBlockOn,
 	zsw_wgpu::WgpuRenderer,
 	zutil_cloned::cloned,
 };
@@ -215,8 +215,6 @@ impl WinitApp {
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
 			let settings_menu = SettingsMenu::new();
 
-			let (egui_painter_output_tx, egui_painter_output_rx) = meetup::channel();
-
 			let shared_window = SharedWindow {
 				_monitor_name: app_window.monitor_name,
 				monitor_geometry: app_window.monitor_geometry,
@@ -233,20 +231,8 @@ impl WinitApp {
 					wgpu_renderer,
 					panels_renderer,
 					egui_renderer,
-					egui_painter_output_rx,
-				)
-				.await
-			});
-
-
-			#[cloned(shared = self.shared, shared_window)]
-			self::spawn_task("Egui painter", async move {
-				self::egui_painter(
-					&shared,
-					&shared_window,
 					egui_painter,
 					settings_menu,
-					egui_painter_output_tx,
 				)
 				.await
 			});
@@ -370,16 +356,20 @@ async fn renderer(
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
-	egui_painter_output_rx: meetup::Receiver<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
+	egui_painter: EguiPainter,
+	mut settings_menu: SettingsMenu,
 ) -> Result<(), AppError> {
-	let mut egui_paint_jobs = vec![];
-	let mut egui_textures_delta = None;
 	loop {
-		// Update egui, if available
-		if let Some((paint_jobs, textures_delta)) = egui_painter_output_rx.try_recv() {
-			egui_paint_jobs = paint_jobs;
-			egui_textures_delta = Some(textures_delta);
-		}
+		// Paint egui
+		// TODO: Have `egui_renderer` do this for us on render?
+		let (egui_paint_jobs, egui_textures_delta) =
+			match self::paint_egui(shared, shared_window, &egui_painter, &mut settings_menu).await {
+				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
+				Err(err) => {
+					tracing::warn!("Unable to draw egui: {}", err.pretty());
+					(vec![], None)
+				},
+			};
 
 		// Start rendering
 		let mut frame = wgpu_renderer
@@ -412,7 +402,7 @@ async fn renderer(
 				&shared_window.window,
 				shared.wgpu,
 				&egui_paint_jobs,
-				egui_textures_delta.take(),
+				egui_textures_delta,
 			)
 			.context("Unable to render egui")?;
 
@@ -433,119 +423,115 @@ async fn renderer(
 	}
 }
 
-/// Egui painter task
-async fn egui_painter(
+/// Paints egui
+async fn paint_egui(
 	shared: &Shared,
 	shared_window: &SharedWindow,
-	egui_painter: EguiPainter,
-	mut settings_menu: SettingsMenu,
-	egui_painter_output_tx: meetup::Sender<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta)>,
-) -> Result<(), AppError> {
-	loop {
-		let full_output_fut = egui_painter.draw(&shared_window.window, async |ctx| {
-			// Draw the settings menu
-			tokio::task::block_in_place(|| settings_menu.draw(ctx, shared, shared_window));
+	egui_painter: &EguiPainter,
+	settings_menu: &mut SettingsMenu,
+) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
+	let full_output_fut = egui_painter.draw(&shared_window.window, async |ctx| {
+		// Draw the settings menu
+		tokio::task::block_in_place(|| settings_menu.draw(ctx, shared, shared_window));
 
-			// Pause any double-clicked panels
-			if !ctx.is_pointer_over_area() &&
-				ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary))
-			{
-				let cursor_pos = shared.cursor_pos.load();
-				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+		// Pause any double-clicked panels
+		if !ctx.is_pointer_over_area() &&
+			ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary))
+		{
+			let cursor_pos = shared.cursor_pos.load();
+			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 
-				for panel in shared.panels.get_all().await {
-					let mut panel = panel.lock().await;
+			for panel in shared.panels.get_all().await {
+				let mut panel = panel.lock().await;
 
-					for geometry in &panel.geometries {
-						if geometry
-							.geometry_on(&shared_window.monitor_geometry)
-							.contains(cursor_pos)
-						{
-							panel.state.paused ^= true;
-							break;
-						}
+				for geometry in &panel.geometries {
+					if geometry
+						.geometry_on(&shared_window.monitor_geometry)
+						.contains(cursor_pos)
+					{
+						panel.state.paused ^= true;
+						break;
 					}
 				}
 			}
+		}
 
-			// Skip any ctrl-clicked/middle clicked panels
-			// TODO: Deduplicate this with the above and settings menu.
-			if !ctx.is_pointer_over_area() &&
-				ctx.input(|input| {
-					(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
-						input.pointer.button_clicked(egui::PointerButton::Middle)
+		// Skip any ctrl-clicked/middle clicked panels
+		// TODO: Deduplicate this with the above and settings menu.
+		if !ctx.is_pointer_over_area() &&
+			ctx.input(|input| {
+				(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
+					input.pointer.button_clicked(egui::PointerButton::Middle)
+			}) {
+			let cursor_pos = shared.cursor_pos.load();
+			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+
+			let mut panels_images = shared.panels_images.lock().await;
+
+			for panel in shared.panels.get_all().await {
+				let mut panel = panel.lock().await;
+
+				if !panel.geometries.iter().any(|geometry| {
+					geometry
+						.geometry_on(&shared_window.monitor_geometry)
+						.contains(cursor_pos)
 				}) {
-				let cursor_pos = shared.cursor_pos.load();
-				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-
-				let mut panels_images = shared.panels_images.lock().await;
-
-				for panel in shared.panels.get_all().await {
-					let mut panel = panel.lock().await;
-
-					if !panel.geometries.iter().any(|geometry| {
-						geometry
-							.geometry_on(&shared_window.monitor_geometry)
-							.contains(cursor_pos)
-					}) {
-						continue;
-					}
-
-					let Some(panel_images) = panels_images.get_mut(&panel.name) else {
-						continue;
-					};
-					panel.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts);
+					continue;
 				}
+
+				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
+					continue;
+				};
+				panel.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts);
 			}
+		}
 
-			// Scroll panels
-			// TODO: Deduplicate this with the above and settings menu.
-			if !ctx.is_pointer_over_area() && ctx.input(|input| input.smooth_scroll_delta.y != 0.0) {
-				let delta = ctx.input(|input| input.smooth_scroll_delta.y);
-				let cursor_pos = shared.cursor_pos.load();
-				let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+		// Scroll panels
+		// TODO: Deduplicate this with the above and settings menu.
+		if !ctx.is_pointer_over_area() && ctx.input(|input| input.smooth_scroll_delta.y != 0.0) {
+			let delta = ctx.input(|input| input.smooth_scroll_delta.y);
+			let cursor_pos = shared.cursor_pos.load();
+			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 
-				let mut panels_images = shared.panels_images.lock().await;
+			let mut panels_images = shared.panels_images.lock().await;
 
-				for panel in shared.panels.get_all().await {
-					let mut panel = panel.lock().await;
+			for panel in shared.panels.get_all().await {
+				let mut panel = panel.lock().await;
 
-					if !panel.geometries.iter().any(|geometry| {
-						geometry
-							.geometry_on(&shared_window.monitor_geometry)
-							.contains(cursor_pos)
-					}) {
-						continue;
-					}
-
-					// TODO: Make this "speed" configurable
-					// TODO: Perform the conversion better without going through nanos
-					let speed = 1.0 / 1000.0;
-					let time_delta_abs = panel.state.duration.mul_f32(delta.abs() * speed);
-					let time_delta_abs =
-						TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
-					let time_delta = match delta.is_sign_positive() {
-						true => -time_delta_abs,
-						false => time_delta_abs,
-					};
-
-					let Some(panel_images) = panels_images.get_mut(&panel.name) else {
-						continue;
-					};
-					panel.step(panel_images, shared.wgpu, &shared.panels_renderer_layouts, time_delta);
+				if !panel.geometries.iter().any(|geometry| {
+					geometry
+						.geometry_on(&shared_window.monitor_geometry)
+						.contains(cursor_pos)
+				}) {
+					continue;
 				}
+
+				// TODO: Make this "speed" configurable
+				// TODO: Perform the conversion better without going through nanos
+				let speed = 1.0 / 1000.0;
+				let time_delta_abs = panel.state.duration.mul_f32(delta.abs() * speed);
+				let time_delta_abs = TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
+				let time_delta = match delta.is_sign_positive() {
+					true => -time_delta_abs,
+					false => time_delta_abs,
+				};
+
+				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
+					continue;
+				};
+				panel.step(panel_images, shared.wgpu, &shared.panels_renderer_layouts, time_delta);
 			}
+		}
 
-			Ok::<_, !>(())
-		});
-		let full_output = full_output_fut.await?;
-		let paint_jobs = egui_painter
-			.tessellate_shapes(full_output.shapes, full_output.pixels_per_point)
-			.await;
-		let textures_delta = full_output.textures_delta;
+		Ok::<_, !>(())
+	});
+	let full_output = full_output_fut.await?;
+	let paint_jobs = egui_painter
+		.tessellate_shapes(full_output.shapes, full_output.pixels_per_point)
+		.await;
+	let textures_delta = full_output.textures_delta;
 
-		egui_painter_output_tx.send((paint_jobs, textures_delta)).await;
-	}
+	Ok((paint_jobs, textures_delta))
 }
 
 /// A resize
