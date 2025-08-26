@@ -49,7 +49,7 @@ use {
 		fs,
 		sync::Arc,
 	},
-	tokio::sync::{Mutex, mpsc},
+	tokio::sync::Mutex,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
@@ -120,9 +120,9 @@ fn main() -> Result<(), AppError> {
 }
 
 struct WinitApp {
-	event_tx:      HashMap<WindowId, mpsc::UnboundedSender<WindowEvent>>,
-	shared:        Arc<Shared>,
-	shared_window: Vec<Arc<SharedWindow>>,
+	window_event_handlers: HashMap<WindowId, EguiEventHandler>,
+	shared:                Arc<Shared>,
+	shared_window:         Vec<Arc<SharedWindow>>,
 }
 
 impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
@@ -152,8 +152,14 @@ impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
 		window_id: WindowId,
 		event: WindowEvent,
 	) {
-		match self.event_tx.get(&window_id) {
-			Some(event_tx) => _ = event_tx.send(event),
+		match event {
+			winit::event::WindowEvent::Resized(size) => self.shared.last_resize.store(Some(Resize { size })),
+			winit::event::WindowEvent::CursorMoved { position, .. } => self.shared.cursor_pos.store(position),
+			_ => (),
+		}
+
+		match self.window_event_handlers.get(&window_id) {
+			Some(egui_event_handler) => egui_event_handler.handle_event(&event).block_on(),
 			None => tracing::warn!("Received window event for unknown window {window_id:?}: {event:?}"),
 		}
 	}
@@ -194,7 +200,7 @@ impl WinitApp {
 		});
 
 		Ok(Self {
-			event_tx: HashMap::new(),
+			window_event_handlers: HashMap::new(),
 			shared,
 			shared_window: vec![],
 		})
@@ -237,24 +243,9 @@ impl WinitApp {
 				.await
 			});
 
-			let (event_tx, mut event_rx) = mpsc::unbounded_channel();
-			_ = self.event_tx.insert(shared_window.window.id(), event_tx);
-
-			#[cloned(shared = self.shared)]
-			self::spawn_task("Event receiver", async move {
-				while let Some(event) = event_rx.recv().await {
-					match event {
-						winit::event::WindowEvent::Resized(size) => shared.last_resize.store(Some(Resize { size })),
-						winit::event::WindowEvent::CursorMoved { position, .. } => shared.cursor_pos.store(position),
-						_ => (),
-					}
-
-					egui_event_handler.handle_event(&event).await;
-				}
-
-				Ok(())
-			});
-
+			_ = self
+				.window_event_handlers
+				.insert(shared_window.window.id(), egui_event_handler);
 			self.shared_window.push(shared_window);
 		}
 
