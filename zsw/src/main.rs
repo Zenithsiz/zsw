@@ -11,7 +11,8 @@
 	iter_partition_in_place,
 	type_alias_impl_trait,
 	proc_macro_hygiene,
-	stmt_expr_attributes
+	stmt_expr_attributes,
+	path_add_extension
 )]
 
 // Modules

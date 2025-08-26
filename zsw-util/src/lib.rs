@@ -39,12 +39,7 @@ pub use {
 use {
 	app_error::Context,
 	image::DynamicImage,
-	std::{
-		ffi::OsStr,
-		fs,
-		future::Future,
-		path::{Path, PathBuf},
-	},
+	std::{fs, future::Future, path::Path},
 };
 
 /// App error export with our data
@@ -81,16 +76,6 @@ pub fn image_format(image: &DynamicImage) -> &'static str {
 		DynamicImage::ImageRgb16(_) => "Rgb16",
 		DynamicImage::ImageRgba16(_) => "Rgba16",
 		_ => "<unknown>",
-	}
-}
-
-/// Appends a string to this path
-#[extend::ext(name = PathAppendExt)]
-pub impl PathBuf {
-	/// Appends a string to this path
-	fn with_appended<S: AsRef<OsStr>>(mut self, s: S) -> Self {
-		self.as_mut_os_string().push(s);
-		self
 	}
 }
 

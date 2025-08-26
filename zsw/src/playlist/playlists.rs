@@ -3,11 +3,11 @@
 // Imports
 use {
 	super::{Playlist, PlaylistItem, PlaylistItemKind, PlaylistName, ser},
+	app_error::Context,
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
 	tokio::sync::OnceCell,
-	zsw_util::PathAppendExt,
-	app_error::Context, zsw_util::AppError,
+	zsw_util::AppError,
 };
 
 /// Playlists
@@ -77,6 +77,6 @@ impl Playlists {
 
 	/// Returns a playlist's path
 	pub fn path_of(&self, name: &PlaylistName) -> PathBuf {
-		self.root.join(&*name.0).with_appended(".toml")
+		self.root.join(&*name.0).with_added_extension("toml")
 	}
 }

@@ -9,7 +9,6 @@ use {
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant},
 	tokio::sync::OnceCell,
-	zsw_util::PathAppendExt,
 };
 
 /// Panel storage
@@ -102,6 +101,6 @@ impl Panels {
 
 	/// Returns a panel's path
 	pub fn path_of(&self, name: &PanelName) -> PathBuf {
-		self.root.join(&*name.0).with_appended(".toml")
+		self.root.join(&*name.0).with_added_extension("toml")
 	}
 }
