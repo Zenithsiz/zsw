@@ -15,7 +15,6 @@ use {
 	app_error::Context,
 	cgmath::Vector2,
 	chrono::TimeDelta,
-	core::mem::{self, Discriminant},
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
@@ -63,13 +62,9 @@ impl PanelsRendererLayouts {
 //       via the uniforms.
 #[derive(Debug)]
 pub struct PanelsRenderer {
-	/// Render pipeline for each shader
+	/// Render pipeline for each shader by shader name
 	// TODO: Prune ones that aren't used?
-	// TODO: Using `mem::discriminant` here could lead to some subtle bugs
-	//       where we expect a certain shader to update based on it's fields,
-	//       so we should probably convert this into something else that uniquely
-	//       determines whether a render pipeline update is required or not.
-	render_pipelines: HashMap<Discriminant<PanelShader>, wgpu::RenderPipeline>,
+	render_pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
 
 	/// Vertex buffer
 	vertices: wgpu::Buffer,
@@ -192,7 +187,7 @@ impl PanelsRenderer {
 				continue;
 			}
 
-			let render_pipeline = match self.render_pipelines.entry(mem::discriminant(&panel.shader)) {
+			let render_pipeline = match self.render_pipelines.entry(panel.shader.name()) {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),
 				hash_map::Entry::Vacant(entry) => {
 					let render_pipeline = self::create_render_pipeline(
