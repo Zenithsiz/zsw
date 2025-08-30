@@ -8,9 +8,8 @@ use {
 		panel::{PanelImages, PanelShaderFade},
 	},
 	app_error::Context,
-	core::time::Duration,
 	futures::lock::Mutex,
-	std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant},
+	std::{collections::HashMap, path::PathBuf, sync::Arc},
 	tokio::sync::OnceCell,
 	zsw_wgpu::WgpuShared,
 };
@@ -69,13 +68,10 @@ impl Panels {
 
 				// Finally convert it
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
-				let state = PanelState {
-					paused:        false,
-					last_update:   Instant::now(),
-					progress:      Duration::ZERO,
-					duration:      panel.state.duration,
-					fade_duration: panel.state.fade_duration,
-					shader:        match panel.shader {
+				let state = PanelState::new(
+					panel.state.duration,
+					panel.state.fade_duration,
+					match panel.shader {
 						Some(ser::PanelShader::None { background_color }) => PanelShader::None { background_color },
 						Some(ser::PanelShader::Fade) => PanelShader::Fade(PanelShaderFade::Basic),
 						Some(ser::PanelShader::FadeWhite { strength }) =>
@@ -88,8 +84,8 @@ impl Panels {
 						// TODO: Is this a good default?
 						None => PanelShader::Fade(PanelShaderFade::Out { strength: 1.5 }),
 					},
-					images:        PanelImages::new(wgpu_shared, panels_renderer_layouts),
-				};
+					PanelImages::new(wgpu_shared, panels_renderer_layouts),
+				);
 
 				let panel = Panel::new(panel_name.clone(), geometries, state);
 

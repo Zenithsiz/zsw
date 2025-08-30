@@ -33,6 +33,18 @@ pub struct PanelState {
 }
 
 impl PanelState {
+	pub fn new(duration: Duration, fade_duration: Duration, shader: PanelShader, images: PanelImages) -> Self {
+		Self {
+			paused: false,
+			shader,
+			last_update: Instant::now(),
+			progress: Duration::ZERO,
+			duration,
+			fade_duration,
+			images,
+		}
+	}
+
 	/// Returns the normalized image progress
 	#[must_use]
 	pub fn progress_norm(&self) -> f32 {
