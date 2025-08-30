@@ -479,7 +479,9 @@ async fn paint_egui(
 				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 					continue;
 				};
-				panel.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts);
+				panel
+					.state
+					.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts);
 			}
 		}
 
@@ -516,7 +518,9 @@ async fn paint_egui(
 				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
 					continue;
 				};
-				panel.step(panel_images, shared.wgpu, &shared.panels_renderer_layouts, time_delta);
+				panel
+					.state
+					.step(panel_images, shared.wgpu, &shared.panels_renderer_layouts, time_delta);
 			}
 		}
 

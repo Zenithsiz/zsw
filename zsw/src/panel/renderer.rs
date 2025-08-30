@@ -179,7 +179,7 @@ impl PanelsRenderer {
 				panel.state.last_update = now;
 				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
-				panel.update(panel_images, wgpu_shared, layouts, delta);
+				panel.state.update(panel_images, wgpu_shared, layouts, delta);
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either
