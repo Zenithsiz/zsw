@@ -96,7 +96,13 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 		}
 
 		ui.collapsing(name, |ui| {
-			ui.checkbox(&mut panel.state.paused, "Paused");
+			{
+				let mut is_paused = panel.state.paused;
+				ui.checkbox(&mut is_paused, "Paused");
+				if is_paused != panel.state.paused {
+					panel.toggle_pause();
+				}
+			}
 
 			ui.collapsing("Geometries", |ui| {
 				for (geometry_idx, geometry) in panel.geometries.iter_mut().enumerate() {
