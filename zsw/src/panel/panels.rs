@@ -79,6 +79,7 @@ impl Panels {
 						// TODO: Is this a good default?
 						None => PanelShader::Fade(PanelShaderFade::Out { strength: 1.5 }),
 					},
+					images:        None,
 				};
 
 				let panel = Panel::new(panel_name.clone(), geometries, state);

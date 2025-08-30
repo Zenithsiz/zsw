@@ -77,7 +77,6 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWin
 #[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
 	let panels = shared.panels.get_all().block_on();
-	let mut panels_images = shared.panels_images.lock().block_on();
 
 	if panels.is_empty() {
 		ui.label("None loaded");
@@ -128,7 +127,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 				// Then clamp to the current max
 				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
-				let cur_max = match panels_images.get(&panel.name) {
+				let cur_max = match &panel.state.images {
 					Some(panel_images) => match (panel_images.cur.is_loaded(), panel_images.next.is_loaded()) {
 						(false, false) => Duration::ZERO,
 						(true, false) => panel.state.fade_duration,
@@ -159,20 +158,14 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.horizontal(|ui| {
-				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
-					return;
-				};
-
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
-					panel
-						.state
-						.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts);
+					panel.state.skip(shared.wgpu, &shared.panels_renderer_layouts);
 				}
 			});
 
 			ui.collapsing("Images", |ui| {
-				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
+				let Some(panel_images) = &mut panel.state.images else {
 					ui.weak("Not loaded");
 					return;
 				};
@@ -182,7 +175,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
+				let Some(panel_images) = &mut panel.state.images else {
 					ui.weak("Not loaded");
 					return;
 				};

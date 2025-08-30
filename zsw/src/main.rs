@@ -44,11 +44,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
-	std::{
-		collections::{HashMap, hash_map},
-		fs,
-		sync::Arc,
-	},
+	std::{collections::HashMap, fs, sync::Arc},
 	tokio::sync::Mutex,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -189,7 +185,6 @@ impl WinitApp {
 			panels_renderer_layouts,
 			panels,
 			playlists,
-			panels_images: Mutex::new(HashMap::new()),
 		};
 		let shared = Arc::new(shared);
 
@@ -286,7 +281,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 	let panel_name = PanelName::from(default_panel.panel.clone());
 	let playlist_name = PlaylistName::from(default_panel.playlist.clone());
 
-	_ = shared
+	let panel = shared
 		.panels
 		.load(panel_name.clone())
 		.await
@@ -306,11 +301,8 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		let playlist_player = PlaylistPlayer::new(&playlist).await;
 
 		let panel_images = PanelImages::new(playlist_player, shared.wgpu, &shared.panels_renderer_layouts);
-		match shared.panels_images.lock().await.entry(panel_name.clone()) {
-			hash_map::Entry::Occupied(_) =>
-				tracing::warn!("Panel {panel_name:?} changed playlist before playlist {playlist_name:?} could load"),
-			hash_map::Entry::Vacant(entry) => _ = entry.insert(panel_images),
-		}
+		let mut panel = panel.lock().await;
+		panel.state.images = Some(panel_images);
 		tracing::debug!("Loaded default panel images {panel_name:?}");
 
 		Ok(())
@@ -374,7 +366,6 @@ async fn renderer(
 			.context("Unable to start frame")?;
 
 		{
-			let mut panels_images = shared.panels_images.lock().await;
 			let mut panels_geometry_uniforms = shared_window.panels_geometry_uniforms.lock().await;
 
 			panels_renderer
@@ -386,7 +377,6 @@ async fn renderer(
 					&mut panels_geometry_uniforms,
 					&shared_window.monitor_geometry,
 					&shared.panels,
-					&mut panels_images,
 				)
 				.await
 				.context("Unable to render panels")?;
@@ -463,8 +453,6 @@ async fn paint_egui(
 			let cursor_pos = shared.cursor_pos.load();
 			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 
-			let mut panels_images = shared.panels_images.lock().await;
-
 			for panel in shared.panels.get_all().await {
 				let mut panel = panel.lock().await;
 
@@ -476,12 +464,7 @@ async fn paint_egui(
 					continue;
 				}
 
-				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
-					continue;
-				};
-				panel
-					.state
-					.skip(panel_images, shared.wgpu, &shared.panels_renderer_layouts);
+				panel.state.skip(shared.wgpu, &shared.panels_renderer_layouts);
 			}
 		}
 
@@ -491,8 +474,6 @@ async fn paint_egui(
 			let delta = ctx.input(|input| input.smooth_scroll_delta.y);
 			let cursor_pos = shared.cursor_pos.load();
 			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-
-			let mut panels_images = shared.panels_images.lock().await;
 
 			for panel in shared.panels.get_all().await {
 				let mut panel = panel.lock().await;
@@ -515,12 +496,9 @@ async fn paint_egui(
 					false => time_delta_abs,
 				};
 
-				let Some(panel_images) = panels_images.get_mut(&panel.name) else {
-					continue;
-				};
 				panel
 					.state
-					.step(panel_images, shared.wgpu, &shared.panels_renderer_layouts, time_delta);
+					.step(shared.wgpu, &shared.panels_renderer_layouts, time_delta);
 			}
 		}
 

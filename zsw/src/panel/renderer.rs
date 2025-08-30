@@ -10,7 +10,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{Panel, PanelImage, PanelImages, PanelName, Panels},
+	super::{Panel, PanelImage, PanelName, Panels},
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
@@ -111,7 +111,6 @@ impl PanelsRenderer {
 		geometry_uniforms: &mut PanelsGeometryUniforms,
 		window_geometry: &Rect<i32, u32>,
 		panels: &Panels,
-		panels_images: &mut HashMap<PanelName, PanelImages>,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match MSAA_SAMPLES {
@@ -159,11 +158,7 @@ impl PanelsRenderer {
 
 		for panel in panels.get_all().await {
 			let mut panel = panel.lock().await;
-
-			// If the panel images are missing, skip it
-			let Some(panel_images) = panels_images.get_mut(&panel.name) else {
-				continue;
-			};
+			let panel = &mut *panel;
 
 			// Update the panel before drawing it
 			// TODO: If the delta is small enough (<1ms), skip updating?
@@ -179,8 +174,13 @@ impl PanelsRenderer {
 				panel.state.last_update = now;
 				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
-				panel.state.update(panel_images, wgpu_shared, layouts, delta);
+				panel.state.update(wgpu_shared, layouts, delta);
 			}
+
+			// If the panel images are missing, skip it
+			let Some(panel_images) = &mut panel.state.images else {
+				continue;
+			};
 
 			// If the panel images are empty, there's no sense in rendering it either
 			if panel_images.is_empty() {
@@ -221,8 +221,7 @@ impl PanelsRenderer {
 				Self::write_uniforms(
 					wgpu_shared,
 					frame.surface_size,
-					&panel,
-					panel_images,
+					panel,
 					window_geometry,
 					geometry,
 					&geometry_uniforms.buffer,
@@ -242,11 +241,14 @@ impl PanelsRenderer {
 		wgpu_shared: &WgpuShared,
 		surface_size: PhysicalSize<u32>,
 		panel: &Panel,
-		panel_images: &PanelImages,
 		window_geometry: &Rect<i32, u32>,
 		geometry: &PanelGeometry,
 		geometry_uniforms: &wgpu::Buffer,
 	) {
+		let Some(panel_images) = &panel.state.images else {
+			return;
+		};
+
 		// Calculate the position matrix for the panel
 		let pos_matrix = geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());

@@ -29,6 +29,11 @@ pub struct PanelState {
 
 	/// Fade duration
 	pub fade_duration: Duration,
+
+	/// Images, if loaded
+	// TODO: Make `PanelImages` itself be lazy, instead of us
+	//       wrapping it in an option.
+	pub images: Option<PanelImages>,
 }
 
 impl PanelState {
@@ -46,26 +51,23 @@ impl PanelState {
 	}
 
 	/// Returns the max duration for the current image
-	fn max_duration(&self, images: &PanelImages) -> Duration {
+	fn max_duration(duration: Duration, fade_duration: Duration, images: &PanelImages) -> Duration {
 		match (images.cur.is_loaded(), images.next.is_loaded()) {
 			(false, false) => Duration::ZERO,
-			(true, false) => self.duration - self.fade_duration,
-			(_, true) => self.duration,
+			(true, false) => duration - fade_duration,
+			(_, true) => duration,
 		}
 	}
 
 	/// Skips to the next image.
 	///
 	/// If the images aren't loaded, does nothing
-	pub fn skip(
-		&mut self,
-		images: &mut PanelImages,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) {
+	pub fn skip(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+		let Some(images) = &mut self.images else { return };
+
 		match images.step_next(wgpu_shared, renderer_layouts) {
 			Ok(()) => self.progress = self.duration.saturating_sub(self.fade_duration),
-			Err(()) => self.progress = self.max_duration(images),
+			Err(()) => self.progress = Self::max_duration(self.duration, self.fade_duration, images),
 		}
 
 		// Then load any missing images
@@ -75,13 +77,9 @@ impl PanelState {
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	///
 	/// If the images aren't loaded, does nothing
-	pub fn step(
-		&mut self,
-		images: &mut PanelImages,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-		delta: TimeDelta,
-	) {
+	pub fn step(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, delta: TimeDelta) {
+		let Some(images) = &mut self.images else { return };
+
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
 			true => Some(self.progress.saturating_add(delta_abs)),
@@ -93,9 +91,12 @@ impl PanelState {
 			Some(next_progress) => match next_progress >= self.duration {
 				true => match images.step_next(wgpu_shared, renderer_layouts) {
 					Ok(()) => next_progress - self.duration,
-					Err(()) => self.max_duration(images),
+					Err(()) => Self::max_duration(self.duration, self.fade_duration, images),
 				},
-				false => next_progress.clamp(Duration::ZERO, self.max_duration(images)),
+				false => next_progress.clamp(
+					Duration::ZERO,
+					Self::max_duration(self.duration, self.fade_duration, images),
+				),
 			},
 			None => match images.step_prev(wgpu_shared, renderer_layouts) {
 				// Note: This branch is only taken when `delta` is negative, so we can always
@@ -116,14 +117,9 @@ impl PanelState {
 	/// Updates this panel's state
 	///
 	/// If the images aren't loaded, does nothing
-	pub fn update(
-		&mut self,
-		images: &mut PanelImages,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
+	pub fn update(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, delta: TimeDelta) {
+		let Some(images) = &mut self.images else { return };
 
-		delta: TimeDelta,
-	) {
 		// Then load any missing images
 		images.load_missing(wgpu_shared, renderer_layouts);
 
@@ -132,7 +128,7 @@ impl PanelState {
 			return;
 		}
 
-		self.step(images, wgpu_shared, renderer_layouts, delta);
+		self.step(wgpu_shared, renderer_layouts, delta);
 	}
 }
 

@@ -5,11 +5,11 @@ use {
 	crate::{
 		AppEvent,
 		Resize,
-		panel::{PanelImages, PanelName, Panels, PanelsGeometryUniforms, PanelsRendererLayouts},
+		panel::{Panels, PanelsGeometryUniforms, PanelsRendererLayouts},
 		playlist::Playlists,
 	},
 	crossbeam::atomic::AtomicCell,
-	std::{collections::HashMap, sync::Arc},
+	std::sync::Arc,
 	tokio::sync::Mutex,
 	winit::dpi::PhysicalPosition,
 	zsw_util::Rect,
@@ -29,8 +29,6 @@ pub struct Shared {
 
 	pub panels:    Panels,
 	pub playlists: Playlists,
-
-	pub panels_images: Mutex<HashMap<PanelName, PanelImages>>,
 }
 
 /// Shared window state
