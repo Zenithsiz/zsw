@@ -212,7 +212,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				});
 			});
 
-			ui.collapsing("Shader", |ui| self::draw_shader_select(ui, &mut panel.shader));
+			ui.collapsing("Shader", |ui| self::draw_shader_select(ui, &mut panel.state.shader));
 		});
 	}
 }

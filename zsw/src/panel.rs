@@ -38,19 +38,15 @@ pub struct Panel {
 
 	/// State
 	pub state: PanelState,
-
-	/// Shader
-	pub shader: PanelShader,
 }
 
 impl Panel {
 	/// Creates a new panel
-	pub fn new(name: PanelName, geometries: Vec<Rect<i32, u32>>, state: PanelState, shader: PanelShader) -> Self {
+	pub fn new(name: PanelName, geometries: Vec<Rect<i32, u32>>, state: PanelState) -> Self {
 		Self {
 			name,
 			geometries: geometries.into_iter().map(PanelGeometry::new).collect(),
 			state,
-			shader,
 		}
 	}
 

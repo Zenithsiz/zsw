@@ -187,7 +187,7 @@ impl PanelsRenderer {
 				continue;
 			}
 
-			let render_pipeline = match self.render_pipelines.entry(panel.shader.name()) {
+			let render_pipeline = match self.render_pipelines.entry(panel.state.shader.name()) {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),
 				hash_map::Entry::Vacant(entry) => {
 					let render_pipeline = self::create_render_pipeline(
@@ -195,7 +195,7 @@ impl PanelsRenderer {
 						wgpu_shared,
 						&layouts.uniforms_bind_group_layout,
 						&layouts.image_bind_group_layout,
-						panel.shader,
+						panel.state.shader,
 					)
 					.context("Unable to create render pipeline")?;
 
@@ -273,7 +273,7 @@ impl PanelsRenderer {
 
 		let fade_duration = panel.state.fade_duration_norm();
 		let progress = panel.state.progress_norm();
-		match panel.shader {
+		match panel.state.shader {
 			PanelShader::None { background_color } => write_uniforms!(uniform::None {
 				pos_matrix,
 				background_color: uniform::Vec4(background_color),

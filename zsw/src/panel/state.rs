@@ -1,13 +1,16 @@
 //! Panel state
 
 // Imports
-use {core::time::Duration, std::time::Instant};
+use {super::PanelShader, core::time::Duration, std::time::Instant};
 
 /// Panel state
 #[derive(Debug)]
 pub struct PanelState {
 	/// If paused
 	pub paused: bool,
+
+	/// Shader
+	pub shader: PanelShader,
 
 	/// Last update
 	pub last_update: Instant,

@@ -66,21 +66,19 @@ impl Panels {
 					progress:      Duration::ZERO,
 					duration:      panel.state.duration,
 					fade_duration: panel.state.fade_duration,
+					shader:        match panel.shader {
+						Some(ser::PanelShader::None { background_color }) => PanelShader::None { background_color },
+						Some(ser::PanelShader::Fade) => PanelShader::Fade,
+						Some(ser::PanelShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
+						Some(ser::PanelShader::FadeOut { strength }) => PanelShader::FadeOut { strength },
+						Some(ser::PanelShader::FadeIn { strength }) => PanelShader::FadeIn { strength },
+
+						// TODO: Is this a good default?
+						None => PanelShader::FadeOut { strength: 1.5 },
+					},
 				};
 
-				// Get the shader
-				let shader = match panel.shader {
-					Some(ser::PanelShader::None { background_color }) => PanelShader::None { background_color },
-					Some(ser::PanelShader::Fade) => PanelShader::Fade,
-					Some(ser::PanelShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
-					Some(ser::PanelShader::FadeOut { strength }) => PanelShader::FadeOut { strength },
-					Some(ser::PanelShader::FadeIn { strength }) => PanelShader::FadeIn { strength },
-
-					// TODO: Is this a good default?
-					None => PanelShader::FadeOut { strength: 1.5 },
-				};
-
-				let panel = Panel::new(panel_name.clone(), geometries, state, shader);
+				let panel = Panel::new(panel_name.clone(), geometries, state);
 
 				Ok(Arc::new(Mutex::new(panel)))
 			})
