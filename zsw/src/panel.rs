@@ -145,21 +145,6 @@ impl Panel {
 			return;
 		};
 
-		// Calculate the delta since the last update and update it
-		// Note: Even if paused we still do this, to avoid the user unpausing
-		//       and suddenly jumping forward
-		// TODO: If the delta is small enough (<1ms), skip updating?
-		//       this happens when we have multiple renderers rendering
-		//       at the same time, one to try to update immediately after
-		//       the other has updated.
-		// TODO: this can fall out of sync after a lot of cycles due to precision,
-		//       should we do it in some other way?
-		let now = Instant::now();
-		let delta = now.duration_since(self.state.last_update);
-		self.state.last_update = now;
-		let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
-
-
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
 		self.state
@@ -170,6 +155,18 @@ impl Panel {
 		if self.state.paused {
 			return;
 		}
+
+		// Calculate the delta since the last update and step through it
+		// TODO: If the delta is small enough (<1ms), skip updating?
+		//       this happens when we have multiple renderers rendering
+		//       at the same time, one to try to update immediately after
+		//       the other has updated.
+		// TODO: this can fall out of sync after a lot of cycles due to precision,
+		//       should we do it in some other way?
+		let now = Instant::now();
+		let delta = now.duration_since(self.state.last_update);
+		self.state.last_update = now;
+		let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
 		self.step(wgpu_shared, renderer_layouts, delta);
 	}
