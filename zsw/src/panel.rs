@@ -62,13 +62,13 @@ impl Panel {
 			return;
 		};
 
-		match self
+		self.state.progress = match self
 			.state
 			.images
 			.step_next(playlist_player, wgpu_shared, renderer_layouts)
 		{
-			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_duration),
-			Err(()) => self.state.progress = self.state.max_duration(),
+			Ok(()) => Duration::ZERO,
+			Err(()) => self.state.max_progress(),
 		}
 	}
 
@@ -80,7 +80,6 @@ impl Panel {
 			return;
 		};
 
-
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
 			true => Some(self.state.progress.saturating_add(delta_abs)),
@@ -89,32 +88,53 @@ impl Panel {
 
 		// Update the progress, potentially rolling over to the previous/next image
 		self.state.progress = match next_progress {
-			Some(next_progress) => match next_progress >= self.state.duration {
-				true => match self
+			// If we have a next progress, check if we overflowed the duration
+			Some(next_progress) => match next_progress.checked_sub(self.state.duration) {
+				// If we did, `next_progress` is our progress at the next image, so try
+				// to step to it.
+				Some(next_progress) => match self
 					.state
 					.images
 					.step_next(playlist_player, wgpu_shared, renderer_layouts)
 				{
-					Ok(()) => next_progress - self.state.duration,
-					Err(()) => self.state.max_duration(),
+					// If we successfully stepped to the next image, start at the next progress
+					// Note: If delta was big enough to overflow 2 durations, then cap it at the
+					//       max duration of the next image.
+					Ok(()) => next_progress.min(self.state.max_progress()),
+
+					// Otherwise, stay at most on our max duration
+					Err(()) => self.state.max_progress(),
 				},
-				false => next_progress.clamp(Duration::ZERO, self.state.max_duration()),
+
+				// Otherwise, we're just moving within the current image, so clamp it
+				// between our min and max progress
+				None => next_progress.clamp(self.state.min_progress(), self.state.max_progress()),
 			},
+
+			// Otherwise, we underflowed, so try to step back
 			None => match self
 				.state
 				.images
 				.step_prev(playlist_player, wgpu_shared, renderer_layouts)
 			{
-				// Note: This branch is only taken when `delta` is negative, so we can always
-				//       subtract without checking `delta_is_positive`.
-				Ok(()) => match (self.state.duration + self.state.progress).checked_sub(delta_abs) {
-					Some(next_progress) => next_progress,
-					None => self.state.fade_duration,
+				// If we successfully stepped backwards, start at where we're supposed to:
+				Ok(()) => {
+					// Note: This branch is only taken when `delta` is negative, so we can always
+					//       subtract without checking `delta_is_positive`.
+					assert!(!delta_is_positive, "Delta was negative despite having no next duration");
+
+					// Note: If this delta actually underflowed twice, cap it at the minimum
+					//       progress of the previous image instead.
+					match (self.state.duration + self.state.progress).checked_sub(delta_abs) {
+						Some(next_progress) => next_progress,
+						None => self.state.min_progress(),
+					}
 				},
 
-				Err(()) => Duration::ZERO,
+				// Otherwise, just stay at the minimum progress of the current image.
+				Err(()) => self.state.min_progress(),
 			},
-		};
+		}
 	}
 
 	/// Updates this panel's state using the current time as a delta
@@ -126,11 +146,13 @@ impl Panel {
 		};
 
 		// Calculate the delta since the last update and update it
+		// Note: Even if paused we still do this, to avoid the user unpausing
+		//       and suddenly jumping forward
 		// TODO: If the delta is small enough (<1ms), skip updating?
-		//       This happens when we have multiple renderers rendering
+		//       this happens when we have multiple renderers rendering
 		//       at the same time, one to try to update immediately after
 		//       the other has updated.
-		// TODO: This can fall out of sync after a lot of cycles due to precision,
+		// TODO: this can fall out of sync after a lot of cycles due to precision,
 		//       should we do it in some other way?
 		let now = Instant::now();
 		let delta = now.duration_since(self.state.last_update);
@@ -149,40 +171,7 @@ impl Panel {
 			return;
 		}
 
-		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
-		let next_progress = match delta_is_positive {
-			true => Some(self.state.progress.saturating_add(delta_abs)),
-			false => self.state.progress.checked_sub(delta_abs),
-		};
-
-		// Update the progress, potentially rolling over to the previous/next image
-		self.state.progress = match next_progress {
-			Some(next_progress) => match next_progress >= self.state.duration {
-				true => match self
-					.state
-					.images
-					.step_next(playlist_player, wgpu_shared, renderer_layouts)
-				{
-					Ok(()) => next_progress - self.state.duration,
-					Err(()) => self.state.max_duration(),
-				},
-				false => next_progress.clamp(Duration::ZERO, self.state.max_duration()),
-			},
-			None => match self
-				.state
-				.images
-				.step_prev(playlist_player, wgpu_shared, renderer_layouts)
-			{
-				// Note: This branch is only taken when `delta` is negative, so we can always
-				//       subtract without checking `delta_is_positive`.
-				Ok(()) => match (self.state.duration + self.state.progress).checked_sub(delta_abs) {
-					Some(next_progress) => next_progress,
-					None => self.state.fade_duration,
-				},
-
-				Err(()) => Duration::ZERO,
-			},
-		};
+		self.step(wgpu_shared, renderer_layouts, delta);
 	}
 }
 

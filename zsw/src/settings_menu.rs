@@ -122,10 +122,6 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 					// TODO: This max needs to be `duration - min_frame_duration` to not skip ahead.
 					Duration::ZERO..=panel.state.duration.mul_f32(0.99),
 				);
-
-
-				// TODO: This should be done elsewhere.
-				panel.state.progress = panel.state.progress.clamp(Duration::ZERO, panel.state.max_duration());
 			});
 
 			ui.horizontal(|ui| {

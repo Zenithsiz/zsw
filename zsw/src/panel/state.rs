@@ -46,12 +46,19 @@ impl PanelState {
 		self.fade_duration.div_duration_f32(self.duration)
 	}
 
-	/// Returns the max duration for the current image
-	pub fn max_duration(&self) -> Duration {
-		match (self.images.cur.is_loaded(), self.images.next.is_loaded()) {
-			(false, false) => Duration::ZERO,
-			(true, false) => self.duration - self.fade_duration,
-			(_, true) => self.duration,
+	/// Returns the min progress for the current image
+	pub fn min_progress(&self) -> Duration {
+		match self.images.prev.is_loaded() {
+			true => Duration::ZERO,
+			false => self.fade_duration,
+		}
+	}
+
+	/// Returns the max progress for the current image
+	pub fn max_progress(&self) -> Duration {
+		match self.images.next.is_loaded() {
+			true => self.duration,
+			false => self.duration - self.fade_duration,
 		}
 	}
 }
