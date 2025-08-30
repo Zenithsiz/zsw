@@ -21,7 +21,7 @@ pub use self::{
 use {
 	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
-	core::{borrow::Borrow, fmt},
+	core::{borrow::Borrow, fmt, time::Duration},
 	std::{sync::Arc, time::Instant},
 	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
@@ -62,7 +62,14 @@ impl Panel {
 			return;
 		};
 
-		self.state.skip(playlist_player, wgpu_shared, renderer_layouts);
+		match self
+			.state
+			.images
+			.step_next(playlist_player, wgpu_shared, renderer_layouts)
+		{
+			Ok(()) => self.state.progress = self.state.duration.saturating_sub(self.state.fade_duration),
+			Err(()) => self.state.progress = self.state.max_duration(),
+		}
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
@@ -73,7 +80,41 @@ impl Panel {
 			return;
 		};
 
-		self.state.step(playlist_player, wgpu_shared, renderer_layouts, delta);
+
+		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
+		let next_progress = match delta_is_positive {
+			true => Some(self.state.progress.saturating_add(delta_abs)),
+			false => self.state.progress.checked_sub(delta_abs),
+		};
+
+		// Update the progress, potentially rolling over to the previous/next image
+		self.state.progress = match next_progress {
+			Some(next_progress) => match next_progress >= self.state.duration {
+				true => match self
+					.state
+					.images
+					.step_next(playlist_player, wgpu_shared, renderer_layouts)
+				{
+					Ok(()) => next_progress - self.state.duration,
+					Err(()) => self.state.max_duration(),
+				},
+				false => next_progress.clamp(Duration::ZERO, self.state.max_duration()),
+			},
+			None => match self
+				.state
+				.images
+				.step_prev(playlist_player, wgpu_shared, renderer_layouts)
+			{
+				// Note: This branch is only taken when `delta` is negative, so we can always
+				//       subtract without checking `delta_is_positive`.
+				Ok(()) => match (self.state.duration + self.state.progress).checked_sub(delta_abs) {
+					Some(next_progress) => next_progress,
+					None => self.state.fade_duration,
+				},
+
+				Err(()) => Duration::ZERO,
+			},
+		};
 	}
 
 	/// Updates this panel's state using the current time as a delta
@@ -96,7 +137,52 @@ impl Panel {
 		self.state.last_update = now;
 		let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
-		self.state.update(playlist_player, wgpu_shared, renderer_layouts, delta);
+
+		// Note: We always load images, even if we're paused, since the user might be
+		//       moving around manually.
+		self.state
+			.images
+			.load_missing(playlist_player, wgpu_shared, renderer_layouts);
+
+		// If we're paused, don't update anything
+		if self.state.paused {
+			return;
+		}
+
+		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
+		let next_progress = match delta_is_positive {
+			true => Some(self.state.progress.saturating_add(delta_abs)),
+			false => self.state.progress.checked_sub(delta_abs),
+		};
+
+		// Update the progress, potentially rolling over to the previous/next image
+		self.state.progress = match next_progress {
+			Some(next_progress) => match next_progress >= self.state.duration {
+				true => match self
+					.state
+					.images
+					.step_next(playlist_player, wgpu_shared, renderer_layouts)
+				{
+					Ok(()) => next_progress - self.state.duration,
+					Err(()) => self.state.max_duration(),
+				},
+				false => next_progress.clamp(Duration::ZERO, self.state.max_duration()),
+			},
+			None => match self
+				.state
+				.images
+				.step_prev(playlist_player, wgpu_shared, renderer_layouts)
+			{
+				// Note: This branch is only taken when `delta` is negative, so we can always
+				//       subtract without checking `delta_is_positive`.
+				Ok(()) => match (self.state.duration + self.state.progress).checked_sub(delta_abs) {
+					Some(next_progress) => next_progress,
+					None => self.state.fade_duration,
+				},
+
+				Err(()) => Duration::ZERO,
+			},
+		};
 	}
 }
 
@@ -125,5 +211,13 @@ impl fmt::Display for PanelName {
 impl fmt::Debug for PanelName {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.0.fmt(f)
+	}
+}
+
+/// Converts a chrono time delta into a duration, indicating whether it's positive or negative
+fn time_delta_to_duration(delta: TimeDelta) -> (Duration, bool) {
+	match delta.to_std() {
+		Ok(delta) => (delta, true),
+		Err(_) => ((-delta).to_std().expect("Duration should fit"), false),
 	}
 }
