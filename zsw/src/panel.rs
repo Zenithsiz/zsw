@@ -22,7 +22,7 @@ use {
 	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
 	core::{borrow::Borrow, fmt},
-	std::sync::Arc,
+	std::{sync::Arc, time::Instant},
 	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
 };
@@ -76,13 +76,25 @@ impl Panel {
 		self.state.step(playlist_player, wgpu_shared, renderer_layouts, delta);
 	}
 
-	/// Updates this panel's state
+	/// Updates this panel's state using the current time as a delta
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn update(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, delta: TimeDelta) {
+	pub fn update(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
 		let Some(playlist_player) = &mut self.playlist_player else {
 			return;
 		};
+
+		// Calculate the delta since the last update and update it
+		// TODO: If the delta is small enough (<1ms), skip updating?
+		//       This happens when we have multiple renderers rendering
+		//       at the same time, one to try to update immediately after
+		//       the other has updated.
+		// TODO: This can fall out of sync after a lot of cycles due to precision,
+		//       should we do it in some other way?
+		let now = Instant::now();
+		let delta = now.duration_since(self.state.last_update);
+		self.state.last_update = now;
+		let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
 		self.state.update(playlist_player, wgpu_shared, renderer_layouts, delta);
 	}

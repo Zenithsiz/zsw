@@ -14,11 +14,9 @@ use {
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
-	chrono::TimeDelta,
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
-		time::Instant,
 	},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -161,20 +159,8 @@ impl PanelsRenderer {
 			let panel = &mut *panel;
 
 			// Update the panel before drawing it
-			// TODO: If the delta is small enough (<1ms), skip updating?
-			//       This happens when we have multiple renderers rendering
-			//       at the same time, one to try to update immediately after
-			//       the other has updated.
 			{
-				// Calculate the delta since the last update and update it
-				// TODO: This can fall out of sync after a lot of cycles due to precision,
-				//       should we do it in some other way?
-				let now = Instant::now();
-				let delta = now.duration_since(panel.state.last_update);
-				panel.state.last_update = now;
-				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
-
-				panel.update(wgpu_shared, layouts, delta);
+				panel.update(wgpu_shared, layouts);
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either
