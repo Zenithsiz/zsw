@@ -72,6 +72,8 @@ impl PanelImages {
 
 	/// Steps to the previous image, if any
 	///
+	/// If successfull, starts loading any missing images
+	///
 	/// Returns `Err(())` if this would erase the current image.
 	pub fn step_prev(
 		&mut self,
@@ -84,10 +86,14 @@ impl PanelImages {
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = PanelImage::empty();
 		self.update_image_bind_group(wgpu_shared, renderer_layouts);
+		self.load_missing(playlist_player, wgpu_shared, renderer_layouts);
+
 		Ok(())
 	}
 
 	/// Steps to the next image.
+	///
+	/// If successfull, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
 	pub fn step_next(
@@ -105,6 +111,7 @@ impl PanelImages {
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = PanelImage::empty();
 		self.update_image_bind_group(wgpu_shared, renderer_layouts);
+		self.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 
 		Ok(())
 	}

@@ -69,9 +69,6 @@ impl PanelState {
 			Ok(()) => self.progress = self.duration.saturating_sub(self.fade_duration),
 			Err(()) => self.progress = self.max_duration(),
 		}
-
-		// Then load any missing images
-		self.images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
@@ -108,9 +105,6 @@ impl PanelState {
 				Err(()) => Duration::ZERO,
 			},
 		};
-
-		// Then load any missing images
-		self.images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 	}
 
 	/// Updates this panel's state
@@ -121,7 +115,8 @@ impl PanelState {
 		renderer_layouts: &PanelsRendererLayouts,
 		delta: TimeDelta,
 	) {
-		// Then load any missing images
+		// Note: We always load images, even if we're paused, since the user might be
+		//       moving around manually.
 		self.images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 
 		// If we're paused, don't update anything
