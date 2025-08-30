@@ -301,7 +301,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		let playlist_player = PlaylistPlayer::new(&playlist).await;
 
 		let mut panel = panel.lock().await;
-		panel.playlist_player = Some(playlist_player);
+		panel.set_playlist_player(playlist_player);
 		tracing::debug!("Loaded default panel playlist player {panel_name:?}");
 
 		Ok(())
@@ -430,7 +430,7 @@ async fn paint_egui(
 			for panel in shared.panels.get_all().await {
 				let mut panel = panel.lock().await;
 
-				for geometry in &panel.geometries {
+				for geometry in panel.geometries() {
 					if geometry
 						.geometry_on(&shared_window.monitor_geometry)
 						.contains(cursor_pos)
@@ -456,7 +456,7 @@ async fn paint_egui(
 				let mut panel = panel.lock().await;
 				let panel = &mut *panel;
 
-				if !panel.geometries.iter().any(|geometry| {
+				if !panel.geometries().iter().any(|geometry| {
 					geometry
 						.geometry_on(&shared_window.monitor_geometry)
 						.contains(cursor_pos)
@@ -479,7 +479,7 @@ async fn paint_egui(
 				let mut panel = panel.lock().await;
 				let panel = &mut *panel;
 
-				if !panel.geometries.iter().any(|geometry| {
+				if !panel.geometries().iter().any(|geometry| {
 					geometry
 						.geometry_on(&shared_window.monitor_geometry)
 						.contains(cursor_pos)
@@ -490,7 +490,7 @@ async fn paint_egui(
 				// TODO: Make this "speed" configurable
 				// TODO: Perform the conversion better without going through nanos
 				let speed = 1.0 / 1000.0;
-				let time_delta_abs = panel.state.duration.mul_f32(delta.abs() * speed);
+				let time_delta_abs = panel.state().duration.mul_f32(delta.abs() * speed);
 				let time_delta_abs = TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
 				let time_delta = match delta.is_sign_positive() {
 					true => -time_delta_abs,

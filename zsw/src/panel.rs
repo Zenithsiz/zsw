@@ -31,16 +31,16 @@ use {
 #[derive(Debug)]
 pub struct Panel {
 	/// Name
-	pub name: PanelName,
+	name: PanelName,
 
 	/// Geometries
-	pub geometries: Vec<PanelGeometry>,
+	geometries: Vec<PanelGeometry>,
 
 	/// Playlist player
-	pub playlist_player: Option<PlaylistPlayer>,
+	playlist_player: Option<PlaylistPlayer>,
 
 	/// State
-	pub state: PanelState,
+	state: PanelState,
 }
 
 impl Panel {
@@ -188,6 +188,41 @@ impl Panel {
 		if !self.state.paused {
 			self.state.last_update = Instant::now();
 		}
+	}
+
+	/// Returns this panel's name
+	pub fn name(&self) -> &PanelName {
+		&self.name
+	}
+
+	/// Returns this panel's geometries
+	pub fn geometries(&self) -> &[PanelGeometry] {
+		&self.geometries
+	}
+
+	/// Returns this panel's geometries mutably
+	pub fn geometries_mut(&mut self) -> &mut Vec<PanelGeometry> {
+		&mut self.geometries
+	}
+
+	/// Returns this panel's playlist player
+	pub fn playlist_player(&self) -> Option<&PlaylistPlayer> {
+		self.playlist_player.as_ref()
+	}
+
+	/// Sets this panel's playlist player
+	pub fn set_playlist_player(&mut self, playlist_player: PlaylistPlayer) {
+		self.playlist_player = Some(playlist_player);
+	}
+
+	/// Returns this panel's state
+	pub fn state(&self) -> &PanelState {
+		&self.state
+	}
+
+	/// Returns this panel's state mutably
+	pub fn state_mut(&mut self) -> &mut PanelState {
+		&mut self.state
 	}
 }
 
