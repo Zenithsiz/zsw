@@ -61,16 +61,4 @@ impl PanelState {
 			false => self.duration - self.fade_duration,
 		}
 	}
-
-	/// Toggles pause of this state
-	pub fn toggle_pause(&mut self) {
-		self.paused ^= true;
-
-		// Note: If we're unpausing, we don't want to skip ahead
-		//       due to the last update being in the past, so just
-		//       set it to now
-		if !self.paused {
-			self.last_update = Instant::now();
-		}
-	}
 }

@@ -161,14 +161,33 @@ impl Panel {
 		//       this happens when we have multiple renderers rendering
 		//       at the same time, one to try to update immediately after
 		//       the other has updated.
+		let delta = self.update_delta();
+		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
+		self.step(wgpu_shared, renderer_layouts, delta);
+	}
+
+	/// Update the last time this field was updated and returns
+	/// the duration since that update
+	fn update_delta(&mut self) -> Duration {
 		// TODO: this can fall out of sync after a lot of cycles due to precision,
 		//       should we do it in some other way?
 		let now = Instant::now();
 		let delta = now.duration_since(self.state.last_update);
 		self.state.last_update = now;
-		let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
-		self.step(wgpu_shared, renderer_layouts, delta);
+		delta
+	}
+
+	/// Toggles pause of this state
+	pub fn toggle_pause(&mut self) {
+		self.state.paused ^= true;
+
+		// Note: If we're unpausing, we don't want to skip ahead
+		//       due to the last update being in the past, so just
+		//       set it to now
+		if !self.state.paused {
+			self.state.last_update = Instant::now();
+		}
 	}
 }
 
