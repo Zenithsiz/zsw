@@ -100,7 +100,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				let mut is_paused = panel.state().paused;
 				ui.checkbox(&mut is_paused, "Paused");
 				if is_paused != panel.state().paused {
-					panel.toggle_pause();
+					panel.toggle_paused();
 				}
 			}
 

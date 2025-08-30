@@ -178,16 +178,20 @@ impl Panel {
 		delta
 	}
 
-	/// Toggles pause of this state
-	pub fn toggle_pause(&mut self) {
-		self.state.paused ^= true;
-
+	/// Sets the pause state
+	pub fn set_paused(&mut self, paused: bool) {
+		self.state.paused = paused;
 		// Note: If we're unpausing, we don't want to skip ahead
 		//       due to the last update being in the past, so just
 		//       set it to now
 		if !self.state.paused {
 			self.state.last_update = Instant::now();
 		}
+	}
+
+	/// Toggles pause of this state
+	pub fn toggle_paused(&mut self) {
+		self.set_paused(!self.state.paused);
 	}
 
 	/// Returns this panel's name
