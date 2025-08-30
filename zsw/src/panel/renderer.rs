@@ -278,45 +278,47 @@ impl PanelsRenderer {
 				pos_matrix,
 				background_color: uniform::Vec4(background_color),
 			}),
-			PanelShader::Fade => write_uniforms!(uniform::Fade {
-				pos_matrix,
-				prev,
-				cur,
-				next,
-				fade_duration,
-				progress,
-				_unused: [0; 2],
-			}),
-			PanelShader::FadeWhite { strength } => write_uniforms!(uniform::FadeWhite {
-				pos_matrix,
-				prev,
-				cur,
-				next,
-				fade_duration,
-				progress,
-				strength,
-				_unused: 0,
-			}),
-			PanelShader::FadeOut { strength } => write_uniforms!(uniform::FadeOut {
-				pos_matrix,
-				prev,
-				cur,
-				next,
-				fade_duration,
-				progress,
-				strength,
-				_unused: 0,
-			}),
-			PanelShader::FadeIn { strength } => write_uniforms!(uniform::FadeIn {
-				pos_matrix,
-				prev,
-				cur,
-				next,
-				fade_duration,
-				progress,
-				strength,
-				_unused: 0,
-			}),
+			PanelShader::Fade(fade) => match fade {
+				PanelShaderFade::Basic => write_uniforms!(uniform::Fade {
+					pos_matrix,
+					prev,
+					cur,
+					next,
+					fade_duration,
+					progress,
+					_unused: [0; 2],
+				}),
+				PanelShaderFade::White { strength } => write_uniforms!(uniform::FadeWhite {
+					pos_matrix,
+					prev,
+					cur,
+					next,
+					fade_duration,
+					progress,
+					strength,
+					_unused: 0,
+				}),
+				PanelShaderFade::Out { strength } => write_uniforms!(uniform::FadeOut {
+					pos_matrix,
+					prev,
+					cur,
+					next,
+					fade_duration,
+					progress,
+					strength,
+					_unused: 0,
+				}),
+				PanelShaderFade::In { strength } => write_uniforms!(uniform::FadeIn {
+					pos_matrix,
+					prev,
+					cur,
+					next,
+					fade_duration,
+					progress,
+					strength,
+					_unused: 0,
+				}),
+			},
 		}
 	}
 }
@@ -583,23 +585,24 @@ fn create_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLa
 
 /// Shader
 #[derive(PartialEq, Clone, Copy, Debug)]
-#[expect(variant_size_differences, reason = "16 bytes is still reasonable for this type")]
 pub enum PanelShader {
+	/// None shader
 	None { background_color: [f32; 4] },
-	Fade,
-	FadeWhite { strength: f32 },
-	FadeOut { strength: f32 },
-	FadeIn { strength: f32 },
+
+	/// Fade shader
+	Fade(PanelShaderFade),
 }
 impl PanelShader {
 	/// Returns this shader's name
 	pub fn name(self) -> &'static str {
 		match self {
 			Self::None { .. } => "None",
-			Self::Fade => "Fade",
-			Self::FadeWhite { .. } => "Fade white",
-			Self::FadeOut { .. } => "Fade out",
-			Self::FadeIn { .. } => "Fade in",
+			Self::Fade(fade) => match fade {
+				PanelShaderFade::Basic => "Fade",
+				PanelShaderFade::White { .. } => "Fade white",
+				PanelShaderFade::Out { .. } => "Fade out",
+				PanelShaderFade::In { .. } => "Fade in",
+			},
 		}
 	}
 
@@ -607,10 +610,22 @@ impl PanelShader {
 	pub fn module_json(self) -> &'static str {
 		match self {
 			Self::None { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/none.json")),
-			Self::Fade => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade.json")),
-			Self::FadeWhite { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-white.json")),
-			Self::FadeOut { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-out.json")),
-			Self::FadeIn { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-in.json")),
+			Self::Fade(fade) => match fade {
+				PanelShaderFade::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade.json")),
+				PanelShaderFade::White { .. } =>
+					include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-white.json")),
+				PanelShaderFade::Out { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-out.json")),
+				PanelShaderFade::In { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-in.json")),
+			},
 		}
 	}
+}
+
+/// Panel shader fade
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum PanelShaderFade {
+	Basic,
+	White { strength: f32 },
+	Out { strength: f32 },
+	In { strength: f32 },
 }

@@ -3,7 +3,7 @@
 // Imports
 use {
 	super::{Panel, PanelName, PanelShader, PanelState, ser},
-	crate::AppError,
+	crate::{AppError, panel::PanelShaderFade},
 	app_error::Context,
 	core::time::Duration,
 	futures::lock::Mutex,
@@ -68,13 +68,16 @@ impl Panels {
 					fade_duration: panel.state.fade_duration,
 					shader:        match panel.shader {
 						Some(ser::PanelShader::None { background_color }) => PanelShader::None { background_color },
-						Some(ser::PanelShader::Fade) => PanelShader::Fade,
-						Some(ser::PanelShader::FadeWhite { strength }) => PanelShader::FadeWhite { strength },
-						Some(ser::PanelShader::FadeOut { strength }) => PanelShader::FadeOut { strength },
-						Some(ser::PanelShader::FadeIn { strength }) => PanelShader::FadeIn { strength },
+						Some(ser::PanelShader::Fade) => PanelShader::Fade(PanelShaderFade::Basic),
+						Some(ser::PanelShader::FadeWhite { strength }) =>
+							PanelShader::Fade(PanelShaderFade::White { strength }),
+						Some(ser::PanelShader::FadeOut { strength }) =>
+							PanelShader::Fade(PanelShaderFade::Out { strength }),
+						Some(ser::PanelShader::FadeIn { strength }) =>
+							PanelShader::Fade(PanelShaderFade::In { strength }),
 
 						// TODO: Is this a good default?
-						None => PanelShader::FadeOut { strength: 1.5 },
+						None => PanelShader::Fade(PanelShaderFade::Out { strength: 1.5 }),
 					},
 				};
 

@@ -6,7 +6,7 @@
 // Imports
 use {
 	crate::{
-		panel::{PanelImage, PanelShader},
+		panel::{PanelImage, PanelShader, PanelShaderFade},
 		shared::{Shared, SharedWindow},
 	},
 	core::{ops::RangeInclusive, time::Duration},
@@ -271,10 +271,10 @@ fn draw_shader_select(ui: &mut egui::Ui, cur_shader: &mut PanelShader) {
 				PanelShader::None {
 					background_color: [0.0; 4],
 				},
-				PanelShader::Fade,
-				PanelShader::FadeWhite { strength: 1.0 },
-				PanelShader::FadeOut { strength: 0.2 },
-				PanelShader::FadeIn { strength: 0.2 },
+				PanelShader::Fade(PanelShaderFade::Basic),
+				PanelShader::Fade(PanelShaderFade::White { strength: 1.0 }),
+				PanelShader::Fade(PanelShaderFade::Out { strength: 0.2 }),
+				PanelShader::Fade(PanelShaderFade::In { strength: 0.2 }),
 			];
 			for shader in shaders {
 				ui.selectable_value(cur_shader, shader, shader.name());
@@ -292,24 +292,26 @@ fn draw_shader_select(ui: &mut egui::Ui, cur_shader: &mut PanelShader) {
 				*bg_color = color.to_array();
 			});
 		},
-		PanelShader::Fade => (),
-		PanelShader::FadeWhite { strength } => {
-			ui.horizontal(|ui| {
-				ui.label("Strength");
-				egui::Slider::new(strength, 0.0..=20.0).ui(ui);
-			});
-		},
-		PanelShader::FadeOut { strength } => {
-			ui.horizontal(|ui| {
-				ui.label("Strength");
-				egui::Slider::new(strength, 0.0..=2.0).ui(ui);
-			});
-		},
-		PanelShader::FadeIn { strength } => {
-			ui.horizontal(|ui| {
-				ui.label("Strength");
-				egui::Slider::new(strength, 0.0..=2.0).ui(ui);
-			});
+		PanelShader::Fade(fade) => match fade {
+			PanelShaderFade::Basic => (),
+			PanelShaderFade::White { strength } => {
+				ui.horizontal(|ui| {
+					ui.label("Strength");
+					egui::Slider::new(strength, 0.0..=20.0).ui(ui);
+				});
+			},
+			PanelShaderFade::Out { strength } => {
+				ui.horizontal(|ui| {
+					ui.label("Strength");
+					egui::Slider::new(strength, 0.0..=2.0).ui(ui);
+				});
+			},
+			PanelShaderFade::In { strength } => {
+				ui.horizontal(|ui| {
+					ui.label("Strength");
+					egui::Slider::new(strength, 0.0..=2.0).ui(ui);
+				});
+			},
 		},
 	}
 }

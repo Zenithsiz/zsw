@@ -25,10 +25,10 @@ fn main() {
 	// Pre-process all panel shaders
 	let shaders = [
 		PanelShader::None,
-		PanelShader::Fade,
-		PanelShader::FadeWhite,
-		PanelShader::FadeOut,
-		PanelShader::FadeIn,
+		PanelShader::Fade(PanelShaderFade::Basic),
+		PanelShader::Fade(PanelShaderFade::White),
+		PanelShader::Fade(PanelShaderFade::Out),
+		PanelShader::Fade(PanelShaderFade::In),
 	];
 	for shader in shaders {
 		let shader_src_path = Path::new("shaders").join(shader.src_path());
@@ -46,18 +46,25 @@ fn main() {
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 enum PanelShader {
 	None,
-	Fade,
-	FadeWhite,
-	FadeOut,
-	FadeIn,
+	Fade(PanelShaderFade),
 }
+
+/// Panel shader fade
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum PanelShaderFade {
+	Basic,
+	White,
+	Out,
+	In,
+}
+
 
 impl PanelShader {
 	/// Returns this shader's source path, relative to the shaders path
 	pub fn src_path(self) -> &'static str {
 		match self {
 			Self::None => "panels/none.wgsl",
-			Self::Fade | Self::FadeWhite | Self::FadeOut | Self::FadeIn => "panels/fade.wgsl",
+			Self::Fade(_) => "panels/fade.wgsl",
 		}
 	}
 
@@ -65,10 +72,12 @@ impl PanelShader {
 	pub fn out_path(self) -> &'static str {
 		match self {
 			Self::None => "panels/none.json",
-			Self::Fade => "panels/fade.json",
-			Self::FadeWhite => "panels/fade-white.json",
-			Self::FadeOut => "panels/fade-out.json",
-			Self::FadeIn => "panels/fade-in.json",
+			Self::Fade(fade) => match fade {
+				PanelShaderFade::Basic => "panels/fade.json",
+				PanelShaderFade::White => "panels/fade-white.json",
+				PanelShaderFade::Out => "panels/fade-out.json",
+				PanelShaderFade::In => "panels/fade-in.json",
+			},
 		}
 	}
 
@@ -111,10 +120,12 @@ impl PanelShader {
 		let mut shader_defs = HashSet::new();
 		match self {
 			Self::None => (),
-			Self::Fade => _ = shader_defs.insert("FADE_BASIC"),
-			Self::FadeWhite => _ = shader_defs.insert("FADE_WHITE"),
-			Self::FadeOut => _ = shader_defs.insert("FADE_OUT"),
-			Self::FadeIn => _ = shader_defs.insert("FADE_IN"),
+			Self::Fade(fade) => match fade {
+				PanelShaderFade::Basic => _ = shader_defs.insert("FADE_BASIC"),
+				PanelShaderFade::White => _ = shader_defs.insert("FADE_WHITE"),
+				PanelShaderFade::Out => _ = shader_defs.insert("FADE_OUT"),
+				PanelShaderFade::In => _ = shader_defs.insert("FADE_IN"),
+			},
 		}
 
 		// And finally build the final module.
