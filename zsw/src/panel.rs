@@ -34,6 +34,9 @@ pub struct Panel {
 	/// Geometries
 	pub geometries: Vec<PanelGeometry>,
 
+	/// Playlist player
+	pub playlist_player: Option<PlaylistPlayer>,
+
 	/// State
 	pub state: PanelState,
 }
@@ -44,6 +47,7 @@ impl Panel {
 		Self {
 			name,
 			geometries: geometries.into_iter().map(PanelGeometry::new).collect(),
+			playlist_player: None,
 			state,
 		}
 	}

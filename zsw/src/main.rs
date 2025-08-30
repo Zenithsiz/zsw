@@ -299,9 +299,10 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		tracing::debug!("Loaded default playlist {playlist_name:?}");
 
 		let playlist_player = PlaylistPlayer::new(&playlist).await;
+		let panel_images = PanelImages::new(shared.wgpu, &shared.panels_renderer_layouts);
 
-		let panel_images = PanelImages::new(playlist_player, shared.wgpu, &shared.panels_renderer_layouts);
 		let mut panel = panel.lock().await;
+		panel.playlist_player = Some(playlist_player);
 		panel.state.images = Some(panel_images);
 		tracing::debug!("Loaded default panel images {panel_name:?}");
 
@@ -455,6 +456,7 @@ async fn paint_egui(
 
 			for panel in shared.panels.get_all().await {
 				let mut panel = panel.lock().await;
+				let panel = &mut *panel;
 
 				if !panel.geometries.iter().any(|geometry| {
 					geometry
@@ -464,7 +466,13 @@ async fn paint_egui(
 					continue;
 				}
 
-				panel.state.skip(shared.wgpu, &shared.panels_renderer_layouts);
+				let Some(playlist_player) = &mut panel.playlist_player else {
+					continue;
+				};
+
+				panel
+					.state
+					.skip(playlist_player, shared.wgpu, &shared.panels_renderer_layouts);
 			}
 		}
 
@@ -477,6 +485,7 @@ async fn paint_egui(
 
 			for panel in shared.panels.get_all().await {
 				let mut panel = panel.lock().await;
+				let panel = &mut *panel;
 
 				if !panel.geometries.iter().any(|geometry| {
 					geometry
@@ -485,6 +494,10 @@ async fn paint_egui(
 				}) {
 					continue;
 				}
+
+				let Some(playlist_player) = &mut panel.playlist_player else {
+					continue;
+				};
 
 				// TODO: Make this "speed" configurable
 				// TODO: Perform the conversion better without going through nanos
@@ -496,9 +509,12 @@ async fn paint_egui(
 					false => time_delta_abs,
 				};
 
-				panel
-					.state
-					.step(shared.wgpu, &shared.panels_renderer_layouts, time_delta);
+				panel.state.step(
+					playlist_player,
+					shared.wgpu,
+					&shared.panels_renderer_layouts,
+					time_delta,
+				);
 			}
 		}
 

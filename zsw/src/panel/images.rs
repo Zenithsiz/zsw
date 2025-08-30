@@ -32,9 +32,6 @@ pub struct PanelImages {
 	/// Next image
 	pub next: PanelImage,
 
-	/// Playlist player
-	pub playlist_player: PlaylistPlayer,
-
 	/// Texture sampler
 	pub texture_sampler: wgpu::Sampler,
 
@@ -48,11 +45,7 @@ pub struct PanelImages {
 impl PanelImages {
 	/// Creates a new panel
 	#[must_use]
-	pub fn new(
-		playlist_player: PlaylistPlayer,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) -> Self {
+	pub fn new(wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Self {
 		// Create the textures
 		let image_prev = PanelImage::empty();
 		let image_cur = PanelImage::empty();
@@ -71,7 +64,6 @@ impl PanelImages {
 			prev: image_prev,
 			cur: image_cur,
 			next: image_next,
-			playlist_player,
 			texture_sampler,
 			image_bind_group,
 			image_load_task: None,
@@ -81,8 +73,13 @@ impl PanelImages {
 	/// Steps to the previous image, if any
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub fn step_prev(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Result<(), ()> {
-		self.playlist_player.step_prev()?;
+	pub fn step_prev(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+	) -> Result<(), ()> {
+		playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = PanelImage::empty();
@@ -93,12 +90,17 @@ impl PanelImages {
 	/// Steps to the next image.
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub fn step_next(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Result<(), ()> {
+	pub fn step_next(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+	) -> Result<(), ()> {
 		if !self.next.is_loaded() {
 			return Err(());
 		}
 
-		self.playlist_player.step_next();
+		playlist_player.step_next();
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = PanelImage::empty();
@@ -110,9 +112,14 @@ impl PanelImages {
 	/// Loads any missing images, prioritizing the current, then next, then previous.
 	///
 	/// Requests images if missing any.
-	pub fn load_missing(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub fn load_missing(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+	) {
 		// Get the next image, if we can
-		let Some(res) = self.next_image(wgpu_shared) else {
+		let Some(res) = self.next_image(playlist_player, wgpu_shared) else {
 			return;
 		};
 
@@ -128,9 +135,9 @@ impl PanelImages {
 					res.path,
 					err.pretty()
 				);
-				self.playlist_player.remove(&res.path);
+				playlist_player.remove(&res.path);
 
-				_ = self.schedule_load_image(wgpu_shared);
+				_ = self.schedule_load_image(playlist_player, wgpu_shared);
 				return;
 			},
 		};
@@ -138,13 +145,13 @@ impl PanelImages {
 		// Get which slot to load the image into
 		let slot = {
 			match res.playlist_pos {
-				pos if Some(pos) == self.playlist_player.prev_pos() => Some(Slot::Prev),
-				pos if pos == self.playlist_player.cur_pos() => Some(Slot::Cur),
-				pos if pos == self.playlist_player.next_pos() => Some(Slot::Next),
+				pos if Some(pos) == playlist_player.prev_pos() => Some(Slot::Prev),
+				pos if pos == playlist_player.cur_pos() => Some(Slot::Cur),
+				pos if pos == playlist_player.next_pos() => Some(Slot::Next),
 				pos => {
 					tracing::warn!(
 						pos,
-						playlist_pos = self.playlist_player.cur_pos(),
+						playlist_pos = playlist_player.cur_pos(),
 						"Discarding loaded image due to position being too far",
 					);
 					None
@@ -166,9 +173,9 @@ impl PanelImages {
 	///
 	/// If an image is not scheduled, schedules it, even after
 	/// successfully returning an image
-	fn next_image(&mut self, wgpu_shared: &WgpuShared) -> Option<ImageLoadRes> {
+	fn next_image(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) -> Option<ImageLoadRes> {
 		// Get the load task
-		let task = self.schedule_load_image(wgpu_shared)?;
+		let task = self.schedule_load_image(playlist_player, wgpu_shared)?;
 
 		// Then try to get the response
 		// Note: If we did it, immediately invalidate the exhausted future
@@ -177,7 +184,7 @@ impl PanelImages {
 			return None;
 		};
 		self.image_load_task = None;
-		_ = self.schedule_load_image(wgpu_shared);
+		_ = self.schedule_load_image(playlist_player, wgpu_shared);
 
 		// Finally make sure the task didn't get cancelled
 		let res = match res {
@@ -195,16 +202,20 @@ impl PanelImages {
 	/// Schedules a new image.
 	///
 	/// Returns the handle to the load task
-	fn schedule_load_image(&mut self, wgpu_shared: &WgpuShared) -> Option<&mut tokio::task::JoinHandle<ImageLoadRes>> {
+	fn schedule_load_image(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_shared: &WgpuShared,
+	) -> Option<&mut tokio::task::JoinHandle<ImageLoadRes>> {
 		match self.image_load_task {
 			// TODO: This is required because of the borrow checker
 			Some(_) => Some(self.image_load_task.as_mut().expect("Just checked")),
 			None => {
 				// Get the playlist position and path to load
 				let (playlist_pos, path) = match () {
-					() if !self.cur.is_loaded() => (self.playlist_player.cur_pos(), self.playlist_player.cur()?),
-					() if !self.next.is_loaded() => (self.playlist_player.next_pos(), self.playlist_player.next()?),
-					() if !self.prev.is_loaded() => (self.playlist_player.prev_pos()?, self.playlist_player.prev()?),
+					() if !self.cur.is_loaded() => (playlist_player.cur_pos(), playlist_player.cur()?),
+					() if !self.next.is_loaded() => (playlist_player.next_pos(), playlist_player.next()?),
+					() if !self.prev.is_loaded() => (playlist_player.prev_pos()?, playlist_player.prev()?),
 					() => return None,
 				};
 

@@ -158,9 +158,15 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.horizontal(|ui| {
+				let Some(playlist_player) = &mut panel.playlist_player else {
+					return;
+				};
+
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
-					panel.state.skip(shared.wgpu, &shared.panels_renderer_layouts);
+					panel
+						.state
+						.skip(playlist_player, shared.wgpu, &shared.panels_renderer_layouts);
 				}
 			});
 
@@ -175,18 +181,18 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let Some(panel_images) = &mut panel.state.images else {
+				let Some(playlist_player) = &mut panel.playlist_player else {
 					ui.weak("Not loaded");
 					return;
 				};
 
 				let row_height = ui.text_style_height(&egui::TextStyle::Body);
 
-				ui.label(format!("Position: {}", panel_images.playlist_player.cur_pos()));
+				ui.label(format!("Position: {}", playlist_player.cur_pos()));
 
 				ui.label(format!(
 					"Remaining until shuffle: {}",
-					panel_images.playlist_player.remaining_until_shuffle()
+					playlist_player.remaining_until_shuffle()
 				));
 
 				ui.collapsing("Items", |ui| {
@@ -194,16 +200,11 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 						.auto_shrink([false, true])
 						.stick_to_right(true)
 						.max_height(row_height * 10.0)
-						.show_rows(
-							ui,
-							row_height,
-							panel_images.playlist_player.all_items().len(),
-							|ui, idx| {
-								for item in panel_images.playlist_player.all_items().take(idx.end).skip(idx.start) {
-									self::draw_openable_path(ui, item);
-								}
-							},
-						);
+						.show_rows(ui, row_height, playlist_player.all_items().len(), |ui, idx| {
+							for item in playlist_player.all_items().take(idx.end).skip(idx.start) {
+								self::draw_openable_path(ui, item);
+							}
+						});
 				});
 			});
 

@@ -3,6 +3,7 @@
 // Imports
 use {
 	super::{PanelImages, PanelShader, PanelsRendererLayouts},
+	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
 	core::time::Duration,
 	std::time::Instant,
@@ -62,22 +63,33 @@ impl PanelState {
 	/// Skips to the next image.
 	///
 	/// If the images aren't loaded, does nothing
-	pub fn skip(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub fn skip(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+	) {
 		let Some(images) = &mut self.images else { return };
 
-		match images.step_next(wgpu_shared, renderer_layouts) {
+		match images.step_next(playlist_player, wgpu_shared, renderer_layouts) {
 			Ok(()) => self.progress = self.duration.saturating_sub(self.fade_duration),
 			Err(()) => self.progress = Self::max_duration(self.duration, self.fade_duration, images),
 		}
 
 		// Then load any missing images
-		images.load_missing(wgpu_shared, renderer_layouts);
+		images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	///
 	/// If the images aren't loaded, does nothing
-	pub fn step(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, delta: TimeDelta) {
+	pub fn step(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+		delta: TimeDelta,
+	) {
 		let Some(images) = &mut self.images else { return };
 
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
@@ -89,7 +101,7 @@ impl PanelState {
 		// Update the progress, potentially rolling over to the previous/next image
 		self.progress = match next_progress {
 			Some(next_progress) => match next_progress >= self.duration {
-				true => match images.step_next(wgpu_shared, renderer_layouts) {
+				true => match images.step_next(playlist_player, wgpu_shared, renderer_layouts) {
 					Ok(()) => next_progress - self.duration,
 					Err(()) => Self::max_duration(self.duration, self.fade_duration, images),
 				},
@@ -98,7 +110,7 @@ impl PanelState {
 					Self::max_duration(self.duration, self.fade_duration, images),
 				),
 			},
-			None => match images.step_prev(wgpu_shared, renderer_layouts) {
+			None => match images.step_prev(playlist_player, wgpu_shared, renderer_layouts) {
 				// Note: This branch is only taken when `delta` is negative, so we can always
 				//       subtract without checking `delta_is_positive`.
 				Ok(()) => match (self.duration + self.progress).checked_sub(delta_abs) {
@@ -111,24 +123,30 @@ impl PanelState {
 		};
 
 		// Then load any missing images
-		images.load_missing(wgpu_shared, renderer_layouts);
+		images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 	}
 
 	/// Updates this panel's state
 	///
 	/// If the images aren't loaded, does nothing
-	pub fn update(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, delta: TimeDelta) {
+	pub fn update(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_shared: &WgpuShared,
+		renderer_layouts: &PanelsRendererLayouts,
+		delta: TimeDelta,
+	) {
 		let Some(images) = &mut self.images else { return };
 
 		// Then load any missing images
-		images.load_missing(wgpu_shared, renderer_layouts);
+		images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 
 		// If we're paused, don't update anything
 		if self.paused {
 			return;
 		}
 
-		self.step(wgpu_shared, renderer_layouts, delta);
+		self.step(playlist_player, wgpu_shared, renderer_layouts, delta);
 	}
 }
 
