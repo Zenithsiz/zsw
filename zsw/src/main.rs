@@ -435,7 +435,7 @@ async fn paint_egui(
 						.geometry_on(&shared_window.monitor_geometry)
 						.contains(cursor_pos)
 					{
-						panel.toggle_paused();
+						panel.state_mut().toggle_paused();
 						break;
 					}
 				}

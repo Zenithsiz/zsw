@@ -22,7 +22,7 @@ use {
 	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
 	core::{borrow::Borrow, fmt, time::Duration},
-	std::{sync::Arc, time::Instant},
+	std::sync::Arc,
 	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
 };
@@ -161,37 +161,9 @@ impl Panel {
 		//       this happens when we have multiple renderers rendering
 		//       at the same time, one to try to update immediately after
 		//       the other has updated.
-		let delta = self.update_delta();
+		let delta = self.state.update_delta();
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
 		self.step(wgpu_shared, renderer_layouts, delta);
-	}
-
-	/// Update the last time this field was updated and returns
-	/// the duration since that update
-	fn update_delta(&mut self) -> Duration {
-		// TODO: this can fall out of sync after a lot of cycles due to precision,
-		//       should we do it in some other way?
-		let now = Instant::now();
-		let delta = now.duration_since(self.state.last_update);
-		self.state.last_update = now;
-
-		delta
-	}
-
-	/// Sets the pause state
-	pub fn set_paused(&mut self, paused: bool) {
-		self.state.paused = paused;
-		// Note: If we're unpausing, we don't want to skip ahead
-		//       due to the last update being in the past, so just
-		//       set it to now
-		if !self.state.paused {
-			self.state.last_update = Instant::now();
-		}
-	}
-
-	/// Toggles pause of this state
-	pub fn toggle_paused(&mut self) {
-		self.set_paused(!self.state.paused);
 	}
 
 	/// Returns this panel's name

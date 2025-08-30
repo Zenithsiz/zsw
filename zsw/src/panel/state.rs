@@ -73,4 +73,33 @@ impl PanelState {
 			false => self.duration - self.fade_duration,
 		}
 	}
+
+	/// Update the last time this field was updated and returns
+	/// the duration since that update
+	pub(super) fn update_delta(&mut self) -> Duration {
+		// TODO: this can fall out of sync after a lot of cycles due to precision,
+		//       should we do it in some other way?
+		let now = Instant::now();
+		let delta = now.duration_since(self.last_update);
+		self.last_update = now;
+
+		delta
+	}
+
+	/// Sets the pause state
+	pub fn set_paused(&mut self, paused: bool) {
+		self.paused = paused;
+
+		// Note: If we're unpausing, we don't want to skip ahead
+		//       due to the last update being in the past, so just
+		//       set it to now
+		if !self.paused {
+			self.last_update = Instant::now();
+		}
+	}
+
+	/// Toggles pause of this state
+	pub fn toggle_paused(&mut self) {
+		self.set_paused(!self.paused);
+	}
 }
