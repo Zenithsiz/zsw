@@ -464,13 +464,7 @@ async fn paint_egui(
 					continue;
 				}
 
-				let Some(playlist_player) = &mut panel.playlist_player else {
-					continue;
-				};
-
-				panel
-					.state
-					.skip(playlist_player, shared.wgpu, &shared.panels_renderer_layouts);
+				panel.skip(shared.wgpu, &shared.panels_renderer_layouts);
 			}
 		}
 
@@ -493,10 +487,6 @@ async fn paint_egui(
 					continue;
 				}
 
-				let Some(playlist_player) = &mut panel.playlist_player else {
-					continue;
-				};
-
 				// TODO: Make this "speed" configurable
 				// TODO: Perform the conversion better without going through nanos
 				let speed = 1.0 / 1000.0;
@@ -507,12 +497,7 @@ async fn paint_egui(
 					false => time_delta_abs,
 				};
 
-				panel.state.step(
-					playlist_player,
-					shared.wgpu,
-					&shared.panels_renderer_layouts,
-					time_delta,
-				);
+				panel.step(shared.wgpu, &shared.panels_renderer_layouts, time_delta);
 			}
 		}
 

@@ -114,8 +114,6 @@ impl PanelState {
 	}
 
 	/// Updates this panel's state
-	///
-	/// If the images aren't loaded, does nothing
 	pub fn update(
 		&mut self,
 		playlist_player: &mut PlaylistPlayer,

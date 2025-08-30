@@ -165,7 +165,7 @@ impl PanelsRenderer {
 			//       This happens when we have multiple renderers rendering
 			//       at the same time, one to try to update immediately after
 			//       the other has updated.
-			if let Some(playlist_player) = &mut panel.playlist_player {
+			{
 				// Calculate the delta since the last update and update it
 				// TODO: This can fall out of sync after a lot of cycles due to precision,
 				//       should we do it in some other way?
@@ -174,7 +174,7 @@ impl PanelsRenderer {
 				panel.state.last_update = now;
 				let delta = TimeDelta::from_std(delta).expect("Frame duration did not fit into time delta");
 
-				panel.state.update(playlist_player, wgpu_shared, layouts, delta);
+				panel.update(wgpu_shared, layouts, delta);
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either

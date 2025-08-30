@@ -146,15 +146,9 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.horizontal(|ui| {
-				let Some(playlist_player) = &mut panel.playlist_player else {
-					return;
-				};
-
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
-					panel
-						.state
-						.skip(playlist_player, shared.wgpu, &shared.panels_renderer_layouts);
+					panel.skip(shared.wgpu, &shared.panels_renderer_layouts);
 				}
 			});
 

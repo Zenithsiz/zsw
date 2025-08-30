@@ -20,9 +20,11 @@ pub use self::{
 // Imports
 use {
 	crate::playlist::PlaylistPlayer,
+	chrono::TimeDelta,
 	core::{borrow::Borrow, fmt},
 	std::sync::Arc,
 	zsw_util::Rect,
+	zsw_wgpu::WgpuShared,
 };
 
 /// Panel
@@ -50,6 +52,39 @@ impl Panel {
 			playlist_player: None,
 			state,
 		}
+	}
+
+	/// Skips to the next image.
+	///
+	/// If the playlist player isn't loaded, does nothing
+	pub fn skip(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+		let Some(playlist_player) = &mut self.playlist_player else {
+			return;
+		};
+
+		self.state.skip(playlist_player, wgpu_shared, renderer_layouts);
+	}
+
+	/// Steps this panel's state by a certain number of frames (potentially negative).
+	///
+	/// If the playlist player isn't loaded, does nothing
+	pub fn step(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, delta: TimeDelta) {
+		let Some(playlist_player) = &mut self.playlist_player else {
+			return;
+		};
+
+		self.state.step(playlist_player, wgpu_shared, renderer_layouts, delta);
+	}
+
+	/// Updates this panel's state
+	///
+	/// If the playlist player isn't loaded, does nothing
+	pub fn update(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, delta: TimeDelta) {
+		let Some(playlist_player) = &mut self.playlist_player else {
+			return;
+		};
+
+		self.state.update(playlist_player, wgpu_shared, renderer_layouts, delta);
 	}
 }
 
