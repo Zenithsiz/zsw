@@ -122,7 +122,6 @@ fn main() -> Result<(), AppError> {
 struct WinitApp {
 	window_event_handlers: HashMap<WindowId, EguiEventHandler>,
 	shared:                Arc<Shared>,
-	shared_window:         Vec<Arc<SharedWindow>>,
 }
 
 impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
@@ -202,7 +201,6 @@ impl WinitApp {
 		Ok(Self {
 			window_event_handlers: HashMap::new(),
 			shared,
-			shared_window: vec![],
 		})
 	}
 
@@ -246,7 +244,6 @@ impl WinitApp {
 			_ = self
 				.window_event_handlers
 				.insert(shared_window.window.id(), egui_event_handler);
-			self.shared_window.push(shared_window);
 		}
 
 		Ok(())
