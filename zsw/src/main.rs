@@ -31,7 +31,7 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{PanelImages, PanelName, Panels, PanelsGeometryUniforms, PanelsRenderer, PanelsRendererLayouts},
+		panel::{PanelName, Panels, PanelsGeometryUniforms, PanelsRenderer, PanelsRendererLayouts},
 		playlist::{PlaylistName, PlaylistPlayer, Playlists},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
@@ -283,7 +283,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 
 	let panel = shared
 		.panels
-		.load(panel_name.clone())
+		.load(panel_name.clone(), shared.wgpu, &shared.panels_renderer_layouts)
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!("Loaded default panel {panel_name:?}");
@@ -299,12 +299,10 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		tracing::debug!("Loaded default playlist {playlist_name:?}");
 
 		let playlist_player = PlaylistPlayer::new(&playlist).await;
-		let panel_images = PanelImages::new(shared.wgpu, &shared.panels_renderer_layouts);
 
 		let mut panel = panel.lock().await;
 		panel.playlist_player = Some(playlist_player);
-		panel.state.images = Some(panel_images);
-		tracing::debug!("Loaded default panel images {panel_name:?}");
+		tracing::debug!("Loaded default panel playlist player {panel_name:?}");
 
 		Ok(())
 	})?;

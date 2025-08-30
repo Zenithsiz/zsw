@@ -74,7 +74,6 @@ fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWin
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
 	let panels = shared.panels.get_all().block_on();
 
@@ -125,19 +124,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				);
 
 
-				// Then clamp to the current max
-				// Note: We don't just use this max above so the slider doesn't jitter when the max changes
-				let cur_max = match &panel.state.images {
-					Some(panel_images) => match (panel_images.cur.is_loaded(), panel_images.next.is_loaded()) {
-						(false, false) => Duration::ZERO,
-						(true, false) => panel.state.fade_duration,
-						(_, true) => panel.state.duration,
-					},
-					None => Duration::ZERO,
-				};
-
 				// TODO: This should be done elsewhere.
-				panel.state.progress = panel.state.progress.clamp(Duration::ZERO, cur_max);
+				panel.state.progress = panel.state.progress.clamp(Duration::ZERO, panel.state.max_duration());
 			});
 
 			ui.horizontal(|ui| {
@@ -171,13 +159,11 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Images", |ui| {
-				let Some(panel_images) = &mut panel.state.images else {
-					ui.weak("Not loaded");
-					return;
-				};
-				ui.collapsing("Previous", |ui| self::draw_panel_image(ui, &mut panel_images.prev));
-				ui.collapsing("Current", |ui| self::draw_panel_image(ui, &mut panel_images.cur));
-				ui.collapsing("Next", |ui| self::draw_panel_image(ui, &mut panel_images.next));
+				ui.collapsing("Previous", |ui| {
+					self::draw_panel_image(ui, &mut panel.state.images.prev);
+				});
+				ui.collapsing("Current", |ui| self::draw_panel_image(ui, &mut panel.state.images.cur));
+				ui.collapsing("Next", |ui| self::draw_panel_image(ui, &mut panel.state.images.next));
 			});
 
 			ui.collapsing("Playlist player", |ui| {

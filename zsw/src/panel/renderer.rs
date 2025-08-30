@@ -177,13 +177,8 @@ impl PanelsRenderer {
 				panel.state.update(playlist_player, wgpu_shared, layouts, delta);
 			}
 
-			// If the panel images are missing, skip it
-			let Some(panel_images) = &mut panel.state.images else {
-				continue;
-			};
-
 			// If the panel images are empty, there's no sense in rendering it either
-			if panel_images.is_empty() {
+			if panel.state.images.is_empty() {
 				continue;
 			}
 
@@ -207,7 +202,7 @@ impl PanelsRenderer {
 			render_pass.set_pipeline(render_pipeline);
 
 			// Bind the panel-shared image bind group
-			render_pass.set_bind_group(1, &panel_images.image_bind_group, &[]);
+			render_pass.set_bind_group(1, &panel.state.images.image_bind_group, &[]);
 
 			for geometry in &panel.geometries {
 				// If this geometry is outside our window, we can safely ignore it
@@ -245,10 +240,6 @@ impl PanelsRenderer {
 		geometry: &PanelGeometry,
 		geometry_uniforms: &wgpu::Buffer,
 	) {
-		let Some(panel_images) = &panel.state.images else {
-			return;
-		};
-
 		// Calculate the position matrix for the panel
 		let pos_matrix = geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
@@ -263,9 +254,9 @@ impl PanelsRenderer {
 			PanelImageUniforms::new(ratio, swap_dir)
 		};
 
-		let prev = image_uniforms(&panel_images.prev);
-		let cur = image_uniforms(&panel_images.cur);
-		let next = image_uniforms(&panel_images.next);
+		let prev = image_uniforms(&panel.state.images.prev);
+		let cur = image_uniforms(&panel.state.images.cur);
+		let next = image_uniforms(&panel.state.images.next);
 
 		// Writes uniforms `uniforms`
 		let write_uniforms = |uniforms_bytes| wgpu_shared.queue.write_buffer(geometry_uniforms, 0, uniforms_bytes);

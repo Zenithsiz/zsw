@@ -2,13 +2,17 @@
 
 // Imports
 use {
-	super::{Panel, PanelName, PanelShader, PanelState, ser},
-	crate::{AppError, panel::PanelShaderFade},
+	super::{Panel, PanelName, PanelShader, PanelState, PanelsRendererLayouts, ser},
+	crate::{
+		AppError,
+		panel::{PanelImages, PanelShaderFade},
+	},
 	app_error::Context,
 	core::time::Duration,
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant},
 	tokio::sync::OnceCell,
+	zsw_wgpu::WgpuShared,
 };
 
 /// Panel storage
@@ -37,7 +41,12 @@ impl Panels {
 	/// Loads a panel from a name.
 	///
 	/// If the panel isn't for this window, returns `Ok(None)`
-	pub async fn load(&self, panel_name: PanelName) -> Result<Arc<Mutex<Panel>>, AppError> {
+	pub async fn load(
+		&self,
+		panel_name: PanelName,
+		wgpu_shared: &WgpuShared,
+		panels_renderer_layouts: &PanelsRendererLayouts,
+	) -> Result<Arc<Mutex<Panel>>, AppError> {
 		let panel_entry = Arc::clone(
 			self.panels
 				.lock()
@@ -79,7 +88,7 @@ impl Panels {
 						// TODO: Is this a good default?
 						None => PanelShader::Fade(PanelShaderFade::Out { strength: 1.5 }),
 					},
-					images:        None,
+					images:        PanelImages::new(wgpu_shared, panels_renderer_layouts),
 				};
 
 				let panel = Panel::new(panel_name.clone(), geometries, state);

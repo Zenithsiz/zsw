@@ -32,9 +32,7 @@ pub struct PanelState {
 	pub fade_duration: Duration,
 
 	/// Images, if loaded
-	// TODO: Make `PanelImages` itself be lazy, instead of us
-	//       wrapping it in an option.
-	pub images: Option<PanelImages>,
+	pub images: PanelImages,
 }
 
 impl PanelState {
@@ -52,37 +50,31 @@ impl PanelState {
 	}
 
 	/// Returns the max duration for the current image
-	fn max_duration(duration: Duration, fade_duration: Duration, images: &PanelImages) -> Duration {
-		match (images.cur.is_loaded(), images.next.is_loaded()) {
+	pub fn max_duration(&self) -> Duration {
+		match (self.images.cur.is_loaded(), self.images.next.is_loaded()) {
 			(false, false) => Duration::ZERO,
-			(true, false) => duration - fade_duration,
-			(_, true) => duration,
+			(true, false) => self.duration - self.fade_duration,
+			(_, true) => self.duration,
 		}
 	}
 
 	/// Skips to the next image.
-	///
-	/// If the images aren't loaded, does nothing
 	pub fn skip(
 		&mut self,
 		playlist_player: &mut PlaylistPlayer,
 		wgpu_shared: &WgpuShared,
 		renderer_layouts: &PanelsRendererLayouts,
 	) {
-		let Some(images) = &mut self.images else { return };
-
-		match images.step_next(playlist_player, wgpu_shared, renderer_layouts) {
+		match self.images.step_next(playlist_player, wgpu_shared, renderer_layouts) {
 			Ok(()) => self.progress = self.duration.saturating_sub(self.fade_duration),
-			Err(()) => self.progress = Self::max_duration(self.duration, self.fade_duration, images),
+			Err(()) => self.progress = self.max_duration(),
 		}
 
 		// Then load any missing images
-		images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
+		self.images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
-	///
-	/// If the images aren't loaded, does nothing
 	pub fn step(
 		&mut self,
 		playlist_player: &mut PlaylistPlayer,
@@ -90,8 +82,6 @@ impl PanelState {
 		renderer_layouts: &PanelsRendererLayouts,
 		delta: TimeDelta,
 	) {
-		let Some(images) = &mut self.images else { return };
-
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
 			true => Some(self.progress.saturating_add(delta_abs)),
@@ -101,16 +91,13 @@ impl PanelState {
 		// Update the progress, potentially rolling over to the previous/next image
 		self.progress = match next_progress {
 			Some(next_progress) => match next_progress >= self.duration {
-				true => match images.step_next(playlist_player, wgpu_shared, renderer_layouts) {
+				true => match self.images.step_next(playlist_player, wgpu_shared, renderer_layouts) {
 					Ok(()) => next_progress - self.duration,
-					Err(()) => Self::max_duration(self.duration, self.fade_duration, images),
+					Err(()) => self.max_duration(),
 				},
-				false => next_progress.clamp(
-					Duration::ZERO,
-					Self::max_duration(self.duration, self.fade_duration, images),
-				),
+				false => next_progress.clamp(Duration::ZERO, self.max_duration()),
 			},
-			None => match images.step_prev(playlist_player, wgpu_shared, renderer_layouts) {
+			None => match self.images.step_prev(playlist_player, wgpu_shared, renderer_layouts) {
 				// Note: This branch is only taken when `delta` is negative, so we can always
 				//       subtract without checking `delta_is_positive`.
 				Ok(()) => match (self.duration + self.progress).checked_sub(delta_abs) {
@@ -123,7 +110,7 @@ impl PanelState {
 		};
 
 		// Then load any missing images
-		images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
+		self.images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 	}
 
 	/// Updates this panel's state
@@ -136,10 +123,8 @@ impl PanelState {
 		renderer_layouts: &PanelsRendererLayouts,
 		delta: TimeDelta,
 	) {
-		let Some(images) = &mut self.images else { return };
-
 		// Then load any missing images
-		images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
+		self.images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
 
 		// If we're paused, don't update anything
 		if self.paused {
