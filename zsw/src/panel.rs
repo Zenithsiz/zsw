@@ -57,34 +57,34 @@ impl Panel {
 	/// Skips to the next image.
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn skip(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub fn skip(&mut self, wgpu_shared: &WgpuShared) {
 		let Some(playlist_player) = &mut self.playlist_player else {
 			return;
 		};
 
-		self.state.skip(playlist_player, wgpu_shared, renderer_layouts);
+		self.state.skip(playlist_player, wgpu_shared);
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn step(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts, delta: TimeDelta) {
+	pub fn step(&mut self, wgpu_shared: &WgpuShared, delta: TimeDelta) {
 		let Some(playlist_player) = &mut self.playlist_player else {
 			return;
 		};
 
-		self.state.step(playlist_player, wgpu_shared, renderer_layouts, delta);
+		self.state.step(playlist_player, wgpu_shared, delta);
 	}
 
 	/// Updates this panel's state using the current time as a delta
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn update(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
+	pub fn update(&mut self, wgpu_shared: &WgpuShared) {
 		let Some(playlist_player) = &mut self.playlist_player else {
 			return;
 		};
 
-		self.state.update(playlist_player, wgpu_shared, renderer_layouts);
+		self.state.update(playlist_player, wgpu_shared);
 	}
 
 	/// Returns this panel's name

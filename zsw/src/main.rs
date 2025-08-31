@@ -283,7 +283,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 
 	let panel = shared
 		.panels
-		.load(panel_name.clone(), shared.wgpu, &shared.panels_renderer_layouts)
+		.load(panel_name.clone(), shared.wgpu)
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!("Loaded default panel {panel_name:?}");
@@ -464,7 +464,7 @@ async fn paint_egui(
 					continue;
 				}
 
-				panel.skip(shared.wgpu, &shared.panels_renderer_layouts);
+				panel.skip(shared.wgpu);
 			}
 		}
 
@@ -497,7 +497,7 @@ async fn paint_egui(
 					false => time_delta_abs,
 				};
 
-				panel.step(shared.wgpu, &shared.panels_renderer_layouts, time_delta);
+				panel.step(shared.wgpu, time_delta);
 			}
 		}
 

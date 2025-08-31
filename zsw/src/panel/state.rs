@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::{PanelImages, PanelShader, PanelsRendererLayouts},
+	super::{PanelImages, PanelShader},
 	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
 	core::time::Duration,
@@ -166,13 +166,8 @@ impl PanelState {
 	/// Skips to the next image.
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn skip(
-		&mut self,
-		playlist_player: &mut PlaylistPlayer,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) {
-		self.progress = match self.images.step_next(playlist_player, wgpu_shared, renderer_layouts) {
+	pub fn skip(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) {
+		self.progress = match self.images.step_next(playlist_player, wgpu_shared) {
 			Ok(()) => Duration::ZERO,
 			Err(()) => self.max_progress(),
 		}
@@ -181,13 +176,7 @@ impl PanelState {
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn step(
-		&mut self,
-		playlist_player: &mut PlaylistPlayer,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-		delta: TimeDelta,
-	) {
+	pub fn step(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared, delta: TimeDelta) {
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
 			true => Some(self.progress.saturating_add(delta_abs)),
@@ -200,7 +189,7 @@ impl PanelState {
 			Some(next_progress) => match next_progress.checked_sub(self.duration) {
 				// If we did, `next_progress` is our progress at the next image, so try
 				// to step to it.
-				Some(next_progress) => match self.images.step_next(playlist_player, wgpu_shared, renderer_layouts) {
+				Some(next_progress) => match self.images.step_next(playlist_player, wgpu_shared) {
 					// If we successfully stepped to the next image, start at the next progress
 					// Note: If delta was big enough to overflow 2 durations, then cap it at the
 					//       max duration of the next image.
@@ -216,7 +205,7 @@ impl PanelState {
 			},
 
 			// Otherwise, we underflowed, so try to step back
-			None => match self.images.step_prev(playlist_player, wgpu_shared, renderer_layouts) {
+			None => match self.images.step_prev(playlist_player, wgpu_shared) {
 				// If we successfully stepped backwards, start at where we're supposed to:
 				Ok(()) => {
 					// Note: This branch is only taken when `delta` is negative, so we can always
@@ -240,15 +229,10 @@ impl PanelState {
 	/// Updates this panel's state using the current time as a delta
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn update(
-		&mut self,
-		playlist_player: &mut PlaylistPlayer,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) {
+	pub fn update(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
-		self.images.load_missing(playlist_player, wgpu_shared, renderer_layouts);
+		self.images.load_missing(playlist_player, wgpu_shared);
 
 		// If we're paused, don't update anything
 		if self.paused {
@@ -262,7 +246,7 @@ impl PanelState {
 		//       the other has updated.
 		let delta = self.update_delta();
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
-		self.step(playlist_player, wgpu_shared, renderer_layouts, delta);
+		self.step(playlist_player, wgpu_shared, delta);
 	}
 }
 

@@ -8,7 +8,7 @@ pub use self::image::PanelImage;
 
 // Imports
 use {
-	super::{PanelsRendererLayouts, PlaylistPlayer},
+	super::PlaylistPlayer,
 	::image::DynamicImage,
 	app_error::Context,
 	core::task::Poll,
@@ -36,7 +36,7 @@ pub struct PanelImages {
 	pub texture_sampler: wgpu::Sampler,
 
 	/// Texture bind group
-	pub image_bind_group: wgpu::BindGroup,
+	pub image_bind_group: Option<wgpu::BindGroup>,
 
 	/// Image loading task
 	pub image_load_task: Option<tokio::task::JoinHandle<ImageLoadRes>>,
@@ -45,27 +45,19 @@ pub struct PanelImages {
 impl PanelImages {
 	/// Creates a new panel
 	#[must_use]
-	pub fn new(wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) -> Self {
+	pub fn new(wgpu_shared: &WgpuShared) -> Self {
 		// Create the textures
 		let image_prev = PanelImage::empty();
 		let image_cur = PanelImage::empty();
 		let image_next = PanelImage::empty();
 		let texture_sampler = self::create_texture_sampler(wgpu_shared);
-		let image_bind_group = self::create_image_bind_group(
-			wgpu_shared,
-			&renderer_layouts.image_bind_group_layout,
-			image_prev.texture_view(wgpu_shared),
-			image_cur.texture_view(wgpu_shared),
-			image_next.texture_view(wgpu_shared),
-			&texture_sampler,
-		);
 
 		Self {
 			prev: image_prev,
 			cur: image_cur,
 			next: image_next,
 			texture_sampler,
-			image_bind_group,
+			image_bind_group: None,
 			image_load_task: None,
 		}
 	}
@@ -75,18 +67,13 @@ impl PanelImages {
 	/// If successfull, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub fn step_prev(
-		&mut self,
-		playlist_player: &mut PlaylistPlayer,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) -> Result<(), ()> {
+	pub fn step_prev(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) -> Result<(), ()> {
 		playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = PanelImage::empty();
-		self.update_image_bind_group(wgpu_shared, renderer_layouts);
-		self.load_missing(playlist_player, wgpu_shared, renderer_layouts);
+		self.image_bind_group = None;
+		self.load_missing(playlist_player, wgpu_shared);
 
 		Ok(())
 	}
@@ -96,12 +83,7 @@ impl PanelImages {
 	/// If successfull, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub fn step_next(
-		&mut self,
-		playlist_player: &mut PlaylistPlayer,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) -> Result<(), ()> {
+	pub fn step_next(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) -> Result<(), ()> {
 		if !self.next.is_loaded() {
 			return Err(());
 		}
@@ -110,8 +92,8 @@ impl PanelImages {
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = PanelImage::empty();
-		self.update_image_bind_group(wgpu_shared, renderer_layouts);
-		self.load_missing(playlist_player, wgpu_shared, renderer_layouts);
+		self.image_bind_group = None;
+		self.load_missing(playlist_player, wgpu_shared);
 
 		Ok(())
 	}
@@ -119,12 +101,7 @@ impl PanelImages {
 	/// Loads any missing images, prioritizing the current, then next, then previous.
 	///
 	/// Requests images if missing any.
-	pub fn load_missing(
-		&mut self,
-		playlist_player: &mut PlaylistPlayer,
-		wgpu_shared: &WgpuShared,
-		renderer_layouts: &PanelsRendererLayouts,
-	) {
+	pub fn load_missing(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) {
 		// Get the next image, if we can
 		let Some(res) = self.next_image(playlist_player, wgpu_shared) else {
 			return;
@@ -172,7 +149,7 @@ impl PanelImages {
 				Slot::Cur => self.cur = PanelImage::new(wgpu_shared, res.path, image),
 				Slot::Next => self.next = PanelImage::new(wgpu_shared, res.path, image),
 			}
-			self.update_image_bind_group(wgpu_shared, renderer_layouts);
+			self.image_bind_group = None;
 		}
 	}
 
@@ -241,18 +218,6 @@ impl PanelImages {
 		}
 	}
 
-	/// Updates the image bind group
-	pub fn update_image_bind_group(&mut self, wgpu_shared: &WgpuShared, renderer_layouts: &PanelsRendererLayouts) {
-		self.image_bind_group = self::create_image_bind_group(
-			wgpu_shared,
-			&renderer_layouts.image_bind_group_layout,
-			self.prev.texture_view(wgpu_shared),
-			self.cur.texture_view(wgpu_shared),
-			self.next.texture_view(wgpu_shared),
-			&self.texture_sampler,
-		);
-	}
-
 	/// Returns if all images are empty
 	pub fn is_empty(&self) -> bool {
 		matches!(self.prev, PanelImage::Empty) &&
@@ -282,40 +247,6 @@ fn create_texture_sampler(wgpu_shared: &WgpuShared) -> wgpu::Sampler {
 		..wgpu::SamplerDescriptor::default()
 	};
 	wgpu_shared.device.create_sampler(&descriptor)
-}
-
-/// Creates the texture bind group
-fn create_image_bind_group(
-	wgpu_shared: &WgpuShared,
-	bind_group_layout: &wgpu::BindGroupLayout,
-	view_prev: &wgpu::TextureView,
-	view_cur: &wgpu::TextureView,
-	view_next: &wgpu::TextureView,
-	sampler: &wgpu::Sampler,
-) -> wgpu::BindGroup {
-	let descriptor = wgpu::BindGroupDescriptor {
-		layout:  bind_group_layout,
-		entries: &[
-			wgpu::BindGroupEntry {
-				binding:  0,
-				resource: wgpu::BindingResource::TextureView(view_prev),
-			},
-			wgpu::BindGroupEntry {
-				binding:  1,
-				resource: wgpu::BindingResource::TextureView(view_cur),
-			},
-			wgpu::BindGroupEntry {
-				binding:  2,
-				resource: wgpu::BindingResource::TextureView(view_next),
-			},
-			wgpu::BindGroupEntry {
-				binding:  3,
-				resource: wgpu::BindingResource::Sampler(sampler),
-			},
-		],
-		label:   Some("[zsw::panel] Image bind group"),
-	};
-	wgpu_shared.device.create_bind_group(&descriptor)
 }
 
 #[derive(Debug)]

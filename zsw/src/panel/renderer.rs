@@ -159,9 +159,8 @@ impl PanelsRenderer {
 			let panel = &mut *panel;
 
 			// Update the panel before drawing it
-			{
-				panel.update(wgpu_shared, layouts);
-			}
+			panel.update(wgpu_shared);
+
 
 			// If the panel images are empty, there's no sense in rendering it either
 			if panel.state().images().is_empty() {
@@ -188,7 +187,20 @@ impl PanelsRenderer {
 			render_pass.set_pipeline(render_pipeline);
 
 			// Bind the panel-shared image bind group
-			render_pass.set_bind_group(1, &panel.state.images().image_bind_group, &[]);
+			let image_bind_group = {
+				let panel_images = panel.state.images_mut();
+				panel_images.image_bind_group.get_or_insert_with(|| {
+					self::create_image_bind_group(
+						wgpu_shared,
+						&layouts.image_bind_group_layout,
+						panel_images.prev.texture_view(wgpu_shared),
+						panel_images.cur.texture_view(wgpu_shared),
+						panel_images.next.texture_view(wgpu_shared),
+						&panel_images.texture_sampler,
+					)
+				})
+			};
+			render_pass.set_bind_group(1, &*image_bind_group, &[]);
 
 			for geometry in &panel.geometries {
 				// If this geometry is outside our window, we can safely ignore it
@@ -560,6 +572,40 @@ fn create_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLa
 	};
 
 	wgpu_shared.device.create_bind_group_layout(&descriptor)
+}
+
+/// Creates the texture bind group
+fn create_image_bind_group(
+	wgpu_shared: &WgpuShared,
+	bind_group_layout: &wgpu::BindGroupLayout,
+	view_prev: &wgpu::TextureView,
+	view_cur: &wgpu::TextureView,
+	view_next: &wgpu::TextureView,
+	sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+	let descriptor = wgpu::BindGroupDescriptor {
+		layout:  bind_group_layout,
+		entries: &[
+			wgpu::BindGroupEntry {
+				binding:  0,
+				resource: wgpu::BindingResource::TextureView(view_prev),
+			},
+			wgpu::BindGroupEntry {
+				binding:  1,
+				resource: wgpu::BindingResource::TextureView(view_cur),
+			},
+			wgpu::BindGroupEntry {
+				binding:  2,
+				resource: wgpu::BindingResource::TextureView(view_next),
+			},
+			wgpu::BindGroupEntry {
+				binding:  3,
+				resource: wgpu::BindingResource::Sampler(sampler),
+			},
+		],
+		label:   Some("[zsw::panel] Image bind group"),
+	};
+	wgpu_shared.device.create_bind_group(&descriptor)
 }
 
 /// Shader

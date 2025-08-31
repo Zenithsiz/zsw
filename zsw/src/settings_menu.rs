@@ -149,7 +149,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			ui.horizontal(|ui| {
 				ui.label("Skip");
 				if ui.button("🔄").clicked() {
-					panel.skip(shared.wgpu, &shared.panels_renderer_layouts);
+					panel.skip(shared.wgpu);
 				}
 			});
 
