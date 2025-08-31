@@ -187,19 +187,20 @@ impl PanelsRenderer {
 			render_pass.set_pipeline(render_pipeline);
 
 			// Bind the panel-shared image bind group
-			let image_bind_group = {
-				let panel_images = panel.state.images_mut();
-				panel_images.image_bind_group.get_or_insert_with(|| {
-					self::create_image_bind_group(
-						wgpu_shared,
-						&layouts.image_bind_group_layout,
-						panel_images.prev.texture_view(wgpu_shared),
-						panel_images.cur.texture_view(wgpu_shared),
-						panel_images.next.texture_view(wgpu_shared),
-						&panel_images.texture_sampler,
-					)
-				})
-			};
+			let panel_images = panel.state.images_mut();
+			let image_sampler = panel_images
+				.image_sampler
+				.get_or_insert_with(|| self::create_image_sampler(wgpu_shared));
+			let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
+				self::create_image_bind_group(
+					wgpu_shared,
+					&layouts.image_bind_group_layout,
+					panel_images.prev.texture_view(wgpu_shared),
+					panel_images.cur.texture_view(wgpu_shared),
+					panel_images.next.texture_view(wgpu_shared),
+					image_sampler,
+				)
+			});
 			render_pass.set_bind_group(1, &*image_bind_group, &[]);
 
 			for geometry in &panel.geometries {
@@ -606,6 +607,21 @@ fn create_image_bind_group(
 		label:   Some("[zsw::panel] Image bind group"),
 	};
 	wgpu_shared.device.create_bind_group(&descriptor)
+}
+
+/// Creates the image sampler
+fn create_image_sampler(wgpu_shared: &WgpuShared) -> wgpu::Sampler {
+	let descriptor = wgpu::SamplerDescriptor {
+		label: Some("[zsw::panel] Image sampler"),
+		address_mode_u: wgpu::AddressMode::ClampToEdge,
+		address_mode_v: wgpu::AddressMode::ClampToEdge,
+		address_mode_w: wgpu::AddressMode::ClampToEdge,
+		mag_filter: wgpu::FilterMode::Linear,
+		min_filter: wgpu::FilterMode::Linear,
+		mipmap_filter: wgpu::FilterMode::Linear,
+		..wgpu::SamplerDescriptor::default()
+	};
+	wgpu_shared.device.create_sampler(&descriptor)
 }
 
 /// Shader

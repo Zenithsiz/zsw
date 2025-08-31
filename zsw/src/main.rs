@@ -283,7 +283,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 
 	let panel = shared
 		.panels
-		.load(panel_name.clone(), shared.wgpu)
+		.load(panel_name.clone())
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!("Loaded default panel {panel_name:?}");

@@ -33,7 +33,7 @@ pub struct PanelImages {
 	pub next: PanelImage,
 
 	/// Texture sampler
-	pub texture_sampler: wgpu::Sampler,
+	pub image_sampler: Option<wgpu::Sampler>,
 
 	/// Texture bind group
 	pub image_bind_group: Option<wgpu::BindGroup>,
@@ -45,20 +45,14 @@ pub struct PanelImages {
 impl PanelImages {
 	/// Creates a new panel
 	#[must_use]
-	pub fn new(wgpu_shared: &WgpuShared) -> Self {
-		// Create the textures
-		let image_prev = PanelImage::empty();
-		let image_cur = PanelImage::empty();
-		let image_next = PanelImage::empty();
-		let texture_sampler = self::create_texture_sampler(wgpu_shared);
-
+	pub fn new() -> Self {
 		Self {
-			prev: image_prev,
-			cur: image_cur,
-			next: image_next,
-			texture_sampler,
+			prev:             PanelImage::empty(),
+			cur:              PanelImage::empty(),
+			next:             PanelImage::empty(),
+			image_sampler:    None,
 			image_bind_group: None,
-			image_load_task: None,
+			image_load_task:  None,
 		}
 	}
 
@@ -232,21 +226,6 @@ enum Slot {
 	Prev,
 	Cur,
 	Next,
-}
-
-/// Creates the texture sampler
-fn create_texture_sampler(wgpu_shared: &WgpuShared) -> wgpu::Sampler {
-	let descriptor = wgpu::SamplerDescriptor {
-		label: Some("[zsw::panel] Image sampler"),
-		address_mode_u: wgpu::AddressMode::ClampToEdge,
-		address_mode_v: wgpu::AddressMode::ClampToEdge,
-		address_mode_w: wgpu::AddressMode::ClampToEdge,
-		mag_filter: wgpu::FilterMode::Linear,
-		min_filter: wgpu::FilterMode::Linear,
-		mipmap_filter: wgpu::FilterMode::Linear,
-		..wgpu::SamplerDescriptor::default()
-	};
-	wgpu_shared.device.create_sampler(&descriptor)
 }
 
 #[derive(Debug)]

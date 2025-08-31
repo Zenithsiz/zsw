@@ -11,7 +11,6 @@ use {
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
 	tokio::sync::OnceCell,
-	zsw_wgpu::WgpuShared,
 };
 
 /// Panel storage
@@ -40,7 +39,7 @@ impl Panels {
 	/// Loads a panel from a name.
 	///
 	/// If the panel isn't for this window, returns `Ok(None)`
-	pub async fn load(&self, panel_name: PanelName, wgpu_shared: &WgpuShared) -> Result<Arc<Mutex<Panel>>, AppError> {
+	pub async fn load(&self, panel_name: PanelName) -> Result<Arc<Mutex<Panel>>, AppError> {
 		let panel_entry = Arc::clone(
 			self.panels
 				.lock()
@@ -79,7 +78,7 @@ impl Panels {
 						// TODO: Is this a good default?
 						None => PanelShader::Fade(PanelShaderFade::Out { strength: 1.5 }),
 					},
-					PanelImages::new(wgpu_shared),
+					PanelImages::new(),
 				);
 
 				let panel = Panel::new(panel_name.clone(), geometries, state);
