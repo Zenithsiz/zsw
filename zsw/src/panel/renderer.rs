@@ -72,30 +72,36 @@ pub struct PanelsRenderer {
 
 	/// Msaa frame-buffer
 	msaa_framebuffer: wgpu::TextureView,
+
+	/// Massa samples
+	// TODO: If we change this, we need to re-create the render pipelines too
+	msaa_samples: u32,
 }
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
-	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared) -> Result<Self, AppError> {
+	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared, msaa_samples: u32) -> Result<Self, AppError> {
 		// Create the index / vertex buffer
 		let indices = self::create_indices(wgpu_shared);
 		let vertices = self::create_vertices(wgpu_shared);
 
 		// Create the framebuffer
-		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, wgpu_renderer.surface_size());
+		let msaa_framebuffer =
+			self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, wgpu_renderer.surface_size(), msaa_samples);
 
 		Ok(Self {
 			render_pipelines: HashMap::new(),
 			vertices,
 			indices,
 			msaa_framebuffer,
+			msaa_samples,
 		})
 	}
 
 	/// Resizes the buffer
 	pub fn resize(&mut self, wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared, size: PhysicalSize<u32>) {
 		tracing::debug!("Resizing msaa framebuffer to {}x{}", size.width, size.height);
-		self.msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, size);
+		self.msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, size, self.msaa_samples);
 	}
 
 	/// Renders a panel
@@ -111,7 +117,7 @@ impl PanelsRenderer {
 		panels: &Panels,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
-		let render_pass_color_attachment = match MSAA_SAMPLES {
+		let render_pass_color_attachment = match self.msaa_samples {
 			1 => wgpu::RenderPassColorAttachment {
 				view:           &frame.surface_view,
 				depth_slice:    None,
@@ -176,6 +182,7 @@ impl PanelsRenderer {
 						&layouts.uniforms_bind_group_layout,
 						&layouts.image_bind_group_layout,
 						panel.state.shader(),
+						self.msaa_samples,
 					)
 					.context("Unable to create render pipeline")?;
 
@@ -408,6 +415,7 @@ fn create_render_pipeline(
 	uniforms_bind_group_layout: &wgpu::BindGroupLayout,
 	image_bind_group_layout: &wgpu::BindGroupLayout,
 	shader: PanelShader,
+	msaa_samples: u32,
 ) -> Result<wgpu::RenderPipeline, AppError> {
 	let shader_name = shader.name();
 	tracing::debug!("Creating render pipeline for shader {shader_name:?}");
@@ -459,7 +467,7 @@ fn create_render_pipeline(
 		},
 		depth_stencil: None,
 		multisample:   wgpu::MultisampleState {
-			count: MSAA_SAMPLES,
+			count: msaa_samples,
 			mask: u64::MAX,
 			alpha_to_coverage_enabled: false,
 		},
@@ -481,6 +489,7 @@ fn create_msaa_framebuffer(
 	wgpu_renderer: &WgpuRenderer,
 	wgpu_shared: &WgpuShared,
 	size: PhysicalSize<u32>,
+	msaa_samples: u32,
 ) -> wgpu::TextureView {
 	let msaa_texture_extent = wgpu::Extent3d {
 		width:                 size.width,
@@ -492,7 +501,7 @@ fn create_msaa_framebuffer(
 	let msaa_frame_descriptor = wgpu::TextureDescriptor {
 		size:            msaa_texture_extent,
 		mip_level_count: 1,
-		sample_count:    MSAA_SAMPLES,
+		sample_count:    msaa_samples,
 		dimension:       wgpu::TextureDimension::D2,
 		format:          surface_config.format,
 		usage:           wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -505,9 +514,6 @@ fn create_msaa_framebuffer(
 		.create_texture(&msaa_frame_descriptor)
 		.create_view(&wgpu::TextureViewDescriptor::default())
 }
-
-/// MSAA samples
-const MSAA_SAMPLES: u32 = 4;
 
 /// Creates the uniforms bind group layout
 fn create_uniforms_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLayout {

@@ -207,8 +207,9 @@ impl WinitApp {
 			let wgpu_renderer =
 				WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu).context("Unable to create wgpu renderer")?;
 
-			let panels_renderer =
-				PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu).context("Unable to create panels renderer")?;
+			let msaa_samples = 4;
+			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu, msaa_samples)
+				.context("Unable to create panels renderer")?;
 			let egui_event_handler = EguiEventHandler::new(&window);
 			let egui_painter = EguiPainter::new(&egui_event_handler);
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
