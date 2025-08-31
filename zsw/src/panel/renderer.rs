@@ -164,11 +164,11 @@ impl PanelsRenderer {
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either
-			if panel.state.images.is_empty() {
+			if panel.state().images().is_empty() {
 				continue;
 			}
 
-			let render_pipeline = match self.render_pipelines.entry(panel.state.shader.name()) {
+			let render_pipeline = match self.render_pipelines.entry(panel.state.shader().name()) {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),
 				hash_map::Entry::Vacant(entry) => {
 					let render_pipeline = self::create_render_pipeline(
@@ -176,7 +176,7 @@ impl PanelsRenderer {
 						wgpu_shared,
 						&layouts.uniforms_bind_group_layout,
 						&layouts.image_bind_group_layout,
-						panel.state.shader,
+						panel.state.shader(),
 					)
 					.context("Unable to create render pipeline")?;
 
@@ -188,7 +188,7 @@ impl PanelsRenderer {
 			render_pass.set_pipeline(render_pipeline);
 
 			// Bind the panel-shared image bind group
-			render_pass.set_bind_group(1, &panel.state.images.image_bind_group, &[]);
+			render_pass.set_bind_group(1, &panel.state.images().image_bind_group, &[]);
 
 			for geometry in &panel.geometries {
 				// If this geometry is outside our window, we can safely ignore it
@@ -240,9 +240,9 @@ impl PanelsRenderer {
 			PanelImageUniforms::new(ratio, swap_dir)
 		};
 
-		let prev = image_uniforms(&panel.state.images.prev);
-		let cur = image_uniforms(&panel.state.images.cur);
-		let next = image_uniforms(&panel.state.images.next);
+		let prev = image_uniforms(&panel.state.images().prev);
+		let cur = image_uniforms(&panel.state.images().cur);
+		let next = image_uniforms(&panel.state.images().next);
 
 		// Writes uniforms `uniforms`
 		let write_uniforms = |uniforms_bytes| wgpu_shared.queue.write_buffer(geometry_uniforms, 0, uniforms_bytes);
@@ -252,7 +252,7 @@ impl PanelsRenderer {
 
 		let fade_duration = panel.state.fade_duration_norm();
 		let progress = panel.state.progress_norm();
-		match panel.state.shader {
+		match panel.state.shader() {
 			PanelShader::None { background_color } => write_uniforms!(uniform::None {
 				pos_matrix,
 				background_color: uniform::Vec4(background_color),

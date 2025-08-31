@@ -6,7 +6,7 @@
 // Imports
 use {
 	crate::{
-		panel::{PanelImage, PanelShader, PanelShaderFade},
+		panel::{PanelImage, PanelShader, PanelShaderFade, PanelState},
 		shared::{Shared, SharedWindow},
 	},
 	core::{ops::RangeInclusive, time::Duration},
@@ -97,11 +97,9 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 		ui.collapsing(name, |ui| {
 			{
-				let mut is_paused = panel.state().paused;
+				let mut is_paused = panel.state().is_paused();
 				ui.checkbox(&mut is_paused, "Paused");
-				if is_paused != panel.state().paused {
-					panel.state_mut().toggle_paused();
-				}
+				panel.state_mut().set_paused(is_paused);
 			}
 
 			ui.collapsing("Geometries", |ui| {
@@ -124,25 +122,28 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				// Note: We only allow up until the duration - 1 so that you don't get stuck
 				//       skipping images when you hold it at the max value
 				// TODO: This max needs to be `duration - min_frame_duration` to not skip ahead.
-				let max = panel.state().duration.mul_f32(0.99);
-				self::draw_duration(ui, &mut panel.state_mut().progress, Duration::ZERO..=max);
+				let max = panel.state().duration().mul_f32(0.99);
+				let mut progress = panel.state().progress();
+				self::draw_duration(ui, &mut progress, Duration::ZERO..=max);
+				panel.state_mut().set_progress(progress);
 			});
 
 			ui.horizontal(|ui| {
 				ui.label("Fade Duration");
 				let min = Duration::ZERO;
-				let max = panel.state().duration / 2;
+				let max = panel.state().duration() / 2;
 
-				self::draw_duration(ui, &mut panel.state_mut().fade_duration, min..=max);
+				let mut fade_duration = panel.state().fade_duration();
+				self::draw_duration(ui, &mut fade_duration, min..=max);
+				panel.state_mut().set_fade_duration(fade_duration);
 			});
 
 			ui.horizontal(|ui| {
 				ui.label("Duration");
-				self::draw_duration(
-					ui,
-					&mut panel.state_mut().duration,
-					Duration::ZERO..=Duration::from_secs_f32(180.0),
-				);
+
+				let mut duration = panel.state().duration();
+				self::draw_duration(ui, &mut duration, Duration::ZERO..=Duration::from_secs_f32(180.0));
+				panel.state_mut().set_duration(duration);
 			});
 
 			ui.horizontal(|ui| {
@@ -154,13 +155,13 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 			ui.collapsing("Images", |ui| {
 				ui.collapsing("Previous", |ui| {
-					self::draw_panel_image(ui, &mut panel.state_mut().images.prev);
+					self::draw_panel_image(ui, &mut panel.state_mut().images_mut().prev);
 				});
 				ui.collapsing("Current", |ui| {
-					self::draw_panel_image(ui, &mut panel.state_mut().images.cur);
+					self::draw_panel_image(ui, &mut panel.state_mut().images_mut().cur);
 				});
 				ui.collapsing("Next", |ui| {
-					self::draw_panel_image(ui, &mut panel.state_mut().images.next);
+					self::draw_panel_image(ui, &mut panel.state_mut().images_mut().next);
 				});
 			});
 
@@ -193,7 +194,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Shader", |ui| {
-				self::draw_shader_select(ui, &mut panel.state_mut().shader);
+				self::draw_shader_select(ui, panel.state_mut());
 			});
 		});
 	}
@@ -244,7 +245,8 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, cur_shader: &mut PanelShader) {
+fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
+	let mut cur_shader = state.shader();
 	egui::ComboBox::from_id_salt("Shader selection menu")
 		.selected_text(cur_shader.name())
 		.show_ui(ui, |ui| {
@@ -259,11 +261,11 @@ fn draw_shader_select(ui: &mut egui::Ui, cur_shader: &mut PanelShader) {
 				PanelShader::Fade(PanelShaderFade::In { strength: 0.2 }),
 			];
 			for shader in shaders {
-				ui.selectable_value(cur_shader, shader, shader.name());
+				ui.selectable_value(&mut cur_shader, shader, shader.name());
 			}
 		});
 
-	match &mut *cur_shader {
+	match &mut cur_shader {
 		PanelShader::None {
 			background_color: bg_color,
 		} => {
@@ -296,6 +298,7 @@ fn draw_shader_select(ui: &mut egui::Ui, cur_shader: &mut PanelShader) {
 			},
 		},
 	}
+	state.set_shader(cur_shader);
 }
 
 /// Draws a geometry rectangle
