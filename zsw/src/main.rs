@@ -371,6 +371,7 @@ async fn renderer(
 				shared.wgpu,
 				&shared.panels_renderer_layouts,
 				&shared_window.monitor_geometry,
+				&shared_window.window,
 				&shared.panels,
 			)
 			.await

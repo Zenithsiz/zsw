@@ -4,7 +4,8 @@
 use {
 	cgmath::{Matrix4, Vector2, Vector3},
 	num_rational::Rational32,
-	winit::dpi::PhysicalSize,
+	std::collections::HashMap,
+	winit::{dpi::PhysicalSize, window::WindowId},
 	zsw_util::Rect,
 };
 
@@ -18,7 +19,7 @@ pub struct PanelGeometry {
 	pub geometry: Rect<i32, u32>,
 
 	/// Uniforms
-	pub uniforms: Option<PanelGeometryUniforms>,
+	pub uniforms: HashMap<WindowId, PanelGeometryUniforms>,
 }
 
 /// Panel geometry uniforms
@@ -35,7 +36,7 @@ impl PanelGeometry {
 	pub fn new(geometry: Rect<i32, u32>) -> Self {
 		Self {
 			geometry,
-			uniforms: None,
+			uniforms: HashMap::new(),
 		}
 	}
 

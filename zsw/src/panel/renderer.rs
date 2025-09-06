@@ -19,7 +19,7 @@ use {
 		collections::{HashMap, hash_map},
 	},
 	wgpu::util::DeviceExt,
-	winit::dpi::PhysicalSize,
+	winit::{dpi::PhysicalSize, window::Window},
 	zsw_util::{AppError, Rect},
 	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
 };
@@ -105,6 +105,7 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
+	#[expect(clippy::too_many_arguments, reason = "TODO: Merge some of these")]
 	pub async fn render(
 		&mut self,
 		frame: &mut FrameRender,
@@ -112,6 +113,7 @@ impl PanelsRenderer {
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
 		window_geometry: &Rect<i32, u32>,
+		window: &Window,
 		panels: &Panels,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
@@ -220,7 +222,7 @@ impl PanelsRenderer {
 					layouts,
 					frame.surface_size,
 					&panel.state,
-					window_geometry,
+					window_geometry,window,
 					geometry,
 				);
 
@@ -240,6 +242,7 @@ impl PanelsRenderer {
 		surface_size: PhysicalSize<u32>,
 		panel_state: &PanelState,
 		window_geometry: &Rect<i32, u32>,
+		window: &Window,
 		geometry: &'geometry mut PanelGeometry,
 	) -> &'geometry mut PanelGeometryUniforms {
 		// Calculate the position matrix for the panel
@@ -263,7 +266,8 @@ impl PanelsRenderer {
 		// Writes uniforms `uniforms`
 		let geometry_uniforms = geometry
 			.uniforms
-			.get_or_insert_with(|| self::create_panel_geometry_uniforms(wgpu_shared, layouts));
+			.entry(window.id())
+			.or_insert_with(|| self::create_panel_geometry_uniforms(wgpu_shared, layouts));
 		let write_uniforms = |uniforms_bytes| {
 			wgpu_shared
 				.queue
