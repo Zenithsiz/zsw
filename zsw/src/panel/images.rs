@@ -58,7 +58,7 @@ impl PanelImages {
 
 	/// Steps to the previous image, if any
 	///
-	/// If successfull, starts loading any missing images
+	/// If successful, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
 	pub fn step_prev(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) -> Result<(), ()> {
@@ -74,7 +74,7 @@ impl PanelImages {
 
 	/// Steps to the next image.
 	///
-	/// If successfull, starts loading any missing images
+	/// If successful, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
 	pub fn step_next(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) -> Result<(), ()> {
