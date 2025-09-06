@@ -5,12 +5,11 @@ use {
 	crate::{
 		AppEvent,
 		Resize,
-		panel::{Panels, PanelsGeometryUniforms, PanelsRendererLayouts},
+		panel::{Panels, PanelsRendererLayouts},
 		playlist::Playlists,
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
-	tokio::sync::Mutex,
 	winit::dpi::PhysicalPosition,
 	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
@@ -34,8 +33,7 @@ pub struct Shared {
 /// Shared window state
 #[derive(Debug)]
 pub struct SharedWindow {
-	pub _monitor_name:            String,
-	pub monitor_geometry:         Rect<i32, u32>,
-	pub window:                   Arc<winit::window::Window>,
-	pub panels_geometry_uniforms: Mutex<PanelsGeometryUniforms>,
+	pub _monitor_name:    String,
+	pub monitor_geometry: Rect<i32, u32>,
+	pub window:           Arc<winit::window::Window>,
 }

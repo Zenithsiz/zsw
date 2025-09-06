@@ -31,7 +31,7 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{PanelName, Panels, PanelsGeometryUniforms, PanelsRenderer, PanelsRendererLayouts},
+		panel::{PanelName, Panels, PanelsRenderer, PanelsRendererLayouts},
 		playlist::{PlaylistName, PlaylistPlayer, Playlists},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
@@ -45,7 +45,6 @@ use {
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
 	std::{collections::HashMap, fs, sync::Arc},
-	tokio::sync::Mutex,
 	winit::{
 		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
@@ -219,7 +218,6 @@ impl WinitApp {
 				_monitor_name: app_window.monitor_name,
 				monitor_geometry: app_window.monitor_geometry,
 				window,
-				panels_geometry_uniforms: Mutex::new(PanelsGeometryUniforms::new()),
 			};
 			let shared_window = Arc::new(shared_window);
 
@@ -365,22 +363,18 @@ async fn renderer(
 			.start_render(shared.wgpu)
 			.context("Unable to start frame")?;
 
-		{
-			let mut panels_geometry_uniforms = shared_window.panels_geometry_uniforms.lock().await;
-
-			panels_renderer
-				.render(
-					&mut frame,
-					&wgpu_renderer,
-					shared.wgpu,
-					&shared.panels_renderer_layouts,
-					&mut panels_geometry_uniforms,
-					&shared_window.monitor_geometry,
-					&shared.panels,
-				)
-				.await
-				.context("Unable to render panels")?;
-		}
+		// Render panels
+		panels_renderer
+			.render(
+				&mut frame,
+				&wgpu_renderer,
+				shared.wgpu,
+				&shared.panels_renderer_layouts,
+				&shared_window.monitor_geometry,
+				&shared.panels,
+			)
+			.await
+			.context("Unable to render panels")?;
 
 		// Render egui
 		egui_renderer

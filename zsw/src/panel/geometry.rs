@@ -16,11 +16,27 @@ pub struct PanelGeometry {
 	// TODO: Since this is unnormalized for the window, we should
 	//       maybe make this private?
 	pub geometry: Rect<i32, u32>,
+
+	/// Uniforms
+	pub uniforms: Option<PanelGeometryUniforms>,
+}
+
+/// Panel geometry uniforms
+#[derive(Debug)]
+pub struct PanelGeometryUniforms {
+	/// Buffer
+	pub buffer: wgpu::Buffer,
+
+	/// Bind group
+	pub bind_group: wgpu::BindGroup,
 }
 
 impl PanelGeometry {
 	pub fn new(geometry: Rect<i32, u32>) -> Self {
-		Self { geometry }
+		Self {
+			geometry,
+			uniforms: None,
+		}
 	}
 
 	/// Returns this geometry's rectangle for a certain window

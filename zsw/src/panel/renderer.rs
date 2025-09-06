@@ -10,7 +10,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{Panel, PanelImage, PanelName, Panels},
+	super::{PanelGeometryUniforms, PanelImage, PanelState, Panels},
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
@@ -105,14 +105,12 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
-	#[expect(clippy::too_many_arguments, reason = "TODO: Remove something")]
 	pub async fn render(
 		&mut self,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
-		geometry_uniforms: &mut PanelsGeometryUniforms,
 		window_geometry: &Rect<i32, u32>,
 		panels: &Panels,
 	) -> Result<(), AppError> {
@@ -210,22 +208,20 @@ impl PanelsRenderer {
 			});
 			render_pass.set_bind_group(1, &*image_bind_group, &[]);
 
-			for geometry in &panel.geometries {
+			for geometry in &mut panel.geometries {
 				// If this geometry is outside our window, we can safely ignore it
 				if window_geometry.intersection(geometry.geometry).is_none() {
 					continue;
 				}
 
-				let geometry_uniforms = geometry_uniforms.get(&panel.name, &geometry.geometry, wgpu_shared, layouts);
-
 				// Write the uniforms
-				Self::write_uniforms(
+				let geometry_uniforms = Self::write_uniforms(
 					wgpu_shared,
+					layouts,
 					frame.surface_size,
-					panel,
+					&panel.state,
 					window_geometry,
 					geometry,
-					&geometry_uniforms.buffer,
 				);
 
 				// Then bind the geometry uniforms and draw
@@ -238,14 +234,14 @@ impl PanelsRenderer {
 	}
 
 	/// Writes the uniforms
-	pub fn write_uniforms(
+	pub fn write_uniforms<'geometry>(
 		wgpu_shared: &WgpuShared,
+		layouts: &PanelsRendererLayouts,
 		surface_size: PhysicalSize<u32>,
-		panel: &Panel,
+		panel_state: &PanelState,
 		window_geometry: &Rect<i32, u32>,
-		geometry: &PanelGeometry,
-		geometry_uniforms: &wgpu::Buffer,
-	) {
+		geometry: &'geometry mut PanelGeometry,
+	) -> &'geometry mut PanelGeometryUniforms {
 		// Calculate the position matrix for the panel
 		let pos_matrix = geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
@@ -260,19 +256,26 @@ impl PanelsRenderer {
 			PanelImageUniforms::new(ratio, swap_dir)
 		};
 
-		let prev = image_uniforms(&panel.state.images().prev);
-		let cur = image_uniforms(&panel.state.images().cur);
-		let next = image_uniforms(&panel.state.images().next);
+		let prev = image_uniforms(&panel_state.images().prev);
+		let cur = image_uniforms(&panel_state.images().cur);
+		let next = image_uniforms(&panel_state.images().next);
 
 		// Writes uniforms `uniforms`
-		let write_uniforms = |uniforms_bytes| wgpu_shared.queue.write_buffer(geometry_uniforms, 0, uniforms_bytes);
+		let geometry_uniforms = geometry
+			.uniforms
+			.get_or_insert_with(|| self::create_panel_geometry_uniforms(wgpu_shared, layouts));
+		let write_uniforms = |uniforms_bytes| {
+			wgpu_shared
+				.queue
+				.write_buffer(&geometry_uniforms.buffer, 0, uniforms_bytes);
+		};
 		macro write_uniforms($uniforms:expr) {
 			write_uniforms(bytemuck::bytes_of(&$uniforms))
 		}
 
-		let fade_duration = panel.state.fade_duration_norm();
-		let progress = panel.state.progress_norm();
-		match panel.state.shader() {
+		let fade_duration = panel_state.fade_duration_norm();
+		let progress = panel_state.progress_norm();
+		match panel_state.shader() {
 			PanelShader::None { background_color } => write_uniforms!(uniform::None {
 				pos_matrix,
 				background_color: uniform::Vec4(background_color),
@@ -319,70 +322,34 @@ impl PanelsRenderer {
 				}),
 			},
 		}
+
+		geometry_uniforms
 	}
 }
 
-/// Panels geometry uniforms
-// TODO: Instead of using `Rect<i32, u32>` as the key, refer to it by index,
-//       or give geometries names like panels do.
-#[derive(Debug)]
-pub struct PanelsGeometryUniforms(HashMap<(PanelName, Rect<i32, u32>), PanelGeometryUniforms>);
+/// Creates the panel geometry uniforms
+fn create_panel_geometry_uniforms(wgpu_shared: &WgpuShared, layouts: &PanelsRendererLayouts) -> PanelGeometryUniforms {
+	// Create the uniforms
+	let buffer_descriptor = wgpu::BufferDescriptor {
+		label:              Some("[zsw::panel] Geometry uniforms buffer"),
+		usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+		size:               u64::try_from(MAX_UNIFORM_SIZE).expect("Maximum uniform size didn't fit into a `u64`"),
+		mapped_at_creation: false,
+	};
+	let buffer = wgpu_shared.device.create_buffer(&buffer_descriptor);
 
-impl PanelsGeometryUniforms {
-	/// Creates an empty set of geometry uniforms
-	pub fn new() -> Self {
-		Self(HashMap::new())
-	}
+	// Create the uniform bind group
+	let bind_group_descriptor = wgpu::BindGroupDescriptor {
+		layout:  &layouts.uniforms_bind_group_layout,
+		entries: &[wgpu::BindGroupEntry {
+			binding:  0,
+			resource: buffer.as_entire_binding(),
+		}],
+		label:   Some("[zsw::panel] Geometry uniforms bind group"),
+	};
+	let bind_group = wgpu_shared.device.create_bind_group(&bind_group_descriptor);
 
-	// Gets, or creates the uniforms for a geometry
-	pub fn get(
-		&mut self,
-		panel: &PanelName,
-		geometry: &Rect<i32, u32>,
-		wgpu_shared: &WgpuShared,
-		layouts: &PanelsRendererLayouts,
-	) -> &PanelGeometryUniforms {
-		self.0
-			.entry((panel.clone(), *geometry))
-			.or_insert_with(|| PanelGeometryUniforms::new(wgpu_shared, layouts))
-	}
-}
-
-/// Panel geometry uniforms
-#[derive(Debug)]
-pub struct PanelGeometryUniforms {
-	/// Buffer
-	pub buffer: wgpu::Buffer,
-
-	/// Bind group
-	pub bind_group: wgpu::BindGroup,
-}
-
-impl PanelGeometryUniforms {
-	/// Creates the panel geometry uniforms
-	fn new(wgpu_shared: &WgpuShared, layouts: &PanelsRendererLayouts) -> Self {
-		// Create the uniforms
-		let buffer_descriptor = wgpu::BufferDescriptor {
-			label:              Some("[zsw::panel] Geometry uniforms buffer"),
-			usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size:               u64::try_from(MAX_UNIFORM_SIZE).expect("Maximum uniform size didn't fit into a `u64`"),
-			mapped_at_creation: false,
-		};
-		let buffer = wgpu_shared.device.create_buffer(&buffer_descriptor);
-
-		// Create the uniform bind group
-		let bind_group_descriptor = wgpu::BindGroupDescriptor {
-			layout:  &layouts.uniforms_bind_group_layout,
-			entries: &[wgpu::BindGroupEntry {
-				binding:  0,
-				resource: buffer.as_entire_binding(),
-			}],
-			label:   Some("[zsw::panel] Geometry uniforms bind group"),
-		};
-		let bind_group = wgpu_shared.device.create_bind_group(&bind_group_descriptor);
-
-		Self { buffer, bind_group }
-	}
+	PanelGeometryUniforms { buffer, bind_group }
 }
 
 /// Creates the vertices

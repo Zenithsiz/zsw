@@ -10,10 +10,10 @@ mod state;
 
 // Exports
 pub use self::{
-	geometry::PanelGeometry,
+	geometry::{PanelGeometry, PanelGeometryUniforms},
 	images::{PanelImage, PanelImages},
 	panels::Panels,
-	renderer::{PanelShader, PanelShaderFade, PanelsGeometryUniforms, PanelsRenderer, PanelsRendererLayouts},
+	renderer::{PanelShader, PanelShaderFade, PanelsRenderer, PanelsRendererLayouts},
 	state::PanelState,
 };
 
