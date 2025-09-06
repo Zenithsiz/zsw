@@ -168,7 +168,7 @@ impl PanelState {
 	/// If the playlist player isn't loaded, does nothing
 	pub fn skip(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) {
 		self.progress = match self.images.step_next(playlist_player, wgpu_shared) {
-			Ok(()) => Duration::ZERO,
+			Ok(()) => self.fade_duration,
 			Err(()) => self.max_progress(),
 		}
 	}
