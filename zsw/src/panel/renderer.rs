@@ -172,19 +172,24 @@ impl PanelsRenderer {
 			// Update the panel before drawing it
 			panel.update(wgpu_shared);
 
-
 			// If the panel images are empty, there's no sense in rendering it either
-			if panel.state.images().is_empty() {
+			let are_images_empty = match &panel.state {
+				PanelState::None(_) => false,
+				PanelState::Fade(state) => state.images().is_empty(),
+			};
+			if are_images_empty {
 				continue;
 			}
 
 			let render_pipeline = match self.render_pipelines.entry(panel.state.shader().name()) {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),
 				hash_map::Entry::Vacant(entry) => {
-					let bind_group_layouts = match panel.state.shader() {
-						PanelShader::None { .. } => &[&layouts.uniforms_bind_group_layout] as &[_],
-						PanelShader::Fade(_) =>
-							&[&layouts.uniforms_bind_group_layout, &layouts.fade_image_bind_group_layout],
+					let bind_group_layouts = match panel.state {
+						PanelState::None(_) => &[&layouts.uniforms_bind_group_layout] as &[_],
+						PanelState::Fade(_) => &[
+							&layouts.uniforms_bind_group_layout,
+							&layouts.fade_image_bind_group_layout,
+						],
 					};
 
 					let render_pipeline = self::create_render_pipeline(
@@ -204,10 +209,10 @@ impl PanelsRenderer {
 			render_pass.set_pipeline(render_pipeline);
 
 			// Bind the extra bind groups
-			match panel.state.shader() {
-				PanelShader::None { .. } => (),
-				PanelShader::Fade(_) => {
-					let panel_images = panel.state.images_mut();
+			match &mut panel.state {
+				PanelState::None(_panel_state) => (),
+				PanelState::Fade(panel_state) => {
+					let panel_images = panel_state.images_mut();
 					let image_sampler = panel_images
 						.image_sampler
 						.get_or_insert_with(|| self::create_image_sampler(wgpu_shared));
@@ -277,10 +282,6 @@ impl PanelsRenderer {
 			PanelImageUniforms::new(ratio, swap_dir)
 		};
 
-		let prev = image_uniforms(&panel_state.images().prev);
-		let cur = image_uniforms(&panel_state.images().cur);
-		let next = image_uniforms(&panel_state.images().next);
-
 		// Writes uniforms `uniforms`
 		let geometry_uniforms = geometry
 			.uniforms
@@ -295,53 +296,59 @@ impl PanelsRenderer {
 			write_uniforms(bytemuck::bytes_of(&$uniforms))
 		}
 
-		let fade_duration = panel_state.fade_duration_norm();
-		let progress = panel_state.progress_norm();
-		match panel_state.shader() {
-			PanelShader::None { background_color } => write_uniforms!(uniform::None {
+		match panel_state {
+			PanelState::None(panel_state) => write_uniforms!(uniform::None {
 				pos_matrix,
-				background_color: uniform::Vec4(background_color),
+				background_color: uniform::Vec4(panel_state.background_color),
 			}),
-			PanelShader::Fade(fade) => match fade {
-				PanelShaderFade::Basic => write_uniforms!(uniform::Fade {
-					pos_matrix,
-					prev,
-					cur,
-					next,
-					fade_duration,
-					progress,
-					_unused: [0; 2],
-				}),
-				PanelShaderFade::White { strength } => write_uniforms!(uniform::FadeWhite {
-					pos_matrix,
-					prev,
-					cur,
-					next,
-					fade_duration,
-					progress,
-					strength,
-					_unused: 0,
-				}),
-				PanelShaderFade::Out { strength } => write_uniforms!(uniform::FadeOut {
-					pos_matrix,
-					prev,
-					cur,
-					next,
-					fade_duration,
-					progress,
-					strength,
-					_unused: 0,
-				}),
-				PanelShaderFade::In { strength } => write_uniforms!(uniform::FadeIn {
-					pos_matrix,
-					prev,
-					cur,
-					next,
-					fade_duration,
-					progress,
-					strength,
-					_unused: 0,
-				}),
+			PanelState::Fade(panel_state) => {
+				let prev = image_uniforms(&panel_state.images().prev);
+				let cur = image_uniforms(&panel_state.images().cur);
+				let next = image_uniforms(&panel_state.images().next);
+
+				let fade_duration = panel_state.fade_duration_norm();
+				let progress = panel_state.progress_norm();
+				match panel_state.shader() {
+					PanelShaderFade::Basic => write_uniforms!(uniform::Fade {
+						pos_matrix,
+						prev,
+						cur,
+						next,
+						fade_duration,
+						progress,
+						_unused: [0; 2],
+					}),
+					PanelShaderFade::White { strength } => write_uniforms!(uniform::FadeWhite {
+						pos_matrix,
+						prev,
+						cur,
+						next,
+						fade_duration,
+						progress,
+						strength,
+						_unused: 0,
+					}),
+					PanelShaderFade::Out { strength } => write_uniforms!(uniform::FadeOut {
+						pos_matrix,
+						prev,
+						cur,
+						next,
+						fade_duration,
+						progress,
+						strength,
+						_unused: 0,
+					}),
+					PanelShaderFade::In { strength } => write_uniforms!(uniform::FadeIn {
+						pos_matrix,
+						prev,
+						cur,
+						next,
+						fade_duration,
+						progress,
+						strength,
+						_unused: 0,
+					}),
+				}
 			},
 		}
 

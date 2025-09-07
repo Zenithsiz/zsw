@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::{PanelImages, PanelShader},
+	super::{PanelImages, PanelShader, PanelShaderFade},
 	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
 	core::time::Duration,
@@ -12,12 +12,49 @@ use {
 
 /// Panel state
 #[derive(Debug)]
-pub struct PanelState {
+#[expect(clippy::large_enum_variant, reason = "Indirections are more costly")]
+pub enum PanelState {
+	/// None shader
+	None(PanelNoneState),
+
+	/// Fade shader
+	Fade(PanelFadeState),
+}
+
+impl PanelState {
+	/// Returns the shader of this state
+	pub fn shader(&self) -> PanelShader {
+		match self {
+			Self::None(state) => PanelShader::None {
+				background_color: state.background_color,
+			},
+			Self::Fade(state) => PanelShader::Fade(state.shader()),
+		}
+	}
+}
+
+/// Panel none state
+#[derive(Debug)]
+pub struct PanelNoneState {
+	/// Background color
+	pub background_color: [f32; 4],
+}
+
+impl PanelNoneState {
+	/// Creates new state
+	pub fn new(background_color: [f32; 4]) -> Self {
+		Self { background_color }
+	}
+}
+
+/// Panel fade state
+#[derive(Debug)]
+pub struct PanelFadeState {
 	/// If paused
 	paused: bool,
 
 	/// Shader
-	shader: PanelShader,
+	shader: PanelShaderFade,
 
 	/// Last update
 	last_update: Instant,
@@ -35,8 +72,8 @@ pub struct PanelState {
 	images: PanelImages,
 }
 
-impl PanelState {
-	pub fn new(duration: Duration, fade_duration: Duration, shader: PanelShader) -> Self {
+impl PanelFadeState {
+	pub fn new(duration: Duration, fade_duration: Duration, shader: PanelShaderFade) -> Self {
 		Self {
 			paused: false,
 			shader,
@@ -110,13 +147,13 @@ impl PanelState {
 	}
 
 	/// Returns the panel shader
-	pub fn shader(&self) -> PanelShader {
+	pub fn shader(&self) -> PanelShaderFade {
 		self.shader
 	}
 
-	/// Sets the panel shader
-	pub fn set_shader(&mut self, shader: PanelShader) {
-		self.shader = shader;
+	/// Returns the panel shader mutably
+	pub fn shader_mut(&mut self) -> &mut PanelShaderFade {
+		&mut self.shader
 	}
 
 	/// Returns the panel images

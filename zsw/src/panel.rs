@@ -14,7 +14,7 @@ pub use self::{
 	images::{PanelImage, PanelImages},
 	panels::Panels,
 	renderer::{PanelShader, PanelShaderFade, PanelsRenderer, PanelsRendererLayouts},
-	state::PanelState,
+	state::{PanelFadeState, PanelNoneState, PanelState},
 };
 
 // Imports
@@ -62,7 +62,10 @@ impl Panel {
 			return;
 		};
 
-		self.state.skip(playlist_player, wgpu_shared);
+		match &mut self.state {
+			PanelState::None(_) => (),
+			PanelState::Fade(state) => state.skip(playlist_player, wgpu_shared),
+		}
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
@@ -73,7 +76,10 @@ impl Panel {
 			return;
 		};
 
-		self.state.step(playlist_player, wgpu_shared, delta);
+		match &mut self.state {
+			PanelState::None(_) => (),
+			PanelState::Fade(state) => state.step(playlist_player, wgpu_shared, delta),
+		}
 	}
 
 	/// Updates this panel's state using the current time as a delta
@@ -84,7 +90,10 @@ impl Panel {
 			return;
 		};
 
-		self.state.update(playlist_player, wgpu_shared);
+		match &mut self.state {
+			PanelState::None(_) => (),
+			PanelState::Fade(state) => state.update(playlist_player, wgpu_shared),
+		}
 	}
 }
 

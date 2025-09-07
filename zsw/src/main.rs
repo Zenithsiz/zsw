@@ -41,6 +41,7 @@ use {
 	cgmath::Point2,
 	chrono::TimeDelta,
 	clap::Parser,
+	core::time::Duration,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
@@ -434,7 +435,10 @@ async fn paint_egui(
 
 			// Pause any double-clicked panels
 			if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
-				panel.state.toggle_paused();
+				match &mut panel.state {
+					panel::PanelState::None(_) => (),
+					panel::PanelState::Fade(state) => state.toggle_paused(),
+				}
 				break;
 			}
 
@@ -453,7 +457,10 @@ async fn paint_egui(
 				// TODO: Make this "speed" configurable
 				// TODO: Perform the conversion better without going through nanos
 				let speed = 1.0 / 1000.0;
-				let time_delta_abs = panel.state.duration().mul_f32(scroll_delta.abs() * speed);
+				let time_delta_abs = match &panel.state {
+					panel::PanelState::None(_) => Duration::ZERO,
+					panel::PanelState::Fade(state) => state.duration().mul_f32(scroll_delta.abs() * speed),
+				};
 				let time_delta_abs = TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
 				let time_delta = match scroll_delta.is_sign_positive() {
 					true => -time_delta_abs,
