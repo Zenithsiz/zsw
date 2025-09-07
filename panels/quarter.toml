@@ -7,5 +7,6 @@ fade_duration = 1.0
 
 [shader]
 type     = "fade"
+playlist = "example1"
 fade     = "white"
 strength = 1.0

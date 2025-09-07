@@ -31,8 +31,8 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{PanelName, PanelShader, Panels, PanelsRenderer, PanelsRendererLayouts},
-		playlist::{PlaylistName, PlaylistPlayer, Playlists},
+		panel::{PanelName, Panels, PanelsRenderer, PanelsRendererLayouts},
+		playlist::Playlists,
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
 	},
@@ -183,7 +183,7 @@ impl WinitApp {
 			wgpu: wgpu_shared,
 			panels_renderer_layouts,
 			panels,
-			playlists,
+			playlists: Arc::new(playlists),
 		};
 		let shared = Arc::new(shared);
 
@@ -260,12 +260,7 @@ async fn load_default_panels(config: &Config, shared: &Arc<Shared>) -> Result<()
 		.iter()
 		.map(async |default_panel| {
 			if let Err(err) = self::load_default_panel(default_panel, shared).await {
-				tracing::warn!(
-					"Unable to load default panel {:?} (playlist: {:?}): {}",
-					default_panel.panel,
-					default_panel.playlist,
-					err.pretty()
-				);
+				tracing::warn!("Unable to load default panel {default_panel:?}: {}", err.pretty());
 			}
 		})
 		.collect::<FuturesUnordered<_>>()
@@ -276,49 +271,15 @@ async fn load_default_panels(config: &Config, shared: &Arc<Shared>) -> Result<()
 }
 
 /// Loads a default panel
-async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Shared>) -> Result<(), AppError> {
-	let panel_name = PanelName::from(default_panel.panel.clone());
-	let playlist_name = PlaylistName::from(default_panel.playlist.clone());
+async fn load_default_panel(default_panel: &str, shared: &Arc<Shared>) -> Result<(), AppError> {
+	let panel_name = PanelName::from(default_panel.to_owned());
 
-	let panel = shared
+	_ = shared
 		.panels
 		.load(panel_name.clone())
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!("Loaded default panel {panel_name:?}");
-
-	let panel_shader = panel.lock().await.state.shader();
-	match panel_shader {
-		PanelShader::None { .. } => (),
-		// Spawn a task to load the playlist player for fade players
-		PanelShader::Fade(_) =>
-			_ = #[cloned(shared)]
-			self::spawn_task(format!("Load playlist for {panel_name:?}"), async move {
-				let playlist = shared
-					.playlists
-					.load(playlist_name.clone())
-					.await
-					.context("Unable to load playlist")?;
-				tracing::debug!("Loaded default playlist {playlist_name:?}");
-
-				let playlist_player = PlaylistPlayer::new(&playlist).await;
-
-				let mut panel = panel.lock().await;
-				#[expect(
-					clippy::match_wildcard_for_single_variants,
-					reason = "We only care about matching with a specific variant"
-				)]
-				match &mut panel.state {
-					panel::PanelState::Fade(panel_state) => {
-						panel_state.set_playlist_player(playlist_player);
-						tracing::debug!("Loaded default panel playlist player {panel_name:?}");
-					},
-					_ => tracing::warn!("Panel {panel_name:?} changed shader while loading default playlist"),
-				}
-
-				Ok(())
-			})?,
-	}
 
 	Ok(())
 }
@@ -383,6 +344,7 @@ async fn renderer(
 				&mut frame,
 				&wgpu_renderer,
 				shared.wgpu,
+				&shared.playlists,
 				&shared.panels_renderer_layouts,
 				&shared_window.monitor_geometry,
 				&shared_window.window,
@@ -462,7 +424,7 @@ async fn paint_egui(
 			}) {
 				match &mut panel.state {
 					panel::PanelState::None(_) => (),
-					panel::PanelState::Fade(state) => state.skip(shared.wgpu),
+					panel::PanelState::Fade(state) => state.skip(shared.wgpu, &shared.playlists),
 				}
 				break;
 			}
@@ -484,7 +446,7 @@ async fn paint_egui(
 							false => time_delta_abs,
 						};
 
-						state.step(shared.wgpu, time_delta);
+						state.step(shared.wgpu, &shared.playlists, time_delta);
 						break;
 					},
 				}

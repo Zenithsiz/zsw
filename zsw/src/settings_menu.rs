@@ -7,6 +7,7 @@
 use {
 	crate::{
 		panel::{PanelFadeState, PanelGeometry, PanelImage, PanelNoneState, PanelShaderFade, PanelState},
+		playlist::PlaylistName,
 		shared::{Shared, SharedWindow},
 	},
 	core::{ops::RangeInclusive, time::Duration},
@@ -170,7 +171,7 @@ fn draw_fade_panel_editor(
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			panel_state.skip(shared.wgpu);
+			panel_state.skip(shared.wgpu, &shared.playlists);
 		}
 	});
 
@@ -186,7 +187,9 @@ fn draw_fade_panel_editor(
 		});
 	});
 
-	ui.collapsing("Playlist player", |ui| {
+	ui.collapsing("Playlist", |ui| {
+		ui.label(format!("Playlist: {:?}", panel_state.playlist()));
+
 		let Some(playlist_player) = panel_state.playlist_player() else {
 			ui.weak("Not loaded");
 			return;
@@ -272,13 +275,13 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 					PanelState::None(PanelNoneState::new([0.0; 4]))
 				}),
 				("Fade", matches!(state, PanelState::Fade(_)), || {
-					// TODO: Creating this here won't load any playlist, but we also
-					//       don't have any playlist yet, so nothing we can do about it
-					//       until we change the design
+					// TODO: We don't have a playlist to pass here, so should we make
+					//       the playlist optional and have the user later change it?
 					PanelState::Fade(PanelFadeState::new(
 						Duration::from_secs(60),
 						Duration::from_secs(5),
 						PanelShaderFade::Out { strength: 1.5 },
+						PlaylistName::from("none".to_owned()),
 					))
 				}),
 			];

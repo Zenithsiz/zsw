@@ -61,6 +61,9 @@ pub enum PanelShader {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct PanelShaderFade {
+	/// Playlist
+	pub playlist: String,
+
 	/// Inner
 	#[serde(flatten)]
 	pub inner: PanelShaderFadeInner,

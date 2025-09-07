@@ -2,20 +2,6 @@ tokio_worker_threads = 2
 rayon_worker_threads = 2
 log_file             = "latest.log"
 
-[[default.panels]]
-panel    = "multiple"
-playlist = "example1"
-
-
-[[default.panels]]
-panel    = "quarter"
-playlist = "example1"
-
-
-#[[default.panels]]
-#panel = "full"
-#playlist = "example1"
-
-#[[default.panels]]
-#panel = "cross-screen"
-#playlist = "example1"
+default.panels = ["multiple", "quarter"]
+#default.panels = ["full"]
+#default.panels = ["cross-screen"]

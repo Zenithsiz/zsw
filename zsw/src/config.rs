@@ -93,7 +93,7 @@ impl Default for Config {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ConfigDefault {
 	/// Panels
-	pub panels: Vec<ConfigPanel>,
+	pub panels: Vec<String>,
 }
 
 #[expect(clippy::derivable_impls, reason = "We want to be explicit with defaults")]
@@ -101,15 +101,4 @@ impl Default for ConfigDefault {
 	fn default() -> Self {
 		Self { panels: vec![] }
 	}
-}
-
-/// Configuration panel
-#[derive(Clone, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct ConfigPanel {
-	/// Panel
-	pub panel: String,
-
-	/// Playlist
-	pub playlist: String,
 }

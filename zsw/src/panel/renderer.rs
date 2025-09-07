@@ -11,12 +11,13 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 use {
 	self::uniform::PanelImageUniforms,
 	super::{PanelGeometryUniforms, PanelImage, PanelState, Panels},
-	crate::panel::PanelGeometry,
+	crate::{panel::PanelGeometry, playlist::Playlists},
 	app_error::Context,
 	cgmath::Vector2,
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
+		sync::Arc,
 	},
 	wgpu::util::DeviceExt,
 	winit::{dpi::PhysicalSize, window::Window},
@@ -116,6 +117,7 @@ impl PanelsRenderer {
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
+		playlists: &Arc<Playlists>,
 		layouts: &PanelsRendererLayouts,
 		window_geometry: &Rect<i32, u32>,
 		window: &Window,
@@ -172,7 +174,7 @@ impl PanelsRenderer {
 			// Update the panel before drawing it
 			match &mut panel.state {
 				PanelState::None(_) => (),
-				PanelState::Fade(state) => state.update(wgpu_shared),
+				PanelState::Fade(state) => state.update(wgpu_shared, playlists),
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either

@@ -6,6 +6,7 @@ use {
 	crate::{
 		AppError,
 		panel::{PanelNoneState, PanelShaderFade, state::PanelFadeState},
+		playlist::PlaylistName,
 	},
 	app_error::Context,
 	futures::lock::Mutex,
@@ -74,6 +75,7 @@ impl Panels {
 							ser::PanelShaderFadeInner::Out { strength } => PanelShaderFade::Out { strength },
 							ser::PanelShaderFadeInner::In { strength } => PanelShaderFade::In { strength },
 						},
+						PlaylistName::from(fade.playlist),
 					)),
 				};
 				let panel = Panel::new(panel_name.clone(), geometries, state);

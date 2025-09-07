@@ -27,7 +27,7 @@ pub struct Shared {
 	pub panels_renderer_layouts: PanelsRendererLayouts,
 
 	pub panels:    Panels,
-	pub playlists: Playlists,
+	pub playlists: Arc<Playlists>,
 }
 
 /// Shared window state

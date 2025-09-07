@@ -6,5 +6,6 @@ duration      = 5.0
 fade_duration = 1.0
 
 [shader]
-type = "fade"
-fade = "basic"
+type     = "fade"
+playlist = "example1"
+fade     = "basic"
