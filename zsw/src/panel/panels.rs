@@ -63,27 +63,20 @@ impl Panels {
 				// Finally convert it
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
 				// TODO: Is this a good default?
-				let panel_shader = panel.shader.unwrap_or(ser::PanelShader::FadeOut { strength: 1.5 });
+				let panel_shader = panel
+					.shader
+					.unwrap_or(ser::PanelShader::Fade(ser::PanelShaderFade::Out { strength: 1.5 }));
 				let state = match panel_shader {
 					ser::PanelShader::None { background_color } =>
 						PanelState::None(PanelNoneState::new(background_color)),
-					ser::PanelShader::Fade |
-					ser::PanelShader::FadeWhite { .. } |
-					ser::PanelShader::FadeOut { .. } |
-					ser::PanelShader::FadeIn { .. } => PanelState::Fade(PanelFadeState::new(
+					ser::PanelShader::Fade(fade) => PanelState::Fade(PanelFadeState::new(
 						panel.state.duration,
 						panel.state.fade_duration,
-						#[expect(
-							clippy::match_wildcard_for_single_variants,
-							reason = "We only care about the variants above"
-						)]
-						match panel_shader {
-							ser::PanelShader::Fade => PanelShaderFade::Basic,
-							ser::PanelShader::FadeWhite { strength } => PanelShaderFade::White { strength },
-							ser::PanelShader::FadeOut { strength } => PanelShaderFade::Out { strength },
-							ser::PanelShader::FadeIn { strength } => PanelShaderFade::In { strength },
-
-							_ => unreachable!(),
+						match fade {
+							ser::PanelShaderFade::Basic => PanelShaderFade::Basic,
+							ser::PanelShaderFade::White { strength } => PanelShaderFade::White { strength },
+							ser::PanelShaderFade::Out { strength } => PanelShaderFade::Out { strength },
+							ser::PanelShaderFade::In { strength } => PanelShaderFade::In { strength },
 						},
 					)),
 				};

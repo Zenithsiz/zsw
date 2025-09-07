@@ -46,7 +46,6 @@ pub struct PanelState {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
-#[expect(variant_size_differences, reason = "16 bytes is still reasonable for this type")]
 pub enum PanelShader {
 	#[serde(rename = "none")]
 	None {
@@ -55,14 +54,23 @@ pub enum PanelShader {
 	},
 
 	#[serde(rename = "fade")]
-	Fade,
+	Fade(PanelShaderFade),
+}
 
-	#[serde(rename = "fade-white")]
-	FadeWhite { strength: f32 },
+/// Configuration shader fade
+#[derive(Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(tag = "fade")]
+pub enum PanelShaderFade {
+	#[serde(rename = "basic")]
+	Basic,
 
-	#[serde(rename = "fade-out")]
-	FadeOut { strength: f32 },
+	#[serde(rename = "white")]
+	White { strength: f32 },
 
-	#[serde(rename = "fade-in")]
-	FadeIn { strength: f32 },
+	#[serde(rename = "out")]
+	Out { strength: f32 },
+
+	#[serde(rename = "in")]
+	In { strength: f32 },
 }
