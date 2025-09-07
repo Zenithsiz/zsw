@@ -416,84 +416,52 @@ async fn paint_egui(
 		// Draw the settings menu
 		tokio::task::block_in_place(|| settings_menu.draw(ctx, shared, shared_window));
 
-		// Pause any double-clicked panels
-		if !ctx.is_pointer_over_area() &&
-			ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary))
-		{
-			let cursor_pos = shared.cursor_pos.load();
-			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+		// Then go through all panels checking for interactions with their geometries
+		let cursor_pos = shared.cursor_pos.load();
+		let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+		for panel in shared.panels.get_all().await {
+			let mut panel = panel.lock().await;
 
-			for panel in shared.panels.get_all().await {
-				let mut panel = panel.lock().await;
-
-				for geometry in panel.geometries() {
-					if geometry
+			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
+			if ctx.is_pointer_over_area() ||
+				!panel.geometries().iter().any(|geometry| {
+					geometry
 						.geometry_on(&shared_window.monitor_geometry)
 						.contains(cursor_pos)
-					{
-						panel.state_mut().toggle_paused();
-						break;
-					}
-				}
+				}) {
+				continue;
 			}
-		}
 
-		// Skip any ctrl-clicked/middle clicked panels
-		// TODO: Deduplicate this with the above and settings menu.
-		if !ctx.is_pointer_over_area() &&
-			ctx.input(|input| {
+			// Pause any double-clicked panels
+			if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
+				panel.state_mut().toggle_paused();
+				break;
+			}
+
+			// Skip any ctrl-clicked/middle clicked panels
+			if ctx.input(|input| {
 				(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
 					input.pointer.button_clicked(egui::PointerButton::Middle)
 			}) {
-			let cursor_pos = shared.cursor_pos.load();
-			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-
-			for panel in shared.panels.get_all().await {
-				let mut panel = panel.lock().await;
-				let panel = &mut *panel;
-
-				if !panel.geometries().iter().any(|geometry| {
-					geometry
-						.geometry_on(&shared_window.monitor_geometry)
-						.contains(cursor_pos)
-				}) {
-					continue;
-				}
-
 				panel.skip(shared.wgpu);
+				break;
 			}
-		}
 
-		// Scroll panels
-		// TODO: Deduplicate this with the above and settings menu.
-		if !ctx.is_pointer_over_area() && ctx.input(|input| input.smooth_scroll_delta.y != 0.0) {
-			let delta = ctx.input(|input| input.smooth_scroll_delta.y);
-			let cursor_pos = shared.cursor_pos.load();
-			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-
-			for panel in shared.panels.get_all().await {
-				let mut panel = panel.lock().await;
-				let panel = &mut *panel;
-
-				if !panel.geometries().iter().any(|geometry| {
-					geometry
-						.geometry_on(&shared_window.monitor_geometry)
-						.contains(cursor_pos)
-				}) {
-					continue;
-				}
-
+			// Scroll panels
+			let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
+			if scroll_delta != 0.0 {
 				// TODO: Make this "speed" configurable
 				// TODO: Perform the conversion better without going through nanos
 				let speed = 1.0 / 1000.0;
-				let time_delta_abs = panel.state().duration().mul_f32(delta.abs() * speed);
+				let time_delta_abs = panel.state().duration().mul_f32(scroll_delta.abs() * speed);
 				let time_delta_abs = TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
-				let time_delta = match delta.is_sign_positive() {
+				let time_delta = match scroll_delta.is_sign_positive() {
 					true => -time_delta_abs,
 					false => time_delta_abs,
 				};
 
 				panel.step(shared.wgpu, time_delta);
+				break;
 			}
 		}
 
