@@ -30,19 +30,20 @@ pub struct PanelsRendererLayouts {
 	/// Uniforms bind group layout
 	pub uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
-	/// Image bind group layout
-	pub image_bind_group_layout: wgpu::BindGroupLayout,
+	/// Fade image bind group layout
+	// TODO: Only create this if using the fade shader?
+	pub fade_image_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl PanelsRendererLayouts {
 	/// Creates new layouts for the panels renderer
 	pub fn new(wgpu_shared: &WgpuShared) -> Self {
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu_shared);
-		let image_bind_group_layout = self::create_image_bind_group_layout(wgpu_shared);
+		let fade_image_bind_group_layout = self::create_fade_image_bind_group_layout(wgpu_shared);
 
 		Self {
 			uniforms_bind_group_layout,
-			image_bind_group_layout,
+			fade_image_bind_group_layout,
 		}
 	}
 }
@@ -105,7 +106,11 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
-	#[expect(clippy::too_many_arguments, reason = "TODO: Merge some of these")]
+	#[expect(
+		clippy::too_many_lines,
+		clippy::too_many_arguments,
+		reason = "TODO: Merge some of these"
+	)]
 	pub async fn render(
 		&mut self,
 		frame: &mut FrameRender,
@@ -176,11 +181,16 @@ impl PanelsRenderer {
 			let render_pipeline = match self.render_pipelines.entry(panel.state.shader().name()) {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),
 				hash_map::Entry::Vacant(entry) => {
+					let bind_group_layouts = match panel.state.shader() {
+						PanelShader::None { .. } => &[&layouts.uniforms_bind_group_layout] as &[_],
+						PanelShader::Fade(_) =>
+							&[&layouts.uniforms_bind_group_layout, &layouts.fade_image_bind_group_layout],
+					};
+
 					let render_pipeline = self::create_render_pipeline(
 						wgpu_renderer,
 						wgpu_shared,
-						&layouts.uniforms_bind_group_layout,
-						&layouts.image_bind_group_layout,
+						bind_group_layouts,
 						panel.state.shader(),
 						self.msaa_samples,
 					)
@@ -193,22 +203,27 @@ impl PanelsRenderer {
 			// Bind the pipeline for the specific shader
 			render_pass.set_pipeline(render_pipeline);
 
-			// Bind the panel-shared image bind group
-			let panel_images = panel.state.images_mut();
-			let image_sampler = panel_images
-				.image_sampler
-				.get_or_insert_with(|| self::create_image_sampler(wgpu_shared));
-			let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
-				self::create_image_bind_group(
-					wgpu_shared,
-					&layouts.image_bind_group_layout,
-					panel_images.prev.texture_view(wgpu_shared),
-					panel_images.cur.texture_view(wgpu_shared),
-					panel_images.next.texture_view(wgpu_shared),
-					image_sampler,
-				)
-			});
-			render_pass.set_bind_group(1, &*image_bind_group, &[]);
+			// Bind the extra bind groups
+			match panel.state.shader() {
+				PanelShader::None { .. } => (),
+				PanelShader::Fade(_) => {
+					let panel_images = panel.state.images_mut();
+					let image_sampler = panel_images
+						.image_sampler
+						.get_or_insert_with(|| self::create_image_sampler(wgpu_shared));
+					let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
+						self::create_image_bind_group(
+							wgpu_shared,
+							&layouts.fade_image_bind_group_layout,
+							panel_images.prev.texture_view(wgpu_shared),
+							panel_images.cur.texture_view(wgpu_shared),
+							panel_images.next.texture_view(wgpu_shared),
+							image_sampler,
+						)
+					});
+					render_pass.set_bind_group(1, &*image_bind_group, &[]);
+				},
+			}
 
 			for geometry in &mut panel.geometries {
 				// If this geometry is outside our window, we can safely ignore it
@@ -386,8 +401,7 @@ fn create_indices(wgpu_shared: &WgpuShared) -> wgpu::Buffer {
 fn create_render_pipeline(
 	wgpu_renderer: &WgpuRenderer,
 	wgpu_shared: &WgpuShared,
-	uniforms_bind_group_layout: &wgpu::BindGroupLayout,
-	image_bind_group_layout: &wgpu::BindGroupLayout,
+	bind_group_layouts: &[&wgpu::BindGroupLayout],
 	shader: PanelShader,
 	msaa_samples: u32,
 ) -> Result<wgpu::RenderPipeline, AppError> {
@@ -407,8 +421,8 @@ fn create_render_pipeline(
 
 	// Create the pipeline layout
 	let render_pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
-		label:                Some(&format!("[zsw::panel] Shader {shader_name:?} render pipeline layout")),
-		bind_group_layouts:   &[uniforms_bind_group_layout, image_bind_group_layout],
+		label: Some(&format!("[zsw::panel] Shader {shader_name:?} render pipeline layout")),
+		bind_group_layouts,
 		push_constant_ranges: &[],
 	};
 	let render_pipeline_layout = wgpu_shared
@@ -508,10 +522,10 @@ fn create_uniforms_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGrou
 	wgpu_shared.device.create_bind_group_layout(&descriptor)
 }
 
-/// Creates the image bind group layout
-fn create_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLayout {
+/// Creates the fade image bind group layout
+fn create_fade_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
-		label:   Some("[zsw::panel] Image bind group layout"),
+		label:   Some("[zsw::panel] Fade image bind group layout"),
 		entries: &[
 			wgpu::BindGroupLayoutEntry {
 				binding:    0,
