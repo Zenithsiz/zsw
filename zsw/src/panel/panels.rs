@@ -62,11 +62,7 @@ impl Panels {
 
 				// Finally convert it
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
-				// TODO: Is this a good default?
-				let panel_shader = panel
-					.shader
-					.unwrap_or(ser::PanelShader::Fade(ser::PanelShaderFade::Out { strength: 1.5 }));
-				let state = match panel_shader {
+				let state = match panel.shader {
 					ser::PanelShader::None { background_color } =>
 						PanelState::None(PanelNoneState::new(background_color)),
 					ser::PanelShader::Fade(fade) => PanelState::Fade(PanelFadeState::new(

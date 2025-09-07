@@ -8,3 +8,7 @@ geometry = "960x1080+2880+0"
 [state]
 duration      = 5.0
 fade_duration = 1.0
+
+[shader]
+type = "fade"
+fade = "basic"

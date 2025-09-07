@@ -15,8 +15,7 @@ pub struct Panel {
 	pub state:      PanelState,
 
 	/// Shader
-	#[serde(default)]
-	pub shader: Option<PanelShader>,
+	pub shader: PanelShader,
 }
 
 /// Serialized panel geometry
