@@ -68,11 +68,11 @@ impl Panels {
 					ser::PanelShader::Fade(fade) => PanelState::Fade(PanelFadeState::new(
 						panel.state.duration,
 						panel.state.fade_duration,
-						match fade {
-							ser::PanelShaderFade::Basic => PanelShaderFade::Basic,
-							ser::PanelShaderFade::White { strength } => PanelShaderFade::White { strength },
-							ser::PanelShaderFade::Out { strength } => PanelShaderFade::Out { strength },
-							ser::PanelShaderFade::In { strength } => PanelShaderFade::In { strength },
+						match fade.inner {
+							ser::PanelShaderFadeInner::Basic => PanelShaderFade::Basic,
+							ser::PanelShaderFadeInner::White { strength } => PanelShaderFade::White { strength },
+							ser::PanelShaderFadeInner::Out { strength } => PanelShaderFade::Out { strength },
+							ser::PanelShaderFadeInner::In { strength } => PanelShaderFade::In { strength },
 						},
 					)),
 				};
