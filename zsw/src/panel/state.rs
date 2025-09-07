@@ -36,7 +36,7 @@ pub struct PanelState {
 }
 
 impl PanelState {
-	pub fn new(duration: Duration, fade_duration: Duration, shader: PanelShader, images: PanelImages) -> Self {
+	pub fn new(duration: Duration, fade_duration: Duration, shader: PanelShader) -> Self {
 		Self {
 			paused: false,
 			shader,
@@ -44,7 +44,7 @@ impl PanelState {
 			progress: Duration::ZERO,
 			duration,
 			fade_duration,
-			images,
+			images: PanelImages::new(),
 		}
 	}
 

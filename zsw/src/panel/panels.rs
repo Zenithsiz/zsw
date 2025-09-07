@@ -3,10 +3,7 @@
 // Imports
 use {
 	super::{Panel, PanelName, PanelShader, PanelState, ser},
-	crate::{
-		AppError,
-		panel::{PanelImages, PanelShaderFade},
-	},
+	crate::{AppError, panel::PanelShaderFade},
 	app_error::Context,
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
@@ -62,24 +59,18 @@ impl Panels {
 
 				// Finally convert it
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
-				let state = PanelState::new(
-					panel.state.duration,
-					panel.state.fade_duration,
-					match panel.shader {
-						Some(ser::PanelShader::None { background_color }) => PanelShader::None { background_color },
-						Some(ser::PanelShader::Fade) => PanelShader::Fade(PanelShaderFade::Basic),
-						Some(ser::PanelShader::FadeWhite { strength }) =>
-							PanelShader::Fade(PanelShaderFade::White { strength }),
-						Some(ser::PanelShader::FadeOut { strength }) =>
-							PanelShader::Fade(PanelShaderFade::Out { strength }),
-						Some(ser::PanelShader::FadeIn { strength }) =>
-							PanelShader::Fade(PanelShaderFade::In { strength }),
+				let state = PanelState::new(panel.state.duration, panel.state.fade_duration, match panel.shader {
+					Some(ser::PanelShader::None { background_color }) => PanelShader::None { background_color },
+					Some(ser::PanelShader::Fade) => PanelShader::Fade(PanelShaderFade::Basic),
+					Some(ser::PanelShader::FadeWhite { strength }) =>
+						PanelShader::Fade(PanelShaderFade::White { strength }),
+					Some(ser::PanelShader::FadeOut { strength }) =>
+						PanelShader::Fade(PanelShaderFade::Out { strength }),
+					Some(ser::PanelShader::FadeIn { strength }) => PanelShader::Fade(PanelShaderFade::In { strength }),
 
-						// TODO: Is this a good default?
-						None => PanelShader::Fade(PanelShaderFade::Out { strength: 1.5 }),
-					},
-					PanelImages::new(),
-				);
+					// TODO: Is this a good default?
+					None => PanelShader::Fade(PanelShaderFade::Out { strength: 1.5 }),
+				});
 
 				let panel = Panel::new(panel_name.clone(), geometries, state);
 
