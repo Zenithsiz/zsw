@@ -613,17 +613,13 @@ pub enum PanelShader {
 	/// Fade shader
 	Fade(PanelShaderFade),
 }
+
 impl PanelShader {
 	/// Returns this shader's name
 	pub fn name(self) -> &'static str {
 		match self {
 			Self::None { .. } => "None",
-			Self::Fade(fade) => match fade {
-				PanelShaderFade::Basic => "Fade",
-				PanelShaderFade::White { .. } => "Fade white",
-				PanelShaderFade::Out { .. } => "Fade out",
-				PanelShaderFade::In { .. } => "Fade in",
-			},
+			Self::Fade(fade) => fade.name(),
 		}
 	}
 
@@ -631,13 +627,7 @@ impl PanelShader {
 	pub fn module_json(self) -> &'static str {
 		match self {
 			Self::None { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/none.json")),
-			Self::Fade(fade) => match fade {
-				PanelShaderFade::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade.json")),
-				PanelShaderFade::White { .. } =>
-					include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-white.json")),
-				PanelShaderFade::Out { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-out.json")),
-				PanelShaderFade::In { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-in.json")),
-			},
+			Self::Fade(fade) => fade.module_json(),
 		}
 	}
 }
@@ -649,4 +639,26 @@ pub enum PanelShaderFade {
 	White { strength: f32 },
 	Out { strength: f32 },
 	In { strength: f32 },
+}
+
+impl PanelShaderFade {
+	/// Returns this shader's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::Basic => "Fade",
+			Self::White { .. } => "Fade white",
+			Self::Out { .. } => "Fade out",
+			Self::In { .. } => "Fade in",
+		}
+	}
+
+	/// Returns this shader's module as json
+	pub fn module_json(self) -> &'static str {
+		match self {
+			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade.json")),
+			Self::White { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-white.json")),
+			Self::Out { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-out.json")),
+			Self::In { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-in.json")),
+		}
+	}
 }
