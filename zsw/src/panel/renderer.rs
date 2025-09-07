@@ -216,18 +216,19 @@ impl PanelsRenderer {
 					continue;
 				}
 
-				// Write the uniforms
-				let geometry_uniforms = Self::write_uniforms(
+				// Write and bind the uniforms
+				Self::write_bind_uniforms(
 					wgpu_shared,
 					layouts,
 					frame.surface_size,
 					&panel.state,
-					window_geometry,window,
+					window_geometry,
+					window,
 					geometry,
+					&mut render_pass,
 				);
 
-				// Then bind the geometry uniforms and draw
-				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+				// Finally draw
 				render_pass.draw_indexed(0..6, 0, 0..1);
 			}
 		}
@@ -235,16 +236,18 @@ impl PanelsRenderer {
 		Ok(())
 	}
 
-	/// Writes the uniforms
-	pub fn write_uniforms<'geometry>(
+	/// Writes and binds the uniforms
+	#[expect(clippy::too_many_arguments, reason = "TODO: Merge some of these")]
+	pub fn write_bind_uniforms(
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
 		surface_size: PhysicalSize<u32>,
 		panel_state: &PanelState,
 		window_geometry: &Rect<i32, u32>,
 		window: &Window,
-		geometry: &'geometry mut PanelGeometry,
-	) -> &'geometry mut PanelGeometryUniforms {
+		geometry: &mut PanelGeometry,
+		render_pass: &mut wgpu::RenderPass<'_>,
+	) {
 		// Calculate the position matrix for the panel
 		let pos_matrix = geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
@@ -327,7 +330,7 @@ impl PanelsRenderer {
 			},
 		}
 
-		geometry_uniforms
+		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 	}
 }
 
