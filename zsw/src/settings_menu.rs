@@ -7,7 +7,6 @@
 use {
 	crate::{
 		panel::{PanelFadeState, PanelGeometry, PanelImage, PanelNoneState, PanelShaderFade, PanelState},
-		playlist::PlaylistPlayer,
 		shared::{Shared, SharedWindow},
 	},
 	core::{ops::RangeInclusive, time::Duration},
@@ -99,14 +98,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 		ui.collapsing(name, |ui| {
 			match &mut panel.state {
 				PanelState::None(_) => (),
-				PanelState::Fade(state) => self::draw_fade_panel_editor(
-					ui,
-					shared,
-					shared_window,
-					state,
-					&mut panel.geometries,
-					panel.playlist_player.as_mut(),
-				),
+				PanelState::Fade(state) =>
+					self::draw_fade_panel_editor(ui, shared, shared_window, state, &mut panel.geometries),
 			}
 
 			ui.collapsing("Shader", |ui| {
@@ -123,7 +116,6 @@ fn draw_fade_panel_editor(
 	shared_window: &SharedWindow,
 	panel_state: &mut PanelFadeState,
 	geometries: &mut [PanelGeometry],
-	mut playlist_player: Option<&mut PlaylistPlayer>,
 ) {
 	{
 		let mut is_paused = panel_state.is_paused();
@@ -178,10 +170,7 @@ fn draw_fade_panel_editor(
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			let Some(playlist_player) = playlist_player.as_mut() else {
-				return;
-			};
-			panel_state.skip(playlist_player, shared.wgpu);
+			panel_state.skip(shared.wgpu);
 		}
 	});
 
@@ -198,7 +187,7 @@ fn draw_fade_panel_editor(
 	});
 
 	ui.collapsing("Playlist player", |ui| {
-		let Some(playlist_player) = playlist_player else {
+		let Some(playlist_player) = panel_state.playlist_player() else {
 			ui.weak("Not loaded");
 			return;
 		};
@@ -283,6 +272,9 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 					PanelState::None(PanelNoneState::new([0.0; 4]))
 				}),
 				("Fade", matches!(state, PanelState::Fade(_)), || {
+					// TODO: Creating this here won't load any playlist, but we also
+					//       don't have any playlist yet, so nothing we can do about it
+					//       until we change the design
 					PanelState::Fade(PanelFadeState::new(
 						Duration::from_secs(60),
 						Duration::from_secs(5),

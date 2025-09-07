@@ -20,11 +20,9 @@ pub use self::{
 // Imports
 use {
 	crate::playlist::PlaylistPlayer,
-	chrono::TimeDelta,
 	core::{borrow::Borrow, fmt},
 	std::sync::Arc,
 	zsw_util::Rect,
-	zsw_wgpu::WgpuShared,
 };
 
 /// Panel
@@ -36,9 +34,6 @@ pub struct Panel {
 	/// Geometries
 	pub geometries: Vec<PanelGeometry>,
 
-	/// Playlist player
-	pub playlist_player: Option<PlaylistPlayer>,
-
 	/// State
 	pub state: PanelState,
 }
@@ -49,50 +44,7 @@ impl Panel {
 		Self {
 			name,
 			geometries: geometries.into_iter().map(PanelGeometry::new).collect(),
-			playlist_player: None,
 			state,
-		}
-	}
-
-	/// Skips to the next image.
-	///
-	/// If the playlist player isn't loaded, does nothing
-	pub fn skip(&mut self, wgpu_shared: &WgpuShared) {
-		let Some(playlist_player) = &mut self.playlist_player else {
-			return;
-		};
-
-		match &mut self.state {
-			PanelState::None(_) => (),
-			PanelState::Fade(state) => state.skip(playlist_player, wgpu_shared),
-		}
-	}
-
-	/// Steps this panel's state by a certain number of frames (potentially negative).
-	///
-	/// If the playlist player isn't loaded, does nothing
-	pub fn step(&mut self, wgpu_shared: &WgpuShared, delta: TimeDelta) {
-		let Some(playlist_player) = &mut self.playlist_player else {
-			return;
-		};
-
-		match &mut self.state {
-			PanelState::None(_) => (),
-			PanelState::Fade(state) => state.step(playlist_player, wgpu_shared, delta),
-		}
-	}
-
-	/// Updates this panel's state using the current time as a delta
-	///
-	/// If the playlist player isn't loaded, does nothing
-	pub fn update(&mut self, wgpu_shared: &WgpuShared) {
-		let Some(playlist_player) = &mut self.playlist_player else {
-			return;
-		};
-
-		match &mut self.state {
-			PanelState::None(_) => (),
-			PanelState::Fade(state) => state.update(playlist_player, wgpu_shared),
 		}
 	}
 }

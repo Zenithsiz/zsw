@@ -31,7 +31,7 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{PanelName, Panels, PanelsRenderer, PanelsRendererLayouts},
+		panel::{PanelName, PanelShader, Panels, PanelsRenderer, PanelsRendererLayouts},
 		playlist::{PlaylistName, PlaylistPlayer, Playlists},
 		settings_menu::SettingsMenu,
 		shared::{Shared, SharedWindow},
@@ -41,7 +41,6 @@ use {
 	cgmath::Point2,
 	chrono::TimeDelta,
 	clap::Parser,
-	core::time::Duration,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::{Future, StreamExt, stream::FuturesUnordered},
@@ -288,24 +287,38 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		.context("Unable to load panel")?;
 	tracing::debug!("Loaded default panel {panel_name:?}");
 
-	// Finally spawn a task to load the playlist player
-	#[cloned(shared)]
-	self::spawn_task(format!("Load playlist for {panel_name:?}"), async move {
-		let playlist = shared
-			.playlists
-			.load(playlist_name.clone())
-			.await
-			.context("Unable to load playlist")?;
-		tracing::debug!("Loaded default playlist {playlist_name:?}");
+	let panel_shader = panel.lock().await.state.shader();
+	match panel_shader {
+		PanelShader::None { .. } => (),
+		// Spawn a task to load the playlist player for fade players
+		PanelShader::Fade(_) =>
+			_ = #[cloned(shared)]
+			self::spawn_task(format!("Load playlist for {panel_name:?}"), async move {
+				let playlist = shared
+					.playlists
+					.load(playlist_name.clone())
+					.await
+					.context("Unable to load playlist")?;
+				tracing::debug!("Loaded default playlist {playlist_name:?}");
 
-		let playlist_player = PlaylistPlayer::new(&playlist).await;
+				let playlist_player = PlaylistPlayer::new(&playlist).await;
 
-		let mut panel = panel.lock().await;
-		panel.playlist_player = Some(playlist_player);
-		tracing::debug!("Loaded default panel playlist player {panel_name:?}");
+				let mut panel = panel.lock().await;
+				#[expect(
+					clippy::match_wildcard_for_single_variants,
+					reason = "We only care about matching with a specific variant"
+				)]
+				match &mut panel.state {
+					panel::PanelState::Fade(panel_state) => {
+						panel_state.set_playlist_player(playlist_player);
+						tracing::debug!("Loaded default panel playlist player {panel_name:?}");
+					},
+					_ => tracing::warn!("Panel {panel_name:?} changed shader while loading default playlist"),
+				}
 
-		Ok(())
-	})?;
+				Ok(())
+			})?,
+	}
 
 	Ok(())
 }
@@ -447,28 +460,34 @@ async fn paint_egui(
 				(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
 					input.pointer.button_clicked(egui::PointerButton::Middle)
 			}) {
-				panel.skip(shared.wgpu);
+				match &mut panel.state {
+					panel::PanelState::None(_) => (),
+					panel::PanelState::Fade(state) => state.skip(shared.wgpu),
+				}
 				break;
 			}
 
 			// Scroll panels
 			let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
 			if scroll_delta != 0.0 {
-				// TODO: Make this "speed" configurable
-				// TODO: Perform the conversion better without going through nanos
-				let speed = 1.0 / 1000.0;
-				let time_delta_abs = match &panel.state {
-					panel::PanelState::None(_) => Duration::ZERO,
-					panel::PanelState::Fade(state) => state.duration().mul_f32(scroll_delta.abs() * speed),
-				};
-				let time_delta_abs = TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
-				let time_delta = match scroll_delta.is_sign_positive() {
-					true => -time_delta_abs,
-					false => time_delta_abs,
-				};
+				match &mut panel.state {
+					panel::PanelState::None(_) => (),
+					panel::PanelState::Fade(state) => {
+						// TODO: Make this "speed" configurable
+						// TODO: Perform the conversion better without going through nanos
+						let speed = 1.0 / 1000.0;
+						let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
+						let time_delta_abs =
+							TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
+						let time_delta = match scroll_delta.is_sign_positive() {
+							true => -time_delta_abs,
+							false => time_delta_abs,
+						};
 
-				panel.step(shared.wgpu, time_delta);
-				break;
+						state.step(shared.wgpu, time_delta);
+						break;
+					},
+				}
 			}
 		}
 

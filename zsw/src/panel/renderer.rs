@@ -170,7 +170,10 @@ impl PanelsRenderer {
 			let panel = &mut *panel;
 
 			// Update the panel before drawing it
-			panel.update(wgpu_shared);
+			match &mut panel.state {
+				PanelState::None(_) => (),
+				PanelState::Fade(state) => state.update(wgpu_shared),
+			}
 
 			// If the panel images are empty, there's no sense in rendering it either
 			let are_images_empty = match &panel.state {

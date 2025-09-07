@@ -68,8 +68,11 @@ pub struct PanelFadeState {
 	/// Fade duration
 	fade_duration: Duration,
 
-	/// Images, if loaded
+	/// Images
 	images: PanelImages,
+
+	/// Playlist player
+	playlist_player: Option<PlaylistPlayer>,
 }
 
 impl PanelFadeState {
@@ -82,6 +85,7 @@ impl PanelFadeState {
 			duration,
 			fade_duration,
 			images: PanelImages::new(),
+			playlist_player: None,
 		}
 	}
 
@@ -166,6 +170,16 @@ impl PanelFadeState {
 		&mut self.images
 	}
 
+	/// Returns the panel playlist player
+	pub fn playlist_player(&self) -> Option<&PlaylistPlayer> {
+		self.playlist_player.as_ref()
+	}
+
+	/// Sets the playlist player
+	pub fn set_playlist_player(&mut self, playlist_player: PlaylistPlayer) {
+		self.playlist_player = Some(playlist_player);
+	}
+
 	/// Returns if paused
 	pub fn is_paused(&self) -> bool {
 		self.paused
@@ -203,7 +217,11 @@ impl PanelFadeState {
 	/// Skips to the next image.
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn skip(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) {
+	pub fn skip(&mut self, wgpu_shared: &WgpuShared) {
+		let Some(playlist_player) = &mut self.playlist_player else {
+			return;
+		};
+
 		self.progress = match self.images.step_next(playlist_player, wgpu_shared) {
 			Ok(()) => self.fade_duration,
 			Err(()) => self.max_progress(),
@@ -213,7 +231,11 @@ impl PanelFadeState {
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn step(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared, delta: TimeDelta) {
+	pub fn step(&mut self, wgpu_shared: &WgpuShared, delta: TimeDelta) {
+		let Some(playlist_player) = &mut self.playlist_player else {
+			return;
+		};
+
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
 			true => Some(self.progress.saturating_add(delta_abs)),
@@ -266,7 +288,11 @@ impl PanelFadeState {
 	/// Updates this panel's state using the current time as a delta
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn update(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) {
+	pub fn update(&mut self, wgpu_shared: &WgpuShared) {
+		let Some(playlist_player) = &mut self.playlist_player else {
+			return;
+		};
+
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
 		self.images.load_missing(playlist_player, wgpu_shared);
@@ -283,7 +309,7 @@ impl PanelFadeState {
 		//       the other has updated.
 		let delta = self.update_delta();
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
-		self.step(playlist_player, wgpu_shared, delta);
+		self.step(wgpu_shared, delta);
 	}
 }
 
