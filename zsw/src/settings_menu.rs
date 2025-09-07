@@ -86,9 +86,9 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 		let mut panel = panel.lock().block_on();
 		let panel = &mut *panel;
 
-		let mut name = egui::WidgetText::from(panel.name().to_string());
+		let mut name = egui::WidgetText::from(panel.name.to_string());
 		if panel
-			.geometries()
+			.geometries
 			.iter()
 			.all(|geometry| shared_window.monitor_geometry.intersection(geometry.geometry).is_none())
 		{
@@ -97,13 +97,13 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 		ui.collapsing(name, |ui| {
 			{
-				let mut is_paused = panel.state().is_paused();
+				let mut is_paused = panel.state.is_paused();
 				ui.checkbox(&mut is_paused, "Paused");
-				panel.state_mut().set_paused(is_paused);
+				panel.state.set_paused(is_paused);
 			}
 
 			ui.collapsing("Geometries", |ui| {
-				for (geometry_idx, geometry) in panel.geometries_mut().iter_mut().enumerate() {
+				for (geometry_idx, geometry) in panel.geometries.iter_mut().enumerate() {
 					ui.horizontal(|ui| {
 						let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
 						if shared_window.monitor_geometry.intersection(geometry.geometry).is_none() {
@@ -122,28 +122,28 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 				// Note: We only allow up until the duration - 1 so that you don't get stuck
 				//       skipping images when you hold it at the max value
 				// TODO: This max needs to be `duration - min_frame_duration` to not skip ahead.
-				let max = panel.state().duration().mul_f32(0.99);
-				let mut progress = panel.state().progress();
+				let max = panel.state.duration().mul_f32(0.99);
+				let mut progress = panel.state.progress();
 				self::draw_duration(ui, &mut progress, Duration::ZERO..=max);
-				panel.state_mut().set_progress(progress);
+				panel.state.set_progress(progress);
 			});
 
 			ui.horizontal(|ui| {
 				ui.label("Fade Duration");
 				let min = Duration::ZERO;
-				let max = panel.state().duration() / 2;
+				let max = panel.state.duration() / 2;
 
-				let mut fade_duration = panel.state().fade_duration();
+				let mut fade_duration = panel.state.fade_duration();
 				self::draw_duration(ui, &mut fade_duration, min..=max);
-				panel.state_mut().set_fade_duration(fade_duration);
+				panel.state.set_fade_duration(fade_duration);
 			});
 
 			ui.horizontal(|ui| {
 				ui.label("Duration");
 
-				let mut duration = panel.state().duration();
+				let mut duration = panel.state.duration();
 				self::draw_duration(ui, &mut duration, Duration::ZERO..=Duration::from_secs_f32(180.0));
-				panel.state_mut().set_duration(duration);
+				panel.state.set_duration(duration);
 			});
 
 			ui.horizontal(|ui| {
@@ -155,18 +155,18 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 
 			ui.collapsing("Images", |ui| {
 				ui.collapsing("Previous", |ui| {
-					self::draw_panel_image(ui, &mut panel.state_mut().images_mut().prev);
+					self::draw_panel_image(ui, &mut panel.state.images_mut().prev);
 				});
 				ui.collapsing("Current", |ui| {
-					self::draw_panel_image(ui, &mut panel.state_mut().images_mut().cur);
+					self::draw_panel_image(ui, &mut panel.state.images_mut().cur);
 				});
 				ui.collapsing("Next", |ui| {
-					self::draw_panel_image(ui, &mut panel.state_mut().images_mut().next);
+					self::draw_panel_image(ui, &mut panel.state.images_mut().next);
 				});
 			});
 
 			ui.collapsing("Playlist player", |ui| {
-				let Some(playlist_player) = panel.playlist_player() else {
+				let Some(playlist_player) = &panel.playlist_player else {
 					ui.weak("Not loaded");
 					return;
 				};
@@ -194,7 +194,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			});
 
 			ui.collapsing("Shader", |ui| {
-				self::draw_shader_select(ui, panel.state_mut());
+				self::draw_shader_select(ui, &mut panel.state);
 			});
 		});
 	}

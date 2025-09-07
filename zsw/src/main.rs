@@ -300,7 +300,7 @@ async fn load_default_panel(default_panel: &config::ConfigPanel, shared: &Arc<Sh
 		let playlist_player = PlaylistPlayer::new(&playlist).await;
 
 		let mut panel = panel.lock().await;
-		panel.set_playlist_player(playlist_player);
+		panel.playlist_player = Some(playlist_player);
 		tracing::debug!("Loaded default panel playlist player {panel_name:?}");
 
 		Ok(())
@@ -424,7 +424,7 @@ async fn paint_egui(
 
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_area() ||
-				!panel.geometries().iter().any(|geometry| {
+				!panel.geometries.iter().any(|geometry| {
 					geometry
 						.geometry_on(&shared_window.monitor_geometry)
 						.contains(cursor_pos)
@@ -434,7 +434,7 @@ async fn paint_egui(
 
 			// Pause any double-clicked panels
 			if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
-				panel.state_mut().toggle_paused();
+				panel.state.toggle_paused();
 				break;
 			}
 
@@ -453,7 +453,7 @@ async fn paint_egui(
 				// TODO: Make this "speed" configurable
 				// TODO: Perform the conversion better without going through nanos
 				let speed = 1.0 / 1000.0;
-				let time_delta_abs = panel.state().duration().mul_f32(scroll_delta.abs() * speed);
+				let time_delta_abs = panel.state.duration().mul_f32(scroll_delta.abs() * speed);
 				let time_delta_abs = TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
 				let time_delta = match scroll_delta.is_sign_positive() {
 					true => -time_delta_abs,

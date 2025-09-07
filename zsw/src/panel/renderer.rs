@@ -169,7 +169,7 @@ impl PanelsRenderer {
 
 
 			// If the panel images are empty, there's no sense in rendering it either
-			if panel.state().images().is_empty() {
+			if panel.state.images().is_empty() {
 				continue;
 			}
 
