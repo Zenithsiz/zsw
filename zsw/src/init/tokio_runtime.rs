@@ -2,12 +2,13 @@
 
 // Imports
 use {
+	app_error::Context,
 	std::{
 		num::NonZeroUsize,
 		sync::atomic::{self, AtomicUsize},
 		thread,
 	},
-	app_error::Context, zsw_util::AppError,
+	zsw_util::AppError,
 };
 
 /// Creates the tokio runtime

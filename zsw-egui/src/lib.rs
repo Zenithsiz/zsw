@@ -5,13 +5,14 @@
 
 // Imports
 use {
+	app_error::Context,
 	egui::epaint,
 	std::{fmt, sync::Arc},
 	tokio::sync::Mutex,
 	tracing as _,
 	winit::window::Window,
-	zsw_wgpu::{FrameRender, WgpuRenderer, Wgpu},
-	app_error::Context, zsw_util::AppError,
+	zsw_util::AppError,
+	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
 
 /// Egui Renderer
@@ -31,8 +32,7 @@ impl EguiRenderer {
 	#[must_use]
 	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu: &Wgpu) -> Self {
 		// Create the egui render pass
-		let render_pass =
-			egui_wgpu_backend::RenderPass::new(&wgpu.device, wgpu_renderer.surface_config().format, 1);
+		let render_pass = egui_wgpu_backend::RenderPass::new(&wgpu.device, wgpu_renderer.surface_config().format, 1);
 
 		Self { render_pass }
 	}

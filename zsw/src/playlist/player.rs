@@ -3,7 +3,6 @@
 // Imports
 use {
 	super::{Playlist, PlaylistItemKind},
-	zsw_util::AppError,
 	futures::{StreamExt, stream::FuturesUnordered},
 	rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
 	std::{
@@ -12,7 +11,7 @@ use {
 		sync::Arc,
 	},
 	tokio::{fs, sync::Mutex},
-	zsw_util::{UnwrapOrReturnExt, WalkDir},
+	zsw_util::{AppError, UnwrapOrReturnExt, WalkDir},
 };
 
 /// Playlist player
