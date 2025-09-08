@@ -22,7 +22,7 @@ pub struct Shared {
 	pub last_resize: AtomicCell<Option<Resize>>,
 	pub cursor_pos:  AtomicCell<PhysicalPosition<f64>>,
 
-	pub wgpu:                    &'static Wgpu,
+	pub wgpu:                    Wgpu,
 	pub panels_renderer_layouts: PanelsRendererLayouts,
 
 	pub panels:    Panels,

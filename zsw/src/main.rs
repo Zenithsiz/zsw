@@ -56,7 +56,7 @@ use {
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
 	zsw_util::{Rect, TokioTaskBlockOn},
-	zsw_wgpu::WgpuRenderer,
+	zsw_wgpu::{Wgpu, WgpuRenderer},
 	zutil_cloned::cloned,
 };
 
@@ -168,8 +168,8 @@ impl WinitApp {
 		config_dirs: Arc<ConfigDirs>,
 		event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
-		let wgpu = zsw_wgpu::get_or_create().await.context("Unable to initialize wgpu")?;
-		let panels_renderer_layouts = PanelsRendererLayouts::new(wgpu);
+		let wgpu = Wgpu::new().await.context("Unable to initialize wgpu")?;
+		let panels_renderer_layouts = PanelsRendererLayouts::new(&wgpu);
 
 		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
 		let panels = Panels::new(config_dirs.panels().to_path_buf());
@@ -204,14 +204,14 @@ impl WinitApp {
 		for app_window in windows {
 			let window = Arc::new(app_window.window);
 			let wgpu_renderer =
-				WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu).context("Unable to create wgpu renderer")?;
+				WgpuRenderer::new(Arc::clone(&window), &self.shared.wgpu).context("Unable to create wgpu renderer")?;
 
 			let msaa_samples = 4;
-			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu, msaa_samples)
+			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, &self.shared.wgpu, msaa_samples)
 				.context("Unable to create panels renderer")?;
 			let egui_event_handler = EguiEventHandler::new(&window);
 			let egui_painter = EguiPainter::new(&egui_event_handler);
-			let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
+			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
 			let settings_menu = SettingsMenu::new();
 
 			#[cloned(shared = self.shared, window)]
@@ -329,7 +329,7 @@ async fn renderer(
 
 		// Start rendering
 		let mut frame = wgpu_renderer
-			.start_render(shared.wgpu)
+			.start_render(&shared.wgpu)
 			.context("Unable to start frame")?;
 
 		// Render panels
@@ -337,7 +337,7 @@ async fn renderer(
 			.render(
 				&mut frame,
 				&wgpu_renderer,
-				shared.wgpu,
+				&shared.wgpu,
 				&shared.panels_renderer_layouts,
 				window_geometry,
 				window,
@@ -348,22 +348,22 @@ async fn renderer(
 
 		// Render egui
 		egui_renderer
-			.render_egui(&mut frame, window, shared.wgpu, &egui_paint_jobs, egui_textures_delta)
+			.render_egui(&mut frame, window, &shared.wgpu, &egui_paint_jobs, egui_textures_delta)
 			.context("Unable to render egui")?;
 
 		// Finish the frame
-		if frame.finish(shared.wgpu) {
+		if frame.finish(&shared.wgpu) {
 			wgpu_renderer
-				.reconfigure(shared.wgpu)
+				.reconfigure(&shared.wgpu)
 				.context("Unable to reconfigure wgpu")?;
 		}
 
 		// Resize if we need to
 		if let Some(resize) = shared.last_resize.swap(None) {
 			wgpu_renderer
-				.resize(shared.wgpu, resize.size)
+				.resize(&shared.wgpu, resize.size)
 				.context("Unable to resize wgpu")?;
-			panels_renderer.resize(&wgpu_renderer, shared.wgpu, resize.size);
+			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, resize.size);
 		}
 	}
 }
@@ -385,7 +385,7 @@ async fn paint_egui(
 		tokio::task::block_in_place(|| {
 			settings_menu.draw(
 				ctx,
-				shared.wgpu,
+				&shared.wgpu,
 				&shared.panels,
 				&shared.playlists,
 				&shared.event_loop_proxy,
@@ -426,7 +426,7 @@ async fn paint_egui(
 			}) {
 				match &mut panel.state {
 					panel::PanelState::None(_) => (),
-					panel::PanelState::Fade(state) => state.skip(shared.wgpu),
+					panel::PanelState::Fade(state) => state.skip(&shared.wgpu),
 				}
 				break;
 			}
@@ -448,7 +448,7 @@ async fn paint_egui(
 							false => time_delta_abs,
 						};
 
-						state.step(shared.wgpu, time_delta);
+						state.step(&shared.wgpu, time_delta);
 						break;
 					},
 				}

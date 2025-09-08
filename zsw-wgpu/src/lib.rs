@@ -10,7 +10,11 @@ mod renderer;
 pub use renderer::{FrameRender, WgpuRenderer};
 
 // Imports
-use {app_error::Context, tokio::sync::OnceCell, zsw_util::AppError};
+use {
+	app_error::Context,
+	core::sync::atomic::{self, AtomicBool},
+	zsw_util::AppError,
+};
 
 /// Wgpu
 #[derive(Debug)]
@@ -27,6 +31,8 @@ pub struct Wgpu {
 	/// Queue
 	pub queue: wgpu::Queue,
 
+	// TODO: Move these out of here elsewhere? They're not necessary for wgpu, just
+	//       for the panels.
 	/// Empty texture
 	pub empty_texture: wgpu::Texture,
 
@@ -34,15 +40,18 @@ pub struct Wgpu {
 	pub empty_texture_view: wgpu::TextureView,
 }
 
-/// Wgpu
-// TODO: Is it a good idea to make this a global?
-//       Realistically, we can only have one per process anyway,
-//       so this models that correctly, but it might be bad API.
-static WGPU: OnceCell<Wgpu> = OnceCell::const_new();
+impl Wgpu {
+	/// Creates the wgpu.
+	///
+	/// # Panics
+	/// Panics if called twice.
+	pub async fn new() -> Result<Self, AppError> {
+		static ALREADY_CREATED: AtomicBool = AtomicBool::new(false);
+		assert!(
+			!ALREADY_CREATED.swap(true, atomic::Ordering::AcqRel),
+			"Cannot create a second wgpu instance"
+		);
 
-/// Gets or creates the wgpu
-pub async fn get_or_create() -> Result<&'static Wgpu, AppError> {
-	WGPU.get_or_try_init(async || {
 		let instance = self::create_instance().context("Unable to create instance")?;
 		let adapter = self::create_adapter(&instance)
 			.await
@@ -51,7 +60,7 @@ pub async fn get_or_create() -> Result<&'static Wgpu, AppError> {
 
 		let (empty_texture, empty_texture_view) = self::create_empty_image_texture(&device);
 
-		Ok::<_, AppError>(Wgpu {
+		Ok::<_, AppError>(Self {
 			instance,
 			adapter,
 			device,
@@ -59,8 +68,7 @@ pub async fn get_or_create() -> Result<&'static Wgpu, AppError> {
 			empty_texture,
 			empty_texture_view,
 		})
-	})
-	.await
+	}
 }
 
 /// Creates the device
