@@ -106,17 +106,14 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
-	#[expect(
-		clippy::too_many_lines,
-		reason = "TODO: Split it up"
-	)]
+	#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 	pub async fn render(
 		&mut self,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,
-		window_geometry: &Rect<i32, u32>,
+		window_geometry: Rect<i32, u32>,
 		window: &Window,
 		panels: &Panels,
 	) -> Result<(), AppError> {
@@ -264,7 +261,7 @@ impl PanelsRenderer {
 		layouts: &PanelsRendererLayouts,
 		surface_size: PhysicalSize<u32>,
 		panel_state: &PanelState,
-		window_geometry: &Rect<i32, u32>,
+		window_geometry: Rect<i32, u32>,
 		window: &Window,
 		geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,

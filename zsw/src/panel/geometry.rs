@@ -41,7 +41,7 @@ impl PanelGeometry {
 	}
 
 	/// Returns this geometry's rectangle for a certain window
-	pub fn geometry_on(&self, window_geometry: &Rect<i32, u32>) -> Rect<i32, u32> {
+	pub fn geometry_on(&self, window_geometry: Rect<i32, u32>) -> Rect<i32, u32> {
 		let mut geometry = self.geometry;
 		geometry.pos -= Vector2::new(window_geometry.pos.x, window_geometry.pos.y);
 
@@ -52,7 +52,7 @@ impl PanelGeometry {
 	// Note: This matrix simply goes from a geometry in physical units
 	//       onto shader coordinates.
 	#[must_use]
-	pub fn pos_matrix(&self, window_geometry: &Rect<i32, u32>, surface_size: PhysicalSize<u32>) -> Matrix4<f32> {
+	pub fn pos_matrix(&self, window_geometry: Rect<i32, u32>, surface_size: PhysicalSize<u32>) -> Matrix4<f32> {
 		let geometry = self.geometry_on(window_geometry);
 
 		let x_scale = geometry.size[0] as f32 / surface_size.width as f32;

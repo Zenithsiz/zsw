@@ -208,8 +208,6 @@ impl WinitApp {
 			let wgpu_renderer =
 				WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu).context("Unable to create wgpu renderer")?;
 
-			let window_geometry = app_window.window_geometry;
-
 			let msaa_samples = 4;
 			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu, msaa_samples)
 				.context("Unable to create panels renderer")?;
@@ -223,7 +221,6 @@ impl WinitApp {
 				self::renderer(
 					&shared,
 					&window,
-					window_geometry,
 					wgpu_renderer,
 					panels_renderer,
 					egui_renderer,
@@ -311,7 +308,6 @@ where
 async fn renderer(
 	shared: &Shared,
 	window: &Window,
-	window_geometry: Rect<i32, u32>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -319,10 +315,13 @@ async fn renderer(
 	mut settings_menu: SettingsMenu,
 ) -> Result<(), AppError> {
 	loop {
+		// TODO: Only update this when we receive a move/resize event instead of querying each frame?
+		let window_geometry = self::window_geometry(window)?;
+
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
 		let (egui_paint_jobs, egui_textures_delta) =
-			match self::paint_egui(shared, window, window_geometry, &egui_painter, &mut settings_menu).await {
+			match self::paint_egui(shared, window, &egui_painter, &mut settings_menu, window_geometry).await {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {}", err.pretty());
@@ -342,7 +341,7 @@ async fn renderer(
 				&wgpu_renderer,
 				shared.wgpu,
 				&shared.panels_renderer_layouts,
-				&window_geometry,
+				window_geometry,
 				window,
 				&shared.panels,
 			)
@@ -375,15 +374,15 @@ async fn renderer(
 async fn paint_egui(
 	shared: &Shared,
 	window: &Window,
-	window_geometry: Rect<i32, u32>,
 	egui_painter: &EguiPainter,
 	settings_menu: &mut SettingsMenu,
+	window_geometry: Rect<i32, u32>,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
-	let full_output_fut = egui_painter.draw(window, async |ctx| {
-		// Adjust cursor pos to account for the scale factor
-		let scale_factor = window.scale_factor();
-		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
+	// Adjust cursor pos to account for the scale factor
+	let scale_factor = window.scale_factor();
+	let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
 
+	let full_output_fut = egui_painter.draw(window, async |ctx| {
 		// Draw the settings menu
 		tokio::task::block_in_place(|| {
 			settings_menu.draw(
@@ -408,7 +407,7 @@ async fn paint_egui(
 				!panel
 					.geometries
 					.iter()
-					.any(|geometry| geometry.geometry_on(&window_geometry).contains(cursor_pos))
+					.any(|geometry| geometry.geometry_on(window_geometry).contains(cursor_pos))
 			{
 				continue;
 			}
@@ -467,6 +466,16 @@ async fn paint_egui(
 	let textures_delta = full_output.textures_delta;
 
 	Ok((paint_jobs, textures_delta))
+}
+
+/// Gets the window geometry for a window
+fn window_geometry(window: &Window) -> Result<Rect<i32, u32>, AppError> {
+	let window_pos = window.inner_position().context("Unable to get window position")?;
+	let window_size = window.inner_size();
+	Ok(Rect {
+		pos:  cgmath::point2(window_pos.x, window_pos.y),
+		size: cgmath::vec2(window_size.width, window_size.height),
+	})
 }
 
 /// A resize
