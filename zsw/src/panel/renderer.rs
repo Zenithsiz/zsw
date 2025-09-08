@@ -168,7 +168,7 @@ impl PanelsRenderer {
 			// Update the panel before drawing it
 			match &mut panel.state {
 				PanelState::None(_) => (),
-				PanelState::Fade(state) => state.update(wgpu),
+				PanelState::Fade(state) => state.update(wgpu).await,
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either

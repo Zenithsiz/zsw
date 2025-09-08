@@ -6,9 +6,9 @@ use {
 	crate::playlist::{PlaylistName, PlaylistPlayer, Playlists},
 	app_error::Context,
 	chrono::TimeDelta,
-	core::time::Duration,
+	core::{ops::Deref, time::Duration},
+	futures::lock::Mutex,
 	std::{sync::Arc, time::Instant},
-	zsw_util::{AppError, Loadable, loadable::Loader},
 	zsw_wgpu::Wgpu,
 	zutil_cloned::cloned,
 };
@@ -78,13 +78,10 @@ pub struct PanelFadeState {
 	playlist: PlaylistName,
 
 	/// Playlist player
-	playlist_player: Loadable<Result<PlaylistPlayer, AppError>, PlaylistPlayerLoader>,
+	playlist_player: Arc<Mutex<PlaylistPlayer>>,
 }
 
-type PlaylistPlayerLoader = impl Loader<(), Result<PlaylistPlayer, AppError>>;
-
 impl PanelFadeState {
-	#[define_opaque(PlaylistPlayerLoader)]
 	pub fn new(
 		duration: Duration,
 		fade_duration: Duration,
@@ -92,22 +89,27 @@ impl PanelFadeState {
 		playlist: PlaylistName,
 		playlists: Arc<Playlists>,
 	) -> Self {
-		#[cloned(playlist)]
-		let playlist_player = Loadable::new(move || {
-			let playlist = playlist.clone();
-			let playlists = Arc::clone(&playlists);
-			async move {
-				let playlist = playlists
-					.load(playlist.clone())
-					.await
-					.context("Unable to load playlist")?;
-				tracing::debug!("Loaded default playlist {playlist:?}");
+		let playlist_player = Arc::new(Mutex::new(PlaylistPlayer::new()));
 
-				let playlist_player = PlaylistPlayer::new(&playlist).await;
+		#[cloned(playlist, playlist_player)]
+		let task_res = crate::spawn_task(format!("Populate panel {playlist:?} playlist"), async move {
+			let playlist = playlists
+				.load(playlist.clone())
+				.await
+				.context("Unable to load playlist")?;
+			tracing::debug!("Loaded default playlist {playlist:?}");
 
-				Ok(playlist_player)
-			}
+			playlist_player.lock().await.extend(&playlist).await;
+
+			Ok(())
 		});
+
+		if let Err(err) = task_res {
+			tracing::warn!(
+				"Unable to create task to populate panel {playlist:?} playlist: {}",
+				err.pretty()
+			);
+		}
 
 		Self {
 			paused: false,
@@ -209,8 +211,8 @@ impl PanelFadeState {
 	}
 
 	/// Returns the panel playlist player
-	pub fn playlist_player(&self) -> Option<&PlaylistPlayer> {
-		self.playlist_player.get().and_then(|res| res.as_ref().ok())
+	pub async fn playlist_player(&self) -> impl Deref<Target = PlaylistPlayer> {
+		self.playlist_player.lock().await
 	}
 
 	/// Returns if paused
@@ -248,26 +250,16 @@ impl PanelFadeState {
 	}
 
 	/// Skips to the next image.
-	///
-	/// If the playlist player isn't loaded, does nothing
-	pub fn skip(&mut self, wgpu: &Wgpu) {
-		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
-			return;
-		};
-
-		self.progress = match self.images.step_next(playlist_player, wgpu) {
+	pub async fn skip(&mut self, wgpu: &Wgpu) {
+		self.progress = match self.images.step_next(&mut *self.playlist_player.lock().await, wgpu) {
 			Ok(()) => self.fade_duration,
 			Err(()) => self.max_progress(),
 		}
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
-	///
-	/// If the playlist player isn't loaded, does nothing
-	pub fn step(&mut self, wgpu: &Wgpu, delta: TimeDelta) {
-		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
-			return;
-		};
+	pub async fn step(&mut self, wgpu: &Wgpu, delta: TimeDelta) {
+		let mut playlist_player = self.playlist_player.lock().await;
 
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
@@ -281,7 +273,7 @@ impl PanelFadeState {
 			Some(next_progress) => match next_progress.checked_sub(self.duration) {
 				// If we did, `next_progress` is our progress at the next image, so try
 				// to step to it.
-				Some(next_progress) => match self.images.step_next(playlist_player, wgpu) {
+				Some(next_progress) => match self.images.step_next(&mut playlist_player, wgpu) {
 					// If we successfully stepped to the next image, start at the next progress
 					// Note: If delta was big enough to overflow 2 durations, then cap it at the
 					//       max duration of the next image.
@@ -297,7 +289,7 @@ impl PanelFadeState {
 			},
 
 			// Otherwise, we underflowed, so try to step back
-			None => match self.images.step_prev(playlist_player, wgpu) {
+			None => match self.images.step_prev(&mut playlist_player, wgpu) {
 				// If we successfully stepped backwards, start at where we're supposed to:
 				Ok(()) => {
 					// Note: This branch is only taken when `delta` is negative, so we can always
@@ -319,16 +311,10 @@ impl PanelFadeState {
 	}
 
 	/// Updates this panel's state using the current time as a delta
-	///
-	/// If the playlist player isn't loaded, does nothing
-	pub fn update(&mut self, wgpu: &Wgpu) {
-		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
-			return;
-		};
-
+	pub async fn update(&mut self, wgpu: &Wgpu) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
-		self.images.load_missing(playlist_player, wgpu);
+		self.images.load_missing(&mut *self.playlist_player.lock().await, wgpu);
 
 		// If we're paused, don't update anything
 		if self.paused {
@@ -342,7 +328,7 @@ impl PanelFadeState {
 		//       the other has updated.
 		let delta = self.update_delta();
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
-		self.step(wgpu, delta);
+		self.step(wgpu, delta).await;
 	}
 }
 

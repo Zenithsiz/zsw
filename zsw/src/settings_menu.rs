@@ -190,7 +190,7 @@ fn draw_fade_panel_editor(
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			panel_state.skip(wgpu);
+			panel_state.skip(wgpu).block_on();
 		}
 	});
 
@@ -207,12 +207,9 @@ fn draw_fade_panel_editor(
 	});
 
 	ui.collapsing("Playlist", |ui| {
-		ui.label(format!("Playlist: {:?}", panel_state.playlist()));
+		let playlist_player = panel_state.playlist_player().block_on();
 
-		let Some(playlist_player) = panel_state.playlist_player() else {
-			ui.weak("Not loaded");
-			return;
-		};
+		ui.label(format!("Playlist: {:?}", panel_state.playlist()));
 
 		let row_height = ui.text_style_height(&egui::TextStyle::Body);
 

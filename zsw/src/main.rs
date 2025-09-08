@@ -426,7 +426,7 @@ async fn paint_egui(
 			}) {
 				match &mut panel.state {
 					panel::PanelState::None(_) => (),
-					panel::PanelState::Fade(state) => state.skip(&shared.wgpu),
+					panel::PanelState::Fade(state) => state.skip(&shared.wgpu).await,
 				}
 				break;
 			}
@@ -448,7 +448,7 @@ async fn paint_egui(
 							false => time_delta_abs,
 						};
 
-						state.step(&shared.wgpu, time_delta);
+						state.step(&shared.wgpu, time_delta).await;
 						break;
 					},
 				}

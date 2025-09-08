@@ -34,10 +34,21 @@ pub struct PlaylistPlayer {
 }
 
 impl PlaylistPlayer {
-	/// Creates a new player from a playlist
-	pub async fn new(playlist: &Playlist) -> Self {
-		let all_items = Mutex::new(HashSet::new());
+	/// Creates a new, empty, player
+	pub fn new() -> Self {
+		Self {
+			all_items:     HashSet::new(),
+			cur_items:     VecDeque::new(),
+			max_old_items: 100,
+			cur_pos:       0,
+			rng:           StdRng::from_os_rng(),
+		}
+	}
 
+	/// Extends this player with a playlist
+	// TODO: Move this elsewhere so we can lock only when inserting
+	pub async fn extend(&mut self, playlist: &Playlist) {
+		let items = Mutex::new(vec![]);
 		playlist
 			.items
 			.iter()
@@ -88,7 +99,7 @@ impl PlaylistPlayer {
 								}
 
 								match tokio::fs::canonicalize(&path).await {
-									Ok(entry) => _ = all_items.lock().await.insert(entry.into()),
+									Ok(entry) => items.lock().await.push(entry.into()),
 									Err(err) => {
 										let err = AppError::new(&err);
 										tracing::warn!("Unable to read playlist entry {path:?}: {}", err.pretty());
@@ -101,7 +112,7 @@ impl PlaylistPlayer {
 							.await,
 
 					PlaylistItemKind::File { ref path } => match tokio::fs::canonicalize(path).await {
-						Ok(path) => _ = all_items.lock().await.insert(path.into()),
+						Ok(path) => items.lock().await.push(path.into()),
 						Err(err) => {
 							let err = AppError::new(&err);
 							tracing::warn!("Unable to canonicalize playlist entry {path:?}: {}", err.pretty());
@@ -113,13 +124,7 @@ impl PlaylistPlayer {
 			.collect::<()>()
 			.await;
 
-		Self {
-			all_items:     all_items.into_inner(),
-			cur_items:     VecDeque::new(),
-			max_old_items: 100,
-			cur_pos:       0,
-			rng:           StdRng::from_os_rng(),
-		}
+		self.all_items.extend(items.into_inner());
 	}
 
 	/// Returns the previous position in the playlist
