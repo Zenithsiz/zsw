@@ -12,7 +12,7 @@ use {
 	},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
-	std::path::Path,
+	std::{path::Path, sync::Arc},
 	zsw_util::{AppError, Rect, TokioTaskBlockOn},
 };
 
@@ -104,7 +104,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			}
 
 			ui.collapsing("Shader", |ui| {
-				self::draw_shader_select(ui, &mut panel.state);
+				self::draw_shader_select(ui, shared, &mut panel.state);
 			});
 		});
 	}
@@ -171,7 +171,7 @@ fn draw_fade_panel_editor(
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			panel_state.skip(shared.wgpu, &shared.playlists);
+			panel_state.skip(shared.wgpu);
 		}
 	});
 
@@ -262,7 +262,7 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
+fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, state: &mut PanelState) {
 	egui::ComboBox::from_id_salt("Shader selection menu")
 		.selected_text(match state {
 			PanelState::None(_) => "None",
@@ -270,11 +270,12 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 		})
 		.show_ui(ui, |ui| {
 			// TODO: Review these defaults?
-			let create_shaders: [(_, _, fn() -> PanelState); _] = [
-				("None", matches!(state, PanelState::None(_)), || {
+			type CreateShader = fn(&Shared) -> PanelState;
+			let create_shaders: [(_, _, CreateShader); _] = [
+				("None", matches!(state, PanelState::None(_)), |_| {
 					PanelState::None(PanelNoneState::new([0.0; 4]))
 				}),
-				("Fade", matches!(state, PanelState::Fade(_)), || {
+				("Fade", matches!(state, PanelState::Fade(_)), |shared| {
 					// TODO: We don't have a playlist to pass here, so should we make
 					//       the playlist optional and have the user later change it?
 					PanelState::Fade(PanelFadeState::new(
@@ -282,13 +283,14 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 						Duration::from_secs(5),
 						PanelShaderFade::Out { strength: 1.5 },
 						PlaylistName::from("none".to_owned()),
+						Arc::clone(&shared.playlists),
 					))
 				}),
 			];
 
 			for (name, checked, create_shader) in create_shaders {
 				if ui.selectable_label(checked, name).clicked() && !checked {
-					*state = create_shader();
+					*state = create_shader(shared);
 				}
 			}
 		});

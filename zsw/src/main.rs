@@ -276,7 +276,7 @@ async fn load_default_panel(default_panel: &str, shared: &Arc<Shared>) -> Result
 
 	_ = shared
 		.panels
-		.load(panel_name.clone())
+		.load(panel_name.clone(), &shared.playlists)
 		.await
 		.context("Unable to load panel")?;
 	tracing::debug!("Loaded default panel {panel_name:?}");
@@ -344,7 +344,6 @@ async fn renderer(
 				&mut frame,
 				&wgpu_renderer,
 				shared.wgpu,
-				&shared.playlists,
 				&shared.panels_renderer_layouts,
 				&shared_window.monitor_geometry,
 				&shared_window.window,
@@ -424,7 +423,7 @@ async fn paint_egui(
 			}) {
 				match &mut panel.state {
 					panel::PanelState::None(_) => (),
-					panel::PanelState::Fade(state) => state.skip(shared.wgpu, &shared.playlists),
+					panel::PanelState::Fade(state) => state.skip(shared.wgpu),
 				}
 				break;
 			}
@@ -446,7 +445,7 @@ async fn paint_egui(
 							false => time_delta_abs,
 						};
 
-						state.step(shared.wgpu, &shared.playlists, time_delta);
+						state.step(shared.wgpu, time_delta);
 						break;
 					},
 				}

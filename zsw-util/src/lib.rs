@@ -16,10 +16,14 @@
 	yeet_expr,
 	const_trait_impl,
 	nonpoison_mutex,
-	sync_nonpoison
+	sync_nonpoison,
+	async_fn_traits,
+	trait_alias,
+	unboxed_closures
 )]
 
 // Modules
+pub mod loadable;
 mod rect;
 mod tuple_collect_res;
 pub mod unwrap_or_return;
@@ -27,6 +31,7 @@ pub mod walk_dir;
 
 // Exports
 pub use {
+	loadable::Loadable,
 	rect::Rect,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
 	unwrap_or_return::{UnwrapOrReturn, UnwrapOrReturnExt},

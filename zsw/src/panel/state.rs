@@ -6,10 +6,9 @@ use {
 	crate::playlist::{PlaylistName, PlaylistPlayer, Playlists},
 	app_error::Context,
 	chrono::TimeDelta,
-	core::{task::Poll, time::Duration},
-	futures::TryFutureExt,
+	core::time::Duration,
 	std::{sync::Arc, time::Instant},
-	zsw_util::AppError,
+	zsw_util::{AppError, Loadable, loadable::Loader},
 	zsw_wgpu::WgpuShared,
 	zutil_cloned::cloned,
 };
@@ -79,14 +78,37 @@ pub struct PanelFadeState {
 	playlist: PlaylistName,
 
 	/// Playlist player
-	playlist_player: Option<Result<PlaylistPlayer, AppError>>,
-
-	/// Load playlist task
-	load_playlist_task: Option<tokio::task::JoinHandle<Result<PlaylistPlayer, AppError>>>,
+	playlist_player: Loadable<Result<PlaylistPlayer, AppError>, PlaylistPlayerLoader>,
 }
 
+type PlaylistPlayerLoader = impl Loader<Result<PlaylistPlayer, AppError>>;
+
 impl PanelFadeState {
-	pub fn new(duration: Duration, fade_duration: Duration, shader: PanelShaderFade, playlist: PlaylistName) -> Self {
+	#[define_opaque(PlaylistPlayerLoader)]
+	pub fn new(
+		duration: Duration,
+		fade_duration: Duration,
+		shader: PanelShaderFade,
+		playlist: PlaylistName,
+		playlists: Arc<Playlists>,
+	) -> Self {
+		#[cloned(playlist)]
+		let playlist_player = Loadable::new(move || {
+			let playlist = playlist.clone();
+			let playlists = Arc::clone(&playlists);
+			async move {
+				let playlist = playlists
+					.load(playlist.clone())
+					.await
+					.context("Unable to load playlist")?;
+				tracing::debug!("Loaded default playlist {playlist:?}");
+
+				let playlist_player = PlaylistPlayer::new(&playlist).await;
+
+				Ok(playlist_player)
+			}
+		});
+
 		Self {
 			paused: false,
 			shader,
@@ -96,8 +118,7 @@ impl PanelFadeState {
 			fade_duration,
 			images: PanelImages::new(),
 			playlist,
-			playlist_player: None,
-			load_playlist_task: None,
+			playlist_player,
 		}
 	}
 
@@ -187,55 +208,9 @@ impl PanelFadeState {
 		self.playlist.clone()
 	}
 
-	/// Starts or continues loading the playlist
-	pub fn load_playlist(&mut self, playlists: &Arc<Playlists>) {
-		// If we're loaded a playlist (successfully or not, quit until it's reset)
-		if self.playlist_player.is_some() {
-			return;
-		}
-
-		// Otherwise, create or continue the playlist task
-		match &mut self.load_playlist_task {
-			Some(task) => {
-				// Otherwise, try to get the value
-				let Poll::Ready(res) =
-					task.try_poll_unpin(&mut std::task::Context::from_waker(std::task::Waker::noop()))
-				else {
-					return;
-				};
-				self.load_playlist_task = None;
-
-				self.playlist_player = Some(match res.context("Load task was cancelled").flatten() {
-					Ok(playlist_player) => Ok(playlist_player),
-					Err(err) => {
-						// TODO: If we get here, should we set some flag to avoid repeatedly loading
-						//       the playlist?
-						tracing::error!("Unable to load playlist {:?}: {}", self.playlist, err.pretty());
-						Err(err)
-					},
-				});
-			},
-			None =>
-				self.load_playlist_task = Some(
-					#[cloned(playlist_name = self.playlist, playlists)]
-					tokio::spawn(async move {
-						let playlist = playlists
-							.load(playlist_name.clone())
-							.await
-							.context("Unable to load playlist")?;
-						tracing::debug!("Loaded default playlist {playlist_name:?}");
-
-						let playlist_player = PlaylistPlayer::new(&playlist).await;
-
-						Ok(playlist_player)
-					}),
-				),
-		}
-	}
-
 	/// Returns the panel playlist player
 	pub fn playlist_player(&self) -> Option<&PlaylistPlayer> {
-		self.playlist_player.as_ref().and_then(|res| res.as_ref().ok())
+		self.playlist_player.get().and_then(|res| res.as_ref().ok())
 	}
 
 	/// Returns if paused
@@ -275,9 +250,8 @@ impl PanelFadeState {
 	/// Skips to the next image.
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn skip(&mut self, wgpu_shared: &WgpuShared, playlists: &Arc<Playlists>) {
-		let Some(Ok(playlist_player)) = &mut self.playlist_player else {
-			self.load_playlist(playlists);
+	pub fn skip(&mut self, wgpu_shared: &WgpuShared) {
+		let Some(Ok(playlist_player)) = self.playlist_player.try_load() else {
 			return;
 		};
 
@@ -290,9 +264,8 @@ impl PanelFadeState {
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn step(&mut self, wgpu_shared: &WgpuShared, playlists: &Arc<Playlists>, delta: TimeDelta) {
-		let Some(Ok(playlist_player)) = &mut self.playlist_player else {
-			self.load_playlist(playlists);
+	pub fn step(&mut self, wgpu_shared: &WgpuShared, delta: TimeDelta) {
+		let Some(Ok(playlist_player)) = self.playlist_player.try_load() else {
 			return;
 		};
 
@@ -348,9 +321,8 @@ impl PanelFadeState {
 	/// Updates this panel's state using the current time as a delta
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn update(&mut self, wgpu_shared: &WgpuShared, playlists: &Arc<Playlists>) {
-		let Some(Ok(playlist_player)) = &mut self.playlist_player else {
-			self.load_playlist(playlists);
+	pub fn update(&mut self, wgpu_shared: &WgpuShared) {
+		let Some(Ok(playlist_player)) = self.playlist_player.try_load() else {
 			return;
 		};
 
@@ -370,7 +342,7 @@ impl PanelFadeState {
 		//       the other has updated.
 		let delta = self.update_delta();
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
-		self.step(wgpu_shared, playlists, delta);
+		self.step(wgpu_shared, delta);
 	}
 }
 
