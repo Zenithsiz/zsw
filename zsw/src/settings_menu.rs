@@ -38,7 +38,6 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	#[expect(clippy::too_many_arguments, reason = "TODO: Merge some of these")]
 	pub fn draw(
 		&mut self,
 		ctx: &egui::Context,

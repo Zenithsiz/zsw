@@ -108,8 +108,7 @@ impl PanelsRenderer {
 	/// Renders a panel
 	#[expect(
 		clippy::too_many_lines,
-		clippy::too_many_arguments,
-		reason = "TODO: Merge some of these"
+		reason = "TODO: Split it up"
 	)]
 	pub async fn render(
 		&mut self,
@@ -260,7 +259,6 @@ impl PanelsRenderer {
 	}
 
 	/// Writes and binds the uniforms
-	#[expect(clippy::too_many_arguments, reason = "TODO: Merge some of these")]
 	pub fn write_bind_uniforms(
 		wgpu_shared: &WgpuShared,
 		layouts: &PanelsRendererLayouts,

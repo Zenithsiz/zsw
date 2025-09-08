@@ -15,7 +15,7 @@ use {
 #[derive(Debug)]
 pub struct AppWindow {
 	/// Monitor name
-	pub monitor_name: String,
+	pub _monitor_name: String,
 
 	/// Monitor geometry
 	pub monitor_geometry: Rect<i32, u32>,
@@ -55,7 +55,7 @@ pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> 
 				.context("Unable to build window")?;
 
 			Ok(AppWindow {
-				monitor_name,
+				_monitor_name: monitor_name,
 				monitor_geometry,
 				window,
 			})

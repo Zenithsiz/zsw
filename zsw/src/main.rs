@@ -14,6 +14,8 @@
 	stmt_expr_attributes,
 	path_add_extension
 )]
+// Lints
+#![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 
 // Modules
 mod args;
@@ -34,7 +36,7 @@ use {
 		panel::{PanelName, Panels, PanelsRenderer, PanelsRendererLayouts},
 		playlist::Playlists,
 		settings_menu::SettingsMenu,
-		shared::{Shared, SharedWindow},
+		shared::Shared,
 	},
 	app_error::{AppError, Context},
 	args::Args,
@@ -50,10 +52,10 @@ use {
 		event::WindowEvent,
 		event_loop::EventLoop,
 		platform::{run_on_demand::EventLoopExtRunOnDemand, x11::EventLoopBuilderExtX11},
-		window::WindowId,
+		window::{Window, WindowId},
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
-	zsw_util::TokioTaskBlockOn,
+	zsw_util::{Rect, TokioTaskBlockOn},
 	zsw_wgpu::WgpuRenderer,
 	zutil_cloned::cloned,
 };
@@ -206,6 +208,8 @@ impl WinitApp {
 			let wgpu_renderer =
 				WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu).context("Unable to create wgpu renderer")?;
 
+			let monitor_geometry = app_window.monitor_geometry;
+
 			let msaa_samples = 4;
 			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu, msaa_samples)
 				.context("Unable to create panels renderer")?;
@@ -214,18 +218,12 @@ impl WinitApp {
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, self.shared.wgpu);
 			let settings_menu = SettingsMenu::new();
 
-			let shared_window = SharedWindow {
-				_monitor_name: app_window.monitor_name,
-				monitor_geometry: app_window.monitor_geometry,
-				window,
-			};
-			let shared_window = Arc::new(shared_window);
-
-			#[cloned(shared = self.shared, shared_window)]
+			#[cloned(shared = self.shared, window)]
 			self::spawn_task("Renderer", async move {
 				self::renderer(
 					&shared,
-					&shared_window,
+					&window,
+					monitor_geometry,
 					wgpu_renderer,
 					panels_renderer,
 					egui_renderer,
@@ -235,9 +233,7 @@ impl WinitApp {
 				.await
 			})?;
 
-			_ = self
-				.window_event_handlers
-				.insert(shared_window.window.id(), egui_event_handler);
+			_ = self.window_event_handlers.insert(window.id(), egui_event_handler);
 		}
 
 		Ok(())
@@ -314,7 +310,8 @@ where
 /// Renderer task
 async fn renderer(
 	shared: &Shared,
-	shared_window: &SharedWindow,
+	window: &Window,
+	monitor_geometry: Rect<i32, u32>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -325,7 +322,7 @@ async fn renderer(
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
 		let (egui_paint_jobs, egui_textures_delta) =
-			match self::paint_egui(shared, shared_window, &egui_painter, &mut settings_menu).await {
+			match self::paint_egui(shared, window, monitor_geometry, &egui_painter, &mut settings_menu).await {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {}", err.pretty());
@@ -345,8 +342,8 @@ async fn renderer(
 				&wgpu_renderer,
 				shared.wgpu,
 				&shared.panels_renderer_layouts,
-				&shared_window.monitor_geometry,
-				&shared_window.window,
+				&monitor_geometry,
+				window,
 				&shared.panels,
 			)
 			.await
@@ -354,13 +351,7 @@ async fn renderer(
 
 		// Render egui
 		egui_renderer
-			.render_egui(
-				&mut frame,
-				&shared_window.window,
-				shared.wgpu,
-				&egui_paint_jobs,
-				egui_textures_delta,
-			)
+			.render_egui(&mut frame, window, shared.wgpu, &egui_paint_jobs, egui_textures_delta)
 			.context("Unable to render egui")?;
 
 		// Finish the frame
@@ -383,13 +374,14 @@ async fn renderer(
 /// Paints egui
 async fn paint_egui(
 	shared: &Shared,
-	shared_window: &SharedWindow,
+	window: &Window,
+	monitor_geometry: Rect<i32, u32>,
 	egui_painter: &EguiPainter,
 	settings_menu: &mut SettingsMenu,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
-	let full_output_fut = egui_painter.draw(&shared_window.window, async |ctx| {
+	let full_output_fut = egui_painter.draw(window, async |ctx| {
 		// Adjust cursor pos to account for the scale factor
-		let scale_factor = shared_window.window.scale_factor();
+		let scale_factor = window.scale_factor();
 		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
 
 		// Draw the settings menu
@@ -401,7 +393,7 @@ async fn paint_egui(
 				&shared.playlists,
 				&shared.event_loop_proxy,
 				cursor_pos,
-				shared_window.monitor_geometry,
+				monitor_geometry,
 			);
 		});
 
@@ -413,11 +405,11 @@ async fn paint_egui(
 
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_area() ||
-				!panel.geometries.iter().any(|geometry| {
-					geometry
-						.geometry_on(&shared_window.monitor_geometry)
-						.contains(cursor_pos)
-				}) {
+				!panel
+					.geometries
+					.iter()
+					.any(|geometry| geometry.geometry_on(&monitor_geometry).contains(cursor_pos))
+			{
 				continue;
 			}
 

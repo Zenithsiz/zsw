@@ -11,7 +11,6 @@ use {
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
 	winit::dpi::PhysicalPosition,
-	zsw_util::Rect,
 	zsw_wgpu::WgpuShared,
 };
 
@@ -28,12 +27,4 @@ pub struct Shared {
 
 	pub panels:    Panels,
 	pub playlists: Arc<Playlists>,
-}
-
-/// Shared window state
-#[derive(Debug)]
-pub struct SharedWindow {
-	pub _monitor_name:    String,
-	pub monitor_geometry: Rect<i32, u32>,
-	pub window:           Arc<winit::window::Window>,
 }
