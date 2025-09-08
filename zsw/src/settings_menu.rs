@@ -6,7 +6,7 @@
 // Imports
 use {
 	crate::{
-		panel::{PanelFadeShader, PanelFadeState, PanelGeometry, PanelImage, PanelNoneState, PanelState},
+		panel::{PanelFadeImage, PanelFadeShader, PanelFadeState, PanelGeometry, PanelNoneState, PanelState},
 		playlist::PlaylistName,
 		shared::{Shared, SharedWindow},
 	},
@@ -243,12 +243,12 @@ fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 }
 
 /// Draws a panel image
-fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelImage) {
+fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelFadeImage) {
 	match image {
-		PanelImage::Empty => {
+		PanelFadeImage::Empty => {
 			ui.label("[Unloaded]");
 		},
-		PanelImage::Loaded {
+		PanelFadeImage::Loaded {
 			size,
 			swap_dir,
 			image_path,

@@ -10,8 +10,8 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{PanelGeometryUniforms, PanelImage, PanelState, Panels},
-	crate::{panel::PanelGeometry},
+	super::{PanelFadeImage, PanelGeometryUniforms, PanelState, Panels},
+	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
 	std::{
@@ -275,10 +275,10 @@ impl PanelsRenderer {
 		let pos_matrix = geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
 
-		let image_uniforms = |image: &PanelImage| {
+		let image_uniforms = |image: &PanelFadeImage| {
 			let (size, swap_dir) = match *image {
-				PanelImage::Empty => (Vector2::new(0, 0), false),
-				PanelImage::Loaded { size, swap_dir, .. } => (size, swap_dir),
+				PanelFadeImage::Empty => (Vector2::new(0, 0), false),
+				PanelFadeImage::Loaded { size, swap_dir, .. } => (size, swap_dir),
 			};
 
 			let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);

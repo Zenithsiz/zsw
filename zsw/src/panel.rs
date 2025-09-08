@@ -11,7 +11,7 @@ mod state;
 // Exports
 pub use self::{
 	geometry::{PanelGeometry, PanelGeometryUniforms},
-	images::{PanelImage, PanelImages},
+	images::{PanelFadeImages, PanelFadeImage},
 	panels::Panels,
 	renderer::{PanelFadeShader, PanelShader, PanelsRenderer, PanelsRendererLayouts},
 	state::{PanelFadeState, PanelNoneState, PanelState},

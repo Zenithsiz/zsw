@@ -4,7 +4,7 @@
 mod image;
 
 // Exports
-pub use self::image::PanelImage;
+pub use self::image::PanelFadeImage;
 
 // Imports
 use {
@@ -18,17 +18,17 @@ use {
 	zutil_cloned::cloned,
 };
 
-/// Panel images
+/// Panel fade images
 #[derive(Debug)]
-pub struct PanelImages {
+pub struct PanelFadeImages {
 	/// Previous image
-	pub prev: PanelImage,
+	pub prev: PanelFadeImage,
 
 	/// Current image
-	pub cur: PanelImage,
+	pub cur: PanelFadeImage,
 
 	/// Next image
-	pub next: PanelImage,
+	pub next: PanelFadeImage,
 
 	/// Texture sampler
 	pub image_sampler: Option<wgpu::Sampler>,
@@ -49,15 +49,15 @@ pub struct NextImageArgs {
 
 pub type NextImageLoader = impl Loader<(NextImageArgs,), ImageLoadRes>;
 
-impl PanelImages {
+impl PanelFadeImages {
 	/// Creates a new panel
 	#[must_use]
 	#[define_opaque(NextImageLoader)]
 	pub fn new() -> Self {
 		Self {
-			prev:             PanelImage::empty(),
-			cur:              PanelImage::empty(),
-			next:             PanelImage::empty(),
+			prev:             PanelFadeImage::empty(),
+			cur:              PanelFadeImage::empty(),
+			next:             PanelFadeImage::empty(),
 			image_sampler:    None,
 			image_bind_group: None,
 			next_image:       Loadable::new(async move |args: NextImageArgs| {
@@ -80,7 +80,7 @@ impl PanelImages {
 		playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
-		self.prev = PanelImage::empty();
+		self.prev = PanelFadeImage::empty();
 		self.image_bind_group = None;
 		self.load_missing(playlist_player, wgpu_shared);
 
@@ -100,7 +100,7 @@ impl PanelImages {
 		playlist_player.step_next();
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
-		self.next = PanelImage::empty();
+		self.next = PanelFadeImage::empty();
 		self.image_bind_group = None;
 		self.load_missing(playlist_player, wgpu_shared);
 
@@ -154,9 +154,9 @@ impl PanelImages {
 
 		if let Some(slot) = slot {
 			match slot {
-				Slot::Prev => self.prev = PanelImage::new(wgpu_shared, res.path, image),
-				Slot::Cur => self.cur = PanelImage::new(wgpu_shared, res.path, image),
-				Slot::Next => self.next = PanelImage::new(wgpu_shared, res.path, image),
+				Slot::Prev => self.prev = PanelFadeImage::new(wgpu_shared, res.path, image),
+				Slot::Cur => self.cur = PanelFadeImage::new(wgpu_shared, res.path, image),
+				Slot::Next => self.next = PanelFadeImage::new(wgpu_shared, res.path, image),
 			}
 			self.image_bind_group = None;
 		}
@@ -205,9 +205,9 @@ impl PanelImages {
 
 	/// Returns if all images are empty
 	pub fn is_empty(&self) -> bool {
-		matches!(self.prev, PanelImage::Empty) &&
-			matches!(self.cur, PanelImage::Empty) &&
-			matches!(self.next, PanelImage::Empty)
+		matches!(self.prev, PanelFadeImage::Empty) &&
+			matches!(self.cur, PanelFadeImage::Empty) &&
+			matches!(self.next, PanelFadeImage::Empty)
 	}
 }
 

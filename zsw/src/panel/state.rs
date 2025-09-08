@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::{PanelFadeShader, PanelImages, PanelShader},
+	super::{PanelFadeImages, PanelFadeShader, PanelShader},
 	crate::playlist::{PlaylistName, PlaylistPlayer, Playlists},
 	app_error::Context,
 	chrono::TimeDelta,
@@ -72,7 +72,7 @@ pub struct PanelFadeState {
 	fade_duration: Duration,
 
 	/// Images
-	images: PanelImages,
+	images: PanelFadeImages,
 
 	/// Playlist
 	playlist: PlaylistName,
@@ -116,7 +116,7 @@ impl PanelFadeState {
 			progress: Duration::ZERO,
 			duration,
 			fade_duration,
-			images: PanelImages::new(),
+			images: PanelFadeImages::new(),
 			playlist,
 			playlist_player,
 		}
@@ -194,12 +194,12 @@ impl PanelFadeState {
 	}
 
 	/// Returns the panel images
-	pub fn images(&self) -> &PanelImages {
+	pub fn images(&self) -> &PanelFadeImages {
 		&self.images
 	}
 
 	/// Returns the panel images mutably
-	pub fn images_mut(&mut self) -> &mut PanelImages {
+	pub fn images_mut(&mut self) -> &mut PanelFadeImages {
 		&mut self.images
 	}
 

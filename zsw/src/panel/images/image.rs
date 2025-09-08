@@ -9,11 +9,11 @@ use {
 	zsw_wgpu::WgpuShared,
 };
 
-/// Panel's image
+/// Panel's fade image
 ///
 /// Represents a single image of a panel.
 #[derive(Debug)]
-pub enum PanelImage {
+pub enum PanelFadeImage {
 	/// Empty
 	Empty,
 
@@ -36,7 +36,7 @@ pub enum PanelImage {
 	},
 }
 
-impl PanelImage {
+impl PanelFadeImage {
 	/// Creates a new, empty, panel image
 	#[must_use]
 	pub fn empty() -> Self {
