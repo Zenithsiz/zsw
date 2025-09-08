@@ -208,7 +208,7 @@ impl WinitApp {
 			let wgpu_renderer =
 				WgpuRenderer::new(Arc::clone(&window), self.shared.wgpu).context("Unable to create wgpu renderer")?;
 
-			let monitor_geometry = app_window.monitor_geometry;
+			let window_geometry = app_window.window_geometry;
 
 			let msaa_samples = 4;
 			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, self.shared.wgpu, msaa_samples)
@@ -223,7 +223,7 @@ impl WinitApp {
 				self::renderer(
 					&shared,
 					&window,
-					monitor_geometry,
+					window_geometry,
 					wgpu_renderer,
 					panels_renderer,
 					egui_renderer,
@@ -311,7 +311,7 @@ where
 async fn renderer(
 	shared: &Shared,
 	window: &Window,
-	monitor_geometry: Rect<i32, u32>,
+	window_geometry: Rect<i32, u32>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -322,7 +322,7 @@ async fn renderer(
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
 		let (egui_paint_jobs, egui_textures_delta) =
-			match self::paint_egui(shared, window, monitor_geometry, &egui_painter, &mut settings_menu).await {
+			match self::paint_egui(shared, window, window_geometry, &egui_painter, &mut settings_menu).await {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {}", err.pretty());
@@ -342,7 +342,7 @@ async fn renderer(
 				&wgpu_renderer,
 				shared.wgpu,
 				&shared.panels_renderer_layouts,
-				&monitor_geometry,
+				&window_geometry,
 				window,
 				&shared.panels,
 			)
@@ -375,7 +375,7 @@ async fn renderer(
 async fn paint_egui(
 	shared: &Shared,
 	window: &Window,
-	monitor_geometry: Rect<i32, u32>,
+	window_geometry: Rect<i32, u32>,
 	egui_painter: &EguiPainter,
 	settings_menu: &mut SettingsMenu,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
@@ -393,7 +393,7 @@ async fn paint_egui(
 				&shared.playlists,
 				&shared.event_loop_proxy,
 				cursor_pos,
-				monitor_geometry,
+				window_geometry,
 			);
 		});
 
@@ -408,7 +408,7 @@ async fn paint_egui(
 				!panel
 					.geometries
 					.iter()
-					.any(|geometry| geometry.geometry_on(&monitor_geometry).contains(cursor_pos))
+					.any(|geometry| geometry.geometry_on(&window_geometry).contains(cursor_pos))
 			{
 				continue;
 			}

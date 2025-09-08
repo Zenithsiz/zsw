@@ -18,7 +18,7 @@ pub struct AppWindow {
 	pub _monitor_name: String,
 
 	/// Monitor geometry
-	pub monitor_geometry: Rect<i32, u32>,
+	pub window_geometry: Rect<i32, u32>,
 
 	/// Window
 	pub window: Window,
@@ -56,7 +56,7 @@ pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> 
 
 			Ok(AppWindow {
 				_monitor_name: monitor_name,
-				monitor_geometry,
+				window_geometry: monitor_geometry,
 				window,
 			})
 		})

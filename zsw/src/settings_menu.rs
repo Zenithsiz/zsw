@@ -46,7 +46,7 @@ impl SettingsMenu {
 		playlists: &Arc<Playlists>,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		cursor_pos: LogicalPosition<f32>,
-		monitor_geometry: Rect<i32, u32>,
+		window_geometry: Rect<i32, u32>,
 	) {
 		// Create the window
 		let mut egui_window = egui::Window::new("Settings");
@@ -68,7 +68,7 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(ui, wgpu_shared, panels, playlists, monitor_geometry),
+				Tab::Panels => self::draw_panels_tab(ui, wgpu_shared, panels, playlists, window_geometry),
 				Tab::Settings => self::draw_settings(ui, event_loop_proxy),
 			}
 		});
@@ -80,9 +80,9 @@ fn draw_panels_tab(
 	wgpu_shared: &WgpuShared,
 	panels: &Panels,
 	playlists: &Arc<Playlists>,
-	monitor_geometry: Rect<i32, u32>,
+	window_geometry: Rect<i32, u32>,
 ) {
-	self::draw_panels_editor(ui, wgpu_shared, panels, playlists, monitor_geometry);
+	self::draw_panels_editor(ui, wgpu_shared, panels, playlists, window_geometry);
 	ui.separator();
 }
 
@@ -93,7 +93,7 @@ fn draw_panels_editor(
 	wgpu_shared: &WgpuShared,
 	panels: &Panels,
 	playlists: &Arc<Playlists>,
-	monitor_geometry: Rect<i32, u32>,
+	window_geometry: Rect<i32, u32>,
 ) {
 	let panels = panels.get_all().block_on();
 
@@ -110,7 +110,7 @@ fn draw_panels_editor(
 		if panel
 			.geometries
 			.iter()
-			.all(|geometry| monitor_geometry.intersection(geometry.geometry).is_none())
+			.all(|geometry| window_geometry.intersection(geometry.geometry).is_none())
 		{
 			name = name.weak();
 		}
@@ -119,7 +119,7 @@ fn draw_panels_editor(
 			match &mut panel.state {
 				PanelState::None(_) => (),
 				PanelState::Fade(state) =>
-					self::draw_fade_panel_editor(ui, wgpu_shared, monitor_geometry, state, &mut panel.geometries),
+					self::draw_fade_panel_editor(ui, wgpu_shared, window_geometry, state, &mut panel.geometries),
 			}
 
 			ui.collapsing("Shader", |ui| {
@@ -133,7 +133,7 @@ fn draw_panels_editor(
 fn draw_fade_panel_editor(
 	ui: &mut egui::Ui,
 	wgpu_shared: &WgpuShared,
-	monitor_geometry: Rect<i32, u32>,
+	window_geometry: Rect<i32, u32>,
 	panel_state: &mut PanelFadeState,
 	geometries: &mut [PanelGeometry],
 ) {
@@ -147,7 +147,7 @@ fn draw_fade_panel_editor(
 		for (geometry_idx, geometry) in geometries.iter_mut().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
-				if monitor_geometry.intersection(geometry.geometry).is_none() {
+				if window_geometry.intersection(geometry.geometry).is_none() {
 					name = name.weak();
 				}
 
