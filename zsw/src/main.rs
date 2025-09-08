@@ -388,8 +388,22 @@ async fn paint_egui(
 	settings_menu: &mut SettingsMenu,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
 	let full_output_fut = egui_painter.draw(&shared_window.window, async |ctx| {
+		// Adjust cursor pos to account for the scale factor
+		let scale_factor = shared_window.window.scale_factor();
+		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
+
 		// Draw the settings menu
-		tokio::task::block_in_place(|| settings_menu.draw(ctx, shared, shared_window));
+		tokio::task::block_in_place(|| {
+			settings_menu.draw(
+				ctx,
+				shared.wgpu,
+				&shared.panels,
+				&shared.playlists,
+				&shared.event_loop_proxy,
+				cursor_pos,
+				shared_window.monitor_geometry,
+			);
+		});
 
 		// Then go through all panels checking for interactions with their geometries
 		let cursor_pos = shared.cursor_pos.load();

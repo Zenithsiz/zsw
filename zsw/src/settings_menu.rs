@@ -6,14 +6,16 @@
 // Imports
 use {
 	crate::{
-		panel::{PanelFadeImage, PanelFadeShader, PanelFadeState, PanelGeometry, PanelNoneState, PanelState},
-		playlist::PlaylistName,
-		shared::{Shared, SharedWindow},
+		AppEvent,
+		panel::{PanelFadeImage, PanelFadeShader, PanelFadeState, PanelGeometry, PanelNoneState, PanelState, Panels},
+		playlist::{PlaylistName, Playlists},
 	},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
 	std::{path::Path, sync::Arc},
+	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
 	zsw_util::{AppError, Rect, TokioTaskBlockOn},
+	zsw_wgpu::WgpuShared,
 };
 
 /// Settings menu
@@ -36,11 +38,17 @@ impl SettingsMenu {
 	}
 
 	/// Draws the settings menu
-	pub fn draw(&mut self, ctx: &egui::Context, shared: &Shared, shared_window: &SharedWindow) {
-		// Adjust cursor pos to account for the scale factor
-		let scale_factor = shared_window.window.scale_factor();
-		let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
-
+	#[expect(clippy::too_many_arguments, reason = "TODO: Merge some of these")]
+	pub fn draw(
+		&mut self,
+		ctx: &egui::Context,
+		wgpu_shared: &WgpuShared,
+		panels: &Panels,
+		playlists: &Arc<Playlists>,
+		event_loop_proxy: &EventLoopProxy<AppEvent>,
+		cursor_pos: LogicalPosition<f32>,
+		monitor_geometry: Rect<i32, u32>,
+	) {
 		// Create the window
 		let mut egui_window = egui::Window::new("Settings");
 
@@ -61,22 +69,34 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(ui, shared, shared_window),
-				Tab::Settings => self::draw_settings(ui, shared),
+				Tab::Panels => self::draw_panels_tab(ui, wgpu_shared, panels, playlists, monitor_geometry),
+				Tab::Settings => self::draw_settings(ui, event_loop_proxy),
 			}
 		});
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
-	self::draw_panels_editor(ui, shared, shared_window);
+fn draw_panels_tab(
+	ui: &mut egui::Ui,
+	wgpu_shared: &WgpuShared,
+	panels: &Panels,
+	playlists: &Arc<Playlists>,
+	monitor_geometry: Rect<i32, u32>,
+) {
+	self::draw_panels_editor(ui, wgpu_shared, panels, playlists, monitor_geometry);
 	ui.separator();
 }
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &SharedWindow) {
-	let panels = shared.panels.get_all().block_on();
+fn draw_panels_editor(
+	ui: &mut egui::Ui,
+	wgpu_shared: &WgpuShared,
+	panels: &Panels,
+	playlists: &Arc<Playlists>,
+	monitor_geometry: Rect<i32, u32>,
+) {
+	let panels = panels.get_all().block_on();
 
 	if panels.is_empty() {
 		ui.label("None loaded");
@@ -91,7 +111,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 		if panel
 			.geometries
 			.iter()
-			.all(|geometry| shared_window.monitor_geometry.intersection(geometry.geometry).is_none())
+			.all(|geometry| monitor_geometry.intersection(geometry.geometry).is_none())
 		{
 			name = name.weak();
 		}
@@ -100,11 +120,11 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 			match &mut panel.state {
 				PanelState::None(_) => (),
 				PanelState::Fade(state) =>
-					self::draw_fade_panel_editor(ui, shared, shared_window, state, &mut panel.geometries),
+					self::draw_fade_panel_editor(ui, wgpu_shared, monitor_geometry, state, &mut panel.geometries),
 			}
 
 			ui.collapsing("Shader", |ui| {
-				self::draw_shader_select(ui, shared, &mut panel.state);
+				self::draw_shader_select(ui, playlists, &mut panel.state);
 			});
 		});
 	}
@@ -113,8 +133,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, shared: &Shared, shared_window: &Shared
 /// Draws the fade panel editor
 fn draw_fade_panel_editor(
 	ui: &mut egui::Ui,
-	shared: &Shared,
-	shared_window: &SharedWindow,
+	wgpu_shared: &WgpuShared,
+	monitor_geometry: Rect<i32, u32>,
 	panel_state: &mut PanelFadeState,
 	geometries: &mut [PanelGeometry],
 ) {
@@ -128,7 +148,7 @@ fn draw_fade_panel_editor(
 		for (geometry_idx, geometry) in geometries.iter_mut().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
-				if shared_window.monitor_geometry.intersection(geometry.geometry).is_none() {
+				if monitor_geometry.intersection(geometry.geometry).is_none() {
 					name = name.weak();
 				}
 
@@ -171,7 +191,7 @@ fn draw_fade_panel_editor(
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			panel_state.skip(shared.wgpu);
+			panel_state.skip(wgpu_shared);
 		}
 	});
 
@@ -219,10 +239,9 @@ fn draw_fade_panel_editor(
 }
 
 /// Draws the settings tab
-fn draw_settings(ui: &mut egui::Ui, shared: &Shared) {
+fn draw_settings(ui: &mut egui::Ui, event_loop_proxy: &EventLoopProxy<AppEvent>) {
 	if ui.button("Quit").clicked() {
-		shared
-			.event_loop_proxy
+		event_loop_proxy
 			.send_event(crate::AppEvent::Shutdown)
 			.expect("Unable to send shutdown event to event loop");
 	}
@@ -262,7 +281,7 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelFadeImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, state: &mut PanelState) {
+fn draw_shader_select(ui: &mut egui::Ui, playlists: &Arc<Playlists>, state: &mut PanelState) {
 	egui::ComboBox::from_id_salt("Shader selection menu")
 		.selected_text(match state {
 			PanelState::None(_) => "None",
@@ -270,12 +289,12 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, state: &mut PanelState
 		})
 		.show_ui(ui, |ui| {
 			// TODO: Review these defaults?
-			type CreateShader = fn(&Shared) -> PanelState;
+			type CreateShader = fn(&Arc<Playlists>) -> PanelState;
 			let create_shaders: [(_, _, CreateShader); _] = [
 				("None", matches!(state, PanelState::None(_)), |_| {
 					PanelState::None(PanelNoneState::new([0.0; 4]))
 				}),
-				("Fade", matches!(state, PanelState::Fade(_)), |shared| {
+				("Fade", matches!(state, PanelState::Fade(_)), |playlists| {
 					// TODO: We don't have a playlist to pass here, so should we make
 					//       the playlist optional and have the user later change it?
 					PanelState::Fade(PanelFadeState::new(
@@ -283,14 +302,14 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, state: &mut PanelState
 						Duration::from_secs(5),
 						PanelFadeShader::Out { strength: 1.5 },
 						PlaylistName::from("none".to_owned()),
-						Arc::clone(&shared.playlists),
+						Arc::clone(playlists),
 					))
 				}),
 			];
 
 			for (name, checked, create_shader) in create_shaders {
 				if ui.selectable_label(checked, name).clicked() && !checked {
-					*state = create_shader(shared);
+					*state = create_shader(playlists);
 				}
 			}
 		});
