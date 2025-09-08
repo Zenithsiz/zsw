@@ -16,9 +16,16 @@ struct Sampled {
 }
 
 // Samples a texture
-fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUniforms, progress: f32, alpha: f32) -> Sampled {
+fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUniforms, progress_raw: f32, alpha: f32) -> Sampled {
 	var sampled: Sampled;
 	var uvs = in_uvs;
+
+	var progress: f32;
+	if image_uniforms.swap_dir == 0 {
+		progress = progress_raw;
+	} else {
+		progress = 1.0 - progress_raw;
+	}
 
 	// Then apply the image ratio and delta
 	let uvs_delta = (vec2<f32>(1.0, 1.0) - image_uniforms.image_ratio) * progress;
