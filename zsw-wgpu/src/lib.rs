@@ -12,9 +12,9 @@ pub use renderer::{FrameRender, WgpuRenderer};
 // Imports
 use {app_error::Context, tokio::sync::OnceCell, zsw_util::AppError};
 
-/// Wgpu shared
+/// Wgpu
 #[derive(Debug)]
-pub struct WgpuShared {
+pub struct Wgpu {
 	/// Instance
 	pub instance: wgpu::Instance,
 
@@ -34,34 +34,33 @@ pub struct WgpuShared {
 	pub empty_texture_view: wgpu::TextureView,
 }
 
-/// Shared
+/// Wgpu
 // TODO: Is it a good idea to make this a global?
 //       Realistically, we can only have one per process anyway,
 //       so this models that correctly, but it might be bad API.
-static SHARED: OnceCell<WgpuShared> = OnceCell::const_new();
+static WGPU: OnceCell<Wgpu> = OnceCell::const_new();
 
-/// Gets or creates the shared state
-pub async fn get_or_create_shared() -> Result<&'static WgpuShared, AppError> {
-	SHARED
-		.get_or_try_init(async || {
-			let instance = self::create_instance().context("Unable to create instance")?;
-			let adapter = self::create_adapter(&instance)
-				.await
-				.context("Unable to create adaptor")?;
-			let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
+/// Gets or creates the wgpu
+pub async fn get_or_create() -> Result<&'static Wgpu, AppError> {
+	WGPU.get_or_try_init(async || {
+		let instance = self::create_instance().context("Unable to create instance")?;
+		let adapter = self::create_adapter(&instance)
+			.await
+			.context("Unable to create adaptor")?;
+		let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
 
-			let (empty_texture, empty_texture_view) = self::create_empty_image_texture(&device);
+		let (empty_texture, empty_texture_view) = self::create_empty_image_texture(&device);
 
-			Ok::<_, AppError>(WgpuShared {
-				instance,
-				adapter,
-				device,
-				queue,
-				empty_texture,
-				empty_texture_view,
-			})
+		Ok::<_, AppError>(Wgpu {
+			instance,
+			adapter,
+			device,
+			queue,
+			empty_texture,
+			empty_texture_view,
 		})
-		.await
+	})
+	.await
 }
 
 /// Creates the device

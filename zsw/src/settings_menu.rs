@@ -15,7 +15,7 @@ use {
 	std::{path::Path, sync::Arc},
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
 	zsw_util::{AppError, Rect, TokioTaskBlockOn},
-	zsw_wgpu::WgpuShared,
+	zsw_wgpu::Wgpu,
 };
 
 /// Settings menu
@@ -41,7 +41,7 @@ impl SettingsMenu {
 	pub fn draw(
 		&mut self,
 		ctx: &egui::Context,
-		wgpu_shared: &WgpuShared,
+		wgpu: &Wgpu,
 		panels: &Panels,
 		playlists: &Arc<Playlists>,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
@@ -68,7 +68,7 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(ui, wgpu_shared, panels, playlists, window_geometry),
+				Tab::Panels => self::draw_panels_tab(ui, wgpu, panels, playlists, window_geometry),
 				Tab::Settings => self::draw_settings(ui, event_loop_proxy),
 			}
 		});
@@ -77,12 +77,12 @@ impl SettingsMenu {
 /// Draws the panels tab
 fn draw_panels_tab(
 	ui: &mut egui::Ui,
-	wgpu_shared: &WgpuShared,
+	wgpu: &Wgpu,
 	panels: &Panels,
 	playlists: &Arc<Playlists>,
 	window_geometry: Rect<i32, u32>,
 ) {
-	self::draw_panels_editor(ui, wgpu_shared, panels, playlists, window_geometry);
+	self::draw_panels_editor(ui, wgpu, panels, playlists, window_geometry);
 	ui.separator();
 }
 
@@ -90,7 +90,7 @@ fn draw_panels_tab(
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
 fn draw_panels_editor(
 	ui: &mut egui::Ui,
-	wgpu_shared: &WgpuShared,
+	wgpu: &Wgpu,
 	panels: &Panels,
 	playlists: &Arc<Playlists>,
 	window_geometry: Rect<i32, u32>,
@@ -119,7 +119,7 @@ fn draw_panels_editor(
 			match &mut panel.state {
 				PanelState::None(_) => (),
 				PanelState::Fade(state) =>
-					self::draw_fade_panel_editor(ui, wgpu_shared, window_geometry, state, &mut panel.geometries),
+					self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &mut panel.geometries),
 			}
 
 			ui.collapsing("Shader", |ui| {
@@ -132,7 +132,7 @@ fn draw_panels_editor(
 /// Draws the fade panel editor
 fn draw_fade_panel_editor(
 	ui: &mut egui::Ui,
-	wgpu_shared: &WgpuShared,
+	wgpu: &Wgpu,
 	window_geometry: Rect<i32, u32>,
 	panel_state: &mut PanelFadeState,
 	geometries: &mut [PanelGeometry],
@@ -190,7 +190,7 @@ fn draw_fade_panel_editor(
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			panel_state.skip(wgpu_shared);
+			panel_state.skip(wgpu);
 		}
 	});
 

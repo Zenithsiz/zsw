@@ -9,7 +9,7 @@ use {
 	core::time::Duration,
 	std::{sync::Arc, time::Instant},
 	zsw_util::{AppError, Loadable, loadable::Loader},
-	zsw_wgpu::WgpuShared,
+	zsw_wgpu::Wgpu,
 	zutil_cloned::cloned,
 };
 
@@ -250,12 +250,12 @@ impl PanelFadeState {
 	/// Skips to the next image.
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn skip(&mut self, wgpu_shared: &WgpuShared) {
+	pub fn skip(&mut self, wgpu: &Wgpu) {
 		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
 			return;
 		};
 
-		self.progress = match self.images.step_next(playlist_player, wgpu_shared) {
+		self.progress = match self.images.step_next(playlist_player, wgpu) {
 			Ok(()) => self.fade_duration,
 			Err(()) => self.max_progress(),
 		}
@@ -264,7 +264,7 @@ impl PanelFadeState {
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn step(&mut self, wgpu_shared: &WgpuShared, delta: TimeDelta) {
+	pub fn step(&mut self, wgpu: &Wgpu, delta: TimeDelta) {
 		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
 			return;
 		};
@@ -281,7 +281,7 @@ impl PanelFadeState {
 			Some(next_progress) => match next_progress.checked_sub(self.duration) {
 				// If we did, `next_progress` is our progress at the next image, so try
 				// to step to it.
-				Some(next_progress) => match self.images.step_next(playlist_player, wgpu_shared) {
+				Some(next_progress) => match self.images.step_next(playlist_player, wgpu) {
 					// If we successfully stepped to the next image, start at the next progress
 					// Note: If delta was big enough to overflow 2 durations, then cap it at the
 					//       max duration of the next image.
@@ -297,7 +297,7 @@ impl PanelFadeState {
 			},
 
 			// Otherwise, we underflowed, so try to step back
-			None => match self.images.step_prev(playlist_player, wgpu_shared) {
+			None => match self.images.step_prev(playlist_player, wgpu) {
 				// If we successfully stepped backwards, start at where we're supposed to:
 				Ok(()) => {
 					// Note: This branch is only taken when `delta` is negative, so we can always
@@ -321,14 +321,14 @@ impl PanelFadeState {
 	/// Updates this panel's state using the current time as a delta
 	///
 	/// If the playlist player isn't loaded, does nothing
-	pub fn update(&mut self, wgpu_shared: &WgpuShared) {
+	pub fn update(&mut self, wgpu: &Wgpu) {
 		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
 			return;
 		};
 
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
-		self.images.load_missing(playlist_player, wgpu_shared);
+		self.images.load_missing(playlist_player, wgpu);
 
 		// If we're paused, don't update anything
 		if self.paused {
@@ -342,7 +342,7 @@ impl PanelFadeState {
 		//       the other has updated.
 		let delta = self.update_delta();
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
-		self.step(wgpu_shared, delta);
+		self.step(wgpu, delta);
 	}
 }
 

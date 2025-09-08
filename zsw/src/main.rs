@@ -168,10 +168,8 @@ impl WinitApp {
 		config_dirs: Arc<ConfigDirs>,
 		event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
-		let wgpu_shared = zsw_wgpu::get_or_create_shared()
-			.await
-			.context("Unable to initialize wgpu")?;
-		let panels_renderer_layouts = PanelsRendererLayouts::new(wgpu_shared);
+		let wgpu = zsw_wgpu::get_or_create().await.context("Unable to initialize wgpu")?;
+		let panels_renderer_layouts = PanelsRendererLayouts::new(wgpu);
 
 		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
 		let panels = Panels::new(config_dirs.panels().to_path_buf());
@@ -182,7 +180,7 @@ impl WinitApp {
 			last_resize: AtomicCell::new(None),
 			// TODO: Not have a default of (0,0)?
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
-			wgpu: wgpu_shared,
+			wgpu,
 			panels_renderer_layouts,
 			panels,
 			playlists: Arc::new(playlists),

@@ -10,7 +10,7 @@ use {
 	tokio::sync::Mutex,
 	tracing as _,
 	winit::window::Window,
-	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
+	zsw_wgpu::{FrameRender, WgpuRenderer, Wgpu},
 	app_error::Context, zsw_util::AppError,
 };
 
@@ -29,10 +29,10 @@ impl fmt::Debug for EguiRenderer {
 impl EguiRenderer {
 	/// Creates a new egui renderer
 	#[must_use]
-	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared) -> Self {
+	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu: &Wgpu) -> Self {
 		// Create the egui render pass
 		let render_pass =
-			egui_wgpu_backend::RenderPass::new(&wgpu_shared.device, wgpu_renderer.surface_config().format, 1);
+			egui_wgpu_backend::RenderPass::new(&wgpu.device, wgpu_renderer.surface_config().format, 1);
 
 		Self { render_pass }
 	}
@@ -42,7 +42,7 @@ impl EguiRenderer {
 		&mut self,
 		frame: &mut FrameRender,
 		window: &Window,
-		wgpu_shared: &WgpuShared,
+		wgpu: &Wgpu,
 		paint_jobs: &[egui::ClippedPrimitive],
 		textures_delta: Option<egui::TexturesDelta>,
 	) -> Result<(), AppError> {
@@ -57,13 +57,13 @@ impl EguiRenderer {
 		// If we have any textures delta, update them
 		if let Some(textures_delta) = textures_delta.as_ref() {
 			self.render_pass
-				.add_textures(&wgpu_shared.device, &wgpu_shared.queue, textures_delta)
+				.add_textures(&wgpu.device, &wgpu.queue, textures_delta)
 				.context("Unable to update textures")?;
 		}
 
 		// Update buffers
 		self.render_pass
-			.update_buffers(&wgpu_shared.device, &wgpu_shared.queue, paint_jobs, &screen_descriptor);
+			.update_buffers(&wgpu.device, &wgpu.queue, paint_jobs, &screen_descriptor);
 
 		// Record all render passes.
 		self.render_pass

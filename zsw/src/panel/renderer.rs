@@ -21,7 +21,7 @@ use {
 	wgpu::util::DeviceExt,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_util::{AppError, Rect},
-	zsw_wgpu::{FrameRender, WgpuRenderer, WgpuShared},
+	zsw_wgpu::{FrameRender, WgpuRenderer, Wgpu},
 };
 
 /// Panels renderer layouts
@@ -37,9 +37,9 @@ pub struct PanelsRendererLayouts {
 
 impl PanelsRendererLayouts {
 	/// Creates new layouts for the panels renderer
-	pub fn new(wgpu_shared: &WgpuShared) -> Self {
-		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu_shared);
-		let fade_image_bind_group_layout = self::create_fade_image_bind_group_layout(wgpu_shared);
+	pub fn new(wgpu: &Wgpu) -> Self {
+		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu);
+		let fade_image_bind_group_layout = self::create_fade_image_bind_group_layout(wgpu);
 
 		Self {
 			uniforms_bind_group_layout,
@@ -81,14 +81,14 @@ pub struct PanelsRenderer {
 
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
-	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared, msaa_samples: u32) -> Result<Self, AppError> {
+	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu: &Wgpu, msaa_samples: u32) -> Result<Self, AppError> {
 		// Create the index / vertex buffer
-		let indices = self::create_indices(wgpu_shared);
-		let vertices = self::create_vertices(wgpu_shared);
+		let indices = self::create_indices(wgpu);
+		let vertices = self::create_vertices(wgpu);
 
 		// Create the framebuffer
 		let msaa_framebuffer =
-			self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, wgpu_renderer.surface_size(), msaa_samples);
+			self::create_msaa_framebuffer(wgpu_renderer, wgpu, wgpu_renderer.surface_size(), msaa_samples);
 
 		Ok(Self {
 			render_pipelines: HashMap::new(),
@@ -100,9 +100,9 @@ impl PanelsRenderer {
 	}
 
 	/// Resizes the buffer
-	pub fn resize(&mut self, wgpu_renderer: &WgpuRenderer, wgpu_shared: &WgpuShared, size: PhysicalSize<u32>) {
+	pub fn resize(&mut self, wgpu_renderer: &WgpuRenderer, wgpu: &Wgpu, size: PhysicalSize<u32>) {
 		tracing::debug!("Resizing msaa framebuffer to {}x{}", size.width, size.height);
-		self.msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_shared, size, self.msaa_samples);
+		self.msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu, size, self.msaa_samples);
 	}
 
 	/// Renders a panel
@@ -111,7 +111,7 @@ impl PanelsRenderer {
 		&mut self,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
-		wgpu_shared: &WgpuShared,
+		wgpu: &Wgpu,
 		layouts: &PanelsRendererLayouts,
 		window_geometry: Rect<i32, u32>,
 		window: &Window,
@@ -168,7 +168,7 @@ impl PanelsRenderer {
 			// Update the panel before drawing it
 			match &mut panel.state {
 				PanelState::None(_) => (),
-				PanelState::Fade(state) => state.update(wgpu_shared),
+				PanelState::Fade(state) => state.update(wgpu),
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either
@@ -193,7 +193,7 @@ impl PanelsRenderer {
 
 					let render_pipeline = self::create_render_pipeline(
 						wgpu_renderer,
-						wgpu_shared,
+						wgpu,
 						bind_group_layouts,
 						panel.state.shader(),
 						self.msaa_samples,
@@ -214,14 +214,14 @@ impl PanelsRenderer {
 					let panel_images = panel_state.images_mut();
 					let image_sampler = panel_images
 						.image_sampler
-						.get_or_insert_with(|| self::create_image_sampler(wgpu_shared));
+						.get_or_insert_with(|| self::create_image_sampler(wgpu));
 					let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
 						self::create_image_bind_group(
-							wgpu_shared,
+							wgpu,
 							&layouts.fade_image_bind_group_layout,
-							panel_images.prev.texture_view(wgpu_shared),
-							panel_images.cur.texture_view(wgpu_shared),
-							panel_images.next.texture_view(wgpu_shared),
+							panel_images.prev.texture_view(wgpu),
+							panel_images.cur.texture_view(wgpu),
+							panel_images.next.texture_view(wgpu),
 							image_sampler,
 						)
 					});
@@ -237,7 +237,7 @@ impl PanelsRenderer {
 
 				// Write and bind the uniforms
 				Self::write_bind_uniforms(
-					wgpu_shared,
+					wgpu,
 					layouts,
 					frame.surface_size,
 					&panel.state,
@@ -257,7 +257,7 @@ impl PanelsRenderer {
 
 	/// Writes and binds the uniforms
 	pub fn write_bind_uniforms(
-		wgpu_shared: &WgpuShared,
+		wgpu: &Wgpu,
 		layouts: &PanelsRendererLayouts,
 		surface_size: PhysicalSize<u32>,
 		panel_state: &PanelState,
@@ -274,9 +274,9 @@ impl PanelsRenderer {
 		let geometry_uniforms = geometry
 			.uniforms
 			.entry(window.id())
-			.or_insert_with(|| self::create_panel_geometry_uniforms(wgpu_shared, layouts));
+			.or_insert_with(|| self::create_panel_geometry_uniforms(wgpu, layouts));
 		let write_uniforms = |uniforms_bytes| {
-			wgpu_shared
+			wgpu
 				.queue
 				.write_buffer(&geometry_uniforms.buffer, 0, uniforms_bytes);
 		};
@@ -355,7 +355,7 @@ impl PanelsRenderer {
 }
 
 /// Creates the panel geometry uniforms
-fn create_panel_geometry_uniforms(wgpu_shared: &WgpuShared, layouts: &PanelsRendererLayouts) -> PanelGeometryUniforms {
+fn create_panel_geometry_uniforms(wgpu: &Wgpu, layouts: &PanelsRendererLayouts) -> PanelGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("[zsw::panel] Geometry uniforms buffer"),
@@ -363,7 +363,7 @@ fn create_panel_geometry_uniforms(wgpu_shared: &WgpuShared, layouts: &PanelsRend
 		size:               u64::try_from(MAX_UNIFORM_SIZE).expect("Maximum uniform size didn't fit into a `u64`"),
 		mapped_at_creation: false,
 	};
-	let buffer = wgpu_shared.device.create_buffer(&buffer_descriptor);
+	let buffer = wgpu.device.create_buffer(&buffer_descriptor);
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
@@ -374,24 +374,24 @@ fn create_panel_geometry_uniforms(wgpu_shared: &WgpuShared, layouts: &PanelsRend
 		}],
 		label:   Some("[zsw::panel] Geometry uniforms bind group"),
 	};
-	let bind_group = wgpu_shared.device.create_bind_group(&bind_group_descriptor);
+	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
 	PanelGeometryUniforms { buffer, bind_group }
 }
 
 /// Creates the vertices
-fn create_vertices(wgpu_shared: &WgpuShared) -> wgpu::Buffer {
+fn create_vertices(wgpu: &Wgpu) -> wgpu::Buffer {
 	let descriptor = wgpu::util::BufferInitDescriptor {
 		label:    Some("[zsw::panel] Vertex buffer"),
 		contents: bytemuck::cast_slice(&PanelVertex::QUAD),
 		usage:    wgpu::BufferUsages::VERTEX,
 	};
 
-	wgpu_shared.device.create_buffer_init(&descriptor)
+	wgpu.device.create_buffer_init(&descriptor)
 }
 
 /// Creates the indices
-fn create_indices(wgpu_shared: &WgpuShared) -> wgpu::Buffer {
+fn create_indices(wgpu: &Wgpu) -> wgpu::Buffer {
 	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
 	let descriptor = wgpu::util::BufferInitDescriptor {
 		label:    Some("[zsw::panel] Index buffer"),
@@ -399,13 +399,13 @@ fn create_indices(wgpu_shared: &WgpuShared) -> wgpu::Buffer {
 		usage:    wgpu::BufferUsages::INDEX,
 	};
 
-	wgpu_shared.device.create_buffer_init(&descriptor)
+	wgpu.device.create_buffer_init(&descriptor)
 }
 
 /// Creates the render pipeline
 fn create_render_pipeline(
 	wgpu_renderer: &WgpuRenderer,
-	wgpu_shared: &WgpuShared,
+	wgpu: &Wgpu,
 	bind_group_layouts: &[&wgpu::BindGroupLayout],
 	shader: PanelShader,
 	msaa_samples: u32,
@@ -422,7 +422,7 @@ fn create_render_pipeline(
 		label:  Some(&format!("[zsw::panel] Shader {shader_name:?}")),
 		source: wgpu::ShaderSource::Naga(Cow::Owned(shader_module)),
 	};
-	let shader = wgpu_shared.device.create_shader_module(shader_descriptor);
+	let shader = wgpu.device.create_shader_module(shader_descriptor);
 
 	// Create the pipeline layout
 	let render_pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
@@ -430,7 +430,7 @@ fn create_render_pipeline(
 		bind_group_layouts,
 		push_constant_ranges: &[],
 	};
-	let render_pipeline_layout = wgpu_shared
+	let render_pipeline_layout = wgpu
 		.device
 		.create_pipeline_layout(&render_pipeline_layout_descriptor);
 
@@ -474,13 +474,13 @@ fn create_render_pipeline(
 		cache:         None,
 	};
 
-	Ok(wgpu_shared.device.create_render_pipeline(&render_pipeline_descriptor))
+	Ok(wgpu.device.create_render_pipeline(&render_pipeline_descriptor))
 }
 
 /// Creates the msaa framebuffer
 fn create_msaa_framebuffer(
 	wgpu_renderer: &WgpuRenderer,
-	wgpu_shared: &WgpuShared,
+	wgpu: &Wgpu,
 	size: PhysicalSize<u32>,
 	msaa_samples: u32,
 ) -> wgpu::TextureView {
@@ -502,14 +502,14 @@ fn create_msaa_framebuffer(
 		view_formats:    &surface_config.view_formats,
 	};
 
-	wgpu_shared
+	wgpu
 		.device
 		.create_texture(&msaa_frame_descriptor)
 		.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
 /// Creates the uniforms bind group layout
-fn create_uniforms_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLayout {
+fn create_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("[zsw::panel] Geometry uniforms bind group layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
@@ -524,11 +524,11 @@ fn create_uniforms_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGrou
 		}],
 	};
 
-	wgpu_shared.device.create_bind_group_layout(&descriptor)
+	wgpu.device.create_bind_group_layout(&descriptor)
 }
 
 /// Creates the fade image bind group layout
-fn create_fade_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGroupLayout {
+fn create_fade_image_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("[zsw::panel] Fade image bind group layout"),
 		entries: &[
@@ -571,12 +571,12 @@ fn create_fade_image_bind_group_layout(wgpu_shared: &WgpuShared) -> wgpu::BindGr
 		],
 	};
 
-	wgpu_shared.device.create_bind_group_layout(&descriptor)
+	wgpu.device.create_bind_group_layout(&descriptor)
 }
 
 /// Creates the texture bind group
 fn create_image_bind_group(
-	wgpu_shared: &WgpuShared,
+	wgpu: &Wgpu,
 	bind_group_layout: &wgpu::BindGroupLayout,
 	view_prev: &wgpu::TextureView,
 	view_cur: &wgpu::TextureView,
@@ -605,11 +605,11 @@ fn create_image_bind_group(
 		],
 		label:   Some("[zsw::panel] Image bind group"),
 	};
-	wgpu_shared.device.create_bind_group(&descriptor)
+	wgpu.device.create_bind_group(&descriptor)
 }
 
 /// Creates the image sampler
-fn create_image_sampler(wgpu_shared: &WgpuShared) -> wgpu::Sampler {
+fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
 	let descriptor = wgpu::SamplerDescriptor {
 		label: Some("[zsw::panel] Image sampler"),
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -620,7 +620,7 @@ fn create_image_sampler(wgpu_shared: &WgpuShared) -> wgpu::Sampler {
 		mipmap_filter: wgpu::FilterMode::Linear,
 		..wgpu::SamplerDescriptor::default()
 	};
-	wgpu_shared.device.create_sampler(&descriptor)
+	wgpu.device.create_sampler(&descriptor)
 }
 
 /// Shader

@@ -6,7 +6,7 @@ use {
 	image::DynamicImage,
 	std::{path::Path, sync::Arc},
 	wgpu::util::DeviceExt,
-	zsw_wgpu::WgpuShared,
+	zsw_wgpu::Wgpu,
 };
 
 /// Panel's fade image
@@ -45,9 +45,9 @@ impl PanelFadeImage {
 
 	/// Creates a new panel image from an image
 	#[must_use]
-	pub fn new(wgpu_shared: &WgpuShared, image_path: Arc<Path>, image: DynamicImage) -> Self {
+	pub fn new(wgpu: &Wgpu, image_path: Arc<Path>, image: DynamicImage) -> Self {
 		let size = Vector2::new(image.width(), image.height());
-		let (texture, texture_view) = self::create_image_texture(wgpu_shared, &image_path, image);
+		let (texture, texture_view) = self::create_image_texture(wgpu, &image_path, image);
 
 		Self::Loaded {
 			_texture: texture,
@@ -59,9 +59,9 @@ impl PanelFadeImage {
 	}
 
 	/// Returns the texture view for this image.
-	pub fn texture_view<'a>(&'a self, wgpu_shared: &'a WgpuShared) -> &'a wgpu::TextureView {
+	pub fn texture_view<'a>(&'a self, wgpu: &'a Wgpu) -> &'a wgpu::TextureView {
 		match self {
-			Self::Empty => &wgpu_shared.empty_texture_view,
+			Self::Empty => &wgpu.empty_texture_view,
 			Self::Loaded { texture_view, .. } => texture_view,
 		}
 	}
@@ -73,11 +73,7 @@ impl PanelFadeImage {
 }
 
 /// Creates the image texture and view
-fn create_image_texture(
-	wgpu_shared: &WgpuShared,
-	image_path: &Path,
-	image: DynamicImage,
-) -> (wgpu::Texture, wgpu::TextureView) {
+fn create_image_texture(wgpu: &Wgpu, image_path: &Path, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
 	// Get the image's format, converting if necessary.
 	let (image, format) = match image {
 		// With `rgba8` we can simply use the image
@@ -93,7 +89,7 @@ fn create_image_texture(
 	};
 
 	// Note: The image loader should ensure the image is the right size.
-	let limits = wgpu_shared.device.limits();
+	let limits = wgpu.device.limits();
 	let max_image_size = limits.max_texture_dimension_2d;
 	let image_width = image.width();
 	let image_height = image.height();
@@ -117,8 +113,8 @@ fn create_image_texture(
 		// TODO: Pass some view formats?
 		view_formats: &[],
 	};
-	let texture = wgpu_shared.device.create_texture_with_data(
-		&wgpu_shared.queue,
+	let texture = wgpu.device.create_texture_with_data(
+		&wgpu.queue,
 		&texture_descriptor,
 		wgpu::util::TextureDataOrder::LayerMajor,
 		image.as_bytes(),

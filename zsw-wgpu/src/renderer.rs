@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::WgpuShared,
+	super::Wgpu,
 	app_error::Context,
 	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
@@ -34,15 +34,15 @@ pub struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-	pub fn new(window: Arc<Window>, shared: &WgpuShared) -> Result<Self, AppError> {
+	pub fn new(window: Arc<Window>, wgpu: &Wgpu) -> Result<Self, AppError> {
 		// Create the surface
 		// SAFETY: We keep an `Arc<Window>` that we only drop
 		//         *after* dropping the surface.
-		let surface = unsafe { self::create_surface(shared, &window) }?;
+		let surface = unsafe { self::create_surface(wgpu, &window) }?;
 
 		// Configure the surface and get the preferred texture format and surface size
 		let surface_size = window.inner_size();
-		let surface_config = self::configure_window_surface(shared, &surface, surface_size)
+		let surface_config = self::configure_window_surface(wgpu, &surface, surface_size)
 			.context("Unable to configure window surface")?;
 
 		Ok(Self {
@@ -69,7 +69,7 @@ impl WgpuRenderer {
 	///
 	/// Returns the encoder and surface view to render onto
 	// TODO: Ensure it's not called more than once?
-	pub fn start_render(&self, shared: &WgpuShared) -> Result<FrameRender, AppError> {
+	pub fn start_render(&self, wgpu: &Wgpu) -> Result<FrameRender, AppError> {
 		// And then get the surface texture
 		// Note: This can block, so we run it under tokio's block-in-place
 		// Note: If the application goes to sleep, this can fail spuriously due to a timeout,
@@ -96,7 +96,7 @@ impl WgpuRenderer {
 		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
 			label: Some("[zsw] Frame render command encoder"),
 		};
-		let encoder = shared.device.create_command_encoder(&encoder_descriptor);
+		let encoder = wgpu.device.create_command_encoder(&encoder_descriptor);
 
 		Ok(FrameRender {
 			encoder,
@@ -107,7 +107,7 @@ impl WgpuRenderer {
 	}
 
 	/// Re-configures the surface
-	pub fn reconfigure(&mut self, shared: &WgpuShared) -> Result<(), AppError> {
+	pub fn reconfigure(&mut self, wgpu: &Wgpu) -> Result<(), AppError> {
 		tracing::info!(
 			"Reconfiguring wgpu surface to {}x{}",
 			self.surface_size.width,
@@ -115,14 +115,14 @@ impl WgpuRenderer {
 		);
 
 		// Update our surface
-		self.surface_config = self::configure_window_surface(shared, &self.surface, self.surface_size)
+		self.surface_config = self::configure_window_surface(wgpu, &self.surface, self.surface_size)
 			.context("Unable to configure window surface")?;
 
 		Ok(())
 	}
 
 	/// Performs a resize
-	pub fn resize(&mut self, shared: &WgpuShared, size: PhysicalSize<u32>) -> Result<(), AppError> {
+	pub fn resize(&mut self, wgpu: &Wgpu, size: PhysicalSize<u32>) -> Result<(), AppError> {
 		tracing::info!(
 			"Resizing wgpu surface to {}x{}",
 			self.surface_size.width,
@@ -132,7 +132,7 @@ impl WgpuRenderer {
 		// TODO: Don't ignore resizes to the same size?
 		if size.width > 0 && size.height > 0 && size != self.surface_size {
 			// Update our surface
-			self.surface_config = self::configure_window_surface(shared, &self.surface, size)
+			self.surface_config = self::configure_window_surface(wgpu, &self.surface, size)
 				.context("Unable to configure window surface")?;
 			self.surface_size = size;
 		}
@@ -162,11 +162,11 @@ impl FrameRender {
 	///
 	/// Returns if a reconfigure is needed
 	#[must_use]
-	pub fn finish(self, shared: &WgpuShared) -> bool {
+	pub fn finish(self, wgpu: &Wgpu) -> bool {
 		// Submit everything to the queue and present the surface's texture
 		// Note: Although not supposed to, `submit` calls can block, so we wrap it
 		//       in a tokio block-in-place
-		let _ = tokio::task::block_in_place(|| shared.queue.submit([self.encoder.finish()]));
+		let _ = tokio::task::block_in_place(|| wgpu.queue.submit([self.encoder.finish()]));
 		let reconfigure = self.surface_texture.suboptimal;
 		self.surface_texture.present();
 
@@ -176,13 +176,13 @@ impl FrameRender {
 
 /// Configures the window surface and returns the configuration
 fn configure_window_surface(
-	shared: &WgpuShared,
+	wgpu: &Wgpu,
 	surface: &wgpu::Surface<'static>,
 	size: PhysicalSize<u32>,
 ) -> Result<wgpu::SurfaceConfiguration, AppError> {
 	// Get the format
 	let mut config = surface
-		.get_default_config(&shared.adapter, size.width, size.height)
+		.get_default_config(&wgpu.adapter, size.width, size.height)
 		.context("Unable to get surface default config")?;
 	tracing::debug!(?config, "Found surface configuration");
 
@@ -192,7 +192,7 @@ fn configure_window_surface(
 	tracing::debug!(?config, "Updated surface configuration");
 
 	// Then configure it
-	surface.configure(&shared.device, &config);
+	surface.configure(&wgpu.device, &config);
 
 	Ok(config)
 }
@@ -201,13 +201,13 @@ fn configure_window_surface(
 ///
 /// # Safety
 /// The returned surface *must* be dropped before the window.
-unsafe fn create_surface(shared: &WgpuShared, window: &Window) -> Result<wgpu::Surface<'static>, AppError> {
+unsafe fn create_surface(wgpu: &Wgpu, window: &Window) -> Result<wgpu::Surface<'static>, AppError> {
 	// Create the surface
 	tracing::debug!(?window, "Requesting wgpu surface");
 	// SAFETY: User ensures that the surface is dropped before the window.
 	let target = unsafe { wgpu::SurfaceTargetUnsafe::from_window(window) }.context("Unable to get window target")?;
 	// SAFETY: User ensures that the surface is dropped before the window.
-	let surface = unsafe { shared.instance.create_surface_unsafe(target) }.context("Unable to request surface")?;
+	let surface = unsafe { wgpu.instance.create_surface_unsafe(target) }.context("Unable to request surface")?;
 	tracing::debug!(?surface, "Created wgpu surface");
 
 	Ok(surface)

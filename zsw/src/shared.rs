@@ -11,7 +11,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
 	winit::dpi::PhysicalPosition,
-	zsw_wgpu::WgpuShared,
+	zsw_wgpu::Wgpu,
 };
 
 /// Shared data
@@ -22,7 +22,7 @@ pub struct Shared {
 	pub last_resize: AtomicCell<Option<Resize>>,
 	pub cursor_pos:  AtomicCell<PhysicalPosition<f64>>,
 
-	pub wgpu:                    &'static WgpuShared,
+	pub wgpu:                    &'static Wgpu,
 	pub panels_renderer_layouts: PanelsRendererLayouts,
 
 	pub panels:    Panels,

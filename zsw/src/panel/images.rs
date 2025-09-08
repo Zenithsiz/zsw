@@ -14,7 +14,7 @@ use {
 	std::{self, mem, path::Path, sync::Arc},
 	tracing::Instrument,
 	zsw_util::{AppError, Loadable, loadable::Loader},
-	zsw_wgpu::WgpuShared,
+	zsw_wgpu::Wgpu,
 	zutil_cloned::cloned,
 };
 
@@ -76,13 +76,13 @@ impl PanelFadeImages {
 	/// If successful, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub fn step_prev(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) -> Result<(), ()> {
+	pub fn step_prev(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Result<(), ()> {
 		playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = PanelFadeImage::empty();
 		self.image_bind_group = None;
-		self.load_missing(playlist_player, wgpu_shared);
+		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
 	}
@@ -92,7 +92,7 @@ impl PanelFadeImages {
 	/// If successful, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub fn step_next(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) -> Result<(), ()> {
+	pub fn step_next(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Result<(), ()> {
 		if !self.next.is_loaded() {
 			return Err(());
 		}
@@ -102,7 +102,7 @@ impl PanelFadeImages {
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = PanelFadeImage::empty();
 		self.image_bind_group = None;
-		self.load_missing(playlist_player, wgpu_shared);
+		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
 	}
@@ -110,9 +110,9 @@ impl PanelFadeImages {
 	/// Loads any missing images, prioritizing the current, then next, then previous.
 	///
 	/// Requests images if missing any.
-	pub fn load_missing(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) {
+	pub fn load_missing(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) {
 		// Get the next image, if we can
-		let Some(res) = self.next_image(playlist_player, wgpu_shared) else {
+		let Some(res) = self.next_image(playlist_player, wgpu) else {
 			return;
 		};
 
@@ -130,7 +130,7 @@ impl PanelFadeImages {
 				);
 				playlist_player.remove(&res.path);
 
-				_ = self.schedule_load_image(playlist_player, wgpu_shared);
+				_ = self.schedule_load_image(playlist_player, wgpu);
 				return;
 			},
 		};
@@ -154,9 +154,9 @@ impl PanelFadeImages {
 
 		if let Some(slot) = slot {
 			match slot {
-				Slot::Prev => self.prev = PanelFadeImage::new(wgpu_shared, res.path, image),
-				Slot::Cur => self.cur = PanelFadeImage::new(wgpu_shared, res.path, image),
-				Slot::Next => self.next = PanelFadeImage::new(wgpu_shared, res.path, image),
+				Slot::Prev => self.prev = PanelFadeImage::new(wgpu, res.path, image),
+				Slot::Cur => self.cur = PanelFadeImage::new(wgpu, res.path, image),
+				Slot::Next => self.next = PanelFadeImage::new(wgpu, res.path, image),
 			}
 			self.image_bind_group = None;
 		}
@@ -166,20 +166,16 @@ impl PanelFadeImages {
 	///
 	/// If an image is not scheduled, schedules it, even after
 	/// successfully returning an image
-	fn next_image(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_shared: &WgpuShared) -> Option<ImageLoadRes> {
+	fn next_image(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Option<ImageLoadRes> {
 		// Schedule it and try to take any existing image result
-		_ = self.schedule_load_image(playlist_player, wgpu_shared);
+		_ = self.schedule_load_image(playlist_player, wgpu);
 		self.next_image.take()
 	}
 
 	/// Schedules a new image.
 	///
 	/// If the image is loaded, returns it
-	fn schedule_load_image(
-		&mut self,
-		playlist_player: &mut PlaylistPlayer,
-		wgpu_shared: &WgpuShared,
-	) -> Option<&mut ImageLoadRes> {
+	fn schedule_load_image(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Option<&mut ImageLoadRes> {
 		// If we're loaded, just return it
 		// Note: We can't use if-let due to a borrow-checker limitation
 		if self.next_image.get().is_some() {
@@ -194,7 +190,7 @@ impl PanelFadeImages {
 			() => return None,
 		};
 
-		let max_image_size = wgpu_shared.device.limits().max_texture_dimension_2d;
+		let max_image_size = wgpu.device.limits().max_texture_dimension_2d;
 
 		self.next_image.try_load((NextImageArgs {
 			playlist_pos,
