@@ -339,9 +339,9 @@ async fn renderer(
 				&wgpu_renderer,
 				&shared.wgpu,
 				&shared.panels_renderer_layouts,
-				window_geometry,
-				window,
 				&shared.panels,
+				window,
+				window_geometry,
 			)
 			.await
 			.context("Unable to render panels")?;

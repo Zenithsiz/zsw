@@ -21,7 +21,7 @@ use {
 	wgpu::util::DeviceExt,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_util::{AppError, Rect},
-	zsw_wgpu::{FrameRender, WgpuRenderer, Wgpu},
+	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
 
 /// Panels renderer layouts
@@ -113,9 +113,9 @@ impl PanelsRenderer {
 		wgpu_renderer: &WgpuRenderer,
 		wgpu: &Wgpu,
 		layouts: &PanelsRendererLayouts,
-		window_geometry: Rect<i32, u32>,
-		window: &Window,
 		panels: &Panels,
+		window: &Window,
+		window_geometry: Rect<i32, u32>,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match self.msaa_samples {
@@ -276,9 +276,7 @@ impl PanelsRenderer {
 			.entry(window.id())
 			.or_insert_with(|| self::create_panel_geometry_uniforms(wgpu, layouts));
 		let write_uniforms = |uniforms_bytes| {
-			wgpu
-				.queue
-				.write_buffer(&geometry_uniforms.buffer, 0, uniforms_bytes);
+			wgpu.queue.write_buffer(&geometry_uniforms.buffer, 0, uniforms_bytes);
 		};
 		macro write_uniforms($uniforms:expr) {
 			write_uniforms(bytemuck::bytes_of(&$uniforms))
@@ -430,9 +428,7 @@ fn create_render_pipeline(
 		bind_group_layouts,
 		push_constant_ranges: &[],
 	};
-	let render_pipeline_layout = wgpu
-		.device
-		.create_pipeline_layout(&render_pipeline_layout_descriptor);
+	let render_pipeline_layout = wgpu.device.create_pipeline_layout(&render_pipeline_layout_descriptor);
 
 	let color_targets = [Some(wgpu::ColorTargetState {
 		format:     wgpu_renderer.surface_config().format,
@@ -502,8 +498,7 @@ fn create_msaa_framebuffer(
 		view_formats:    &surface_config.view_formats,
 	};
 
-	wgpu
-		.device
+	wgpu.device
 		.create_texture(&msaa_frame_descriptor)
 		.create_view(&wgpu::TextureViewDescriptor::default())
 }
