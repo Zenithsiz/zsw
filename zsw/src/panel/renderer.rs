@@ -275,16 +275,6 @@ impl PanelsRenderer {
 		let pos_matrix = geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
 
-		let image_uniforms = |image: &PanelFadeImage| {
-			let (size, swap_dir) = match *image {
-				PanelFadeImage::Empty => (Vector2::new(0, 0), false),
-				PanelFadeImage::Loaded { size, swap_dir, .. } => (size, swap_dir),
-			};
-
-			let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);
-			PanelImageUniforms::new(ratio, swap_dir)
-		};
-
 		// Writes uniforms `uniforms`
 		let geometry_uniforms = geometry
 			.uniforms
@@ -305,6 +295,16 @@ impl PanelsRenderer {
 				background_color: uniform::Vec4(panel_state.background_color),
 			}),
 			PanelState::Fade(panel_state) => {
+				let image_uniforms = |image: &PanelFadeImage| {
+					let (size, swap_dir) = match *image {
+						PanelFadeImage::Empty => (Vector2::new(0, 0), false),
+						PanelFadeImage::Loaded { size, swap_dir, .. } => (size, swap_dir),
+					};
+
+					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);
+					PanelImageUniforms::new(ratio, swap_dir)
+				};
+
 				let prev = image_uniforms(&panel_state.images().prev);
 				let cur = image_uniforms(&panel_state.images().cur);
 				let next = image_uniforms(&panel_state.images().next);
