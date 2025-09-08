@@ -2,16 +2,12 @@
 
 // Imports
 use {
-	super::{Playlist, PlaylistItemKind},
-	futures::{StreamExt, stream::FuturesUnordered},
 	rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
 	std::{
 		collections::{HashSet, VecDeque},
 		path::Path,
 		sync::Arc,
 	},
-	tokio::{fs, sync::Mutex},
-	zsw_util::{AppError, UnwrapOrReturnExt, WalkDir},
 };
 
 /// Playlist player
@@ -45,86 +41,9 @@ impl PlaylistPlayer {
 		}
 	}
 
-	/// Extends this player with a playlist
-	// TODO: Move this elsewhere so we can lock only when inserting
-	pub async fn extend(&mut self, playlist: &Playlist) {
-		let items = Mutex::new(vec![]);
-		playlist
-			.items
-			.iter()
-			.map(async |item| {
-				// If not enabled, skip it
-				if !item.enabled {
-					return;
-				}
-
-				// Else check the kind of item
-				match item.kind {
-					PlaylistItemKind::Directory {
-						path: ref dir_path,
-						recursive,
-					} =>
-						WalkDir::builder()
-							.max_depth(match recursive {
-								true => None,
-								false => Some(0),
-							})
-							.recurse_symlink(true)
-							.build(dir_path.to_path_buf())
-							.map(|entry| async {
-								let entry = match entry {
-									Ok(entry) => entry,
-									Err(err) => {
-										let err = AppError::new(&err);
-										tracing::warn!("Unable to read directory entry: {}", err.pretty());
-										return;
-									},
-								};
-
-								let path = entry.path();
-								if fs::metadata(&path)
-									.await
-									.map_err(|err| {
-										let err = AppError::new(&err);
-										tracing::warn!(
-											"Unable to get playlist entry {path:?} metadata: {}",
-											err.pretty()
-										);
-									})
-									.unwrap_or_return()?
-									.is_dir()
-								{
-									// If it's a directory, skip it
-									return;
-								}
-
-								match tokio::fs::canonicalize(&path).await {
-									Ok(entry) => items.lock().await.push(entry.into()),
-									Err(err) => {
-										let err = AppError::new(&err);
-										tracing::warn!("Unable to read playlist entry {path:?}: {}", err.pretty());
-									},
-								}
-							})
-							.collect::<FuturesUnordered<_>>()
-							.await
-							.collect::<()>()
-							.await,
-
-					PlaylistItemKind::File { ref path } => match tokio::fs::canonicalize(path).await {
-						Ok(path) => items.lock().await.push(path.into()),
-						Err(err) => {
-							let err = AppError::new(&err);
-							tracing::warn!("Unable to canonicalize playlist entry {path:?}: {}", err.pretty());
-						},
-					},
-				}
-			})
-			.collect::<FuturesUnordered<_>>()
-			.collect::<()>()
-			.await;
-
-		self.all_items.extend(items.into_inner());
+	/// Inserts an item in this player
+	pub fn insert(&mut self, item: Arc<Path>) {
+		_ = self.all_items.insert(item);
 	}
 
 	/// Returns the previous position in the playlist

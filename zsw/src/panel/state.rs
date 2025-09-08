@@ -3,14 +3,15 @@
 // Imports
 use {
 	super::{PanelFadeImages, PanelFadeShader, PanelShader},
-	crate::playlist::{PlaylistName, PlaylistPlayer, Playlists},
+	crate::playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
 	app_error::Context,
 	chrono::TimeDelta,
 	core::{ops::Deref, time::Duration},
-	futures::lock::Mutex,
+	futures::{StreamExt, lock::Mutex, stream::FuturesUnordered},
 	std::{sync::Arc, time::Instant},
+	tokio::fs,
+	zsw_util::{AppError, UnwrapOrReturnExt, WalkDir},
 	zsw_wgpu::Wgpu,
-	zutil_cloned::cloned,
 };
 
 /// Panel state
@@ -91,18 +92,10 @@ impl PanelFadeState {
 	) -> Self {
 		let playlist_player = Arc::new(Mutex::new(PlaylistPlayer::new()));
 
-		#[cloned(playlist, playlist_player)]
-		let task_res = crate::spawn_task(format!("Populate panel {playlist:?} playlist"), async move {
-			let playlist = playlists
-				.load(playlist.clone())
-				.await
-				.context("Unable to load playlist")?;
-			tracing::debug!("Loaded default playlist {playlist:?}");
-
-			playlist_player.lock().await.extend(&playlist).await;
-
-			Ok(())
-		});
+		let task_res = crate::spawn_task(
+			format!("Populate panel {playlist:?} playlist"),
+			self::load_playlist(Arc::clone(&playlist_player), playlist.clone(), playlists),
+		);
 
 		if let Err(err) = task_res {
 			tracing::warn!(
@@ -330,6 +323,94 @@ impl PanelFadeState {
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
 		self.step(wgpu, delta).await;
 	}
+}
+
+/// Loads a panel's playlist
+async fn load_playlist(
+	playlist_player: Arc<Mutex<PlaylistPlayer>>,
+	playlist: PlaylistName,
+	playlists: Arc<Playlists>,
+) -> Result<(), AppError> {
+	let playlist = playlists
+		.load(playlist.clone())
+		.await
+		.context("Unable to load playlist")?;
+	tracing::debug!("Loaded default playlist {playlist:?}");
+
+	playlist
+		.items
+		.iter()
+		.map(async |item| {
+			// If not enabled, skip it
+			if !item.enabled {
+				return;
+			}
+
+			// Else check the kind of item
+			match item.kind {
+				PlaylistItemKind::Directory {
+					path: ref dir_path,
+					recursive,
+				} =>
+					WalkDir::builder()
+						.max_depth(match recursive {
+							true => None,
+							false => Some(0),
+						})
+						.recurse_symlink(true)
+						.build(dir_path.to_path_buf())
+						.map(|entry| async {
+							let entry = match entry {
+								Ok(entry) => entry,
+								Err(err) => {
+									let err = AppError::new(&err);
+									tracing::warn!("Unable to read directory entry: {}", err.pretty());
+									return;
+								},
+							};
+
+							let path = entry.path();
+							if fs::metadata(&path)
+								.await
+								.map_err(|err| {
+									let err = AppError::new(&err);
+									tracing::warn!("Unable to get playlist entry {path:?} metadata: {}", err.pretty());
+								})
+								.unwrap_or_return()?
+								.is_dir()
+							{
+								// If it's a directory, skip it
+								return;
+							}
+
+							match tokio::fs::canonicalize(&path).await {
+								Ok(entry) => playlist_player.lock().await.insert(entry.into()),
+								Err(err) => {
+									let err = AppError::new(&err);
+									tracing::warn!("Unable to read playlist entry {path:?}: {}", err.pretty());
+								},
+							}
+						})
+						.collect::<FuturesUnordered<_>>()
+						.await
+						.collect::<()>()
+						.await,
+
+				PlaylistItemKind::File { ref path } => match tokio::fs::canonicalize(path).await {
+					Ok(path) => playlist_player.lock().await.insert(path.into()),
+					Err(err) => {
+						let err = AppError::new(&err);
+						tracing::warn!("Unable to canonicalize playlist entry {path:?}: {}", err.pretty());
+					},
+				},
+			}
+		})
+		.collect::<FuturesUnordered<_>>()
+		.collect::<()>()
+		.await;
+
+
+	Ok(())
 }
 
 /// Converts a chrono time delta into a duration, indicating whether it's positive or negative
