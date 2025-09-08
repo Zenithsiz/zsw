@@ -3,7 +3,7 @@
 // Imports
 use {
 	crate::AppError,
-	core::{fmt, task::Poll},
+	core::{fmt, marker::Tuple, task::Poll},
 	futures::FutureExt,
 };
 
@@ -37,6 +37,13 @@ impl<T, F> Loadable<T, F> {
 		self.value.as_ref()
 	}
 
+	/// Gets the inner value mutably, if any.
+	///
+	/// Does not start loading if unloaded.
+	pub fn get_mut(&mut self) -> Option<&mut T> {
+		self.value.as_mut()
+	}
+
 	/// Takes the value, if any.
 	///
 	/// Does not start loading if unloaded.
@@ -45,10 +52,11 @@ impl<T, F> Loadable<T, F> {
 	}
 
 	/// Tries to load the inner value
-	pub fn try_load(&mut self) -> Option<&mut T>
+	pub fn try_load<Args>(&mut self, args: Args) -> Option<&mut T>
 	where
 		T: Send + 'static,
-		F: Loader<T>,
+		F: Loader<Args, T>,
+		Args: Tuple,
 	{
 		// If the value is loaded, we're done
 		// Note: We can't use if-let due to a borrow-checker limitation
@@ -80,7 +88,7 @@ impl<T, F> Loadable<T, F> {
 				}
 			},
 			None => {
-				let fut = (self.loader)();
+				let fut = self.loader.async_call_mut(args);
 				self.task = Some(tokio::spawn(fut));
 
 				None
@@ -90,7 +98,8 @@ impl<T, F> Loadable<T, F> {
 }
 
 /// Loader trait
-pub trait Loader<T> = AsyncFnMut() -> T where for<'a> <Self as AsyncFnMut<()>>::CallRefFuture<'a>: Send + 'static;
+pub trait Loader<Args: Tuple, T> =
+	AsyncFnMut<Args, Output = T> where for<'a> <Self as AsyncFnMut<Args>>::CallRefFuture<'a>: Send + 'static;
 
 impl<T: fmt::Debug, F> fmt::Debug for Loadable<T, F> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

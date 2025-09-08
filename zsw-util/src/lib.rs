@@ -19,7 +19,8 @@
 	sync_nonpoison,
 	async_fn_traits,
 	trait_alias,
-	unboxed_closures
+	unboxed_closures,
+	tuple_trait
 )]
 
 // Modules

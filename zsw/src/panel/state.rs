@@ -81,7 +81,7 @@ pub struct PanelFadeState {
 	playlist_player: Loadable<Result<PlaylistPlayer, AppError>, PlaylistPlayerLoader>,
 }
 
-type PlaylistPlayerLoader = impl Loader<Result<PlaylistPlayer, AppError>>;
+type PlaylistPlayerLoader = impl Loader<(), Result<PlaylistPlayer, AppError>>;
 
 impl PanelFadeState {
 	#[define_opaque(PlaylistPlayerLoader)]
@@ -251,7 +251,7 @@ impl PanelFadeState {
 	///
 	/// If the playlist player isn't loaded, does nothing
 	pub fn skip(&mut self, wgpu_shared: &WgpuShared) {
-		let Some(Ok(playlist_player)) = self.playlist_player.try_load() else {
+		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
 			return;
 		};
 
@@ -265,7 +265,7 @@ impl PanelFadeState {
 	///
 	/// If the playlist player isn't loaded, does nothing
 	pub fn step(&mut self, wgpu_shared: &WgpuShared, delta: TimeDelta) {
-		let Some(Ok(playlist_player)) = self.playlist_player.try_load() else {
+		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
 			return;
 		};
 
@@ -322,7 +322,7 @@ impl PanelFadeState {
 	///
 	/// If the playlist player isn't loaded, does nothing
 	pub fn update(&mut self, wgpu_shared: &WgpuShared) {
-		let Some(Ok(playlist_player)) = self.playlist_player.try_load() else {
+		let Some(Ok(playlist_player)) = self.playlist_player.try_load(()) else {
 			return;
 		};
 
