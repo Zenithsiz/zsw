@@ -5,7 +5,7 @@ use {
 	super::{Panel, PanelName, PanelState, ser},
 	crate::{
 		AppError,
-		panel::{PanelNoneState, PanelShaderFade, state::PanelFadeState},
+		panel::{PanelFadeShader, PanelNoneState, state::PanelFadeState},
 		playlist::{PlaylistName, Playlists},
 	},
 	app_error::Context,
@@ -70,10 +70,10 @@ impl Panels {
 						panel.state.duration,
 						panel.state.fade_duration,
 						match fade.inner {
-							ser::PanelShaderFadeInner::Basic => PanelShaderFade::Basic,
-							ser::PanelShaderFadeInner::White { strength } => PanelShaderFade::White { strength },
-							ser::PanelShaderFadeInner::Out { strength } => PanelShaderFade::Out { strength },
-							ser::PanelShaderFadeInner::In { strength } => PanelShaderFade::In { strength },
+							ser::PanelFadeShaderInner::Basic => PanelFadeShader::Basic,
+							ser::PanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
+							ser::PanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
+							ser::PanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
 						},
 						PlaylistName::from(fade.playlist),
 						Arc::clone(playlists),

@@ -53,27 +53,27 @@ pub enum PanelShader {
 	},
 
 	#[serde(rename = "fade")]
-	Fade(PanelShaderFade),
+	Fade(PanelFadeShader),
 }
 
 
 /// Configuration shader fade inner
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct PanelShaderFade {
+pub struct PanelFadeShader {
 	/// Playlist
 	pub playlist: String,
 
 	/// Inner
 	#[serde(flatten)]
-	pub inner: PanelShaderFadeInner,
+	pub inner: PanelFadeShaderInner,
 }
 
 /// Configuration shader fade inner
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "fade")]
-pub enum PanelShaderFadeInner {
+pub enum PanelFadeShaderInner {
 	#[serde(rename = "basic")]
 	Basic,
 

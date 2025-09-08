@@ -25,10 +25,10 @@ fn main() {
 	// Pre-process all panel shaders
 	let shaders = [
 		PanelShader::None,
-		PanelShader::Fade(PanelShaderFade::Basic),
-		PanelShader::Fade(PanelShaderFade::White),
-		PanelShader::Fade(PanelShaderFade::Out),
-		PanelShader::Fade(PanelShaderFade::In),
+		PanelShader::Fade(PanelFadeShader::Basic),
+		PanelShader::Fade(PanelFadeShader::White),
+		PanelShader::Fade(PanelFadeShader::Out),
+		PanelShader::Fade(PanelFadeShader::In),
 	];
 	for shader in shaders {
 		let shader_src_path = Path::new("shaders").join(shader.src_path());
@@ -46,12 +46,12 @@ fn main() {
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 enum PanelShader {
 	None,
-	Fade(PanelShaderFade),
+	Fade(PanelFadeShader),
 }
 
 /// Panel shader fade
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum PanelShaderFade {
+pub enum PanelFadeShader {
 	Basic,
 	White,
 	Out,
@@ -73,10 +73,10 @@ impl PanelShader {
 		match self {
 			Self::None => "panels/none.json",
 			Self::Fade(fade) => match fade {
-				PanelShaderFade::Basic => "panels/fade.json",
-				PanelShaderFade::White => "panels/fade-white.json",
-				PanelShaderFade::Out => "panels/fade-out.json",
-				PanelShaderFade::In => "panels/fade-in.json",
+				PanelFadeShader::Basic => "panels/fade.json",
+				PanelFadeShader::White => "panels/fade-white.json",
+				PanelFadeShader::Out => "panels/fade-out.json",
+				PanelFadeShader::In => "panels/fade-in.json",
 			},
 		}
 	}
@@ -122,10 +122,10 @@ fn parse(shader: PanelShader, shader_src_path: &Path) -> Result<naga::Module, Ap
 	match shader {
 		PanelShader::None => (),
 		PanelShader::Fade(fade) => match fade {
-			PanelShaderFade::Basic => _ = shader_defs.insert("FADE_BASIC"),
-			PanelShaderFade::White => _ = shader_defs.insert("FADE_WHITE"),
-			PanelShaderFade::Out => _ = shader_defs.insert("FADE_OUT"),
-			PanelShaderFade::In => _ = shader_defs.insert("FADE_IN"),
+			PanelFadeShader::Basic => _ = shader_defs.insert("FADE_BASIC"),
+			PanelFadeShader::White => _ = shader_defs.insert("FADE_WHITE"),
+			PanelFadeShader::Out => _ = shader_defs.insert("FADE_OUT"),
+			PanelFadeShader::In => _ = shader_defs.insert("FADE_IN"),
 		},
 	}
 

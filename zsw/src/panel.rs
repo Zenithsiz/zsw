@@ -13,7 +13,7 @@ pub use self::{
 	geometry::{PanelGeometry, PanelGeometryUniforms},
 	images::{PanelImage, PanelImages},
 	panels::Panels,
-	renderer::{PanelShader, PanelShaderFade, PanelsRenderer, PanelsRendererLayouts},
+	renderer::{PanelFadeShader, PanelShader, PanelsRenderer, PanelsRendererLayouts},
 	state::{PanelFadeState, PanelNoneState, PanelState},
 };
 

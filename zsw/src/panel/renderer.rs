@@ -312,7 +312,7 @@ impl PanelsRenderer {
 				let fade_duration = panel_state.fade_duration_norm();
 				let progress = panel_state.progress_norm();
 				match panel_state.shader() {
-					PanelShaderFade::Basic => write_uniforms!(uniform::Fade {
+					PanelFadeShader::Basic => write_uniforms!(uniform::Fade {
 						pos_matrix,
 						prev,
 						cur,
@@ -321,7 +321,7 @@ impl PanelsRenderer {
 						progress,
 						_unused: [0; 2],
 					}),
-					PanelShaderFade::White { strength } => write_uniforms!(uniform::FadeWhite {
+					PanelFadeShader::White { strength } => write_uniforms!(uniform::FadeWhite {
 						pos_matrix,
 						prev,
 						cur,
@@ -331,7 +331,7 @@ impl PanelsRenderer {
 						strength,
 						_unused: 0,
 					}),
-					PanelShaderFade::Out { strength } => write_uniforms!(uniform::FadeOut {
+					PanelFadeShader::Out { strength } => write_uniforms!(uniform::FadeOut {
 						pos_matrix,
 						prev,
 						cur,
@@ -341,7 +341,7 @@ impl PanelsRenderer {
 						strength,
 						_unused: 0,
 					}),
-					PanelShaderFade::In { strength } => write_uniforms!(uniform::FadeIn {
+					PanelFadeShader::In { strength } => write_uniforms!(uniform::FadeIn {
 						pos_matrix,
 						prev,
 						cur,
@@ -635,7 +635,7 @@ pub enum PanelShader {
 	None { background_color: [f32; 4] },
 
 	/// Fade shader
-	Fade(PanelShaderFade),
+	Fade(PanelFadeShader),
 }
 
 impl PanelShader {
@@ -658,14 +658,14 @@ impl PanelShader {
 
 /// Panel shader fade
 #[derive(PartialEq, Clone, Copy, Debug)]
-pub enum PanelShaderFade {
+pub enum PanelFadeShader {
 	Basic,
 	White { strength: f32 },
 	Out { strength: f32 },
 	In { strength: f32 },
 }
 
-impl PanelShaderFade {
+impl PanelFadeShader {
 	/// Returns this shader's name
 	pub fn name(self) -> &'static str {
 		match self {

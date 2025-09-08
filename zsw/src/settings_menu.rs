@@ -6,7 +6,7 @@
 // Imports
 use {
 	crate::{
-		panel::{PanelFadeState, PanelGeometry, PanelImage, PanelNoneState, PanelShaderFade, PanelState},
+		panel::{PanelFadeShader, PanelFadeState, PanelGeometry, PanelImage, PanelNoneState, PanelState},
 		playlist::PlaylistName,
 		shared::{Shared, SharedWindow},
 	},
@@ -281,7 +281,7 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, state: &mut PanelState
 					PanelState::Fade(PanelFadeState::new(
 						Duration::from_secs(60),
 						Duration::from_secs(5),
-						PanelShaderFade::Out { strength: 1.5 },
+						PanelFadeShader::Out { strength: 1.5 },
 						PlaylistName::from("none".to_owned()),
 						Arc::clone(&shared.playlists),
 					))
@@ -314,10 +314,10 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, state: &mut PanelState
 				.show_ui(ui, |ui| {
 					// TODO: Not have default values here?
 					let shaders = [
-						PanelShaderFade::Basic,
-						PanelShaderFade::White { strength: 1.0 },
-						PanelShaderFade::Out { strength: 0.2 },
-						PanelShaderFade::In { strength: 0.2 },
+						PanelFadeShader::Basic,
+						PanelFadeShader::White { strength: 1.0 },
+						PanelFadeShader::Out { strength: 0.2 },
+						PanelFadeShader::In { strength: 0.2 },
 					];
 					for shader in shaders {
 						ui.selectable_value(state.shader_mut(), shader, shader.name());
@@ -325,20 +325,20 @@ fn draw_shader_select(ui: &mut egui::Ui, shared: &Shared, state: &mut PanelState
 				});
 
 			match state.shader_mut() {
-				PanelShaderFade::Basic => (),
-				PanelShaderFade::White { strength } => {
+				PanelFadeShader::Basic => (),
+				PanelFadeShader::White { strength } => {
 					ui.horizontal(|ui| {
 						ui.label("Strength");
 						egui::Slider::new(strength, 0.0..=20.0).ui(ui);
 					});
 				},
-				PanelShaderFade::Out { strength } => {
+				PanelFadeShader::Out { strength } => {
 					ui.horizontal(|ui| {
 						ui.label("Strength");
 						egui::Slider::new(strength, 0.0..=2.0).ui(ui);
 					});
 				},
-				PanelShaderFade::In { strength } => {
+				PanelFadeShader::In { strength } => {
 					ui.horizontal(|ui| {
 						ui.label("Strength");
 						egui::Slider::new(strength, 0.0..=2.0).ui(ui);
