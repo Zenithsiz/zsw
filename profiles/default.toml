@@ -1,7 +1,26 @@
 [[panels]]
-panel     = "multiple"
+name = "multiple"
+
+[panels.state]
+duration      = 5.0
+fade_duration = 1.0
+
+[panels.shader]
+type      = "fade"
 playlists = ["example1"]
+fade      = "out"
+strength  = 1.0
+
 
 [[panels]]
-panel     = "quarter"
+name = "quarter"
+
+[panels.state]
+duration      = 5.0
+fade_duration = 1.0
+
+[panels.shader]
+type      = "fade"
 playlists = ["example1"]
+fade      = "white"
+strength  = 1.0

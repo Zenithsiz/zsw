@@ -1,3 +1,11 @@
 [[panels]]
-panel     = "cross-screen"
+name = "cross-screen"
+
+[panels.state]
+duration      = 5.0
+fade_duration = 1.0
+
+[panels.shader]
+type      = "fade"
 playlists = ["example1"]
+fade      = "basic"

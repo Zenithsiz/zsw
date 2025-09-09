@@ -3,7 +3,18 @@
 // Imports
 use {
 	super::{Profile, ProfileName, ser},
-	crate::{panel::PanelName, playlist::PlaylistName, profile::ProfilePanel},
+	crate::{
+		panel::PanelName,
+		playlist::PlaylistName,
+		profile::{
+			ProfilePanel,
+			ProfilePanelFadeShader,
+			ProfilePanelFadeShaderInner,
+			ProfilePanelNoneShader,
+			ProfilePanelShader,
+			ProfilePanelState,
+		},
+	},
 	app_error::Context,
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
@@ -57,8 +68,31 @@ impl Profiles {
 						.panels
 						.into_iter()
 						.map(|panel| ProfilePanel {
-							panel:     PanelName::from(panel.panel),
-							playlists: panel.playlists.into_iter().map(PlaylistName::from).collect(),
+							name:   PanelName::from(panel.name),
+							state:  ProfilePanelState {
+								duration:      panel.state.duration,
+								fade_duration: panel.state.fade_duration,
+							},
+							shader: match panel.shader {
+								ser::ProfilePanelShader::None(shader) =>
+									ProfilePanelShader::None(ProfilePanelNoneShader {
+										background_color: shader.background_color,
+									}),
+								ser::ProfilePanelShader::Fade(shader) =>
+									ProfilePanelShader::Fade(ProfilePanelFadeShader {
+										playlists: shader.playlists.into_iter().map(PlaylistName::from).collect(),
+										inner:     match shader.inner {
+											ser::ProfilePanelFadeShaderInner::Basic =>
+												ProfilePanelFadeShaderInner::Basic,
+											ser::ProfilePanelFadeShaderInner::White { strength } =>
+												ProfilePanelFadeShaderInner::White { strength },
+											ser::ProfilePanelFadeShaderInner::Out { strength } =>
+												ProfilePanelFadeShaderInner::Out { strength },
+											ser::ProfilePanelFadeShaderInner::In { strength } =>
+												ProfilePanelFadeShaderInner::In { strength },
+										},
+									}),
+							},
 						})
 						.collect(),
 				};

@@ -2,7 +2,7 @@
 
 // Modules
 mod profiles;
-mod ser;
+pub mod ser;
 
 // Exports
 pub use self::profiles::Profiles;
@@ -10,6 +10,7 @@ pub use self::profiles::Profiles;
 // Imports
 use {
 	crate::{panel::PanelName, playlist::PlaylistName},
+	core::time::Duration,
 	std::{borrow::Borrow, fmt, sync::Arc},
 };
 
@@ -23,12 +24,47 @@ pub struct Profile {
 /// Profile panel
 #[derive(Debug)]
 pub struct ProfilePanel {
-	/// Panel
-	pub panel: PanelName,
-
-	/// Playlists
-	pub playlists: Vec<PlaylistName>,
+	pub name:   PanelName,
+	pub state:  ProfilePanelState,
+	pub shader: ProfilePanelShader,
 }
+
+/// Profile panel state
+#[derive(Debug)]
+pub struct ProfilePanelState {
+	pub duration:      Duration,
+	pub fade_duration: Duration,
+}
+
+/// Profile panel shader
+#[derive(Debug)]
+pub enum ProfilePanelShader {
+	None(ProfilePanelNoneShader),
+	Fade(ProfilePanelFadeShader),
+}
+
+/// Profile panel shader none
+#[derive(Debug)]
+pub struct ProfilePanelNoneShader {
+	pub background_color: [f32; 4],
+}
+
+/// Profile panel shader fade
+#[derive(Debug)]
+pub struct ProfilePanelFadeShader {
+	pub playlists: Vec<PlaylistName>,
+	pub inner:     ProfilePanelFadeShaderInner,
+}
+
+/// Profile panel shader fade inner
+#[derive(Debug)]
+pub enum ProfilePanelFadeShaderInner {
+	Basic,
+	White { strength: f32 },
+	Out { strength: f32 },
+	In { strength: f32 },
+}
+
 
 /// Profile name
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]

@@ -3,10 +3,7 @@
 // Imports
 use {
 	super::{Panel, PanelName, PanelState, ser},
-	crate::{
-		AppError,
-		panel::{PanelFadeShader, PanelNoneState, state::PanelFadeState},
-	},
+	crate::AppError,
 	app_error::Context,
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
@@ -24,6 +21,7 @@ pub struct Panels {
 
 	/// Loaded panels
 	// TODO: Limit the size of this?
+	// TODO: Just store panels without their state?
 	panels: Mutex<HashMap<PanelName, Arc<OnceCell<PanelStorage>>>>,
 }
 
@@ -39,7 +37,11 @@ impl Panels {
 	/// Loads a panel from a name.
 	///
 	/// If the panel isn't for this window, returns `Ok(None)`
-	pub async fn load(&self, panel_name: PanelName) -> Result<Arc<Mutex<Panel>>, AppError> {
+	pub async fn load(
+		&self,
+		panel_name: PanelName,
+		create_state: impl FnOnce() -> PanelState,
+	) -> Result<Arc<Mutex<Panel>>, AppError> {
 		let panel_entry = Arc::clone(
 			self.panels
 				.lock()
@@ -62,21 +64,7 @@ impl Panels {
 
 				// Finally convert it
 				let geometries = panel.geometries.into_iter().map(|geometry| geometry.geometry).collect();
-				let state = match panel.shader {
-					ser::PanelShader::None { background_color } =>
-						PanelState::None(PanelNoneState::new(background_color)),
-					ser::PanelShader::Fade(fade) => PanelState::Fade(PanelFadeState::new(
-						panel.state.duration,
-						panel.state.fade_duration,
-						match fade.inner {
-							ser::PanelFadeShaderInner::Basic => PanelFadeShader::Basic,
-							ser::PanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
-							ser::PanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
-							ser::PanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
-						},
-					)),
-				};
-				let panel = Panel::new(panel_name.clone(), geometries, state);
+				let panel = Panel::new(panel_name.clone(), geometries, create_state());
 
 				Ok(Arc::new(Mutex::new(panel)))
 			})

@@ -3,13 +3,3 @@ geometry = "960x540+0+540"
 
 [[geometries]]
 geometry = "960x1080+960+0"
-
-[state]
-duration      = 5.0
-fade_duration = 1.0
-
-[shader]
-type     = "fade"
-playlist = "example1"
-fade     = "out"
-strength = 1.0

@@ -1,11 +1,2 @@
 [[geometries]]
 geometry = "1366x768+0+0"
-
-[state]
-duration      = 5.0
-fade_duration = 1.0
-
-[shader]
-type     = "fade"
-playlist = "example1"
-fade     = "basic"

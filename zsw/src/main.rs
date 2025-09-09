@@ -34,9 +34,17 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{Panels, PanelsRenderer, PanelsRendererShared},
+		panel::{
+			PanelFadeShader,
+			PanelFadeState,
+			PanelNoneState,
+			PanelState,
+			Panels,
+			PanelsRenderer,
+			PanelsRendererShared,
+		},
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
-		profile::{ProfileName, Profiles},
+		profile::{ProfileName, ProfilePanelFadeShaderInner, ProfilePanelShader, Profiles},
 		settings_menu::SettingsMenu,
 		shared::Shared,
 	},
@@ -264,32 +272,53 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 		.panels
 		.iter()
 		.map(async |profile_panel| {
-			let panel = shared
-				.panels
-				.load(profile_panel.panel.clone())
-				.await
-				.with_context(|| format!("Unable to load panel {:?}", profile_panel.panel))?;
-
-			// TODO: This is a bit awkward, should we specify the shader in
-			//       the profile instead?
-			let playlist_player = match &panel.lock().await.state {
-				panel::PanelState::None(_) => return Ok(()),
-				panel::PanelState::Fade(state) => Arc::clone(state.playlist_player()),
+			let create_panel_state = move || match &profile_panel.shader {
+				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
+				ProfilePanelShader::Fade(shader) => PanelState::Fade(PanelFadeState::new(
+					profile_panel.state.duration,
+					profile_panel.state.fade_duration,
+					match shader.inner {
+						ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
+						ProfilePanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
+						ProfilePanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
+						ProfilePanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
+					},
+				)),
 			};
 
-			profile_panel
-				.playlists
-				.iter()
-				.map(async |playlist_name| {
-					self::load_playlist(&playlist_player, playlist_name, &shared.playlists)
-						.await
-						.with_context(|| format!("Unable to load playlist {playlist_name:?}"))
-				})
-				.collect::<FuturesUnordered<_>>()
-				.try_collect::<()>()
-				.await?;
+			let panel = shared
+				.panels
+				.load(profile_panel.name.clone(), create_panel_state)
+				.await
+				.with_context(|| format!("Unable to load panel {:?}", profile_panel.state))?;
 
-			Ok::<_, AppError>(())
+			let panel = panel.lock().await;
+			match &panel.state {
+				panel::PanelState::None(_) => Ok::<_, AppError>(()),
+				panel::PanelState::Fade(state) => {
+					let ProfilePanelShader::Fade(shader) = &profile_panel.shader else {
+						tracing::warn!("Fade panel was changed before playlists could be loaded");
+						return Ok(());
+					};
+
+					let playlist_player = Arc::clone(state.playlist_player());
+					drop(panel);
+
+					shader
+						.playlists
+						.iter()
+						.map(async |playlist_name| {
+							self::load_playlist(&playlist_player, playlist_name, &shared.playlists)
+								.await
+								.with_context(|| format!("Unable to load playlist {playlist_name:?}"))
+						})
+						.collect::<FuturesUnordered<_>>()
+						.try_collect::<()>()
+						.await?;
+
+					Ok(())
+				},
+			}
 		})
 		.collect::<FuturesUnordered<_>>()
 		.try_collect::<()>()
