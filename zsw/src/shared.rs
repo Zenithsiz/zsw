@@ -5,7 +5,7 @@ use {
 	crate::{
 		AppEvent,
 		Resize,
-		panel::{Panels, PanelsRendererLayouts},
+		panel::{Panels, PanelsRendererShared},
 		playlist::Playlists,
 	},
 	crossbeam::atomic::AtomicCell,
@@ -22,8 +22,8 @@ pub struct Shared {
 	pub last_resize: AtomicCell<Option<Resize>>,
 	pub cursor_pos:  AtomicCell<PhysicalPosition<f64>>,
 
-	pub wgpu:                    Wgpu,
-	pub panels_renderer_layouts: PanelsRendererLayouts,
+	pub wgpu:                   Wgpu,
+	pub panels_renderer_shared: PanelsRendererShared,
 
 	pub panels:    Panels,
 	pub playlists: Arc<Playlists>,

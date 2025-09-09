@@ -33,7 +33,7 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{PanelName, Panels, PanelsRenderer, PanelsRendererLayouts},
+		panel::{PanelName, Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
 		settings_menu::SettingsMenu,
 		shared::Shared,
@@ -169,7 +169,7 @@ impl WinitApp {
 		event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
 		let wgpu = Wgpu::new().await.context("Unable to initialize wgpu")?;
-		let panels_renderer_layouts = PanelsRendererLayouts::new(&wgpu);
+		let panels_renderer_layouts = PanelsRendererShared::new(&wgpu);
 
 		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
 		let panels = Panels::new(config_dirs.panels().to_path_buf());
@@ -181,7 +181,7 @@ impl WinitApp {
 			// TODO: Not have a default of (0,0)?
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 			wgpu,
-			panels_renderer_layouts,
+			panels_renderer_shared: panels_renderer_layouts,
 			panels,
 			playlists: Arc::new(playlists),
 		};
@@ -338,7 +338,7 @@ async fn renderer(
 				&mut frame,
 				&wgpu_renderer,
 				&shared.wgpu,
-				&shared.panels_renderer_layouts,
+				&shared.panels_renderer_shared,
 				&shared.panels,
 				window,
 				window_geometry,

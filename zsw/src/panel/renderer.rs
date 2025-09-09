@@ -24,9 +24,9 @@ use {
 	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
 
-/// Panels renderer layouts
+/// Panels renderer shared
 #[derive(Debug)]
-pub struct PanelsRendererLayouts {
+pub struct PanelsRendererShared {
 	/// Uniforms bind group layout
 	pub uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
@@ -35,7 +35,7 @@ pub struct PanelsRendererLayouts {
 	pub fade_image_bind_group_layout: wgpu::BindGroupLayout,
 }
 
-impl PanelsRendererLayouts {
+impl PanelsRendererShared {
 	/// Creates new layouts for the panels renderer
 	pub fn new(wgpu: &Wgpu) -> Self {
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu);
@@ -112,7 +112,7 @@ impl PanelsRenderer {
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu: &Wgpu,
-		layouts: &PanelsRendererLayouts,
+		shared: &PanelsRendererShared,
 		panels: &Panels,
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
@@ -184,11 +184,9 @@ impl PanelsRenderer {
 				hash_map::Entry::Occupied(entry) => entry.into_mut(),
 				hash_map::Entry::Vacant(entry) => {
 					let bind_group_layouts = match panel.state {
-						PanelState::None(_) => &[&layouts.uniforms_bind_group_layout] as &[_],
-						PanelState::Fade(_) => &[
-							&layouts.uniforms_bind_group_layout,
-							&layouts.fade_image_bind_group_layout,
-						],
+						PanelState::None(_) => &[&shared.uniforms_bind_group_layout] as &[_],
+						PanelState::Fade(_) =>
+							&[&shared.uniforms_bind_group_layout, &shared.fade_image_bind_group_layout],
 					};
 
 					let render_pipeline = self::create_render_pipeline(
@@ -218,7 +216,7 @@ impl PanelsRenderer {
 					let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
 						self::create_image_bind_group(
 							wgpu,
-							&layouts.fade_image_bind_group_layout,
+							&shared.fade_image_bind_group_layout,
 							panel_images.prev.texture_view(wgpu),
 							panel_images.cur.texture_view(wgpu),
 							panel_images.next.texture_view(wgpu),
@@ -238,7 +236,7 @@ impl PanelsRenderer {
 				// Write and bind the uniforms
 				Self::write_bind_uniforms(
 					wgpu,
-					layouts,
+					shared,
 					frame.surface_size,
 					&panel.state,
 					window_geometry,
@@ -258,7 +256,7 @@ impl PanelsRenderer {
 	/// Writes and binds the uniforms
 	pub fn write_bind_uniforms(
 		wgpu: &Wgpu,
-		layouts: &PanelsRendererLayouts,
+		shared: &PanelsRendererShared,
 		surface_size: PhysicalSize<u32>,
 		panel_state: &PanelState,
 		window_geometry: Rect<i32, u32>,
@@ -274,7 +272,7 @@ impl PanelsRenderer {
 		let geometry_uniforms = geometry
 			.uniforms
 			.entry(window.id())
-			.or_insert_with(|| self::create_panel_geometry_uniforms(wgpu, layouts));
+			.or_insert_with(|| self::create_panel_geometry_uniforms(wgpu, shared));
 		let write_uniforms = |uniforms_bytes| {
 			wgpu.queue.write_buffer(&geometry_uniforms.buffer, 0, uniforms_bytes);
 		};
@@ -353,7 +351,7 @@ impl PanelsRenderer {
 }
 
 /// Creates the panel geometry uniforms
-fn create_panel_geometry_uniforms(wgpu: &Wgpu, layouts: &PanelsRendererLayouts) -> PanelGeometryUniforms {
+fn create_panel_geometry_uniforms(wgpu: &Wgpu, shared: &PanelsRendererShared) -> PanelGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("[zsw::panel] Geometry uniforms buffer"),
@@ -365,7 +363,7 @@ fn create_panel_geometry_uniforms(wgpu: &Wgpu, layouts: &PanelsRendererLayouts) 
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
-		layout:  &layouts.uniforms_bind_group_layout,
+		layout:  &shared.uniforms_bind_group_layout,
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),
