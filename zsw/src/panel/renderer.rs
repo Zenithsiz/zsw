@@ -14,9 +14,11 @@ use {
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
+	futures::lock::Mutex,
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
+		sync::Arc,
 	},
 	wgpu::util::DeviceExt,
 	winit::{dpi::PhysicalSize, window::Window},
@@ -27,21 +29,38 @@ use {
 /// Panels renderer shared
 #[derive(Debug)]
 pub struct PanelsRendererShared {
+	/// Render pipeline for each shader by shader name
+	// TODO: Prune ones that aren't used?
+	render_pipelines: Mutex<HashMap<&'static str, Arc<wgpu::RenderPipeline>>>,
+
+	/// Vertex buffer
+	vertices: wgpu::Buffer,
+
+	/// Index buffer
+	indices: wgpu::Buffer,
+
 	/// Uniforms bind group layout
-	pub uniforms_bind_group_layout: wgpu::BindGroupLayout,
+	uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Fade image bind group layout
 	// TODO: Only create this if using the fade shader?
-	pub fade_image_bind_group_layout: wgpu::BindGroupLayout,
+	fade_image_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl PanelsRendererShared {
 	/// Creates new layouts for the panels renderer
 	pub fn new(wgpu: &Wgpu) -> Self {
+		// Create the index / vertex buffer
+		let indices = self::create_indices(wgpu);
+		let vertices = self::create_vertices(wgpu);
+
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu);
 		let fade_image_bind_group_layout = self::create_fade_image_bind_group_layout(wgpu);
 
 		Self {
+			render_pipelines: Mutex::new(HashMap::new()),
+			vertices,
+			indices,
 			uniforms_bind_group_layout,
 			fade_image_bind_group_layout,
 		}
@@ -61,16 +80,6 @@ impl PanelsRendererShared {
 //       via the uniforms.
 #[derive(Debug)]
 pub struct PanelsRenderer {
-	/// Render pipeline for each shader by shader name
-	// TODO: Prune ones that aren't used?
-	render_pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
-
-	/// Vertex buffer
-	vertices: wgpu::Buffer,
-
-	/// Index buffer
-	indices: wgpu::Buffer,
-
 	/// Msaa frame-buffer
 	msaa_framebuffer: wgpu::TextureView,
 
@@ -82,18 +91,11 @@ pub struct PanelsRenderer {
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
 	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu: &Wgpu, msaa_samples: u32) -> Result<Self, AppError> {
-		// Create the index / vertex buffer
-		let indices = self::create_indices(wgpu);
-		let vertices = self::create_vertices(wgpu);
-
 		// Create the framebuffer
 		let msaa_framebuffer =
 			self::create_msaa_framebuffer(wgpu_renderer, wgpu, wgpu_renderer.surface_size(), msaa_samples);
 
 		Ok(Self {
-			render_pipelines: HashMap::new(),
-			vertices,
-			indices,
 			msaa_framebuffer,
 			msaa_samples,
 		})
@@ -108,7 +110,7 @@ impl PanelsRenderer {
 	/// Renders a panel
 	#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 	pub async fn render(
-		&mut self,
+		&self,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu: &Wgpu,
@@ -158,8 +160,8 @@ impl PanelsRenderer {
 		let mut render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
 
 		// Set our shared indices and vertices
-		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
-		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
+		render_pass.set_index_buffer(shared.indices.slice(..), wgpu::IndexFormat::Uint32);
+		render_pass.set_vertex_buffer(0, shared.vertices.slice(..));
 
 		for panel in panels.get_all().await {
 			let mut panel = panel.lock().await;
@@ -180,8 +182,8 @@ impl PanelsRenderer {
 				continue;
 			}
 
-			let render_pipeline = match self.render_pipelines.entry(panel.state.shader().name()) {
-				hash_map::Entry::Occupied(entry) => entry.into_mut(),
+			let render_pipeline = match shared.render_pipelines.lock().await.entry(panel.state.shader().name()) {
+				hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
 				hash_map::Entry::Vacant(entry) => {
 					let bind_group_layouts = match panel.state {
 						PanelState::None(_) => &[&shared.uniforms_bind_group_layout] as &[_],
@@ -198,12 +200,12 @@ impl PanelsRenderer {
 					)
 					.context("Unable to create render pipeline")?;
 
-					entry.insert(render_pipeline)
+					Arc::clone(entry.insert(Arc::new(render_pipeline)))
 				},
 			};
 
 			// Bind the pipeline for the specific shader
-			render_pass.set_pipeline(render_pipeline);
+			render_pass.set_pipeline(&render_pipeline);
 
 			// Bind the extra bind groups
 			match &mut panel.state {
