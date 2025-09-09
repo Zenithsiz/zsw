@@ -2,7 +2,7 @@
 
 // Modules
 mod profiles;
-pub mod ser;
+mod ser;
 
 // Exports
 pub use self::profiles::Profiles;
