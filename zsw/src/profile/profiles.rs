@@ -12,7 +12,6 @@ use {
 			ProfilePanelFadeShaderInner,
 			ProfilePanelNoneShader,
 			ProfilePanelShader,
-			ProfilePanelState,
 		},
 	},
 	app_error::Context,
@@ -69,10 +68,6 @@ impl Profiles {
 						.into_iter()
 						.map(|panel| ProfilePanel {
 							name:   PanelName::from(panel.name),
-							state:  ProfilePanelState {
-								duration:      panel.state.duration,
-								fade_duration: panel.state.fade_duration,
-							},
 							shader: match panel.shader {
 								ser::ProfilePanelShader::None(shader) =>
 									ProfilePanelShader::None(ProfilePanelNoneShader {
@@ -80,8 +75,10 @@ impl Profiles {
 									}),
 								ser::ProfilePanelShader::Fade(shader) =>
 									ProfilePanelShader::Fade(ProfilePanelFadeShader {
-										playlists: shader.playlists.into_iter().map(PlaylistName::from).collect(),
-										inner:     match shader.inner {
+										playlists:     shader.playlists.into_iter().map(PlaylistName::from).collect(),
+										duration:      shader.duration,
+										fade_duration: shader.fade_duration,
+										inner:         match shader.inner {
 											ser::ProfilePanelFadeShaderInner::Basic =>
 												ProfilePanelFadeShaderInner::Basic,
 											ser::ProfilePanelFadeShaderInner::White { strength } =>

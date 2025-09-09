@@ -1,11 +1,9 @@
 [[panels]]
 name = "full"
 
-[panels.state]
+[panels.shader]
+type          = "fade"
+playlists     = ["example1"]
 duration      = 5.0
 fade_duration = 1.0
-
-[panels.shader]
-type      = "fade"
-playlists = ["example1"]
-fade      = "basic"
+fade          = "basic"

@@ -25,15 +25,7 @@ pub struct Profile {
 #[derive(Debug)]
 pub struct ProfilePanel {
 	pub name:   PanelName,
-	pub state:  ProfilePanelState,
 	pub shader: ProfilePanelShader,
-}
-
-/// Profile panel state
-#[derive(Debug)]
-pub struct ProfilePanelState {
-	pub duration:      Duration,
-	pub fade_duration: Duration,
 }
 
 /// Profile panel shader
@@ -52,8 +44,10 @@ pub struct ProfilePanelNoneShader {
 /// Profile panel shader fade
 #[derive(Debug)]
 pub struct ProfilePanelFadeShader {
-	pub playlists: Vec<PlaylistName>,
-	pub inner:     ProfilePanelFadeShaderInner,
+	pub playlists:     Vec<PlaylistName>,
+	pub duration:      Duration,
+	pub fade_duration: Duration,
+	pub inner:         ProfilePanelFadeShaderInner,
 }
 
 /// Profile panel shader fade inner

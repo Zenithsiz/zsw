@@ -275,8 +275,8 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 			let create_panel_state = move || match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
 				ProfilePanelShader::Fade(shader) => PanelState::Fade(PanelFadeState::new(
-					profile_panel.state.duration,
-					profile_panel.state.fade_duration,
+					shader.duration,
+					shader.fade_duration,
 					match shader.inner {
 						ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
 						ProfilePanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
@@ -290,7 +290,7 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 				.panels
 				.load(profile_panel.name.clone(), create_panel_state)
 				.await
-				.with_context(|| format!("Unable to load panel {:?}", profile_panel.state))?;
+				.with_context(|| format!("Unable to load panel {:?}", profile_panel.name))?;
 
 			let panel = panel.lock().await;
 			match &panel.state {

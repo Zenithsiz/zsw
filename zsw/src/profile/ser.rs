@@ -1,5 +1,7 @@
 //! Serialized profile
 
+// TODO: Allow deserializing durations from strings such as "500ms", "5s", "1m2s", etc.
+
 // Imports
 use {
 	core::time::Duration,
@@ -18,21 +20,7 @@ pub struct Profile {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanel {
 	pub name:   String,
-	pub state:  ProfilePanelState,
 	pub shader: ProfilePanelShader,
-}
-
-/// Panel state
-// TODO: Instead allow deserializing from strings such as "500ms", "5s", "1m2s", etc.
-#[derive(Debug)]
-#[serde_as]
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct ProfilePanelState {
-	#[serde_as(as = "DurationSecondsWithFrac<f64>")]
-	pub duration: Duration,
-
-	#[serde_as(as = "DurationSecondsWithFrac<f64>")]
-	pub fade_duration: Duration,
 }
 
 /// Panel shader
@@ -57,9 +45,16 @@ pub struct ProfilePanelNoneShader {
 
 /// Panel shader fade
 #[derive(Debug)]
+#[serde_as]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanelFadeShader {
 	pub playlists: Vec<String>,
+
+	#[serde_as(as = "DurationSecondsWithFrac<f64>")]
+	pub duration: Duration,
+
+	#[serde_as(as = "DurationSecondsWithFrac<f64>")]
+	pub fade_duration: Duration,
 
 	/// Inner
 	#[serde(flatten)]
