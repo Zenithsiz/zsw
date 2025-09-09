@@ -4,14 +4,15 @@
 #![allow(unused_results)] // Egui produces a lot of results we don't need to use
 
 // Modules
+mod displays;
 mod panels;
 
 // Imports
 use {
-	crate::{AppEvent, panel::Panel},
+	crate::{AppEvent, display::Displays, panel::Panel},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
-	std::path::Path,
+	std::{path::Path, sync::Arc},
 	strum::IntoEnumIterator,
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
 	zsw_util::{AppError, Rect},
@@ -42,6 +43,7 @@ impl SettingsMenu {
 		&mut self,
 		ctx: &egui::Context,
 		wgpu: &Wgpu,
+		displays: &Arc<Displays>,
 		panels: &mut [Panel],
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		cursor_pos: LogicalPosition<f32>,
@@ -69,6 +71,7 @@ impl SettingsMenu {
 
 			match self.cur_tab {
 				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, window_geometry),
+				Tab::Displays => displays::draw_displays_tab(ui, displays),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
 		});
@@ -134,6 +137,9 @@ fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusi
 enum Tab {
 	#[display("Panels")]
 	Panels,
+
+	#[display("Displays")]
+	Displays,
 
 	#[display("Settings")]
 	Settings,

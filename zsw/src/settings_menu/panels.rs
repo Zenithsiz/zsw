@@ -1,4 +1,4 @@
-//! Settings menu "Panels" tab
+//! Panels tab
 
 // Imports
 use {

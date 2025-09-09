@@ -196,7 +196,7 @@ impl WinitApp {
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 			wgpu,
 			panels_renderer_shared: panels_renderer_layouts,
-			displays,
+			displays: Arc::new(displays),
 			playlists: Arc::new(playlists),
 			profiles,
 			panels: Mutex::new(vec![]),
@@ -319,7 +319,7 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 				},
 			};
 
-			let panel = Panel::new(&display, panel_state);
+			let panel = Panel::new(&*display.lock().await, panel_state);
 			shared.panels.lock().await.push(panel);
 
 			Ok::<_, AppError>(())
@@ -530,6 +530,7 @@ async fn paint_egui(
 			settings_menu.draw(
 				ctx,
 				&shared.wgpu,
+				&shared.displays,
 				&mut shared.panels.lock().block_on(),
 				&shared.event_loop_proxy,
 				cursor_pos,

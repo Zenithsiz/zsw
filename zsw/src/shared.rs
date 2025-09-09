@@ -28,7 +28,7 @@ pub struct Shared {
 	pub wgpu:                   Wgpu,
 	pub panels_renderer_shared: PanelsRendererShared,
 
-	pub displays:  Displays,
+	pub displays:  Arc<Displays>,
 	pub playlists: Arc<Playlists>,
 	pub profiles:  Profiles,
 
