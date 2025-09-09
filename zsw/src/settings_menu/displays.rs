@@ -15,15 +15,14 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 		ui.collapsing(display.name.to_string(), |ui| {
 			self::draw_display(ui, &mut display);
 
+			#[expect(clippy::semicolon_if_nothing_returned, reason = "False positive")]
 			if ui.button("Save").clicked() {
 				let display_name = display.name.clone();
 
 				#[cloned(displays)]
-				if let Err(err) = crate::spawn_task(format!("Save display {:?}", display.name), async move {
+				crate::spawn_task(format!("Save display {:?}", display.name), async move {
 					displays.save(&display_name).await
-				}) {
-					tracing::warn!("Unable to spawn task: {}", err.pretty());
-				}
+				});
 			}
 		});
 	}

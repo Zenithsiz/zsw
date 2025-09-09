@@ -206,9 +206,9 @@ impl WinitApp {
 		if let Some(profile) = &config.default.profile {
 			let profile_name = ProfileName::from(profile.clone());
 			let shared = Arc::clone(&shared);
-			_ = self::spawn_task("Load default profile", async move {
+			self::spawn_task("Load default profile", async move {
 				self::load_profile(profile_name, &shared).await
-			})?;
+			});
 		}
 
 		Ok(Self {
@@ -245,7 +245,7 @@ impl WinitApp {
 					settings_menu,
 				)
 				.await
-			})?;
+			});
 
 			_ = self.window_event_handlers.insert(window.id(), egui_event_handler);
 		}
@@ -297,7 +297,7 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 					let panel_playlists = shader.playlists.clone();
 
 					#[cloned(playlists = shared.playlists)]
-					if let Err(err) = self::spawn_task(
+					self::spawn_task(
 						format!("Load panel {:?} playlists", profile_panel.display),
 						async move {
 							panel_playlists
@@ -311,9 +311,7 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 								.try_collect::<()>()
 								.await
 						},
-					) {
-						tracing::warn!("Unable to spawn task: {}", err.pretty());
-					}
+					);
 
 					PanelState::Fade(state)
 				},
@@ -421,29 +419,25 @@ async fn load_playlist(
 
 /// Spawns a task
 #[track_caller]
-pub fn spawn_task<T, Fut>(
-	name: impl Into<String>,
-	fut: Fut,
-) -> Result<tokio::task::JoinHandle<Result<T, AppError>>, AppError>
+pub fn spawn_task<Fut>(name: impl Into<String>, fut: Fut)
 where
-	Fut: Future<Output = Result<T, AppError>> + Send + 'static,
-	T: Send + 'static,
+	Fut: Future<Output = Result<(), AppError>> + Send + 'static,
 {
 	let name = name.into();
 
-	tokio::task::Builder::new()
-		.name(&name.clone())
-		.spawn(
-			#[cloned(name)]
-			async move {
-				let id = tokio::task::id();
-				tracing::debug!("Spawning task {name:?} ({id:?})");
-				fut.await
-					.inspect(|_| tracing::debug!("Task {name:?} ({id:?}) finished"))
-					.inspect_err(|err| tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()))
-			},
-		)
-		.with_context(|| format!("Unable to spawn task {name:?}"))
+	#[cloned(name)]
+	let fut = async move {
+		let id = tokio::task::id();
+		tracing::debug!("Spawning task {name:?} ({id:?})");
+		fut.await
+			.inspect(|()| tracing::debug!("Task {name:?} ({id:?}) finished"))
+			.inspect_err(|err| tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()))
+	};
+
+	if let Err(err) = tokio::task::Builder::new().name(&name.clone()).spawn(fut) {
+		let err = AppError::new(&err);
+		tracing::warn!("Unable to spawn task {name:?}: {}", err.pretty());
+	}
 }
 
 /// Renderer task
