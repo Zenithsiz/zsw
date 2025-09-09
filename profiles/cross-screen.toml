@@ -1,5 +1,5 @@
 [[panels]]
-name = "cross-screen"
+display = "cross-screen"
 
 [panels.shader]
 type          = "fade"

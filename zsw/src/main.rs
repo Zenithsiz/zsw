@@ -21,6 +21,7 @@
 mod args;
 mod config;
 mod config_dirs;
+mod display;
 mod init;
 mod panel;
 mod playlist;
@@ -34,12 +35,13 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
+		display::Displays,
 		panel::{
+			Panel,
 			PanelFadeShader,
 			PanelFadeState,
 			PanelNoneState,
 			PanelState,
-			Panels,
 			PanelsRenderer,
 			PanelsRendererShared,
 		},
@@ -182,8 +184,8 @@ impl WinitApp {
 		let wgpu = Wgpu::new().await.context("Unable to initialize wgpu")?;
 		let panels_renderer_layouts = PanelsRendererShared::new(&wgpu);
 
+		let displays = Displays::new(config_dirs.displays().to_path_buf());
 		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
-		let panels = Panels::new(config_dirs.panels().to_path_buf());
 		let profiles = Profiles::new(config_dirs.profiles().to_path_buf());
 
 		// Shared state
@@ -194,9 +196,10 @@ impl WinitApp {
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 			wgpu,
 			panels_renderer_shared: panels_renderer_layouts,
-			panels,
+			displays,
 			playlists: Arc::new(playlists),
 			profiles,
+			panels: Mutex::new(vec![]),
 		};
 		let shared = Arc::new(shared);
 
@@ -272,7 +275,14 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 		.panels
 		.iter()
 		.map(async |profile_panel| {
-			let create_panel_state = move || match &profile_panel.shader {
+			let display = shared
+				.displays
+				.load(profile_panel.display.clone())
+				.await
+				.with_context(|| format!("Unable to load display {:?}", profile_panel.display))?;
+
+
+			let panel_state = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
 				ProfilePanelShader::Fade(shader) => {
 					let state = PanelFadeState::new(shader.duration, shader.fade_duration, match shader.inner {
@@ -287,8 +297,9 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 					let panel_playlists = shader.playlists.clone();
 
 					#[cloned(playlists = shared.playlists)]
-					if let Err(err) =
-						self::spawn_task(format!("Load panel {:?} playlists", profile_panel.name), async move {
+					if let Err(err) = self::spawn_task(
+						format!("Load panel {:?} playlists", profile_panel.display),
+						async move {
 							panel_playlists
 								.into_iter()
 								.map(async |playlist_name| {
@@ -299,19 +310,17 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 								.collect::<FuturesUnordered<_>>()
 								.try_collect::<()>()
 								.await
-						}) {
-							tracing::warn!("Unable to spawn task: {}", err.pretty());
-						}
+						},
+					) {
+						tracing::warn!("Unable to spawn task: {}", err.pretty());
+					}
 
 					PanelState::Fade(state)
 				},
 			};
 
-			_ = shared
-				.panels
-				.load(profile_panel.name.clone(), create_panel_state)
-				.await
-				.with_context(|| format!("Unable to load panel {:?}", profile_panel.name))?;
+			let panel = Panel::new(&display, panel_state);
+			shared.panels.lock().await.push(panel);
 
 			Ok::<_, AppError>(())
 		})
@@ -474,7 +483,7 @@ async fn renderer(
 				&wgpu_renderer,
 				&shared.wgpu,
 				&shared.panels_renderer_shared,
-				&shared.panels,
+				&mut shared.panels.lock().await,
 				window,
 				window_geometry,
 			)
@@ -521,7 +530,7 @@ async fn paint_egui(
 			settings_menu.draw(
 				ctx,
 				&shared.wgpu,
-				&shared.panels,
+				&mut shared.panels.lock().block_on(),
 				&shared.event_loop_proxy,
 				cursor_pos,
 				window_geometry,
@@ -531,9 +540,7 @@ async fn paint_egui(
 		// Then go through all panels checking for interactions with their geometries
 		let cursor_pos = shared.cursor_pos.load();
 		let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-		for panel in shared.panels.get_all().await {
-			let mut panel = panel.lock().await;
-
+		for panel in &mut *shared.panels.lock().await {
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_area() ||
 				!panel

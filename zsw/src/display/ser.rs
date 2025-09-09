@@ -1,20 +1,20 @@
-//! Panel serialization / deserialization
+//! Serialized display
 
 // Imports
 use {serde_with::serde_as, zsw_util::Rect};
 
-/// Serialized panel
+/// Serialized display
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct Panel {
-	pub geometries: Vec<PanelGeometry>,
+pub struct Display {
+	pub geometries: Vec<DisplayGeometry>,
 }
 
-/// Serialized panel geometry
+/// Serialized display geometry
 #[derive(Debug)]
 #[serde_with::serde_as]
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct PanelGeometry {
+pub struct DisplayGeometry {
 	#[serde_as(as = "serde_with::DisplayFromStr")]
 	pub geometry: Rect<i32, u32>,
 }

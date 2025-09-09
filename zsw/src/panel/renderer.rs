@@ -10,7 +10,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{PanelFadeImage, PanelGeometryUniforms, PanelState, Panels},
+	super::{Panel, PanelFadeImage, PanelGeometryUniforms, PanelState},
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
@@ -115,7 +115,7 @@ impl PanelsRenderer {
 		wgpu_renderer: &WgpuRenderer,
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
-		panels: &Panels,
+		panels: &mut [Panel],
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
 	) -> Result<(), AppError> {
@@ -163,10 +163,7 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(shared.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, shared.vertices.slice(..));
 
-		for panel in panels.get_all().await {
-			let mut panel = panel.lock().await;
-			let panel = &mut *panel;
-
+		for panel in panels {
 			// Update the panel before drawing it
 			match &mut panel.state {
 				PanelState::None(_) => (),

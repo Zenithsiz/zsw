@@ -5,11 +5,13 @@ use {
 	crate::{
 		AppEvent,
 		Resize,
-		panel::{Panels, PanelsRendererShared},
+		display::Displays,
+		panel::{Panel, PanelsRendererShared},
 		playlist::Playlists,
 		profile::Profiles,
 	},
 	crossbeam::atomic::AtomicCell,
+	futures::lock::Mutex,
 	std::sync::Arc,
 	winit::dpi::PhysicalPosition,
 	zsw_wgpu::Wgpu,
@@ -26,7 +28,10 @@ pub struct Shared {
 	pub wgpu:                   Wgpu,
 	pub panels_renderer_shared: PanelsRendererShared,
 
-	pub panels:    Panels,
+	pub displays:  Displays,
 	pub playlists: Arc<Playlists>,
 	pub profiles:  Profiles,
+
+	// TODO: Have an "active" profile type store this and other things instead?
+	pub panels: Mutex<Vec<Panel>>,
 }

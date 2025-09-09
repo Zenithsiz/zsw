@@ -4,7 +4,7 @@
 use {
 	super::{Profile, ProfileName, ser},
 	crate::{
-		panel::PanelName,
+		display::DisplayName,
 		playlist::PlaylistName,
 		profile::{
 			ProfilePanel,
@@ -67,8 +67,8 @@ impl Profiles {
 						.panels
 						.into_iter()
 						.map(|panel| ProfilePanel {
-							name:   PanelName::from(panel.name),
-							shader: match panel.shader {
+							display: DisplayName::from(panel.display),
+							shader:  match panel.shader {
 								ser::ProfilePanelShader::None(shader) =>
 									ProfilePanelShader::None(ProfilePanelNoneShader {
 										background_color: shader.background_color,

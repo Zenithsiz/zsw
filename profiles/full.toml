@@ -1,5 +1,5 @@
 [[panels]]
-name = "full"
+display = "full"
 
 [panels.shader]
 type          = "fade"

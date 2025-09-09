@@ -9,7 +9,7 @@ pub use self::profiles::Profiles;
 
 // Imports
 use {
-	crate::{panel::PanelName, playlist::PlaylistName},
+	crate::{display::DisplayName, playlist::PlaylistName},
 	core::time::Duration,
 	std::{borrow::Borrow, fmt, sync::Arc},
 };
@@ -24,8 +24,8 @@ pub struct Profile {
 /// Profile panel
 #[derive(Debug)]
 pub struct ProfilePanel {
-	pub name:   PanelName,
-	pub shader: ProfilePanelShader,
+	pub display: DisplayName,
+	pub shader:  ProfilePanelShader,
 }
 
 /// Profile panel shader

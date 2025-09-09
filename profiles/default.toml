@@ -1,5 +1,5 @@
 [[panels]]
-name = "multiple"
+display = "multiple"
 
 [panels.shader]
 type          = "fade"
@@ -11,7 +11,7 @@ strength      = 1.0
 
 
 [[panels]]
-name = "quarter"
+display = "quarter"
 
 [panels.shader]
 type          = "fade"

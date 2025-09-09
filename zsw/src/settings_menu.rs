@@ -7,7 +7,7 @@
 use {
 	crate::{
 		AppEvent,
-		panel::{PanelFadeImage, PanelFadeShader, PanelFadeState, PanelGeometry, PanelNoneState, PanelState, Panels},
+		panel::{Panel, PanelFadeImage, PanelFadeShader, PanelFadeState, PanelGeometry, PanelNoneState, PanelState},
 	},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
@@ -41,7 +41,7 @@ impl SettingsMenu {
 		&mut self,
 		ctx: &egui::Context,
 		wgpu: &Wgpu,
-		panels: &Panels,
+		panels: &mut [Panel],
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		cursor_pos: LogicalPosition<f32>,
 		window_geometry: Rect<i32, u32>,
@@ -73,26 +73,21 @@ impl SettingsMenu {
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_geometry: Rect<i32, u32>) {
+fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut [Panel], window_geometry: Rect<i32, u32>) {
 	self::draw_panels_editor(ui, wgpu, panels, window_geometry);
 	ui.separator();
 }
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_geometry: Rect<i32, u32>) {
-	let panels = panels.get_all().block_on();
-
+fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut [Panel], window_geometry: Rect<i32, u32>) {
 	if panels.is_empty() {
 		ui.label("None loaded");
 		return;
 	}
 
 	for panel in panels {
-		let mut panel = panel.lock().block_on();
-		let panel = &mut *panel;
-
-		let mut name = egui::WidgetText::from(panel.name.to_string());
+		let mut name = egui::WidgetText::from(panel.display_name.to_string());
 		if panel
 			.geometries
 			.iter()

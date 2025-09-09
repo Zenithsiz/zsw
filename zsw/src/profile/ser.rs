@@ -19,8 +19,8 @@ pub struct Profile {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanel {
-	pub name:   String,
-	pub shader: ProfilePanelShader,
+	pub display: String,
+	pub shader:  ProfilePanelShader,
 }
 
 /// Panel shader
