@@ -1,13 +1,7 @@
 //! Serialized playlist
 
 // Imports
-use std::{collections::HashMap, path::PathBuf};
-
-/// Playlists
-#[derive(Debug)]
-pub struct _Playlists {
-	pub playlists: HashMap<String, Playlist>,
-}
+use std::path::PathBuf;
 
 /// Playlist
 #[derive(Debug)]
