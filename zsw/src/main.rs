@@ -195,7 +195,7 @@ impl WinitApp {
 			wgpu,
 			panels_renderer_shared: panels_renderer_layouts,
 			panels,
-			playlists,
+			playlists: Arc::new(playlists),
 			profiles,
 		};
 		let shared = Arc::new(shared);
@@ -274,51 +274,46 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 		.map(async |profile_panel| {
 			let create_panel_state = move || match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
-				ProfilePanelShader::Fade(shader) => PanelState::Fade(PanelFadeState::new(
-					shader.duration,
-					shader.fade_duration,
-					match shader.inner {
+				ProfilePanelShader::Fade(shader) => {
+					let state = PanelFadeState::new(shader.duration, shader.fade_duration, match shader.inner {
 						ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
 						ProfilePanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
 						ProfilePanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
 						ProfilePanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
-					},
-				)),
+					});
+
+					let playlist_player = Arc::clone(state.playlist_player());
+
+					let panel_playlists = shader.playlists.clone();
+
+					#[cloned(playlists = shared.playlists)]
+					if let Err(err) =
+						self::spawn_task(format!("Load panel {:?} playlists", profile_panel.name), async move {
+							panel_playlists
+								.into_iter()
+								.map(async |playlist_name| {
+									self::load_playlist(&playlist_player, &playlist_name, &playlists)
+										.await
+										.with_context(|| format!("Unable to load playlist {playlist_name:?}"))
+								})
+								.collect::<FuturesUnordered<_>>()
+								.try_collect::<()>()
+								.await
+						}) {
+							tracing::warn!("Unable to spawn task: {}", err.pretty());
+						}
+
+					PanelState::Fade(state)
+				},
 			};
 
-			let panel = shared
+			_ = shared
 				.panels
 				.load(profile_panel.name.clone(), create_panel_state)
 				.await
 				.with_context(|| format!("Unable to load panel {:?}", profile_panel.name))?;
 
-			let panel = panel.lock().await;
-			match &panel.state {
-				panel::PanelState::None(_) => Ok::<_, AppError>(()),
-				panel::PanelState::Fade(state) => {
-					let ProfilePanelShader::Fade(shader) = &profile_panel.shader else {
-						tracing::warn!("Fade panel was changed before playlists could be loaded");
-						return Ok(());
-					};
-
-					let playlist_player = Arc::clone(state.playlist_player());
-					drop(panel);
-
-					shader
-						.playlists
-						.iter()
-						.map(async |playlist_name| {
-							self::load_playlist(&playlist_player, playlist_name, &shared.playlists)
-								.await
-								.with_context(|| format!("Unable to load playlist {playlist_name:?}"))
-						})
-						.collect::<FuturesUnordered<_>>()
-						.try_collect::<()>()
-						.await?;
-
-					Ok(())
-				},
-			}
+			Ok::<_, AppError>(())
 		})
 		.collect::<FuturesUnordered<_>>()
 		.try_collect::<()>()
