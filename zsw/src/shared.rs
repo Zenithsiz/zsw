@@ -10,7 +10,6 @@ use {
 		profile::Profiles,
 	},
 	crossbeam::atomic::AtomicCell,
-	std::sync::Arc,
 	winit::dpi::PhysicalPosition,
 	zsw_wgpu::Wgpu,
 };
@@ -27,6 +26,6 @@ pub struct Shared {
 	pub panels_renderer_shared: PanelsRendererShared,
 
 	pub panels:    Panels,
-	pub playlists: Arc<Playlists>,
+	pub playlists: Playlists,
 	pub profiles:  Profiles,
 }

@@ -9,7 +9,7 @@ pub use self::profiles::Profiles;
 
 // Imports
 use {
-	crate::panel::PanelName,
+	crate::{panel::PanelName, playlist::PlaylistName},
 	std::{borrow::Borrow, fmt, sync::Arc},
 };
 
@@ -17,7 +17,17 @@ use {
 #[derive(Debug)]
 pub struct Profile {
 	/// Panels
-	pub panels: Vec<PanelName>,
+	pub panels: Vec<ProfilePanel>,
+}
+
+/// Profile panel
+#[derive(Debug)]
+pub struct ProfilePanel {
+	/// Panel
+	pub panel: PanelName,
+
+	/// Playlists
+	pub playlists: Vec<PlaylistName>,
 }
 
 /// Profile name

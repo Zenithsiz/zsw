@@ -8,11 +8,10 @@ use {
 	crate::{
 		AppEvent,
 		panel::{PanelFadeImage, PanelFadeShader, PanelFadeState, PanelGeometry, PanelNoneState, PanelState, Panels},
-		playlist::{PlaylistName, Playlists},
 	},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
-	std::{path::Path, sync::Arc},
+	std::path::Path,
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
 	zsw_util::{AppError, Rect, TokioTaskBlockOn},
 	zsw_wgpu::Wgpu,
@@ -43,7 +42,6 @@ impl SettingsMenu {
 		ctx: &egui::Context,
 		wgpu: &Wgpu,
 		panels: &Panels,
-		playlists: &Arc<Playlists>,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		cursor_pos: LogicalPosition<f32>,
 		window_geometry: Rect<i32, u32>,
@@ -68,33 +66,21 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => self::draw_panels_tab(ui, wgpu, panels, playlists, window_geometry),
+				Tab::Panels => self::draw_panels_tab(ui, wgpu, panels, window_geometry),
 				Tab::Settings => self::draw_settings(ui, event_loop_proxy),
 			}
 		});
 	}
 }
 /// Draws the panels tab
-fn draw_panels_tab(
-	ui: &mut egui::Ui,
-	wgpu: &Wgpu,
-	panels: &Panels,
-	playlists: &Arc<Playlists>,
-	window_geometry: Rect<i32, u32>,
-) {
-	self::draw_panels_editor(ui, wgpu, panels, playlists, window_geometry);
+fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_geometry: Rect<i32, u32>) {
+	self::draw_panels_editor(ui, wgpu, panels, window_geometry);
 	ui.separator();
 }
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(
-	ui: &mut egui::Ui,
-	wgpu: &Wgpu,
-	panels: &Panels,
-	playlists: &Arc<Playlists>,
-	window_geometry: Rect<i32, u32>,
-) {
+fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_geometry: Rect<i32, u32>) {
 	let panels = panels.get_all().block_on();
 
 	if panels.is_empty() {
@@ -123,7 +109,7 @@ fn draw_panels_editor(
 			}
 
 			ui.collapsing("Shader", |ui| {
-				self::draw_shader_select(ui, playlists, &mut panel.state);
+				self::draw_shader_select(ui, &mut panel.state);
 			});
 		});
 	}
@@ -207,9 +193,7 @@ fn draw_fade_panel_editor(
 	});
 
 	ui.collapsing("Playlist", |ui| {
-		let playlist_player = panel_state.playlist_player().block_on();
-
-		ui.label(format!("Playlist: {:?}", panel_state.playlist()));
+		let playlist_player = panel_state.playlist_player().lock().block_on();
 
 		let row_height = ui.text_style_height(&egui::TextStyle::Body);
 
@@ -277,7 +261,7 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelFadeImage) {
 }
 
 /// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, playlists: &Arc<Playlists>, state: &mut PanelState) {
+fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 	egui::ComboBox::from_id_salt("Shader selection menu")
 		.selected_text(match state {
 			PanelState::None(_) => "None",
@@ -285,27 +269,23 @@ fn draw_shader_select(ui: &mut egui::Ui, playlists: &Arc<Playlists>, state: &mut
 		})
 		.show_ui(ui, |ui| {
 			// TODO: Review these defaults?
-			type CreateShader = fn(&Arc<Playlists>) -> PanelState;
+			type CreateShader = fn() -> PanelState;
 			let create_shaders: [(_, _, CreateShader); _] = [
-				("None", matches!(state, PanelState::None(_)), |_| {
+				("None", matches!(state, PanelState::None(_)), || {
 					PanelState::None(PanelNoneState::new([0.0; 4]))
 				}),
-				("Fade", matches!(state, PanelState::Fade(_)), |playlists| {
-					// TODO: We don't have a playlist to pass here, so should we make
-					//       the playlist optional and have the user later change it?
+				("Fade", matches!(state, PanelState::Fade(_)), || {
 					PanelState::Fade(PanelFadeState::new(
 						Duration::from_secs(60),
 						Duration::from_secs(5),
 						PanelFadeShader::Out { strength: 1.5 },
-						PlaylistName::from("none".to_owned()),
-						Arc::clone(playlists),
 					))
 				}),
 			];
 
 			for (name, checked, create_shader) in create_shaders {
 				if ui.selectable_label(checked, name).clicked() && !checked {
-					*state = create_shader(playlists);
+					*state = create_shader();
 				}
 			}
 		});

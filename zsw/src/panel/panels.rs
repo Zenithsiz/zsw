@@ -6,7 +6,6 @@ use {
 	crate::{
 		AppError,
 		panel::{PanelFadeShader, PanelNoneState, state::PanelFadeState},
-		playlist::{PlaylistName, Playlists},
 	},
 	app_error::Context,
 	futures::lock::Mutex,
@@ -40,7 +39,7 @@ impl Panels {
 	/// Loads a panel from a name.
 	///
 	/// If the panel isn't for this window, returns `Ok(None)`
-	pub async fn load(&self, panel_name: PanelName, playlists: &Arc<Playlists>) -> Result<Arc<Mutex<Panel>>, AppError> {
+	pub async fn load(&self, panel_name: PanelName) -> Result<Arc<Mutex<Panel>>, AppError> {
 		let panel_entry = Arc::clone(
 			self.panels
 				.lock()
@@ -75,8 +74,6 @@ impl Panels {
 							ser::PanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
 							ser::PanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
 						},
-						PlaylistName::from(fade.playlist),
-						Arc::clone(playlists),
 					)),
 				};
 				let panel = Panel::new(panel_name.clone(), geometries, state);

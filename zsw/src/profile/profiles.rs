@@ -3,7 +3,7 @@
 // Imports
 use {
 	super::{Profile, ProfileName, ser},
-	crate::panel::PanelName,
+	crate::{panel::PanelName, playlist::PlaylistName, profile::ProfilePanel},
 	app_error::Context,
 	futures::lock::Mutex,
 	std::{collections::HashMap, path::PathBuf, sync::Arc},
@@ -53,7 +53,14 @@ impl Profiles {
 				// And parse it
 				let profile = toml::from_str::<ser::Profile>(&profile_toml).context("Unable to parse profile")?;
 				let profile = Profile {
-					panels: profile.panels.into_iter().map(PanelName::from).collect(),
+					panels: profile
+						.panels
+						.into_iter()
+						.map(|panel| ProfilePanel {
+							panel:     PanelName::from(panel.panel),
+							playlists: panel.playlists.into_iter().map(PlaylistName::from).collect(),
+						})
+						.collect(),
 				};
 				tracing::info!("Loaded profile {profile_name:?}");
 

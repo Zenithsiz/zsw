@@ -1,1 +1,7 @@
-panels = ["multiple", "quarter"]
+[[panels]]
+panel     = "multiple"
+playlists = ["example1"]
+
+[[panels]]
+panel     = "quarter"
+playlists = ["example1"]

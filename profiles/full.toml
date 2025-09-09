@@ -1,1 +1,3 @@
-panels = ["full"]
+[[panels]]
+panel     = "full"
+playlists = ["example1"]
