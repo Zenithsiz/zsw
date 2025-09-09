@@ -24,6 +24,7 @@ mod config_dirs;
 mod init;
 mod panel;
 mod playlist;
+mod profile;
 mod settings_menu;
 mod shared;
 mod window;
@@ -33,8 +34,9 @@ use {
 	self::{
 		config::Config,
 		config_dirs::ConfigDirs,
-		panel::{PanelName, Panels, PanelsRenderer, PanelsRendererShared},
+		panel::{Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
+		profile::{ProfileName, Profiles},
 		settings_menu::SettingsMenu,
 		shared::Shared,
 	},
@@ -173,6 +175,7 @@ impl WinitApp {
 
 		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
 		let panels = Panels::new(config_dirs.panels().to_path_buf());
+		let profiles = Profiles::new(config_dirs.profiles().to_path_buf());
 
 		// Shared state
 		let shared = Shared {
@@ -184,13 +187,17 @@ impl WinitApp {
 			panels_renderer_shared: panels_renderer_layouts,
 			panels,
 			playlists: Arc::new(playlists),
+			profiles,
 		};
 		let shared = Arc::new(shared);
 
-		#[cloned(shared, config)]
-		self::spawn_task("Load default panels", async move {
-			self::load_default_panels(&config, &shared).await
-		})?;
+		if let Some(profile) = &config.default.profile {
+			let profile_name = ProfileName::from(profile.clone());
+			let shared = Arc::clone(&shared);
+			_ = self::spawn_task("Load default profile", async move {
+				self::load_profile(profile_name, &shared).await
+			})?;
+		}
 
 		Ok(Self {
 			window_event_handlers: HashMap::new(),
@@ -242,35 +249,30 @@ impl WinitApp {
 	}
 }
 
-/// Loads the default panels
-async fn load_default_panels(config: &Config, shared: &Arc<Shared>) -> Result<(), AppError> {
-	// Load the panels
-	config
-		.default
+/// Loads a profile
+async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result<(), AppError> {
+	// Load the profile
+	let profile = shared
+		.profiles
+		.load(profile_name)
+		.await
+		.context("Unable to load profile")?;
+
+	// Then load it's panels
+	profile
 		.panels
 		.iter()
-		.map(async |default_panel| {
-			if let Err(err) = self::load_default_panel(default_panel, shared).await {
-				tracing::warn!("Unable to load default panel {default_panel:?}: {}", err.pretty());
-			}
-		})
+		.map(
+			async |panel_name| match shared.panels.load(panel_name.clone(), &shared.playlists).await {
+				Ok(_) => tracing::debug!("Loaded panel {panel_name:?}"),
+				Err(err) => {
+					tracing::warn!("Unable to load panel {panel_name:?}: {}", err.pretty());
+				},
+			},
+		)
 		.collect::<FuturesUnordered<_>>()
 		.collect::<()>()
 		.await;
-
-	Ok(())
-}
-
-/// Loads a default panel
-async fn load_default_panel(default_panel: &str, shared: &Arc<Shared>) -> Result<(), AppError> {
-	let panel_name = PanelName::from(default_panel.to_owned());
-
-	_ = shared
-		.panels
-		.load(panel_name.clone(), &shared.playlists)
-		.await
-		.context("Unable to load panel")?;
-	tracing::debug!("Loaded default panel {panel_name:?}");
 
 	Ok(())
 }

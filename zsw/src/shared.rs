@@ -7,6 +7,7 @@ use {
 		Resize,
 		panel::{Panels, PanelsRendererShared},
 		playlist::Playlists,
+		profile::Profiles,
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
@@ -27,4 +28,5 @@ pub struct Shared {
 
 	pub panels:    Panels,
 	pub playlists: Arc<Playlists>,
+	pub profiles:  Profiles,
 }

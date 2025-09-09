@@ -17,6 +17,9 @@ pub struct ConfigDirs {
 
 	/// Playlist directory
 	playlists: OnceLock<PathBuf>,
+
+	/// Profiles directory
+	profiles: OnceLock<PathBuf>,
 }
 
 impl ConfigDirs {
@@ -26,6 +29,7 @@ impl ConfigDirs {
 			root,
 			panels: OnceLock::new(),
 			playlists: OnceLock::new(),
+			profiles: OnceLock::new(),
 		}
 	}
 
@@ -42,6 +46,15 @@ impl ConfigDirs {
 	pub fn playlists(&self) -> &Path {
 		self.playlists.get_or_init(|| {
 			let path = self.root.join("playlists");
+			tracing::info!("Playlists path: {path:?}");
+			path
+		})
+	}
+
+	/// Returns the profiles directory
+	pub fn profiles(&self) -> &Path {
+		self.profiles.get_or_init(|| {
+			let path = self.root.join("profiles");
 			tracing::info!("Playlists path: {path:?}");
 			path
 		})
