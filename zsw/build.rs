@@ -30,16 +30,23 @@ fn main() {
 		PanelShader::Fade(PanelFadeShader::Out),
 		PanelShader::Fade(PanelFadeShader::In),
 	];
-	for shader in shaders {
-		let shader_src_path = Path::new("shaders").join(shader.src_path());
-		let shader_out_path = shaders_out_dir.join(shader.out_path());
-		if let Err(err) = self::process(shader, &shader_src_path, &shader_out_path) {
-			panic!(
-				"Unable to process shader module {shader_src_path:?} ({shader:?}): {}",
-				err.pretty()
-			)
+
+	std::thread::scope(|s| {
+		for shader in shaders {
+			let shader_src_path = Path::new("shaders").join(shader.src_path());
+			let shader_out_path = shaders_out_dir.join(shader.out_path());
+			_ = std::thread::Builder::new()
+				.spawn_scoped(s, move || {
+					if let Err(err) = self::process(shader, &shader_src_path, &shader_out_path) {
+						panic!(
+							"Unable to process shader module {shader_src_path:?} ({shader:?}): {}",
+							err.pretty()
+						)
+					}
+				})
+				.expect("Unable to spawn thread to parse shader");
 		}
-	}
+	});
 }
 
 /// Panel shader
