@@ -69,7 +69,7 @@ impl SettingsMenu {
 
 			match self.cur_tab {
 				Tab::Panels => self::draw_panels_tab(ui, wgpu, panels, window_geometry),
-				Tab::Settings => self::draw_settings(ui, event_loop_proxy),
+				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
 		});
 	}
@@ -216,7 +216,7 @@ fn draw_fade_panel_editor(
 }
 
 /// Draws the settings tab
-fn draw_settings(ui: &mut egui::Ui, event_loop_proxy: &EventLoopProxy<AppEvent>) {
+fn draw_settings_tab(ui: &mut egui::Ui, event_loop_proxy: &EventLoopProxy<AppEvent>) {
 	if ui.button("Quit").clicked() {
 		event_loop_proxy
 			.send_event(crate::AppEvent::Shutdown)
