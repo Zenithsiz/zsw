@@ -17,6 +17,7 @@ chrono             = { workspace = true }
 clap               = { features = ["derive"], workspace = true }
 console-subscriber = { optional = true, workspace = true }
 crossbeam          = { workspace = true }
+derive_more        = { features = ["full"], workspace = true }
 directories        = { workspace = true }
 egui               = { features = ["default_fonts"], workspace = true }
 futures            = { workspace = true }
@@ -30,6 +31,7 @@ rayon              = { workspace = true }
 serde              = { features = ["derive"], workspace = true }
 serde_json         = { workspace = true }
 serde_with         = { workspace = true }
+strum              = { features = ["derive"], workspace = true }
 tokio              = { features = ["full", "tracing"], workspace = true }
 toml               = { workspace = true }
 tracing            = { features = ["log"], workspace = true }

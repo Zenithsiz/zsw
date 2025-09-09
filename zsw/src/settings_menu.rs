@@ -12,6 +12,7 @@ use {
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
 	std::path::Path,
+	strum::IntoEnumIterator,
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
 	zsw_util::{AppError, Rect, TokioTaskBlockOn},
 	zsw_wgpu::Wgpu,
@@ -60,8 +61,9 @@ impl SettingsMenu {
 		// Then render it
 		egui_window.open(&mut self.open).show(ctx, |ui| {
 			ui.horizontal(|ui| {
-				ui.selectable_value(&mut self.cur_tab, Tab::Panels, "Panels");
-				ui.selectable_value(&mut self.cur_tab, Tab::Settings, "Settings");
+				for tab in Tab::iter() {
+					ui.selectable_value(&mut self.cur_tab, tab, tab.to_string());
+				}
 			});
 			ui.separator();
 
@@ -367,8 +369,13 @@ fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusi
 }
 
 /// Tab
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(derive_more::Display)]
+#[derive(strum::EnumIter)]
 enum Tab {
+	#[display("Panels")]
 	Panels,
+
+	#[display("Settings")]
 	Settings,
 }
