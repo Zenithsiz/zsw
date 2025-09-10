@@ -32,6 +32,18 @@ impl Displays {
 		}
 	}
 
+	/// Adds a new display
+	pub async fn add(&self, display_name: DisplayName, display: Display) -> Arc<Mutex<Display>> {
+		let display = Arc::new(Mutex::new(display));
+		_ = self
+			.displays
+			.lock()
+			.await
+			.insert(display_name, Arc::new(OnceCell::new_with(Some(Arc::clone(&display)))));
+
+		display
+	}
+
 	/// Loads a display by name
 	pub async fn load(&self, display_name: DisplayName) -> Result<Arc<Mutex<Display>>, AppError> {
 		let display_entry = Arc::clone(

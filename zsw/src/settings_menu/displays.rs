@@ -2,9 +2,9 @@
 
 // Imports
 use {
-	crate::display::{Display, Displays},
+	crate::display::{Display, DisplayName, Displays},
 	std::sync::Arc,
-	zsw_util::TokioTaskBlockOn,
+	zsw_util::{Rect, TokioTaskBlockOn},
 	zutil_cloned::cloned,
 };
 
@@ -26,6 +26,55 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 			}
 		});
 	}
+
+	ui.separator();
+
+	ui.collapsing("New", |ui| {
+		let name = super::get_data::<String>(ui, "display-tab-new-name");
+		let geometries = super::get_data::<Vec<Rect<i32, u32>>>(ui, "display-tab-new-geometries");
+
+		ui.horizontal(|ui| {
+			ui.label("Name");
+			ui.text_edit_singleline(&mut *name.lock());
+		});
+
+		ui.collapsing("Geometries", |ui| {
+			geometries.lock().retain_mut(|geometry| {
+				let mut retain = true;
+				ui.horizontal(|ui| {
+					super::draw_rect(ui, geometry);
+					if ui.button("-").clicked() {
+						retain = false;
+					}
+				});
+
+				retain
+			});
+
+			if ui.button("+").clicked() {
+				geometries.lock().push(Rect::zero());
+			}
+		});
+
+		#[expect(clippy::semicolon_if_nothing_returned, reason = "False positive")]
+		if ui.button("Add").clicked() {
+			let display_name = DisplayName::from(name.lock().clone());
+			let geometries = geometries.lock().iter().copied().collect();
+
+			#[cloned(displays)]
+			crate::spawn_task(format!("Add display {display_name:?}"), async move {
+				// TODO: Should we also save it?
+				displays
+					.add(display_name.clone(), Display {
+						name: display_name,
+						geometries,
+					})
+					.await;
+
+				Ok(())
+			});
+		}
+	});
 }
 
 /// Draws a display

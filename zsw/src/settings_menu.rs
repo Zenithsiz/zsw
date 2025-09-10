@@ -11,7 +11,7 @@ mod panels;
 use {
 	crate::{AppEvent, display::Displays, panel::Panel},
 	core::{ops::RangeInclusive, time::Duration},
-	egui::Widget,
+	egui::{Widget, mutex::Mutex},
 	std::{path::Path, sync::Arc},
 	strum::IntoEnumIterator,
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
@@ -143,4 +143,15 @@ enum Tab {
 
 	#[display("Settings")]
 	Settings,
+}
+
+/// Gets an `Arc<Mutex<T>>` from the egui data with id `id`
+fn get_data<T>(ui: &egui::Ui, id: impl Into<egui::Id>) -> Arc<Mutex<T>>
+where
+	T: Default + Send + 'static,
+{
+	ui.data_mut(|map| {
+		let value = map.get_persisted_mut_or_default(id.into());
+		Arc::clone(value)
+	})
 }
