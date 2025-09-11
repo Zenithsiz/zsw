@@ -115,21 +115,24 @@ pub macro log_error_panic( $($rest:tt)* ) {{
 
 /// Returns the maximum value in an array as a `const fn`
 #[must_use]
-#[expect(clippy::missing_panics_doc, reason = "It's an internal panic")]
 pub const fn array_max<const N: usize>(values: &[usize; N]) -> Option<usize> {
 	let mut max = None;
 	let mut cur_idx = 0;
 	while cur_idx < values.len() {
-		#[expect(
-			clippy::unwrap_used,
-			reason = "We know it's `Some` in that branch and we can't use any pattern matching or `Option` methods"
-		)]
-		if max.is_none() || values[cur_idx] > max.unwrap() {
-			max = Some(values[cur_idx]);
-		}
+		let value = values[cur_idx];
+
+		max = Some(match max {
+			Some(max) => self::usize_max(max, value),
+			None => value,
+		});
 
 		cur_idx += 1;
 	}
 
 	max
+}
+
+/// Returns the maximum between two `usize` values
+const fn usize_max(lhs: usize, rhs: usize) -> usize {
+	if lhs > rhs { lhs } else { rhs }
 }
