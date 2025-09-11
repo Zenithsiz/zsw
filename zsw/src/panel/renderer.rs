@@ -212,13 +212,17 @@ impl PanelsRenderer {
 					let image_sampler = panel_images
 						.image_sampler
 						.get_or_insert_with(|| self::create_image_sampler(wgpu));
+
+					let [prev, cur, next] = [&panel_images.prev, &panel_images.cur, &panel_images.next]
+						.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
+
 					let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
 						self::create_image_bind_group(
 							wgpu,
 							&shared.fade_image_bind_group_layout,
-							panel_images.prev.texture_view(wgpu),
-							panel_images.cur.texture_view(wgpu),
-							panel_images.next.texture_view(wgpu),
+							prev,
+							cur,
+							next,
 							image_sampler,
 						)
 					});
@@ -285,19 +289,19 @@ impl PanelsRenderer {
 				background_color: uniform::Vec4(panel_state.background_color),
 			}),
 			PanelState::Fade(panel_state) => {
-				let image_uniforms = |image: &PanelFadeImage| {
-					let (size, swap_dir) = match *image {
-						PanelFadeImage::Empty => (Vector2::new(0, 0), false),
-						PanelFadeImage::Loaded { size, swap_dir, .. } => (size, swap_dir),
+				let image_uniforms = |image: Option<&PanelFadeImage>| {
+					let (size, swap_dir) = match image {
+						None => (Vector2::new(0, 0), false),
+						Some(image) => (image.size, image.swap_dir),
 					};
 
 					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);
 					PanelImageUniforms::new(ratio, swap_dir)
 				};
 
-				let prev = image_uniforms(&panel_state.images().prev);
-				let cur = image_uniforms(&panel_state.images().cur);
-				let next = image_uniforms(&panel_state.images().next);
+				let prev = image_uniforms(panel_state.images().prev.as_ref());
+				let cur = image_uniforms(panel_state.images().cur.as_ref());
+				let next = image_uniforms(panel_state.images().next.as_ref());
 
 				let fade_duration = panel_state.fade_duration_norm();
 				let progress = panel_state.progress_norm();

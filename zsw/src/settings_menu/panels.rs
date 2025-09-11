@@ -151,20 +151,15 @@ fn draw_fade_panel_editor(
 }
 
 /// Draws a panel image
-fn draw_panel_image(ui: &mut egui::Ui, image: &mut PanelFadeImage) {
+fn draw_panel_image(ui: &mut egui::Ui, image: &mut Option<PanelFadeImage>) {
 	match image {
-		PanelFadeImage::Empty => {
+		None => {
 			ui.label("[Unloaded]");
 		},
-		PanelFadeImage::Loaded {
-			size,
-			swap_dir,
-			image_path,
-			..
-		} => {
-			super::draw_openable_path(ui, image_path);
-			ui.label(format!("Size: {}x{}", size.x, size.y));
-			ui.checkbox(swap_dir, "Swap direction");
+		Some(image) => {
+			super::draw_openable_path(ui, &image.image_path);
+			ui.label(format!("Size: {}x{}", image.size.x, image.size.y));
+			ui.checkbox(&mut image.swap_dir, "Swap direction");
 		},
 	}
 }

@@ -128,7 +128,7 @@ impl PanelFadeState {
 
 	/// Returns the min progress for the current image
 	pub fn min_progress(&self) -> Duration {
-		match self.images.prev.is_loaded() {
+		match self.images.prev.is_some() {
 			true => Duration::ZERO,
 			false => self.fade_duration,
 		}
@@ -136,7 +136,7 @@ impl PanelFadeState {
 
 	/// Returns the max progress for the current image
 	pub fn max_progress(&self) -> Duration {
-		match self.images.next.is_loaded() {
+		match self.images.next.is_some() {
 			true => self.duration,
 			false => self.duration - self.fade_duration,
 		}

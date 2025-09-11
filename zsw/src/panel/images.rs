@@ -22,13 +22,13 @@ use {
 #[derive(Debug)]
 pub struct PanelFadeImages {
 	/// Previous image
-	pub prev: PanelFadeImage,
+	pub prev: Option<PanelFadeImage>,
 
 	/// Current image
-	pub cur: PanelFadeImage,
+	pub cur: Option<PanelFadeImage>,
 
 	/// Next image
-	pub next: PanelFadeImage,
+	pub next: Option<PanelFadeImage>,
 
 	/// Texture sampler
 	pub image_sampler: Option<wgpu::Sampler>,
@@ -55,9 +55,9 @@ impl PanelFadeImages {
 	#[define_opaque(NextImageLoader)]
 	pub fn new() -> Self {
 		Self {
-			prev:             PanelFadeImage::empty(),
-			cur:              PanelFadeImage::empty(),
-			next:             PanelFadeImage::empty(),
+			prev:             None,
+			cur:              None,
+			next:             None,
 			image_sampler:    None,
 			image_bind_group: None,
 			next_image:       Loadable::new(async move |args: NextImageArgs| {
@@ -80,7 +80,7 @@ impl PanelFadeImages {
 		playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
-		self.prev = PanelFadeImage::empty();
+		self.prev = None;
 		self.image_bind_group = None;
 		self.load_missing(playlist_player, wgpu);
 
@@ -93,14 +93,14 @@ impl PanelFadeImages {
 	///
 	/// Returns `Err(())` if this would erase the current image.
 	pub fn step_next(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Result<(), ()> {
-		if !self.next.is_loaded() {
+		if self.next.is_none() {
 			return Err(());
 		}
 
 		playlist_player.step_next();
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
-		self.next = PanelFadeImage::empty();
+		self.next = None;
 		self.image_bind_group = None;
 		self.load_missing(playlist_player, wgpu);
 
@@ -154,9 +154,9 @@ impl PanelFadeImages {
 
 		if let Some(slot) = slot {
 			match slot {
-				Slot::Prev => self.prev = PanelFadeImage::new(wgpu, res.path, image),
-				Slot::Cur => self.cur = PanelFadeImage::new(wgpu, res.path, image),
-				Slot::Next => self.next = PanelFadeImage::new(wgpu, res.path, image),
+				Slot::Prev => self.prev = Some(PanelFadeImage::new(wgpu, res.path, image)),
+				Slot::Cur => self.cur = Some(PanelFadeImage::new(wgpu, res.path, image)),
+				Slot::Next => self.next = Some(PanelFadeImage::new(wgpu, res.path, image)),
 			}
 			self.image_bind_group = None;
 		}
@@ -184,9 +184,9 @@ impl PanelFadeImages {
 
 		// Get the playlist position and path to load
 		let (playlist_pos, path) = match () {
-			() if !self.cur.is_loaded() => (playlist_player.cur_pos(), playlist_player.cur()?),
-			() if !self.next.is_loaded() => (playlist_player.next_pos(), playlist_player.next()?),
-			() if !self.prev.is_loaded() => (playlist_player.prev_pos()?, playlist_player.prev()?),
+			() if self.cur.is_none() => (playlist_player.cur_pos(), playlist_player.cur()?),
+			() if self.next.is_none() => (playlist_player.next_pos(), playlist_player.next()?),
+			() if self.prev.is_none() => (playlist_player.prev_pos()?, playlist_player.prev()?),
 			() => return None,
 		};
 
@@ -201,9 +201,7 @@ impl PanelFadeImages {
 
 	/// Returns if all images are empty
 	pub fn is_empty(&self) -> bool {
-		matches!(self.prev, PanelFadeImage::Empty) &&
-			matches!(self.cur, PanelFadeImage::Empty) &&
-			matches!(self.next, PanelFadeImage::Empty)
+		self.prev.is_none() && self.cur.is_none() && self.next.is_none()
 	}
 }
 
