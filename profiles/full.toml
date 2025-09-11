@@ -4,6 +4,6 @@ display = "full"
 [panels.shader]
 type          = "fade"
 playlists     = ["example1"]
-duration      = 5.0
-fade_duration = 1.0
+duration      = "5s"
+fade_duration = "1s"
 fade          = "basic"

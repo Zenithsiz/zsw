@@ -4865,6 +4865,7 @@ dependencies = [
  "pin-project",
  "serde",
  "serde_json",
+ "serde_with",
  "tokio",
  "tracing",
 ]

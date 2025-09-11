@@ -4,8 +4,8 @@ display = "multiple"
 [panels.shader]
 type          = "fade"
 playlists     = ["example1"]
-duration      = 5.0
-fade_duration = 1.0
+duration      = "1h1m1.1s"
+fade_duration = "1m1.1s"
 fade          = "out"
 strength      = 1.0
 
@@ -16,7 +16,7 @@ display = "quarter"
 [panels.shader]
 type          = "fade"
 playlists     = ["example1"]
-duration      = 5.0
-fade_duration = 1.0
+duration      = "5s"
+fade_duration = "1s"
 fade          = "white"
 strength      = 1.0

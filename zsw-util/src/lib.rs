@@ -24,6 +24,7 @@
 )]
 
 // Modules
+pub mod duration_display;
 pub mod loadable;
 mod rect;
 mod tuple_collect_res;
@@ -32,6 +33,7 @@ pub mod walk_dir;
 
 // Exports
 pub use {
+	duration_display::DurationDisplay,
 	loadable::Loadable,
 	rect::Rect,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},

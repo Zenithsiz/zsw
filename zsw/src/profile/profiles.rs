@@ -76,8 +76,8 @@ impl Profiles {
 								ser::ProfilePanelShader::Fade(shader) =>
 									ProfilePanelShader::Fade(ProfilePanelFadeShader {
 										playlists:     shader.playlists.into_iter().map(PlaylistName::from).collect(),
-										duration:      shader.duration,
-										fade_duration: shader.fade_duration,
+										duration:      shader.duration.0,
+										fade_duration: shader.fade_duration.0,
 										inner:         match shader.inner {
 											ser::ProfilePanelFadeShaderInner::Basic =>
 												ProfilePanelFadeShaderInner::Basic,

@@ -10,12 +10,12 @@ mod panels;
 // Imports
 use {
 	crate::{AppEvent, display::Displays, panel::Panel},
-	core::{ops::RangeInclusive, time::Duration},
+	core::{ops::RangeInclusive, str::FromStr, time::Duration},
 	egui::{Widget, mutex::Mutex},
 	std::{path::Path, sync::Arc},
 	strum::IntoEnumIterator,
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
-	zsw_util::{AppError, Rect},
+	zsw_util::{AppError, DurationDisplay, Rect},
 	zsw_wgpu::Wgpu,
 };
 
@@ -124,7 +124,8 @@ fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusi
 	let start = range.start().as_secs_f32();
 	let end = range.end().as_secs_f32();
 	egui::Slider::new(&mut secs, start..=end)
-		.suffix("s")
+		.custom_formatter(|secs, _| DurationDisplay(Duration::from_secs_f64(secs)).to_string())
+		.custom_parser(|s| DurationDisplay::from_str(s).ok().map(|d| d.0.as_secs_f64()))
 		.clamping(egui::SliderClamping::Edits)
 		.ui(ui);
 	*duration = Duration::from_secs_f32(secs);
