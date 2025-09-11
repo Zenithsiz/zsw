@@ -1,7 +1,7 @@
 //! Build script
 
 // Features
-#![feature(must_not_suspend, path_add_extension)]
+#![feature(must_not_suspend)]
 
 // Imports
 use {

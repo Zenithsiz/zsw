@@ -11,8 +11,7 @@
 	iter_partition_in_place,
 	type_alias_impl_trait,
 	proc_macro_hygiene,
-	stmt_expr_attributes,
-	path_add_extension
+	stmt_expr_attributes
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
