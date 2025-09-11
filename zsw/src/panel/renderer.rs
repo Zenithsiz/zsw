@@ -292,7 +292,11 @@ impl PanelsRenderer {
 				let image_uniforms = |image: Option<&PanelFadeImage>| {
 					let (size, swap_dir) = match image {
 						None => (Vector2::new(0, 0), false),
-						Some(image) => (image.size, image.swap_dir),
+						Some(image) => {
+							let texture = image.texture_view.texture();
+							let size = Vector2::new(texture.width(), texture.height());
+							(size, image.swap_dir)
+						},
 					};
 
 					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);

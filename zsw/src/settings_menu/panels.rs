@@ -158,7 +158,9 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut Option<PanelFadeImage>) {
 		},
 		Some(image) => {
 			super::draw_openable_path(ui, &image.path);
-			ui.label(format!("Size: {}x{}", image.size.x, image.size.y));
+
+			let texture = image.texture_view.texture();
+			ui.label(format!("Size: {}x{}", texture.width(), texture.height()));
 			ui.checkbox(&mut image.swap_dir, "Swap direction");
 		},
 	}

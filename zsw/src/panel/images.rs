@@ -5,7 +5,6 @@ use {
 	super::PlaylistPlayer,
 	::image::DynamicImage,
 	app_error::Context,
-	cgmath::Vector2,
 	std::{self, mem, path::Path, sync::Arc},
 	tracing::Instrument,
 	zsw_util::{AppError, Loadable, loadable::Loader},
@@ -40,9 +39,6 @@ pub struct PanelFadeImages {
 pub struct PanelFadeImage {
 	/// Texture view
 	pub texture_view: wgpu::TextureView,
-
-	/// Image size
-	pub size: Vector2<u32>,
 
 	/// Swap direction
 	pub swap_dir: bool,
@@ -165,8 +161,8 @@ impl PanelFadeImages {
 		};
 
 		if let Some(slot) = slot {
-			let (texture, texture_view) = match wgpu.create_texture_from_image(&res.path, image) {
-				Ok((texture, texture_view)) => (texture, texture_view),
+			let texture_view = match wgpu.create_texture_from_image(&res.path, image) {
+				Ok((_, texture_view)) => texture_view,
 				Err(err) => {
 					tracing::warn!("Unable to create texture for image {:?}: {}", res.path, err.pretty());
 					return;
@@ -175,7 +171,6 @@ impl PanelFadeImages {
 
 			let image = PanelFadeImage {
 				texture_view,
-				size: Vector2::new(texture.width(), texture.height()),
 				swap_dir: rand::random(),
 				path: res.path,
 			};
