@@ -1,16 +1,11 @@
 //! Panel images
 
-// Modules
-mod image;
-
-// Exports
-pub use self::image::PanelFadeImage;
-
 // Imports
 use {
 	super::PlaylistPlayer,
 	::image::DynamicImage,
 	app_error::Context,
+	cgmath::Vector2,
 	std::{self, mem, path::Path, sync::Arc},
 	tracing::Instrument,
 	zsw_util::{AppError, Loadable, loadable::Loader},
@@ -39,6 +34,23 @@ pub struct PanelFadeImages {
 	/// Next image
 	pub next_image: Loadable<ImageLoadRes, NextImageLoader>,
 }
+
+/// Panel's fade image
+#[derive(Debug)]
+pub struct PanelFadeImage {
+	/// Texture view
+	pub texture_view: wgpu::TextureView,
+
+	/// Image size
+	pub size: Vector2<u32>,
+
+	/// Swap direction
+	pub swap_dir: bool,
+
+	/// Path
+	pub path: Arc<Path>,
+}
+
 
 /// Arguments to the next image loader
 pub struct NextImageArgs {
@@ -153,12 +165,19 @@ impl PanelFadeImages {
 		};
 
 		if let Some(slot) = slot {
-			let image = match PanelFadeImage::new(wgpu, Arc::clone(&res.path), image) {
-				Ok(image) => image,
+			let (texture, texture_view) = match wgpu.create_texture_from_image(&res.path, image) {
+				Ok((texture, texture_view)) => (texture, texture_view),
 				Err(err) => {
-					tracing::warn!("Unable to create image {:?}: {}", res.path, err.pretty());
+					tracing::warn!("Unable to create texture for image {:?}: {}", res.path, err.pretty());
 					return;
 				},
+			};
+
+			let image = PanelFadeImage {
+				texture_view,
+				size: Vector2::new(texture.width(), texture.height()),
+				swap_dir: rand::random(),
+				path: res.path,
 			};
 
 			match slot {
