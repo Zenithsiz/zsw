@@ -153,10 +153,18 @@ impl PanelFadeImages {
 		};
 
 		if let Some(slot) = slot {
+			let image = match PanelFadeImage::new(wgpu, Arc::clone(&res.path), image) {
+				Ok(image) => image,
+				Err(err) => {
+					tracing::warn!("Unable to create image {:?}: {}", res.path, err.pretty());
+					return;
+				},
+			};
+
 			match slot {
-				Slot::Prev => self.prev = Some(PanelFadeImage::new(wgpu, res.path, image)),
-				Slot::Cur => self.cur = Some(PanelFadeImage::new(wgpu, res.path, image)),
-				Slot::Next => self.next = Some(PanelFadeImage::new(wgpu, res.path, image)),
+				Slot::Prev => self.prev = Some(image),
+				Slot::Cur => self.cur = Some(image),
+				Slot::Next => self.next = Some(image),
 			}
 			self.image_bind_group = None;
 		}

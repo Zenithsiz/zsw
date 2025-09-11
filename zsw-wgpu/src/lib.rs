@@ -1,7 +1,7 @@
 //! Wgpu wrapper
 
 // Features
-#![feature(must_not_suspend)]
+#![feature(must_not_suspend, yeet_expr)]
 
 // Modules
 mod renderer;
@@ -13,6 +13,9 @@ pub use renderer::{FrameRender, WgpuRenderer};
 use {
 	app_error::Context,
 	core::sync::atomic::{self, AtomicBool},
+	image::DynamicImage,
+	std::path::Path,
+	wgpu::util::DeviceExt,
 	zsw_util::AppError,
 };
 
@@ -68,6 +71,64 @@ impl Wgpu {
 			empty_texture,
 			empty_texture_view,
 		})
+	}
+
+	/// Creates a texture from an image.
+	pub fn create_texture_from_image(
+		&self,
+		path: &Path,
+		image: DynamicImage,
+	) -> Result<(wgpu::Texture, wgpu::TextureView), AppError> {
+		// Get the image's format, converting if necessary.
+		let (image, format) = match image {
+			// With `rgba8` we can simply use the image
+			image @ DynamicImage::ImageRgba8(_) => (image, wgpu::TextureFormat::Rgba8UnormSrgb),
+
+			// TODO: Convert more common formats (such as rgb8) if possible.
+
+			// Else simply convert to rgba8
+			image => {
+				let image = image.to_rgba8();
+				(DynamicImage::ImageRgba8(image), wgpu::TextureFormat::Rgba8UnormSrgb)
+			},
+		};
+
+		// If the image is too large, return an error
+		let limits = self.device.limits();
+		let max_image_size = limits.max_texture_dimension_2d;
+		let image_width = image.width();
+		let image_height = image.height();
+		app_error::ensure!(
+			image_width <= max_image_size && image_height <= max_image_size,
+			"Image is too large ({image_width}x{image_height}), maximum dimension is {max_image_size}",
+		);
+
+		let texture_descriptor = wgpu::TextureDescriptor {
+			label: Some(&format!("[zsw] Image ({path:?})")),
+			size: wgpu::Extent3d {
+				width:                 image.width(),
+				height:                image.height(),
+				depth_or_array_layers: 1,
+			},
+			mip_level_count: 1,
+			sample_count: 1,
+			dimension: wgpu::TextureDimension::D2,
+			format,
+			usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+			view_formats: &[],
+		};
+
+		let texture = self.device.create_texture_with_data(
+			&self.queue,
+			&texture_descriptor,
+			wgpu::util::TextureDataOrder::LayerMajor,
+			image.as_bytes(),
+		);
+
+		let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+		let texture_view = texture.create_view(&texture_view_descriptor);
+
+		Ok((texture, texture_view))
 	}
 }
 

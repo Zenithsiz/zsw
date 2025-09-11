@@ -9,6 +9,7 @@ edition = "2024"
 zsw-util = { workspace = true }
 
 app-error = { workspace = true }
+image     = { workspace = true }
 tokio     = { workspace = true }
 tracing   = { workspace = true }
 wgpu      = { workspace = true }
