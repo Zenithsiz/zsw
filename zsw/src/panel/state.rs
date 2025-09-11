@@ -129,16 +129,25 @@ impl PanelFadeState {
 	/// Returns the min progress for the current image
 	pub fn min_progress(&self) -> Duration {
 		match self.images.prev.is_some() {
+			// If we have a previous image, we can go until the very beginning
 			true => Duration::ZERO,
+
+			// Otherwise, stop before the fade
 			false => self.fade_duration,
 		}
 	}
 
 	/// Returns the max progress for the current image
 	pub fn max_progress(&self) -> Duration {
-		match self.images.next.is_some() {
-			true => self.duration,
-			false => self.duration - self.fade_duration,
+		match (self.images.cur.is_some(), self.images.next.is_some()) {
+			// If we have a next image, we can go until the full duration
+			(_, true) => self.duration,
+
+			// Otherwise, if we have a current, but no next, we can go until the fade begins
+			(true, false) => self.duration - self.fade_duration,
+
+			// Finally, if we don't have any, we should stay at the beginning
+			(false, false) => self.min_progress(),
 		}
 	}
 
