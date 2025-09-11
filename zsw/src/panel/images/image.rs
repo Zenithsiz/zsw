@@ -26,29 +26,29 @@ pub struct PanelFadeImage {
 	/// Swap direction
 	pub swap_dir: bool,
 
-	/// Image path
-	pub image_path: Arc<Path>,
+	/// Path
+	pub path: Arc<Path>,
 }
 
 impl PanelFadeImage {
 	/// Creates a new panel image from an image
 	#[must_use]
-	pub fn new(wgpu: &Wgpu, image_path: Arc<Path>, image: DynamicImage) -> Self {
+	pub fn new(wgpu: &Wgpu, path: Arc<Path>, image: DynamicImage) -> Self {
 		let size = Vector2::new(image.width(), image.height());
-		let (texture, texture_view) = self::create_image_texture(wgpu, &image_path, image);
+		let (texture, texture_view) = self::create_image_texture(wgpu, &path, image);
 
 		Self {
 			_texture: texture,
 			texture_view,
 			size,
 			swap_dir: rand::random(),
-			image_path,
+			path,
 		}
 	}
 }
 
 /// Creates the image texture and view
-fn create_image_texture(wgpu: &Wgpu, image_path: &Path, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
+fn create_image_texture(wgpu: &Wgpu, path: &Path, image: DynamicImage) -> (wgpu::Texture, wgpu::TextureView) {
 	// Get the image's format, converting if necessary.
 	let (image, format) = match image {
 		// With `rgba8` we can simply use the image
@@ -74,7 +74,7 @@ fn create_image_texture(wgpu: &Wgpu, image_path: &Path, image: DynamicImage) -> 
 	);
 
 	let texture_descriptor = wgpu::TextureDescriptor {
-		label: Some(&format!("[zsw::panel_img] Image ({image_path:?})")),
+		label: Some(&format!("[zsw::panel_img] Image ({path:?})")),
 		size: wgpu::Extent3d {
 			width:                 image.width(),
 			height:                image.height(),

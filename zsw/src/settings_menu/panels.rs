@@ -157,7 +157,7 @@ fn draw_panel_image(ui: &mut egui::Ui, image: &mut Option<PanelFadeImage>) {
 			ui.label("[Unloaded]");
 		},
 		Some(image) => {
-			super::draw_openable_path(ui, &image.image_path);
+			super::draw_openable_path(ui, &image.path);
 			ui.label(format!("Size: {}x{}", image.size.x, image.size.y));
 			ui.checkbox(&mut image.swap_dir, "Swap direction");
 		},
