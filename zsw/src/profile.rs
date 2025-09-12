@@ -17,6 +17,9 @@ pub type Profiles = ResourceManager<ProfileName, Profile, ser::Profile>;
 /// Profile
 #[derive(Debug)]
 pub struct Profile {
+	/// Name
+	pub _name: ProfileName,
+
 	/// Panels
 	pub panels: Vec<ProfilePanel>,
 }
@@ -60,8 +63,9 @@ pub enum ProfilePanelFadeShaderInner {
 }
 
 impl resource_manager::FromSerialized<ProfileName, ser::Profile> for Profile {
-	fn from_serialized(_name: ProfileName, profile: ser::Profile) -> Self {
+	fn from_serialized(name: ProfileName, profile: ser::Profile) -> Self {
 		Self {
+			_name:  name,
 			panels: profile
 				.panels
 				.into_iter()

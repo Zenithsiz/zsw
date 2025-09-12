@@ -19,6 +19,9 @@ pub type Playlists = ResourceManager<PlaylistName, Playlist, ser::Playlist>;
 /// Playlist
 #[derive(Debug)]
 pub struct Playlist {
+	/// Name
+	pub _name: PlaylistName,
+
 	/// All items
 	pub items: Vec<PlaylistItem>,
 }
@@ -48,8 +51,9 @@ pub enum PlaylistItemKind {
 }
 
 impl resource_manager::FromSerialized<PlaylistName, ser::Playlist> for Playlist {
-	fn from_serialized(_name: PlaylistName, playlist: ser::Playlist) -> Self {
+	fn from_serialized(name: PlaylistName, playlist: ser::Playlist) -> Self {
 		Self {
+			_name: name,
 			items: playlist
 				.items
 				.into_iter()
