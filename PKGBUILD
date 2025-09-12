@@ -41,4 +41,5 @@ package() {
 	cd "$pkgname-$pkgver"
 
 	install -Dm0755 -t "$pkgdir/usr/bin/" "target/release/$pkgname"
+	install -Dm0644 -t "$pkgdir/usr/share/applications/" "install/zsw.desktop"
 }

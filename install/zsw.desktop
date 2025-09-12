@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Zsw
+Comment=Zenithsiz's scrolling wallpaper
+Exec=/usr/bin/zsw
+Type=Application
+Categories=Wallpaper;
