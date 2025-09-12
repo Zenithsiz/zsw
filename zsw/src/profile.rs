@@ -8,7 +8,7 @@ use {
 	crate::{display::DisplayName, playlist::PlaylistName},
 	core::time::Duration,
 	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::{ResourceManager, resource_manager},
+	zsw_util::{DurationDisplay, ResourceManager, resource_manager},
 };
 
 /// Profiles
@@ -18,7 +18,7 @@ pub type Profiles = ResourceManager<ProfileName, Profile, ser::Profile>;
 #[derive(Debug)]
 pub struct Profile {
 	/// Name
-	pub _name: ProfileName,
+	pub name: ProfileName,
 
 	/// Panels
 	pub panels: Vec<ProfilePanel>,
@@ -65,7 +65,7 @@ pub enum ProfilePanelFadeShaderInner {
 impl resource_manager::FromSerialized<ProfileName, ser::Profile> for Profile {
 	fn from_serialized(name: ProfileName, profile: ser::Profile) -> Self {
 		Self {
-			_name:  name,
+			name,
 			panels: profile
 				.panels
 				.into_iter()
@@ -89,6 +89,41 @@ impl resource_manager::FromSerialized<ProfileName, ser::Profile> for Profile {
 									ProfilePanelFadeShaderInner::In { strength },
 							},
 						}),
+					},
+				})
+				.collect(),
+		}
+	}
+}
+
+impl resource_manager::ToSerialized<ProfileName, ser::Profile> for Profile {
+	fn to_serialized(&self, _name: &ProfileName) -> ser::Profile {
+		ser::Profile {
+			panels: self
+				.panels
+				.iter()
+				.map(|panel| ser::ProfilePanel {
+					display: panel.display.to_string(),
+					shader:  match &panel.shader {
+						ProfilePanelShader::None(shader) =>
+							ser::ProfilePanelShader::None(ser::ProfilePanelNoneShader {
+								background_color: shader.background_color,
+							}),
+						ProfilePanelShader::Fade(shader) =>
+							ser::ProfilePanelShader::Fade(ser::ProfilePanelFadeShader {
+								playlists:     shader.playlists.iter().map(PlaylistName::to_string).collect(),
+								duration:      DurationDisplay(shader.duration),
+								fade_duration: DurationDisplay(shader.fade_duration),
+								inner:         match shader.inner {
+									ProfilePanelFadeShaderInner::Basic => ser::ProfilePanelFadeShaderInner::Basic,
+									ProfilePanelFadeShaderInner::White { strength } =>
+										ser::ProfilePanelFadeShaderInner::White { strength },
+									ProfilePanelFadeShaderInner::Out { strength } =>
+										ser::ProfilePanelFadeShaderInner::Out { strength },
+									ProfilePanelFadeShaderInner::In { strength } =>
+										ser::ProfilePanelFadeShaderInner::In { strength },
+								},
+							}),
 					},
 				})
 				.collect(),

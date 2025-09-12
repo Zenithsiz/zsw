@@ -6,10 +6,11 @@
 // Modules
 mod displays;
 mod panels;
+mod profiles;
 
 // Imports
 use {
-	crate::{AppEvent, display::Displays, panel::Panel},
+	crate::{AppEvent, display::Displays, panel::Panel, profile::Profiles},
 	core::{ops::RangeInclusive, str::FromStr, time::Duration},
 	egui::{Widget, mutex::Mutex},
 	std::{path::Path, sync::Arc},
@@ -44,6 +45,7 @@ impl SettingsMenu {
 		ctx: &egui::Context,
 		wgpu: &Wgpu,
 		displays: &Arc<Displays>,
+		profiles: &Arc<Profiles>,
 		panels: &mut [Panel],
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		cursor_pos: LogicalPosition<f32>,
@@ -72,6 +74,7 @@ impl SettingsMenu {
 			match self.cur_tab {
 				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, window_geometry),
 				Tab::Displays => displays::draw_displays_tab(ui, displays),
+				Tab::Profiles => profiles::draw_profiles_tab(ui, profiles),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
 		});
@@ -141,6 +144,9 @@ enum Tab {
 
 	#[display("Displays")]
 	Displays,
+
+	#[display("Profiles")]
+	Profiles,
 
 	#[display("Settings")]
 	Settings,

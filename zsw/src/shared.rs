@@ -30,7 +30,7 @@ pub struct Shared {
 
 	pub displays:  Arc<Displays>,
 	pub playlists: Arc<Playlists>,
-	pub profiles:  Profiles,
+	pub profiles:  Arc<Profiles>,
 
 	// TODO: Have an "active" profile type store this and other things instead?
 	pub panels: Mutex<Vec<Panel>>,

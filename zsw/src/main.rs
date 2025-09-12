@@ -198,7 +198,7 @@ impl WinitApp {
 			panels_renderer_shared: panels_renderer_layouts,
 			displays: Arc::new(displays),
 			playlists: Arc::new(playlists),
-			profiles,
+			profiles: Arc::new(profiles),
 			panels: Mutex::new(vec![]),
 		};
 		let shared = Arc::new(shared);
@@ -529,6 +529,7 @@ async fn paint_egui(
 				ctx,
 				&shared.wgpu,
 				&shared.displays,
+				&shared.profiles,
 				&mut shared.panels.lock().block_on(),
 				&shared.event_loop_proxy,
 				cursor_pos,
