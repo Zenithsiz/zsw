@@ -43,7 +43,7 @@ impl Logger {
 		let registry = tracing_subscriber::registry();
 
 		// Add the terminal layer
-		let (term_use_colors, term_layer) = self::term_layer();
+		let term_layer = self::term_layer();
 		let registry = registry.with(term_layer);
 
 		// Add the tokio-console layer
@@ -57,7 +57,7 @@ impl Logger {
 		// Then initialize it temporarily
 		drop(barebones_logger_guard);
 		let guard = tracing::dispatcher::set_default(&dispatch);
-		tracing::debug!(?term_use_colors, "Initialized temporary stderr logger");
+		tracing::debug!("Initialized temporary stderr logger");
 
 		// Initialize the `log` compatibility too
 		tracing_log::LogTracer::builder()
@@ -102,7 +102,7 @@ impl Logger {
 }
 
 /// Creates the terminal layer
-fn term_layer<S>() -> (bool, impl Layer<S>)
+fn term_layer<S>() -> impl Layer<S>
 where
 	S: Subscriber + for<'a> LookupSpan<'a>,
 {
@@ -111,17 +111,16 @@ where
 	let layer = tracing_subscriber::fmt::layer()
 		.with_span_events(FmtSpan::CLOSE)
 		.with_ansi(use_colors);
+	tracing::debug!("Using colors for terminal logging: {use_colors}");
 
 	#[cfg(debug_assertions)]
 	let layer = layer.with_file(true).with_line_number(true).with_thread_names(true);
 
-	let layer = layer.with_filter(
+	layer.with_filter(
 		EnvFilter::builder()
 			.with_default_directive(LevelFilter::INFO.into())
 			.parse_lossy(env),
-	);
-
-	(use_colors, layer)
+	)
 }
 
 /// Creates the file layer
