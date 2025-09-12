@@ -4867,6 +4867,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "tokio",
+ "tokio-stream",
  "toml 0.9.5",
  "tracing",
 ]

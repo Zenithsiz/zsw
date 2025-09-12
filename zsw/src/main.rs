@@ -184,9 +184,29 @@ impl WinitApp {
 		let wgpu = Wgpu::new().await.context("Unable to initialize wgpu")?;
 		let panels_renderer_layouts = PanelsRendererShared::new(&wgpu);
 
-		let displays = Displays::new(config_dirs.displays().to_path_buf());
-		let playlists = Playlists::new(config_dirs.playlists().to_path_buf());
-		let profiles = Profiles::new(config_dirs.profiles().to_path_buf());
+		// Create and stat loading the displays
+		let displays = Displays::new(config_dirs.displays().to_path_buf())
+			.await
+			.context("Unable to create displays")?;
+		let displays = Arc::new(displays);
+		#[cloned(displays)]
+		self::spawn_task("Load displays", async move { displays.load_all().await });
+
+		// Create and stat loading the playlists
+		let playlists = Playlists::new(config_dirs.playlists().to_path_buf())
+			.await
+			.context("Unable to create playlists")?;
+		let playlists = Arc::new(playlists);
+		#[cloned(playlists)]
+		self::spawn_task("Load playlists", async move { playlists.load_all().await });
+
+		// Create and stat loading the profiles
+		let profiles = Profiles::new(config_dirs.profiles().to_path_buf())
+			.await
+			.context("Unable to create profiles")?;
+		let profiles = Arc::new(profiles);
+		#[cloned(profiles)]
+		self::spawn_task("Load profiles", async move { profiles.load_all().await });
 
 		// Shared state
 		let shared = Shared {
@@ -196,9 +216,9 @@ impl WinitApp {
 			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
 			wgpu,
 			panels_renderer_shared: panels_renderer_layouts,
-			displays: Arc::new(displays),
-			playlists: Arc::new(playlists),
-			profiles: Arc::new(profiles),
+			displays,
+			playlists,
+			profiles,
 			panels: Mutex::new(vec![]),
 		};
 		let shared = Arc::new(shared);

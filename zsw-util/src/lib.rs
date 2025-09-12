@@ -20,7 +20,8 @@
 	async_fn_traits,
 	trait_alias,
 	unboxed_closures,
-	tuple_trait
+	tuple_trait,
+	try_blocks
 )]
 
 // Modules

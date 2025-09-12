@@ -3,12 +3,13 @@
 // Imports
 use {
 	crate::AppError,
-	app_error::Context,
+	app_error::{Context, app_error},
 	core::marker::PhantomData,
-	futures::lock::Mutex,
+	futures::{TryStreamExt, lock::Mutex},
 	serde::{Serialize, de::DeserializeOwned},
-	std::{collections::HashMap, hash::Hash, path::PathBuf, sync::Arc},
+	std::{collections::HashMap, ffi::OsStr, hash::Hash, path::PathBuf, sync::Arc},
 	tokio::sync::OnceCell,
+	tokio_stream::{StreamExt, wrappers::ReadDirStream},
 };
 
 /// Resource storage
@@ -30,13 +31,60 @@ pub struct ResourceManager<N, V, S> {
 
 impl<N, V, S> ResourceManager<N, V, S> {
 	/// Creates a new resource manager over a root directory
-	#[must_use]
-	pub fn new(root: PathBuf) -> Self {
-		Self {
+	pub async fn new(root: PathBuf) -> Result<Self, AppError> {
+		tokio::fs::create_dir_all(&root)
+			.await
+			.context("Unable to create root directory")?;
+
+		Ok(Self {
 			root,
 			values: Mutex::new(HashMap::new()),
 			_phantom: PhantomData,
-		}
+		})
+	}
+
+	/// Loads all playlists from the root directory
+	pub async fn load_all(&self) -> Result<(), AppError>
+	where
+		N: Eq + Hash + Clone + From<String> + AsRef<str>,
+		V: FromSerialized<N, S>,
+		S: DeserializeOwned,
+	{
+		tokio::fs::read_dir(&self.root)
+			.await
+			.map(ReadDirStream::new)
+			.context("Unable to read playlists directory")?
+			.then(|entry| async {
+				// Ignore directories and non `.toml` files
+				let entry = entry.context("Unable to get entry")?;
+				let entry_path = entry.path();
+				if entry
+					.file_type()
+					.await
+					.context("Unable to get entry metadata")?
+					.is_dir() || entry_path.extension().and_then(OsStr::to_str) != Some("toml")
+				{
+					return Ok(());
+				}
+
+				// Then get the playlist name from the file
+				let playlist_name = entry_path
+					.file_stem()
+					.context("Entry path had no file stem")?
+					.to_os_string()
+					.into_string()
+					.map(N::from)
+					.map_err(|file_name| app_error!("Entry name was non-utf8: {file_name:?}"))?;
+
+				_ = self
+					.load(playlist_name)
+					.await
+					.with_context(|| format!("Unable to load file {entry_path:?}"))?;
+
+				Ok(())
+			})
+			.try_collect::<()>()
+			.await
 	}
 
 	/// Adds a new value
