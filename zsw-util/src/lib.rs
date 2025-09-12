@@ -23,7 +23,9 @@
 	tuple_trait,
 	try_blocks,
 	proc_macro_hygiene,
-	stmt_expr_attributes
+	stmt_expr_attributes,
+	return_type_notation,
+	fn_traits
 )]
 
 // Modules

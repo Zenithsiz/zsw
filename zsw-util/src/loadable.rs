@@ -89,7 +89,7 @@ impl<T, F> Loadable<T, F> {
 				}
 			},
 			None => {
-				let fut = self.loader.async_call_mut(args);
+				let fut = self.loader.load(args);
 				self.task = Some(tokio::spawn(fut));
 
 				None
@@ -99,8 +99,21 @@ impl<T, F> Loadable<T, F> {
 }
 
 /// Loader trait
-pub trait Loader<Args: Tuple, T> =
-	AsyncFnMut<Args, Output = T> where for<'a> <Self as AsyncFnMut<Args>>::CallRefFuture<'a>: Send + 'static;
+pub trait Loader<Args, T> {
+	/// Creates the loader future
+	fn load(&mut self, args: Args) -> impl Future<Output = T> + Send + 'static;
+}
+
+impl<Args, T, F, Fut> Loader<Args, T> for F
+where
+	Args: Tuple + Send,
+	F: FnMut<Args, Output = Fut>,
+	Fut: Future<Output = T> + Send + 'static,
+{
+	fn load(&mut self, args: Args) -> impl Future<Output = T> + 'static {
+		self.call_mut(args)
+	}
+}
 
 impl<T: fmt::Debug, F> fmt::Debug for Loadable<T, F> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
