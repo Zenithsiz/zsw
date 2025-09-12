@@ -214,7 +214,8 @@ impl WinitApp {
 
 		if let Some(profile) = &config.default.profile {
 			let profile_name = ProfileName::from(profile.clone());
-			let shared = Arc::clone(&shared);
+
+			#[cloned(shared)]
 			self::spawn_task("Load default profile", async move {
 				shared
 					.panels

@@ -106,11 +106,7 @@ impl Panels {
 							ProfilePanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
 						});
 
-						let playlist_player = Arc::clone(state.playlist_player());
-
-						let panel_playlists = shader.playlists.clone();
-
-						#[cloned(playlists)]
+						#[cloned(playlists, panel_playlists = shader.playlists, playlist_player = state.playlist_player())]
 						crate::spawn_task(
 							format!("Load panel {:?} playlists", profile_panel.display),
 							async move {

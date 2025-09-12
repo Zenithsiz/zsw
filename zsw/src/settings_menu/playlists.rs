@@ -10,10 +10,8 @@ pub fn draw_playlists_tab(ui: &mut egui::Ui, playlists: &Arc<Playlists>) {
 
 		ui.collapsing(playlist.name.to_string(), |ui| {
 			if ui.button("Save").clicked() {
-				let playlist_name = playlist.name.clone();
-
-				#[cloned(playlists;)]
-				crate::spawn_task(format!("Save playlist {:?}", playlist.name), async move {
+				#[cloned(playlists, playlist_name = playlist.name;)]
+				crate::spawn_task(format!("Save playlist {playlist_name:?}"), async move {
 					playlists.save(&playlist_name).await
 				});
 			}
