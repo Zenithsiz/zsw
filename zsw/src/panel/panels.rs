@@ -143,16 +143,13 @@ impl Panels {
 /// Loads a panel's playlist
 async fn load_playlist(
 	playlist_player: &Mutex<PlaylistPlayer>,
-	playlist: &PlaylistName,
+	playlist_name: &PlaylistName,
 	playlists: &Playlists,
 ) -> Result<(), AppError> {
-	let playlist = playlists
-		.load(playlist.clone())
+	playlists
+		.load(playlist_name.clone())
 		.await
-		.context("Unable to load playlist")?;
-	tracing::debug!("Loaded default playlist {playlist:?}");
-
-	playlist
+		.context("Unable to load playlist")?
 		.lock()
 		.await
 		.items
