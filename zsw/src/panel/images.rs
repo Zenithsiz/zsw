@@ -56,12 +56,9 @@ pub struct NextImageArgs {
 	max_image_size: u32,
 }
 
-pub type NextImageLoader = impl Loader<(NextImageArgs,), ImageLoadRes>;
-
 impl PanelFadeImages {
 	/// Creates a new panel
 	#[must_use]
-	#[define_opaque(NextImageLoader)]
 	pub fn new() -> Self {
 		Self {
 			prev:             None,
@@ -69,14 +66,7 @@ impl PanelFadeImages {
 			next:             None,
 			image_sampler:    None,
 			image_bind_group: None,
-			next_image:       Loadable::new(async move |args: NextImageArgs| {
-				let image_res = self::load(&args.path, args.max_image_size).await;
-				ImageLoadRes {
-					path: args.path,
-					playlist_pos: args.playlist_pos,
-					image_res,
-				}
-			}),
+			next_image:       Loadable::new(NextImageLoader),
 		}
 	}
 
@@ -215,16 +205,37 @@ impl PanelFadeImages {
 
 		let max_image_size = wgpu.device.limits().max_texture_dimension_2d;
 
-		self.next_image.try_load((NextImageArgs {
+		self.next_image.try_load(NextImageArgs {
 			playlist_pos,
 			path,
 			max_image_size,
-		},))
+		})
 	}
 
 	/// Returns if all images are empty
 	pub fn is_empty(&self) -> bool {
 		self.prev.is_none() && self.cur.is_none() && self.next.is_none()
+	}
+}
+
+/// Next image loader
+pub struct NextImageLoader;
+
+impl Loader<NextImageArgs, ImageLoadRes> for NextImageLoader {
+	fn name(&self, args: &NextImageArgs) -> String {
+		format!("Load image {:?}", args.path)
+	}
+
+	#[expect(clippy::manual_async_fn, reason = "We can't specify the bounds")]
+	fn load(&mut self, args: NextImageArgs) -> impl Future<Output = ImageLoadRes> + Send + 'static {
+		async move {
+			let image_res = self::load(&args.path, args.max_image_size).await;
+			ImageLoadRes {
+				path: args.path,
+				playlist_pos: args.playlist_pos,
+				image_res,
+			}
+		}
 	}
 }
 
