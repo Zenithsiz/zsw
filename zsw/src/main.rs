@@ -272,6 +272,8 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 
 	// Then load it's panels
 	profile
+		.lock()
+		.await
 		.panels
 		.iter()
 		.map(async |profile_panel| {
@@ -342,6 +344,8 @@ async fn load_playlist(
 	tracing::debug!("Loaded default playlist {playlist:?}");
 
 	playlist
+		.lock()
+		.await
 		.items
 		.iter()
 		.map(async |item| {

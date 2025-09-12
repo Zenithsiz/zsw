@@ -1,17 +1,16 @@
 //! Display
 
 // Modules
-mod displays;
 pub mod ser;
-
-// Exports
-pub use self::displays::Displays;
 
 // Imports
 use {
 	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::Rect,
+	zsw_util::{Rect, ResourceManager, resource_manager},
 };
+
+/// Displays
+pub type Displays = ResourceManager<DisplayName, Display, ser::Display>;
 
 /// Display
 #[derive(Debug)]
@@ -21,6 +20,31 @@ pub struct Display {
 
 	/// Geometries
 	pub geometries: Vec<Rect<i32, u32>>,
+}
+
+impl resource_manager::FromSerialized<DisplayName, ser::Display> for Display {
+	fn from_serialized(name: DisplayName, display: ser::Display) -> Self {
+		Self {
+			name,
+			geometries: display
+				.geometries
+				.into_iter()
+				.map(|geometry| geometry.geometry)
+				.collect(),
+		}
+	}
+}
+
+impl resource_manager::ToSerialized<DisplayName, ser::Display> for Display {
+	fn to_serialized(&self, _name: &DisplayName) -> ser::Display {
+		ser::Display {
+			geometries: self
+				.geometries
+				.iter()
+				.map(|&geometry| ser::DisplayGeometry { geometry })
+				.collect(),
+		}
+	}
 }
 
 /// Display name
@@ -33,11 +57,18 @@ impl From<String> for DisplayName {
 	}
 }
 
+impl AsRef<str> for DisplayName {
+	fn as_ref(&self) -> &str {
+		&self.0
+	}
+}
+
 impl Borrow<str> for DisplayName {
 	fn borrow(&self) -> &str {
 		&self.0
 	}
 }
+
 
 impl fmt::Display for DisplayName {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

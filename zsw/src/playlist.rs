@@ -2,14 +2,19 @@
 
 // Modules
 mod player;
-mod playlists;
 mod ser;
 
 // Exports
-pub use self::{player::PlaylistPlayer, playlists::Playlists};
+pub use self::player::PlaylistPlayer;
 
 // Imports
-use std::{borrow::Borrow, fmt, path::Path, sync::Arc};
+use {
+	std::{borrow::Borrow, fmt, path::Path, sync::Arc},
+	zsw_util::{ResourceManager, resource_manager},
+};
+
+/// Playlists
+pub type Playlists = ResourceManager<PlaylistName, Playlist, ser::Playlist>;
 
 /// Playlist
 #[derive(Debug)]
@@ -42,6 +47,27 @@ pub enum PlaylistItemKind {
 	File { path: Arc<Path> },
 }
 
+impl resource_manager::FromSerialized<PlaylistName, ser::Playlist> for Playlist {
+	fn from_serialized(_name: PlaylistName, playlist: ser::Playlist) -> Self {
+		Self {
+			items: playlist
+				.items
+				.into_iter()
+				.map(|item| PlaylistItem {
+					enabled: item.enabled,
+					kind:    match item.kind {
+						ser::PlaylistItemKind::Directory { path, recursive } => PlaylistItemKind::Directory {
+							path: path.into(),
+							recursive,
+						},
+						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path: path.into() },
+					},
+				})
+				.collect(),
+		}
+	}
+}
+
 /// Playlist name
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct PlaylistName(Arc<str>);
@@ -49,6 +75,12 @@ pub struct PlaylistName(Arc<str>);
 impl From<String> for PlaylistName {
 	fn from(s: String) -> Self {
 		Self(s.into())
+	}
+}
+
+impl AsRef<str> for PlaylistName {
+	fn as_ref(&self) -> &str {
+		&self.0
 	}
 }
 
