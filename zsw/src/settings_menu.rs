@@ -17,7 +17,7 @@ use {
 	std::{path::Path, sync::Arc},
 	strum::IntoEnumIterator,
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
-	zsw_util::{AppError, DurationDisplay, Rect, TokioTaskBlockOn},
+	zsw_util::{AppError, DurationDisplay, Rect},
 	zsw_wgpu::Wgpu,
 };
 
@@ -75,7 +75,7 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => panels::draw_panels_tab(ui, wgpu, &mut panels.get_all().block_on(), window_geometry),
+				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, window_geometry),
 				Tab::Displays => displays::draw_displays_tab(ui, displays),
 				Tab::Playlists => playlists::draw_playlists_tab(ui, playlists),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, displays, playlists, profiles, panels),
