@@ -13,7 +13,12 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 	for display in displays.get_all().block_on() {
 		let mut display = display.lock().block_on();
 		ui.collapsing(display.name.to_string(), |ui| {
-			self::draw_display(ui, &mut display);
+			ui.horizontal(|ui| {
+				ui.label(format!("Name: {:?}", display.name));
+			});
+
+			self::draw_display_geometries(ui, &mut display.geometries);
+
 
 			#[expect(clippy::semicolon_if_nothing_returned, reason = "False positive")]
 			if ui.button("Save").clicked() {
@@ -37,29 +42,13 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 			ui.label("Name");
 			ui.text_edit_singleline(&mut *name.lock());
 		});
+		self::draw_display_geometries(ui, &mut geometries.lock());
 
-		ui.collapsing("Geometries", |ui| {
-			geometries.lock().retain_mut(|geometry| {
-				let mut retain = true;
-				ui.horizontal(|ui| {
-					super::draw_rect(ui, geometry);
-					if ui.button("-").clicked() {
-						retain = false;
-					}
-				});
-
-				retain
-			});
-
-			if ui.button("+").clicked() {
-				geometries.lock().push(Rect::zero());
-			}
-		});
 
 		#[expect(clippy::semicolon_if_nothing_returned, reason = "False positive")]
 		if ui.button("Add").clicked() {
 			let display_name = DisplayName::from(name.lock().clone());
-			let geometries = geometries.lock().iter().copied().collect();
+			let geometries = geometries.lock().clone();
 
 			#[cloned(displays)]
 			crate::spawn_task(format!("Add display {display_name:?}"), async move {
@@ -77,12 +66,25 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 	});
 }
 
-/// Draws a display
-pub fn draw_display(ui: &mut egui::Ui, display: &mut Display) {
-	for (geometry_idx, geometry) in display.geometries.iter_mut().enumerate() {
+
+/// Draws a display's geometries
+pub fn draw_display_geometries(ui: &mut egui::Ui, geometries: &mut Vec<Rect<i32, u32>>) {
+	let mut geometry_idx = 0;
+	geometries.retain_mut(|geometry| {
+		let mut retain = true;
 		ui.horizontal(|ui| {
 			ui.label(format!("#{}: ", geometry_idx + 1));
 			super::draw_rect(ui, geometry);
+			if ui.button("-").clicked() {
+				retain = false;
+			}
 		});
+
+		geometry_idx += 1;
+		retain
+	});
+
+	if ui.button("+").clicked() {
+		geometries.push(Rect::zero());
 	}
 }
