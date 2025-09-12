@@ -13,12 +13,7 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 	for display in displays.get_all().block_on() {
 		let mut display = display.lock().block_on();
 		ui.collapsing(display.name.to_string(), |ui| {
-			ui.horizontal(|ui| {
-				ui.label(format!("Name: {:?}", display.name));
-			});
-
 			self::draw_display_geometries(ui, &mut display.geometries);
-
 
 			#[expect(clippy::semicolon_if_nothing_returned, reason = "False positive")]
 			if ui.button("Save").clicked() {
