@@ -1,0 +1,23 @@
+//! Playlists tab
+
+// Imports
+use {crate::playlist::Playlists, std::sync::Arc, zsw_util::TokioTaskBlockOn, zutil_cloned::cloned};
+
+/// Draws the playlists tab
+pub fn draw_playlists_tab(ui: &mut egui::Ui, playlists: &Arc<Playlists>) {
+	for playlist in playlists.get_all().block_on() {
+		let playlist = playlist.lock().block_on();
+
+		ui.collapsing(playlist.name.to_string(), |ui| {
+			#[expect(clippy::semicolon_if_nothing_returned, reason = "False positive")]
+			if ui.button("Save").clicked() {
+				let playlist_name = playlist.name.clone();
+
+				#[cloned(playlists)]
+				crate::spawn_task(format!("Save playlist {:?}", playlist.name), async move {
+					playlists.save(&playlist_name).await
+				});
+			}
+		});
+	}
+}

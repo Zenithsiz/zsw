@@ -20,7 +20,7 @@ pub type Playlists = ResourceManager<PlaylistName, Playlist, ser::Playlist>;
 #[derive(Debug)]
 pub struct Playlist {
 	/// Name
-	pub _name: PlaylistName,
+	pub name: PlaylistName,
 
 	/// All items
 	pub items: Vec<PlaylistItem>,
@@ -53,7 +53,7 @@ pub enum PlaylistItemKind {
 impl resource_manager::FromSerialized<PlaylistName, ser::Playlist> for Playlist {
 	fn from_serialized(name: PlaylistName, playlist: ser::Playlist) -> Self {
 		Self {
-			_name: name,
+			name,
 			items: playlist
 				.items
 				.into_iter()
@@ -65,6 +65,29 @@ impl resource_manager::FromSerialized<PlaylistName, ser::Playlist> for Playlist 
 							recursive,
 						},
 						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path: path.into() },
+					},
+				})
+				.collect(),
+		}
+	}
+}
+
+impl resource_manager::ToSerialized<PlaylistName, ser::Playlist> for Playlist {
+	fn to_serialized(&self, _name: &PlaylistName) -> ser::Playlist {
+		ser::Playlist {
+			items: self
+				.items
+				.iter()
+				.map(|item| ser::PlaylistItem {
+					enabled: item.enabled,
+					kind:    match item.kind {
+						PlaylistItemKind::Directory { ref path, recursive } => ser::PlaylistItemKind::Directory {
+							path: path.to_path_buf(),
+							recursive,
+						},
+						PlaylistItemKind::File { ref path } => ser::PlaylistItemKind::File {
+							path: path.to_path_buf(),
+						},
 					},
 				})
 				.collect(),

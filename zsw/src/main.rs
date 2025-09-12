@@ -529,6 +529,7 @@ async fn paint_egui(
 				ctx,
 				&shared.wgpu,
 				&shared.displays,
+				&shared.playlists,
 				&shared.profiles,
 				&mut shared.panels.lock().block_on(),
 				&shared.event_loop_proxy,
