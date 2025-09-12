@@ -35,18 +35,9 @@ use {
 		config::Config,
 		config_dirs::ConfigDirs,
 		display::Displays,
-		panel::{
-			Panel,
-			PanelFadeShader,
-			PanelFadeState,
-			PanelGeometry,
-			PanelNoneState,
-			PanelState,
-			PanelsRenderer,
-			PanelsRendererShared,
-		},
-		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
-		profile::{ProfileName, ProfilePanelFadeShaderInner, ProfilePanelShader, Profiles},
+		panel::{PanelGeometry, Panels, PanelsRenderer, PanelsRendererShared},
+		playlist::Playlists,
+		profile::{ProfileName, Profiles},
 		settings_menu::SettingsMenu,
 		shared::Shared,
 	},
@@ -57,9 +48,8 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::{Future, StreamExt, TryStreamExt, lock::Mutex, stream::FuturesUnordered},
+	futures::Future,
 	std::{collections::HashMap, sync::Arc},
-	tokio::fs,
 	winit::{
 		dpi::PhysicalSize,
 		event::WindowEvent,
@@ -68,7 +58,7 @@ use {
 		window::{Window, WindowId},
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
-	zsw_util::{AppError, Rect, TokioTaskBlockOn, UnwrapOrReturnExt, WalkDir},
+	zsw_util::{AppError, Rect, TokioTaskBlockOn},
 	zsw_wgpu::{Wgpu, WgpuRenderer},
 	zutil_cloned::cloned,
 };
@@ -218,7 +208,7 @@ impl WinitApp {
 			displays,
 			playlists,
 			profiles,
-			panels: Mutex::new(vec![]),
+			panels: Panels::new(),
 		};
 		let shared = Arc::new(shared);
 
@@ -226,7 +216,19 @@ impl WinitApp {
 			let profile_name = ProfileName::from(profile.clone());
 			let shared = Arc::clone(&shared);
 			self::spawn_task("Load default profile", async move {
-				self::load_profile(profile_name, &shared).await
+				let profile = shared
+					.profiles
+					.load(profile_name)
+					.await
+					.context("Unable to load profile")?;
+
+				shared
+					.panels
+					.set_profile(profile, &shared.displays, &shared.playlists)
+					.await
+					.context("Unable to set profile")?;
+
+				Ok(())
 			});
 		}
 
@@ -278,166 +280,6 @@ impl WinitApp {
 		// TODO: Handle destroying all tasks that use the window
 		todo!();
 	}
-}
-
-/// Loads a profile
-async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result<(), AppError> {
-	// Load the profile
-	let profile = shared
-		.profiles
-		.load(profile_name)
-		.await
-		.context("Unable to load profile")?;
-
-	// Then load it's panels
-	profile
-		.lock()
-		.await
-		.panels
-		.iter()
-		.map(async |profile_panel| {
-			let display = shared
-				.displays
-				.load(profile_panel.display.clone())
-				.await
-				.with_context(|| format!("Unable to load display {:?}", profile_panel.display))?;
-
-
-			let panel_state = match &profile_panel.shader {
-				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
-				ProfilePanelShader::Fade(shader) => {
-					let state = PanelFadeState::new(shader.duration, shader.fade_duration, match shader.inner {
-						ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
-						ProfilePanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
-						ProfilePanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
-						ProfilePanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
-					});
-
-					let playlist_player = Arc::clone(state.playlist_player());
-
-					let panel_playlists = shader.playlists.clone();
-
-					#[cloned(playlists = shared.playlists)]
-					self::spawn_task(
-						format!("Load panel {:?} playlists", profile_panel.display),
-						async move {
-							panel_playlists
-								.into_iter()
-								.map(async |playlist_name| {
-									self::load_playlist(&playlist_player, &playlist_name, &playlists)
-										.await
-										.with_context(|| format!("Unable to load playlist {playlist_name:?}"))
-								})
-								.collect::<FuturesUnordered<_>>()
-								.try_collect::<()>()
-								.await
-						},
-					);
-
-					PanelState::Fade(state)
-				},
-			};
-
-			let panel = Panel::new(display, panel_state);
-			shared.panels.lock().await.push(panel);
-
-			Ok::<_, AppError>(())
-		})
-		.collect::<FuturesUnordered<_>>()
-		.try_collect::<()>()
-		.await?;
-
-	Ok(())
-}
-
-/// Loads a panel's playlist
-async fn load_playlist(
-	playlist_player: &Mutex<PlaylistPlayer>,
-	playlist: &PlaylistName,
-	playlists: &Playlists,
-) -> Result<(), AppError> {
-	let playlist = playlists
-		.load(playlist.clone())
-		.await
-		.context("Unable to load playlist")?;
-	tracing::debug!("Loaded default playlist {playlist:?}");
-
-	playlist
-		.lock()
-		.await
-		.items
-		.iter()
-		.map(async |item| {
-			// If not enabled, skip it
-			if !item.enabled {
-				return;
-			}
-
-			// Else check the kind of item
-			match item.kind {
-				PlaylistItemKind::Directory {
-					path: ref dir_path,
-					recursive,
-				} =>
-					WalkDir::builder()
-						.max_depth(match recursive {
-							true => None,
-							false => Some(0),
-						})
-						.recurse_symlink(true)
-						.build(dir_path.to_path_buf())
-						.map(|entry| async {
-							let entry = match entry {
-								Ok(entry) => entry,
-								Err(err) => {
-									let err = AppError::new(&err);
-									tracing::warn!("Unable to read directory entry: {}", err.pretty());
-									return;
-								},
-							};
-
-							let path = entry.path();
-							if fs::metadata(&path)
-								.await
-								.map_err(|err| {
-									let err = AppError::new(&err);
-									tracing::warn!("Unable to get playlist entry {path:?} metadata: {}", err.pretty());
-								})
-								.unwrap_or_return()?
-								.is_dir()
-							{
-								// If it's a directory, skip it
-								return;
-							}
-
-							match tokio::fs::canonicalize(&path).await {
-								Ok(entry) => playlist_player.lock().await.insert(entry.into()),
-								Err(err) => {
-									let err = AppError::new(&err);
-									tracing::warn!("Unable to read playlist entry {path:?}: {}", err.pretty());
-								},
-							}
-						})
-						.collect::<FuturesUnordered<_>>()
-						.await
-						.collect::<()>()
-						.await,
-
-				PlaylistItemKind::File { ref path } => match tokio::fs::canonicalize(path).await {
-					Ok(path) => playlist_player.lock().await.insert(path.into()),
-					Err(err) => {
-						let err = AppError::new(&err);
-						tracing::warn!("Unable to canonicalize playlist entry {path:?}: {}", err.pretty());
-					},
-				},
-			}
-		})
-		.collect::<FuturesUnordered<_>>()
-		.collect::<()>()
-		.await;
-
-
-	Ok(())
 }
 
 /// Spawns a task
@@ -500,7 +342,7 @@ async fn renderer(
 				&wgpu_renderer,
 				&shared.wgpu,
 				&shared.panels_renderer_shared,
-				&mut shared.panels.lock().await,
+				&mut shared.panels.get_all().await,
 				window,
 				window_geometry,
 			)
@@ -551,7 +393,7 @@ async fn paint_egui(
 				&shared.displays,
 				&shared.playlists,
 				&shared.profiles,
-				&mut shared.panels.lock().block_on(),
+				&mut shared.panels.get_all().block_on(),
 				&shared.event_loop_proxy,
 				cursor_pos,
 				window_geometry,
@@ -563,7 +405,7 @@ async fn paint_egui(
 			return Ok(());
 		};
 		let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-		for panel in &mut *shared.panels.lock().await {
+		for panel in &mut *shared.panels.get_all().await {
 			let display = panel.display.lock().await;
 
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel

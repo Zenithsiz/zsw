@@ -6,12 +6,11 @@ use {
 		AppEvent,
 		Resize,
 		display::Displays,
-		panel::{Panel, PanelsRendererShared},
+		panel::{Panels, PanelsRendererShared},
 		playlist::Playlists,
 		profile::Profiles,
 	},
 	crossbeam::atomic::AtomicCell,
-	futures::lock::Mutex,
 	std::sync::Arc,
 	winit::dpi::PhysicalPosition,
 	zsw_wgpu::Wgpu,
@@ -32,6 +31,5 @@ pub struct Shared {
 	pub playlists: Arc<Playlists>,
 	pub profiles:  Arc<Profiles>,
 
-	// TODO: Have an "active" profile type store this and other things instead?
-	pub panels: Mutex<Vec<Panel>>,
+	pub panels: Panels,
 }

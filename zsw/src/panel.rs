@@ -3,6 +3,7 @@
 // Modules
 mod geometry;
 mod images;
+mod panels;
 mod renderer;
 mod state;
 
@@ -10,6 +11,7 @@ mod state;
 pub use self::{
 	geometry::{PanelGeometry, PanelGeometryUniforms},
 	images::{PanelFadeImage, PanelFadeImages},
+	panels::Panels,
 	renderer::{PanelFadeShader, PanelShader, PanelsRenderer, PanelsRendererShared},
 	state::{PanelFadeState, PanelNoneState, PanelState},
 };
