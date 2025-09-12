@@ -61,7 +61,7 @@ use {
 	std::{collections::HashMap, sync::Arc},
 	tokio::fs,
 	winit::{
-		dpi::{PhysicalPosition, PhysicalSize},
+		dpi::PhysicalSize,
 		event::WindowEvent,
 		event_loop::EventLoop,
 		platform::{run_on_demand::EventLoopExtRunOnDemand, x11::EventLoopBuilderExtX11},
@@ -163,7 +163,7 @@ impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
 	) {
 		match event {
 			winit::event::WindowEvent::Resized(size) => self.shared.last_resize.store(Some(Resize { size })),
-			winit::event::WindowEvent::CursorMoved { position, .. } => self.shared.cursor_pos.store(position),
+			winit::event::WindowEvent::CursorMoved { position, .. } => self.shared.cursor_pos.store(Some(position)),
 			_ => (),
 		}
 
@@ -212,8 +212,7 @@ impl WinitApp {
 		let shared = Shared {
 			event_loop_proxy,
 			last_resize: AtomicCell::new(None),
-			// TODO: Not have a default of (0,0)?
-			cursor_pos: AtomicCell::new(PhysicalPosition::new(0.0, 0.0)),
+			cursor_pos: AtomicCell::new(None),
 			wgpu,
 			panels_renderer_shared,
 			displays,
@@ -540,11 +539,12 @@ async fn paint_egui(
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
 	// Adjust cursor pos to account for the scale factor
 	let scale_factor = window.scale_factor();
-	let cursor_pos = shared.cursor_pos.load().cast::<f32>().to_logical(scale_factor);
+	let cursor_pos = shared.cursor_pos.load();
 
 	let full_output_fut = egui_painter.draw(window, async |ctx| {
 		// Draw the settings menu
 		tokio::task::block_in_place(|| {
+			let cursor_pos = cursor_pos.map(|cursor_pos| cursor_pos.cast::<f32>().to_logical(scale_factor));
 			settings_menu.draw(
 				ctx,
 				&shared.wgpu,
@@ -559,7 +559,9 @@ async fn paint_egui(
 		});
 
 		// Then go through all panels checking for interactions with their geometries
-		let cursor_pos = shared.cursor_pos.load();
+		let Some(cursor_pos) = shared.cursor_pos.load() else {
+			return Ok(());
+		};
 		let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 		for panel in &mut *shared.panels.lock().await {
 			let display = panel.display.lock().await;

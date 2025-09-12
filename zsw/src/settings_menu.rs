@@ -50,14 +50,15 @@ impl SettingsMenu {
 		profiles: &Arc<Profiles>,
 		panels: &mut [Panel],
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
-		cursor_pos: LogicalPosition<f32>,
+		cursor_pos: Option<LogicalPosition<f32>>,
 		window_geometry: Rect<i32, u32>,
 	) {
 		// Create the window
 		let mut egui_window = egui::Window::new("Settings");
 
 		// Open it at the mouse if pressed
-		if !ctx.is_pointer_over_area() &&
+		if let Some(cursor_pos) = cursor_pos &&
+			!ctx.is_pointer_over_area() &&
 			ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Secondary))
 		{
 			egui_window = egui_window.current_pos(egui::pos2(cursor_pos.x, cursor_pos.y));
