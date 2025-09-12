@@ -90,7 +90,10 @@ impl<T, F> Loadable<T, F> {
 			},
 			None => {
 				let fut = self.loader.load(args);
-				self.task = Some(tokio::spawn(fut));
+				match tokio::task::Builder::new().spawn(fut) {
+					Ok(task) => self.task = Some(task),
+					Err(err) => tracing::warn!("Unable to spawn task: {}", AppError::new(&err).pretty()),
+				}
 
 				None
 			},
