@@ -1,17 +1,20 @@
 absolute-paths-allowed-crates = [
-	# `winit::event::Event` would be ambigous with just `event::Event` or `Event`.
+	# `winit::event::Event` would be ambiguous with just `event::Event` or `Event`.
 	"winit",
 
 	# `tokio` mirrors a lot of `std`'s api, so we want to explicitly mention when
 	# using `tokio`,
 	"tokio",
 
-	# `tracing_subscriber::fmt` makes this ambigious with `std::fmt`
+	# `tracing_subscriber::fmt` makes this ambiguous with `std::fmt`
 	"tracing_subscriber",
 
 	# Since this lint triggers for enum variants, and the following crates have
-	# types that would be ambigious without the crate name, we allow them.
+	# types that would be ambiguous without the crate name, we allow them.
 	"wgpu",
 	"async_channel",
 	"async_walkdir",
+
+	# Crate consists of only nondescript modules
+	"naga_oil",
 ]

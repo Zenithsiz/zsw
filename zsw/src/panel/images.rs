@@ -5,6 +5,7 @@ use {
 	super::PlaylistPlayer,
 	::image::DynamicImage,
 	app_error::Context,
+	image::imageops,
 	std::{self, mem, path::Path, sync::Arc},
 	tracing::Instrument,
 	zsw_util::{AppError, Loadable, loadable::Loader},
@@ -263,7 +264,7 @@ pub async fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage,
 			image.height()
 		);
 		image = tokio::task::spawn_blocking(move || {
-			image.resize(max_image_size, max_image_size, ::image::imageops::FilterType::Nearest)
+			image.resize(max_image_size, max_image_size, imageops::FilterType::Nearest)
 		})
 		.instrument(tracing::trace_span!("Resizing image"))
 		.await

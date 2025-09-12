@@ -7,7 +7,7 @@ use {
 		panel::{PanelFadeImage, PanelFadeShader, PanelFadeState, PanelNoneState, PanelState, Panels},
 	},
 	core::time::Duration,
-	egui::Widget,
+	egui::{Widget, color_picker},
 	zsw_util::{Rect, TokioTaskBlockOn},
 	zsw_wgpu::Wgpu,
 };
@@ -211,7 +211,7 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 					state.background_color[2],
 					state.background_color[3],
 				);
-				egui::color_picker::color_edit_button_rgba(ui, &mut color, egui::color_picker::Alpha::OnlyBlend);
+				color_picker::color_edit_button_rgba(ui, &mut color, color_picker::Alpha::OnlyBlend);
 				state.background_color = color.to_array();
 			}),
 		PanelState::Fade(state) => {

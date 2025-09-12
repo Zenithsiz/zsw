@@ -5,6 +5,7 @@ use {
 	crate::AppError,
 	core::{fmt, marker::Tuple, task::Poll},
 	futures::FutureExt,
+	std::task,
 };
 
 /// Loadable value
@@ -68,8 +69,8 @@ impl<T, F> Loadable<T, F> {
 		match &mut self.task {
 			Some(task) => {
 				// Otherwise, try to get the value
-				let Poll::Ready(res) = task.poll_unpin(&mut std::task::Context::from_waker(std::task::Waker::noop()))
-				else {
+				let mut cx = task::Context::from_waker(task::Waker::noop());
+				let Poll::Ready(res) = task.poll_unpin(&mut cx) else {
 					return None;
 				};
 				self.task = None;
@@ -102,7 +103,7 @@ pub trait Loader<Args: Tuple, T> =
 	AsyncFnMut<Args, Output = T> where for<'a> <Self as AsyncFnMut<Args>>::CallRefFuture<'a>: Send + 'static;
 
 impl<T: fmt::Debug, F> fmt::Debug for Loadable<T, F> {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("Loadable")
 			.field("value", &self.value)
 			.field("task", &self.task)

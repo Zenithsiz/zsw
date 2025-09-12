@@ -182,4 +182,5 @@ impl Stream for WalkDir {
 }
 
 pub type ReadDirFut = impl Future<Output = Result<fs::ReadDir, io::Error>>;
+#[expect(clippy::absolute_paths, reason = "We're already using `tokio::fs`")]
 pub type ReadMetadataFut = impl Future<Output = Result<(PathBuf, std::fs::Metadata), io::Error>>;

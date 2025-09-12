@@ -11,7 +11,7 @@ use {
 		path::Path,
 		sync::Arc,
 	},
-	tracing::{Dispatch, Subscriber, metadata::LevelFilter, subscriber::DefaultGuard},
+	tracing::{Dispatch, Subscriber, dispatcher, metadata::LevelFilter, subscriber::DefaultGuard},
 	tracing_subscriber::{EnvFilter, Layer, fmt::format::FmtSpan, prelude::*, registry::LookupSpan},
 	zsw_util::AppError,
 };
@@ -36,7 +36,7 @@ impl Logger {
 		// until our temporary subscriber is up and running.
 		let barebones_logger =
 			tracing_subscriber::fmt::Subscriber::builder().with_env_filter(EnvFilter::from_default_env());
-		let barebones_logger_guard = tracing::dispatcher::set_default(&barebones_logger.into());
+		let barebones_logger_guard = dispatcher::set_default(&barebones_logger.into());
 		tracing::debug!("Initialized barebones logger");
 
 		// Create the initial registry
@@ -56,7 +56,7 @@ impl Logger {
 
 		// Then initialize it temporarily
 		drop(barebones_logger_guard);
-		let guard = tracing::dispatcher::set_default(&dispatch);
+		let guard = dispatcher::set_default(&dispatch);
 		tracing::debug!("Initialized temporary stderr logger");
 
 		// Initialize the `log` compatibility too
@@ -81,7 +81,7 @@ impl Logger {
 		let registry = self.into_temp_subscriber().with(file_layer);
 
 		// And properly initialize
-		tracing::dispatcher::set_global_default(registry.into()).expect("Unable to set global `tracing` logger");
+		dispatcher::set_global_default(registry.into()).expect("Unable to set global `tracing` logger");
 		tracing::debug!(?log_file, "Initialized global logger");
 	}
 

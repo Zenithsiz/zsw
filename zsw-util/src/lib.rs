@@ -48,6 +48,7 @@ pub use {
 use {
 	app_error::Context,
 	image::DynamicImage,
+	serde::de::DeserializeOwned,
 	std::{fs, future::Future, path::Path},
 };
 
@@ -55,7 +56,7 @@ use {
 pub type AppError = app_error::AppError<()>;
 
 /// Parses json from a file
-pub fn parse_json_from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, AppError> {
+pub fn parse_json_from_file<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, AppError> {
 	// Open the file
 	let file = fs::File::open(path).context("Unable to open file")?;
 

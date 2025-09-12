@@ -49,7 +49,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::Future,
-	std::{collections::HashMap, sync::Arc},
+	std::{collections::HashMap, fs, sync::Arc},
 	winit::{
 		dpi::PhysicalSize,
 		event::WindowEvent,
@@ -74,7 +74,7 @@ fn main() -> Result<(), AppError> {
 
 	// Create the configuration then load the config
 	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
-	std::fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
+	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.toml"));
 	let config = Config::get_or_create_default(&config_path);
 	let config = Arc::new(config);

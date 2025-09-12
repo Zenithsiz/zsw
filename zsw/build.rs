@@ -13,6 +13,7 @@ use {
 		env,
 		fs,
 		path::{Path, PathBuf},
+		thread,
 	},
 };
 
@@ -31,11 +32,11 @@ fn main() {
 		PanelShader::Fade(PanelFadeShader::In),
 	];
 
-	std::thread::scope(|s| {
+	thread::scope(|s| {
 		for shader in shaders {
 			let shader_src_path = Path::new("shaders").join(shader.src_path());
 			let shader_out_path = shaders_out_dir.join(shader.out_path());
-			_ = std::thread::Builder::new()
+			_ = thread::Builder::new()
 				.spawn_scoped(s, move || {
 					if let Err(err) = self::process(shader, &shader_src_path, &shader_out_path) {
 						panic!(

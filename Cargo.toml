@@ -68,6 +68,7 @@ debug = true
 
 [workspace.lints]
 
+clippy.absolute_paths                    = "warn"
 clippy.allow_attributes                  = "warn"
 clippy.assigning_clones                  = "warn"
 clippy.clone_on_ref_ptr                  = "warn"
@@ -122,6 +123,7 @@ rust.unused_macro_rules                  = "warn"
 rust.unused_results                      = "warn"
 rust.variant_size_differences            = "warn"
 
+
 # We want to annotate unsafe inside unsafe fns
 rust.unsafe_op_in_unsafe_fn = "deny"
 
@@ -171,10 +173,6 @@ clippy.future_not_send = "allow"
 # Too many false positives
 clippy.significant_drop_tightening = "allow"
 clippy.wildcard_imports            = "allow"
-
-# We can't configure it with the granularity we'd like, only by crate.
-# TODO: Turn on every once a while to check for actual use cases.
-#clippy.absolute_paths = "warn"
 
 # Despite it not being stable, we don't want to just display the string, and
 # instead want to display *any* debug representation
