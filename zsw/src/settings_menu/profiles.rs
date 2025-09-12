@@ -9,10 +9,6 @@ pub fn draw_profiles_tab(ui: &mut egui::Ui, profiles: &Arc<Profiles>) {
 		let profile = profile.lock().block_on();
 
 		ui.collapsing(profile.name.to_string(), |ui| {
-			ui.horizontal(|ui| {
-				ui.label(format!("Name: {:?}", profile.name));
-			});
-
 			#[expect(clippy::semicolon_if_nothing_returned, reason = "False positive")]
 			if ui.button("Save").clicked() {
 				let profile_name = profile.name.clone();
