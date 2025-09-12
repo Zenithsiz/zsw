@@ -54,7 +54,7 @@ tracing-log         = "0.2.0"
 tracing-subscriber  = "0.3.20"
 wgpu                = "26.0.1"
 winit               = "0.30.12"
-zutil-cloned        = { git = "https://github.com/Zenithsiz/zutil", rev = "5363bba6ced162185a1eb5a132cce499bfc5d818" }
+zutil-cloned        = { git = "https://github.com/Zenithsiz/zutil", rev = "21b9b994e5d29aab5597a96e4e5970183942a8cb" }
 
 
 # Compile all dependencies with optimizations in debug builds, since otherwise
@@ -182,3 +182,6 @@ clippy.unnecessary_debug_formatting = "allow"
 
 # TODO: Are they actually confusing?
 clippy.similar_names = "allow"
+
+# False positives with `zutil_cloned::cloned`
+clippy.semicolon_if_nothing_returned = "allow"

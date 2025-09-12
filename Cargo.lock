@@ -4912,7 +4912,7 @@ dependencies = [
 [[package]]
 name = "zutil-cloned"
 version = "0.1.0"
-source = "git+https://github.com/Zenithsiz/zutil?rev=5363bba6ced162185a1eb5a132cce499bfc5d818#5363bba6ced162185a1eb5a132cce499bfc5d818"
+source = "git+https://github.com/Zenithsiz/zutil?rev=21b9b994e5d29aab5597a96e4e5970183942a8cb#21b9b994e5d29aab5597a96e4e5970183942a8cb"
 dependencies = [
  "quote",
  "syn",
