@@ -216,19 +216,11 @@ impl WinitApp {
 			let profile_name = ProfileName::from(profile.clone());
 			let shared = Arc::clone(&shared);
 			self::spawn_task("Load default profile", async move {
-				let profile = shared
-					.profiles
-					.load(profile_name)
-					.await
-					.context("Unable to load profile")?;
-
 				shared
 					.panels
-					.set_profile(profile, &shared.displays, &shared.playlists)
+					.set_profile(profile_name, &shared.displays, &shared.playlists, &shared.profiles)
 					.await
-					.context("Unable to set profile")?;
-
-				Ok(())
+					.context("Unable to set profile")
 			});
 		}
 

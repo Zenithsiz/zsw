@@ -16,15 +16,15 @@ pub fn draw_profiles_tab(
 	profiles: &Arc<Profiles>,
 	panels: &Arc<Panels>,
 ) {
-	for profile_arc in profiles.get_all().block_on() {
-		let profile = profile_arc.lock().block_on();
+	for profile in profiles.get_all().block_on() {
+		let profile = profile.lock().block_on();
 
 		ui.collapsing(profile.name.to_string(), |ui| {
 			#[expect(clippy::semicolon_if_nothing_returned, reason = "False positive")]
 			if ui.button("Set active").clicked() {
-				#[cloned(profile_arc, displays, playlists, panels)]
+				#[cloned(profile_name = profile.name, displays, playlists, profiles, panels)]
 				crate::spawn_task(format!("Set profile active {:?}", profile.name), async move {
-					panels.set_profile(profile_arc, &displays, &playlists).await
+					panels.set_profile(profile_name, &displays, &playlists, &profiles).await
 				});
 			}
 

@@ -7,7 +7,7 @@ use {
 		display::Displays,
 		panel::{PanelFadeShader, PanelFadeState, PanelNoneState, PanelState},
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
-		profile::{Profile, ProfilePanelFadeShaderInner, ProfilePanelShader},
+		profile::{Profile, ProfileName, ProfilePanelFadeShaderInner, ProfilePanelShader, Profiles},
 	},
 	app_error::Context,
 	core::ops::DerefMut,
@@ -58,22 +58,28 @@ impl Panels {
 	/// Sets the current profile.
 	///
 	/// If a profile already exists, unloads it's panels first
-	// TODO: Make this take a `ProfileName` instead for consistency
 	pub async fn set_profile(
 		&self,
-		profile: Arc<Mutex<Profile>>,
+		profile_name: ProfileName,
 		displays: &Displays,
 		playlists: &Arc<Playlists>,
+		profiles: &Profiles,
 	) -> Result<(), AppError> {
+		// Get the new profile
+		let profile = profiles
+			.load(profile_name.clone())
+			.await
+			.context("Unable to load profile")?;
+
 		// If we have a previous loaded profile, clear all panels before proceeding
 		{
 			let mut inner = self.inner.lock().await;
 			if let Some(old_profile) = &inner.profile {
-				tracing::info!("Dropping previous profile: {}", old_profile.lock().await.name);
+				tracing::info!("Dropping previous profile: {:?}", old_profile.lock().await.name);
 				inner.panels.clear();
 			}
 			inner.profile = Some(Arc::clone(&profile));
-			tracing::info!("Setting current profile: {}", profile.lock().await.name);
+			tracing::info!("Setting current profile: {profile_name:?}");
 		}
 
 
