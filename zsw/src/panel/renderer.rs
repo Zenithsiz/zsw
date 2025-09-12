@@ -15,6 +15,7 @@ use {
 	app_error::Context,
 	cgmath::Vector2,
 	futures::lock::Mutex,
+	itertools::Itertools,
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
@@ -230,9 +231,16 @@ impl PanelsRenderer {
 				},
 			}
 
-			for geometry in &mut panel.geometries {
+			// The display might have changed asynchronously from the panel geometries,
+			// so resize it to ensure we have a panel geometry for each display geometry.
+			let display = panel.display.lock().await;
+			panel
+				.geometries
+				.resize_with(display.geometries.len(), PanelGeometry::new);
+
+			for (&display_geometry, panel_geometry) in display.geometries.iter().zip_eq(&mut panel.geometries) {
 				// If this geometry is outside our window, we can safely ignore it
-				if window_geometry.intersection(geometry.geometry).is_none() {
+				if window_geometry.intersection(display_geometry).is_none() {
 					continue;
 				}
 
@@ -244,7 +252,8 @@ impl PanelsRenderer {
 					&panel.state,
 					window_geometry,
 					window,
-					geometry,
+					display_geometry,
+					panel_geometry,
 					&mut render_pass,
 				);
 
@@ -264,15 +273,16 @@ impl PanelsRenderer {
 		panel_state: &PanelState,
 		window_geometry: Rect<i32, u32>,
 		window: &Window,
-		geometry: &mut PanelGeometry,
+		display_geometry: Rect<i32, u32>,
+		panel_geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
 		// Calculate the position matrix for the panel
-		let pos_matrix = geometry.pos_matrix(window_geometry, surface_size);
+		let pos_matrix = PanelGeometry::pos_matrix(display_geometry, window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
 
 		// Writes uniforms `uniforms`
-		let geometry_uniforms = geometry
+		let geometry_uniforms = panel_geometry
 			.uniforms
 			.entry(window.id())
 			.or_insert_with(|| self::create_panel_geometry_uniforms(wgpu, shared));
@@ -299,7 +309,7 @@ impl PanelsRenderer {
 						},
 					};
 
-					let ratio = PanelGeometry::image_ratio(geometry.geometry.size, size);
+					let ratio = PanelGeometry::image_ratio(display_geometry.size, size);
 					PanelImageUniforms::new(ratio, swap_dir)
 				};
 

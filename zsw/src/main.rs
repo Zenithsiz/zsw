@@ -39,6 +39,7 @@ use {
 			Panel,
 			PanelFadeShader,
 			PanelFadeState,
+			PanelGeometry,
 			PanelNoneState,
 			PanelState,
 			PanelsRenderer,
@@ -316,7 +317,7 @@ async fn load_profile(profile_name: ProfileName, shared: &Arc<Shared>) -> Result
 				},
 			};
 
-			let panel = Panel::new(&*display.lock().await, panel_state);
+			let panel = Panel::new(display, panel_state);
 			shared.panels.lock().await.push(panel);
 
 			Ok::<_, AppError>(())
@@ -535,12 +536,14 @@ async fn paint_egui(
 		let cursor_pos = shared.cursor_pos.load();
 		let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 		for panel in &mut *shared.panels.lock().await {
+			let display = panel.display.lock().await;
+
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_area() ||
-				!panel
+				!display
 					.geometries
 					.iter()
-					.any(|geometry| geometry.geometry_on(window_geometry).contains(cursor_pos))
+					.any(|&geometry| PanelGeometry::geometry_on(geometry, window_geometry).contains(cursor_pos))
 			{
 				continue;
 			}

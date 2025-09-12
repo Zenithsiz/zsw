@@ -15,16 +15,17 @@ pub use self::{
 };
 
 // Imports
-use crate::{
-	display::{Display, DisplayName},
-	playlist::PlaylistPlayer,
+use {
+	crate::{display::Display, playlist::PlaylistPlayer},
+	futures::lock::Mutex,
+	std::sync::Arc,
 };
 
 /// Panel
 #[derive(Debug)]
 pub struct Panel {
-	/// Display name
-	pub display_name: DisplayName,
+	/// Display
+	pub display: Arc<Mutex<Display>>,
 
 	/// Geometries
 	pub geometries: Vec<PanelGeometry>,
@@ -35,10 +36,10 @@ pub struct Panel {
 
 impl Panel {
 	/// Creates a new panel
-	pub fn new(display: &Display, state: PanelState) -> Self {
+	pub fn new(display: Arc<Mutex<Display>>, state: PanelState) -> Self {
 		Self {
-			display_name: display.name.clone(),
-			geometries: display.geometries.iter().copied().map(PanelGeometry::new).collect(),
+			display,
+			geometries: vec![],
 			state,
 		}
 	}

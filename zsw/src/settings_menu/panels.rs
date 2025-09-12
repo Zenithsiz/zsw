@@ -2,7 +2,10 @@
 
 // Imports
 use {
-	crate::panel::{Panel, PanelFadeImage, PanelFadeShader, PanelFadeState, PanelGeometry, PanelNoneState, PanelState},
+	crate::{
+		display::Display,
+		panel::{Panel, PanelFadeImage, PanelFadeShader, PanelFadeState, PanelNoneState, PanelState},
+	},
 	core::time::Duration,
 	egui::Widget,
 	zsw_util::{Rect, TokioTaskBlockOn},
@@ -24,11 +27,13 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut [Panel], wind
 	}
 
 	for panel in panels {
-		let mut name = egui::WidgetText::from(panel.display_name.to_string());
-		if panel
+		let mut display = panel.display.lock().block_on();
+
+		let mut name = egui::WidgetText::from(display.name.to_string());
+		if display
 			.geometries
 			.iter()
-			.all(|geometry| window_geometry.intersection(geometry.geometry).is_none())
+			.all(|&geometry| window_geometry.intersection(geometry).is_none())
 		{
 			name = name.weak();
 		}
@@ -36,8 +41,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut [Panel], wind
 		ui.collapsing(name, |ui| {
 			match &mut panel.state {
 				PanelState::None(_) => (),
-				PanelState::Fade(state) =>
-					self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &mut panel.geometries),
+				PanelState::Fade(state) => self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &mut display),
 			}
 
 			ui.collapsing("Shader", |ui| {
@@ -53,7 +57,7 @@ fn draw_fade_panel_editor(
 	wgpu: &Wgpu,
 	window_geometry: Rect<i32, u32>,
 	panel_state: &mut PanelFadeState,
-	geometries: &mut [PanelGeometry],
+	display: &mut Display,
 ) {
 	{
 		let mut is_paused = panel_state.is_paused();
@@ -62,15 +66,15 @@ fn draw_fade_panel_editor(
 	}
 
 	ui.collapsing("Geometries", |ui| {
-		for (geometry_idx, geometry) in geometries.iter_mut().enumerate() {
+		for (geometry_idx, geometry) in display.geometries.iter_mut().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
-				if window_geometry.intersection(geometry.geometry).is_none() {
+				if window_geometry.intersection(*geometry).is_none() {
 					name = name.weak();
 				}
 
 				ui.label(name);
-				super::draw_rect(ui, &mut geometry.geometry);
+				super::draw_rect(ui, geometry);
 			});
 		}
 	});

@@ -13,11 +13,6 @@ use {
 /// Panel geometry
 #[derive(Debug)]
 pub struct PanelGeometry {
-	/// Geometry
-	// TODO: Since this is unnormalized for the window, we should
-	//       maybe make this private?
-	pub geometry: Rect<i32, u32>,
-
 	/// Uniforms
 	pub uniforms: HashMap<WindowId, PanelGeometryUniforms>,
 }
@@ -33,16 +28,17 @@ pub struct PanelGeometryUniforms {
 }
 
 impl PanelGeometry {
-	pub fn new(geometry: Rect<i32, u32>) -> Self {
+	pub fn new() -> Self {
 		Self {
-			geometry,
 			uniforms: HashMap::new(),
 		}
 	}
 
+	// TODO: Move these out of here, since they don't receive `&self`.
+
 	/// Returns this geometry's rectangle for a certain window
-	pub fn geometry_on(&self, window_geometry: Rect<i32, u32>) -> Rect<i32, u32> {
-		let mut geometry = self.geometry;
+	pub fn geometry_on(display_geometry: Rect<i32, u32>, window_geometry: Rect<i32, u32>) -> Rect<i32, u32> {
+		let mut geometry = display_geometry;
 		geometry.pos -= Vector2::new(window_geometry.pos.x, window_geometry.pos.y);
 
 		geometry
@@ -52,8 +48,12 @@ impl PanelGeometry {
 	// Note: This matrix simply goes from a geometry in physical units
 	//       onto shader coordinates.
 	#[must_use]
-	pub fn pos_matrix(&self, window_geometry: Rect<i32, u32>, surface_size: PhysicalSize<u32>) -> Matrix4<f32> {
-		let geometry = self.geometry_on(window_geometry);
+	pub fn pos_matrix(
+		display_geometry: Rect<i32, u32>,
+		window_geometry: Rect<i32, u32>,
+		surface_size: PhysicalSize<u32>,
+	) -> Matrix4<f32> {
+		let geometry = Self::geometry_on(display_geometry, window_geometry);
 
 		let x_scale = geometry.size[0] as f32 / surface_size.width as f32;
 		let y_scale = geometry.size[1] as f32 / surface_size.height as f32;
