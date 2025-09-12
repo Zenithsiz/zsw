@@ -10,6 +10,7 @@ use {
 	std::{collections::HashMap, ffi::OsStr, hash::Hash, path::PathBuf, sync::Arc},
 	tokio::sync::OnceCell,
 	tokio_stream::{StreamExt, wrappers::ReadDirStream},
+	zutil_cloned::cloned,
 };
 
 /// Resource storage
@@ -44,11 +45,11 @@ impl<N, V, S> ResourceManager<N, V, S> {
 	}
 
 	/// Loads all playlists from the root directory
-	pub async fn load_all(&self) -> Result<(), AppError>
+	pub async fn load_all(self: &Arc<Self>) -> Result<(), AppError>
 	where
-		N: Eq + Hash + Clone + From<String> + AsRef<str>,
-		V: FromSerialized<N, S>,
-		S: DeserializeOwned,
+		N: Eq + Hash + Clone + From<String> + AsRef<str> + Send + 'static,
+		V: FromSerialized<N, S> + Send + 'static,
+		S: DeserializeOwned + 'static,
 	{
 		tokio::fs::read_dir(&self.root)
 			.await
@@ -76,10 +77,13 @@ impl<N, V, S> ResourceManager<N, V, S> {
 					.map(N::from)
 					.map_err(|file_name| app_error!("Entry name was non-utf8: {file_name:?}"))?;
 
-				_ = self
-					.load(playlist_name)
-					.await
-					.with_context(|| format!("Unable to load file {entry_path:?}"))?;
+				#[cloned(this = self)]
+				crate::spawn_task(format!("Load resource {entry_path:?}"), async move {
+					this.load(playlist_name)
+						.await
+						.map(|_| ())
+						.with_context(|| format!("Unable to load file {entry_path:?}"))
+				});
 
 				Ok(())
 			})
