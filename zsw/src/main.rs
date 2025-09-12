@@ -48,7 +48,6 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::Future,
 	std::{collections::HashMap, fs, sync::Arc},
 	winit::{
 		dpi::PhysicalSize,
@@ -180,7 +179,7 @@ impl WinitApp {
 			.context("Unable to create displays")?;
 		let displays = Arc::new(displays);
 		#[cloned(displays)]
-		self::spawn_task("Load displays", async move { displays.load_all().await });
+		zsw_util::spawn_task("Load displays", async move { displays.load_all().await });
 
 		// Create and stat loading the playlists
 		let playlists = Playlists::new(config_dirs.playlists().to_path_buf())
@@ -188,7 +187,7 @@ impl WinitApp {
 			.context("Unable to create playlists")?;
 		let playlists = Arc::new(playlists);
 		#[cloned(playlists)]
-		self::spawn_task("Load playlists", async move { playlists.load_all().await });
+		zsw_util::spawn_task("Load playlists", async move { playlists.load_all().await });
 
 		// Create and stat loading the profiles
 		let profiles = Profiles::new(config_dirs.profiles().to_path_buf())
@@ -196,7 +195,7 @@ impl WinitApp {
 			.context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);
 		#[cloned(profiles)]
-		self::spawn_task("Load profiles", async move { profiles.load_all().await });
+		zsw_util::spawn_task("Load profiles", async move { profiles.load_all().await });
 
 		// Shared state
 		let shared = Shared {
@@ -216,7 +215,7 @@ impl WinitApp {
 			let profile_name = ProfileName::from(profile.clone());
 
 			#[cloned(shared)]
-			self::spawn_task("Load default profile", async move {
+			zsw_util::spawn_task("Load default profile", async move {
 				shared
 					.panels
 					.set_profile(profile_name, &shared.displays, &shared.playlists, &shared.profiles)
@@ -248,7 +247,7 @@ impl WinitApp {
 			let settings_menu = SettingsMenu::new();
 
 			#[cloned(shared = self.shared, window)]
-			self::spawn_task("Renderer", async move {
+			zsw_util::spawn_task("Renderer", async move {
 				self::renderer(
 					&shared,
 					&window,
@@ -272,29 +271,6 @@ impl WinitApp {
 	pub fn destroy_window(&mut self) -> Result<(), AppError> {
 		// TODO: Handle destroying all tasks that use the window
 		todo!();
-	}
-}
-
-/// Spawns a task
-#[track_caller]
-pub fn spawn_task<Fut>(name: impl Into<String>, fut: Fut)
-where
-	Fut: Future<Output = Result<(), AppError>> + Send + 'static,
-{
-	let name = name.into();
-
-	#[cloned(name)]
-	let fut = async move {
-		let id = tokio::task::id();
-		tracing::debug!("Spawning task {name:?} ({id:?})");
-		fut.await
-			.inspect(|()| tracing::debug!("Task {name:?} ({id:?}) finished"))
-			.inspect_err(|err| tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()))
-	};
-
-	if let Err(err) = tokio::task::Builder::new().name(&name.clone()).spawn(fut) {
-		let err = AppError::new(&err);
-		tracing::warn!("Unable to spawn task {name:?}: {}", err.pretty());
 	}
 }
 

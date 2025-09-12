@@ -17,7 +17,7 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 
 			if ui.button("Save").clicked() {
 				#[cloned(displays, display_name = display.name;)]
-				crate::spawn_task(format!("Save display {display_name:?}"), async move {
+				zsw_util::spawn_task(format!("Save display {display_name:?}"), async move {
 					displays.save(&display_name).await
 				});
 			}
@@ -41,7 +41,7 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 			let display_name = DisplayName::from(name.lock().clone());
 
 			#[cloned(displays, geometries = geometries.lock();)]
-			crate::spawn_task(format!("Add display {display_name:?}"), async move {
+			zsw_util::spawn_task(format!("Add display {display_name:?}"), async move {
 				// TODO: Should we also save it?
 				displays
 					.add(display_name.clone(), Display {

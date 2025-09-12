@@ -21,7 +21,9 @@
 	trait_alias,
 	unboxed_closures,
 	tuple_trait,
-	try_blocks
+	try_blocks,
+	proc_macro_hygiene,
+	stmt_expr_attributes
 )]
 
 // Modules
@@ -50,6 +52,7 @@ use {
 	image::DynamicImage,
 	serde::de::DeserializeOwned,
 	std::{fs, future::Future, path::Path},
+	zutil_cloned::cloned,
 };
 
 /// App error export with our data
@@ -141,4 +144,27 @@ pub const fn array_max<const N: usize>(values: &[usize; N]) -> Option<usize> {
 /// Returns the maximum between two `usize` values
 const fn usize_max(lhs: usize, rhs: usize) -> usize {
 	if lhs > rhs { lhs } else { rhs }
+}
+
+/// Spawns a task
+#[track_caller]
+pub fn spawn_task<Fut>(name: impl Into<String>, fut: Fut)
+where
+	Fut: Future<Output = Result<(), AppError>> + Send + 'static,
+{
+	let name = name.into();
+
+	#[cloned(name)]
+	let fut = async move {
+		let id = tokio::task::id();
+		tracing::debug!("Spawning task {name:?} ({id:?})");
+		fut.await
+			.inspect(|()| tracing::debug!("Task {name:?} ({id:?}) finished"))
+			.inspect_err(|err| tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()))
+	};
+
+	if let Err(err) = tokio::task::Builder::new().name(&name.clone()).spawn(fut) {
+		let err = AppError::new(&err);
+		tracing::warn!("Unable to spawn task {name:?}: {}", err.pretty());
+	}
 }

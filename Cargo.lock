@@ -4870,6 +4870,7 @@ dependencies = [
  "tokio-stream",
  "toml 0.9.5",
  "tracing",
+ "zutil-cloned",
 ]
 
 [[package]]

@@ -107,7 +107,7 @@ impl Panels {
 						});
 
 						#[cloned(playlists, panel_playlists = shader.playlists, playlist_player = state.playlist_player())]
-						crate::spawn_task(
+						zsw_util::spawn_task(
 							format!("Load panel {:?} playlists", profile_panel.display),
 							async move {
 								panel_playlists
