@@ -208,7 +208,7 @@ impl WinitApp {
 			displays,
 			playlists,
 			profiles,
-			panels: Panels::new(),
+			panels: Arc::new(Panels::new()),
 		};
 		let shared = Arc::new(shared);
 
@@ -393,7 +393,7 @@ async fn paint_egui(
 				&shared.displays,
 				&shared.playlists,
 				&shared.profiles,
-				&mut shared.panels.get_all().block_on(),
+				&shared.panels,
 				&shared.event_loop_proxy,
 				cursor_pos,
 				window_geometry,

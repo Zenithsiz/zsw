@@ -58,6 +58,7 @@ impl Panels {
 	/// Sets the current profile.
 	///
 	/// If a profile already exists, unloads it's panels first
+	// TODO: Make this take a `ProfileName` instead for consistency
 	pub async fn set_profile(
 		&self,
 		profile: Arc<Mutex<Profile>>,

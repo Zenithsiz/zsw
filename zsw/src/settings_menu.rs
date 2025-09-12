@@ -11,13 +11,13 @@ mod profiles;
 
 // Imports
 use {
-	crate::{AppEvent, display::Displays, panel::Panel, playlist::Playlists, profile::Profiles},
+	crate::{AppEvent, display::Displays, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, str::FromStr, time::Duration},
 	egui::{Widget, mutex::Mutex},
 	std::{path::Path, sync::Arc},
 	strum::IntoEnumIterator,
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
-	zsw_util::{AppError, DurationDisplay, Rect},
+	zsw_util::{AppError, DurationDisplay, Rect, TokioTaskBlockOn},
 	zsw_wgpu::Wgpu,
 };
 
@@ -48,7 +48,7 @@ impl SettingsMenu {
 		displays: &Arc<Displays>,
 		playlists: &Arc<Playlists>,
 		profiles: &Arc<Profiles>,
-		panels: &mut [Panel],
+		panels: &Arc<Panels>,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		cursor_pos: Option<LogicalPosition<f32>>,
 		window_geometry: Rect<i32, u32>,
@@ -75,10 +75,10 @@ impl SettingsMenu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, window_geometry),
+				Tab::Panels => panels::draw_panels_tab(ui, wgpu, &mut panels.get_all().block_on(), window_geometry),
 				Tab::Displays => displays::draw_displays_tab(ui, displays),
 				Tab::Playlists => playlists::draw_playlists_tab(ui, playlists),
-				Tab::Profiles => profiles::draw_profiles_tab(ui, profiles),
+				Tab::Profiles => profiles::draw_profiles_tab(ui, displays, playlists, profiles, panels),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
 		});

@@ -31,5 +31,5 @@ pub struct Shared {
 	pub playlists: Arc<Playlists>,
 	pub profiles:  Arc<Profiles>,
 
-	pub panels: Panels,
+	pub panels: Arc<Panels>,
 }
