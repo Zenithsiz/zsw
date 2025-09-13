@@ -10,7 +10,7 @@ use {
 	std::{fmt, sync::Arc},
 	tokio::sync::Mutex,
 	tracing as _,
-	winit::window::Window,
+	winit::{event::WindowEvent, window::Window},
 	zsw_util::AppError,
 	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
@@ -166,7 +166,7 @@ impl EguiEventHandler {
 	}
 
 	/// Handles an event
-	pub async fn handle_event(&self, event: &winit::event::WindowEvent) {
+	pub async fn handle_event(&self, event: &WindowEvent) {
 		self.platform.lock().await.handle_event(event);
 	}
 }

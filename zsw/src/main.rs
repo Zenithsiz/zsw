@@ -50,9 +50,10 @@ use {
 	directories::ProjectDirs,
 	std::{collections::HashMap, fs, sync::Arc},
 	winit::{
+		application::ApplicationHandler,
 		dpi::PhysicalSize,
 		event::WindowEvent,
-		event_loop::EventLoop,
+		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
 		platform::{run_on_demand::EventLoopExtRunOnDemand, x11::EventLoopBuilderExtX11},
 		window::{Window, WindowId},
 	},
@@ -118,36 +119,31 @@ struct WinitApp {
 	shared:                Arc<Shared>,
 }
 
-impl winit::application::ApplicationHandler<AppEvent> for WinitApp {
-	fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+impl ApplicationHandler<AppEvent> for WinitApp {
+	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
 		if let Err(err) = self.init_window(event_loop) {
 			tracing::warn!("Unable to initialize window: {}", err.pretty());
 			event_loop.exit();
 		}
 	}
 
-	fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+	fn suspended(&mut self, event_loop: &ActiveEventLoop) {
 		if let Err(err) = self.destroy_window() {
 			tracing::warn!("Unable to destroy window: {}", err.pretty());
 			event_loop.exit();
 		}
 	}
 
-	fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: AppEvent) {
+	fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
 		match event {
 			AppEvent::Shutdown => event_loop.exit(),
 		}
 	}
 
-	fn window_event(
-		&mut self,
-		_event_loop: &winit::event_loop::ActiveEventLoop,
-		window_id: WindowId,
-		event: WindowEvent,
-	) {
+	fn window_event(&mut self, _event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
 		match event {
-			winit::event::WindowEvent::Resized(size) => self.shared.last_resize.store(Some(Resize { size })),
-			winit::event::WindowEvent::CursorMoved { position, .. } => self.shared.cursor_pos.store(Some(position)),
+			WindowEvent::Resized(size) => self.shared.last_resize.store(Some(Resize { size })),
+			WindowEvent::CursorMoved { position, .. } => self.shared.cursor_pos.store(Some(position)),
 			_ => (),
 		}
 
@@ -163,7 +159,7 @@ impl WinitApp {
 	pub async fn new(
 		config: Arc<Config>,
 		config_dirs: Arc<ConfigDirs>,
-		event_loop_proxy: winit::event_loop::EventLoopProxy<AppEvent>,
+		event_loop_proxy: EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
 		let wgpu = Wgpu::new().await.context("Unable to initialize wgpu")?;
 		let panels_renderer_shared = PanelsRendererShared::new(&wgpu);
@@ -226,7 +222,7 @@ impl WinitApp {
 	}
 
 	/// Initializes the window related things
-	pub fn init_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Result<(), AppError> {
+	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let windows = window::create(event_loop).context("Unable to create winit event loop and window")?;
 		for app_window in windows {
 			let window = Arc::new(app_window.window);

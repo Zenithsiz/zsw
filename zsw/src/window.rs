@@ -6,7 +6,8 @@ use {
 	cgmath::{Point2, Vector2},
 	winit::{
 		event_loop::ActiveEventLoop,
-		window::{Window, WindowAttributes},
+		monitor::MonitorHandle,
+		window::{Fullscreen, Window, WindowAttributes, WindowLevel},
 	},
 	zsw_util::{AppError, Rect},
 };
@@ -41,8 +42,8 @@ pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> 
 				.with_position(monitor.position())
 				.with_inner_size(monitor.size())
 				.with_resizable(false)
-				.with_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(monitor))))
-				.with_window_level(winit::window::WindowLevel::AlwaysOnBottom)
+				.with_fullscreen(Some(Fullscreen::Borderless(Some(monitor))))
+				.with_window_level(WindowLevel::AlwaysOnBottom)
 				.with_transparent(true)
 				.with_decorations(false);
 
@@ -61,7 +62,7 @@ pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> 
 }
 
 /// Returns a monitor's geometry
-fn monitor_geometry(monitor: &winit::monitor::MonitorHandle) -> Rect<i32, u32> {
+fn monitor_geometry(monitor: &MonitorHandle) -> Rect<i32, u32> {
 	let monitor_pos = monitor.position();
 	let monitor_size = monitor.size();
 	Rect {

@@ -15,7 +15,7 @@ use {
 	core::sync::atomic::{self, AtomicBool},
 	image::DynamicImage,
 	std::path::Path,
-	wgpu::util::DeviceExt,
+	wgpu::{util as wgpu_util, util::DeviceExt},
 	zsw_util::AppError,
 };
 
@@ -121,7 +121,7 @@ impl Wgpu {
 		let texture = self.device.create_texture_with_data(
 			&self.queue,
 			&texture_descriptor,
-			wgpu::util::TextureDataOrder::LayerMajor,
+			wgpu_util::TextureDataOrder::LayerMajor,
 			image.as_bytes(),
 		);
 
