@@ -88,11 +88,9 @@ impl<T, F> Loadable<T, F> {
 				}
 			},
 			None => {
-				let name = self.loader.name(&args);
-				let fut = self.loader.load(args);
-				match tokio::task::Builder::new().name(&name).spawn(fut) {
+				match self.loader.spawn(args) {
 					Ok(task) => self.task = Some(task),
-					Err(err) => tracing::warn!("Unable to spawn task: {}", AppError::new(&err).pretty()),
+					Err(err) => tracing::warn!("Unable to spawn task: {}", err.pretty()),
 				}
 
 				None
@@ -103,13 +101,8 @@ impl<T, F> Loadable<T, F> {
 
 /// Loader trait
 pub trait Loader<Args, T> {
-	/// Returns the loader name for a set of arguments
-	// TODO: Is this the correct abstraction? Should we just have `load` return
-	//       both the name and future?
-	fn name(&self, args: &Args) -> String;
-
-	/// Creates the loader future
-	fn load(&mut self, args: Args) -> impl Future<Output = T> + Send + 'static;
+	/// Spawns the loader future
+	fn spawn(&mut self, args: Args) -> Result<tokio::task::JoinHandle<T>, AppError>;
 }
 
 impl<T: fmt::Debug, F> fmt::Debug for Loadable<T, F> {

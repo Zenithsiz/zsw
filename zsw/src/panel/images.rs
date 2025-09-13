@@ -7,7 +7,6 @@ use {
 	app_error::Context,
 	image::imageops,
 	std::{self, mem, path::Path, sync::Arc},
-	tracing::Instrument,
 	zsw_util::{AppError, Loadable, loadable::Loader},
 	zsw_wgpu::Wgpu,
 	zutil_cloned::cloned,
@@ -222,20 +221,18 @@ impl PanelFadeImages {
 pub struct NextImageLoader;
 
 impl Loader<NextImageArgs, ImageLoadRes> for NextImageLoader {
-	fn name(&self, args: &NextImageArgs) -> String {
-		format!("Load image {:?}", args.path)
-	}
-
-	#[expect(clippy::manual_async_fn, reason = "We can't specify the bounds")]
-	fn load(&mut self, args: NextImageArgs) -> impl Future<Output = ImageLoadRes> + Send + 'static {
-		async move {
-			let image_res = self::load(&args.path, args.max_image_size).await;
-			ImageLoadRes {
-				path: args.path,
-				playlist_pos: args.playlist_pos,
-				image_res,
-			}
-		}
+	fn spawn(&mut self, args: NextImageArgs) -> Result<tokio::task::JoinHandle<ImageLoadRes>, AppError> {
+		tokio::task::Builder::new()
+			.name(&format!("Load image {:?}", args.path))
+			.spawn_blocking(move || {
+				let image_res = self::load(&args.path, args.max_image_size);
+				ImageLoadRes {
+					path: args.path,
+					playlist_pos: args.playlist_pos,
+					image_res,
+				}
+			})
+			.context("Unable to spawn task")
 	}
 }
 
@@ -255,15 +252,11 @@ pub struct ImageLoadRes {
 }
 
 /// Loads an image
-pub async fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppError> {
+pub fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppError> {
 	// Load the image
 	tracing::trace!("Loading image {:?}", path);
 	#[cloned(path)]
-	let mut image = tokio::task::spawn_blocking(move || ::image::open(path))
-		.instrument(tracing::trace_span!("Loading image"))
-		.await
-		.context("Unable to join image load task")?
-		.context("Unable to open image")?;
+	let mut image = image::open(path).context("Unable to open image")?;
 	tracing::trace!("Loaded image {:?} ({}x{})", path, image.width(), image.height());
 
 	// If the image is too big, resize it
@@ -274,12 +267,7 @@ pub async fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage,
 			image.width(),
 			image.height()
 		);
-		image = tokio::task::spawn_blocking(move || {
-			image.resize(max_image_size, max_image_size, imageops::FilterType::Nearest)
-		})
-		.instrument(tracing::trace_span!("Resizing image"))
-		.await
-		.context("Failed to join image resize task")?;
+		image = image.resize(max_image_size, max_image_size, imageops::FilterType::Nearest);
 		tracing::trace!("Resized image {:?} to {}x{}", path, image.width(), image.height());
 	}
 
