@@ -89,12 +89,9 @@ fn main() -> Result<(), AppError> {
 	// Initialize the logger properly now
 	logger.init_global(args.log_file.as_deref().or(config.log_file.as_deref()));
 
-	// Initialize and create everything
-	init::rayon_pool::init(config.rayon_worker_threads).context("Unable to initialize rayon")?;
+	// Initialize the tokio runtime
 	let tokio_runtime =
 		init::tokio_runtime::create(config.tokio_worker_threads).context("Unable to create tokio runtime")?;
-
-	// Enter the tokio runtime
 	let _runtime_enter = tokio_runtime.enter();
 
 	// Create the event loop

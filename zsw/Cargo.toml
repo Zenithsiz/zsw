@@ -27,7 +27,6 @@ naga               = { features = ["deserialize"], workspace = true }
 num-rational       = { workspace = true }
 opener             = { workspace = true }
 rand               = { workspace = true }
-rayon              = { workspace = true }
 serde              = { features = ["derive"], workspace = true }
 serde_json         = { workspace = true }
 serde_with         = { workspace = true }

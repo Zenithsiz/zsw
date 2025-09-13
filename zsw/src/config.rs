@@ -19,10 +19,6 @@ pub struct Config {
 	#[serde(default)]
 	pub tokio_worker_threads: Option<NonZeroUsize>,
 
-	/// Rayon worker threads
-	#[serde(default)]
-	pub rayon_worker_threads: Option<NonZeroUsize>,
-
 	/// Default config file.
 	///
 	/// Will be overridden by command-line arguments
@@ -81,7 +77,6 @@ impl Default for Config {
 	fn default() -> Self {
 		Self {
 			tokio_worker_threads: None,
-			rayon_worker_threads: None,
 			log_file:             None,
 			default:              ConfigDefault::default(),
 		}
