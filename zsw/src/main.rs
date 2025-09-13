@@ -110,9 +110,7 @@ fn main() -> Result<(), AppError> {
 		.context("Unable to create winit app")?;
 
 	// Finally run the app on the event loop
-	event_loop
-		.run_app_on_demand(&mut app)
-		.context("Unable to run event loop")?;
+	tokio::task::block_in_place(|| event_loop.run_app_on_demand(&mut app)).context("Unable to run event loop")?;
 
 	tracing::info!("Successfully shutting down");
 	Ok(())
@@ -354,8 +352,8 @@ async fn paint_egui(
 
 	let full_output_fut = egui_painter.draw(window, async |ctx| {
 		// Draw the settings menu
+		let cursor_pos = cursor_pos.map(|cursor_pos| cursor_pos.cast::<f32>().to_logical(scale_factor));
 		tokio::task::block_in_place(|| {
-			let cursor_pos = cursor_pos.map(|cursor_pos| cursor_pos.cast::<f32>().to_logical(scale_factor));
 			settings_menu.draw(
 				ctx,
 				&shared.wgpu,
@@ -366,8 +364,9 @@ async fn paint_egui(
 				&shared.event_loop_proxy,
 				cursor_pos,
 				window_geometry,
-			);
+			)
 		});
+
 
 		// Then go through all panels checking for interactions with their geometries
 		let Some(cursor_pos) = shared.cursor_pos.load() else {
