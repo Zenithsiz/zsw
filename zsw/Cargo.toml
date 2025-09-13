@@ -49,8 +49,7 @@ serde_json = { workspace = true }
 
 [features]
 
-tokio-console     = ["dep:console-subscriber"]
-locker-validation = []
+tokio-console = ["dep:console-subscriber"]
 
 [lints]
 workspace = true
