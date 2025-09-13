@@ -27,6 +27,7 @@ pub fn create(worker_threads: Option<NonZeroUsize>) -> Result<tokio::runtime::Ru
 			format!("tokio${id}")
 		})
 		.worker_threads(worker_threads)
+		.max_blocking_threads(worker_threads)
 		.build()
 		.context("Unable to create runtime")
 }
