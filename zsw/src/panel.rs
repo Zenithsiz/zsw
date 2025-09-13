@@ -12,8 +12,8 @@ pub use self::{
 	geometry::{PanelGeometry, PanelGeometryUniforms},
 	images::{PanelFadeImage, PanelFadeImages},
 	panels::Panels,
-	renderer::{PanelFadeShader, PanelShader, PanelsRenderer, PanelsRendererShared},
-	state::{PanelFadeState, PanelNoneState, PanelState},
+	renderer::{PanelFadeShader, PanelShader, PanelSlideShader, PanelsRenderer, PanelsRendererShared},
+	state::{PanelFadeState, PanelNoneState, PanelSlideState, PanelState},
 };
 
 // Imports

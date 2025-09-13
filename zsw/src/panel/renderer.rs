@@ -166,15 +166,19 @@ impl PanelsRenderer {
 
 		for panel in panels {
 			// Update the panel before drawing it
+			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 			match &mut panel.state {
 				PanelState::None(_) => (),
 				PanelState::Fade(state) => state.update(wgpu).await,
+				PanelState::Slide(_) => (),
 			}
 
 			// If the panel images are empty, there's no sense in rendering it either
+			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 			let are_images_empty = match &panel.state {
 				PanelState::None(_) => false,
 				PanelState::Fade(state) => state.images().is_empty(),
+				PanelState::Slide(_) => false,
 			};
 			if are_images_empty {
 				continue;
@@ -187,6 +191,7 @@ impl PanelsRenderer {
 						PanelState::None(_) => &[&shared.uniforms_bind_group_layout] as &[_],
 						PanelState::Fade(_) =>
 							&[&shared.uniforms_bind_group_layout, &shared.fade_image_bind_group_layout],
+						PanelState::Slide(_) => &[&shared.uniforms_bind_group_layout],
 					};
 
 					let render_pipeline = self::create_render_pipeline(
@@ -229,6 +234,7 @@ impl PanelsRenderer {
 					});
 					render_pass.set_bind_group(1, &*image_bind_group, &[]);
 				},
+				PanelState::Slide(_panel_state) => (),
 			}
 
 			// The display might have changed asynchronously from the panel geometries,
@@ -361,6 +367,7 @@ impl PanelsRenderer {
 					}),
 				}
 			},
+			PanelState::Slide(_panel_state) => write_uniforms!(uniform::Slide { pos_matrix }),
 		}
 
 		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
@@ -641,6 +648,9 @@ pub enum PanelShader {
 
 	/// Fade shader
 	Fade(PanelFadeShader),
+
+	/// Slide shader
+	Slide(PanelSlideShader),
 }
 
 impl PanelShader {
@@ -649,6 +659,7 @@ impl PanelShader {
 		match self {
 			Self::None { .. } => "None",
 			Self::Fade(fade) => fade.name(),
+			Self::Slide(slide) => slide.name(),
 		}
 	}
 
@@ -657,11 +668,12 @@ impl PanelShader {
 		match self {
 			Self::None { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/none.json")),
 			Self::Fade(fade) => fade.module_json(),
+			Self::Slide(slide) => slide.module_json(),
 		}
 	}
 }
 
-/// Panel shader fade
+/// Panel fade shader
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum PanelFadeShader {
 	Basic,
@@ -688,6 +700,28 @@ impl PanelFadeShader {
 			Self::White { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-white.json")),
 			Self::Out { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-out.json")),
 			Self::In { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-in.json")),
+		}
+	}
+}
+
+/// Panel slide shader
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum PanelSlideShader {
+	Basic,
+}
+
+impl PanelSlideShader {
+	/// Returns this shader's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::Basic => "Slide",
+		}
+	}
+
+	/// Returns this shader's module as json
+	pub fn module_json(self) -> &'static str {
+		match self {
+			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/slide.json")),
 		}
 	}
 }

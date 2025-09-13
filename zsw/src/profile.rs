@@ -36,6 +36,7 @@ pub struct ProfilePanel {
 pub enum ProfilePanelShader {
 	None(ProfilePanelNoneShader),
 	Fade(ProfilePanelFadeShader),
+	Slide(ProfilePanelSlideShader),
 }
 
 /// Profile panel shader none
@@ -44,7 +45,7 @@ pub struct ProfilePanelNoneShader {
 	pub background_color: [f32; 4],
 }
 
-/// Profile panel shader fade
+/// Profile panel fade shader
 #[derive(Debug)]
 pub struct ProfilePanelFadeShader {
 	pub playlists:     Vec<PlaylistName>,
@@ -53,13 +54,25 @@ pub struct ProfilePanelFadeShader {
 	pub inner:         ProfilePanelFadeShaderInner,
 }
 
-/// Profile panel shader fade inner
+/// Profile panel fade shader inner
 #[derive(Debug)]
 pub enum ProfilePanelFadeShaderInner {
 	Basic,
 	White { strength: f32 },
 	Out { strength: f32 },
 	In { strength: f32 },
+}
+
+/// Profile slide panel shader
+#[derive(Debug)]
+pub struct ProfilePanelSlideShader {
+	pub inner: ProfilePanelSlideShaderInner,
+}
+
+/// Profile panel slide shader inner
+#[derive(Debug)]
+pub enum ProfilePanelSlideShaderInner {
+	Basic,
 }
 
 impl resource_manager::FromSerialized<ProfileName, ser::Profile> for Profile {
@@ -87,6 +100,11 @@ impl resource_manager::FromSerialized<ProfileName, ser::Profile> for Profile {
 									ProfilePanelFadeShaderInner::Out { strength },
 								ser::ProfilePanelFadeShaderInner::In { strength } =>
 									ProfilePanelFadeShaderInner::In { strength },
+							},
+						}),
+						ser::ProfilePanelShader::Slide(shader) => ProfilePanelShader::Slide(ProfilePanelSlideShader {
+							inner: match shader.inner {
+								ser::ProfilePanelSlideShaderInner::Basic => ProfilePanelSlideShaderInner::Basic,
 							},
 						}),
 					},
@@ -122,6 +140,12 @@ impl resource_manager::ToSerialized<ProfileName, ser::Profile> for Profile {
 										ser::ProfilePanelFadeShaderInner::Out { strength },
 									ProfilePanelFadeShaderInner::In { strength } =>
 										ser::ProfilePanelFadeShaderInner::In { strength },
+								},
+							}),
+						ProfilePanelShader::Slide(shader) =>
+							ser::ProfilePanelShader::Slide(ser::ProfilePanelSlideShader {
+								inner: match shader.inner {
+									ProfilePanelSlideShaderInner::Basic => ser::ProfilePanelSlideShaderInner::Basic,
 								},
 							}),
 					},

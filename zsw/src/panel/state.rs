@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::{PanelFadeImages, PanelFadeShader, PanelShader},
+	super::{PanelFadeImages, PanelFadeShader, PanelShader, PanelSlideShader},
 	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
 	core::time::Duration,
@@ -20,6 +20,9 @@ pub enum PanelState {
 
 	/// Fade shader
 	Fade(PanelFadeState),
+
+	/// Slide shader
+	Slide(PanelSlideState),
 }
 
 impl PanelState {
@@ -30,6 +33,7 @@ impl PanelState {
 				background_color: state.background_color,
 			},
 			Self::Fade(state) => PanelShader::Fade(state.shader()),
+			Self::Slide(state) => PanelShader::Slide(state.shader()),
 		}
 	}
 }
@@ -301,6 +305,30 @@ impl PanelFadeState {
 		let delta = self.update_delta();
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
 		self.step(wgpu, delta).await;
+	}
+}
+
+/// Panel slide state
+#[derive(Debug)]
+pub struct PanelSlideState {
+	/// Shader
+	shader: PanelSlideShader,
+}
+
+impl PanelSlideState {
+	/// Creates new state
+	pub fn new(shader: PanelSlideShader) -> Self {
+		Self { shader }
+	}
+
+	/// Returns the panel shader
+	pub fn shader(&self) -> PanelSlideShader {
+		self.shader
+	}
+
+	/// Returns the panel shader mutably
+	pub fn shader_mut(&mut self) -> &mut PanelSlideShader {
+		&mut self.shader
 	}
 }
 

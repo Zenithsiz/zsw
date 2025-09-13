@@ -5,9 +5,16 @@ use {
 	super::Panel,
 	crate::{
 		display::Displays,
-		panel::{PanelFadeShader, PanelFadeState, PanelNoneState, PanelState},
+		panel::{PanelFadeShader, PanelFadeState, PanelNoneState, PanelSlideShader, PanelSlideState, PanelState},
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
-		profile::{Profile, ProfileName, ProfilePanelFadeShaderInner, ProfilePanelShader, Profiles},
+		profile::{
+			Profile,
+			ProfileName,
+			ProfilePanelFadeShaderInner,
+			ProfilePanelShader,
+			ProfilePanelSlideShaderInner,
+			Profiles,
+		},
 	},
 	app_error::Context,
 	core::ops::DerefMut,
@@ -124,6 +131,13 @@ impl Panels {
 						);
 
 						PanelState::Fade(state)
+					},
+					ProfilePanelShader::Slide(shader) => {
+						let state = PanelSlideState::new(match shader.inner {
+							ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
+						});
+
+						PanelState::Slide(state)
 					},
 				};
 

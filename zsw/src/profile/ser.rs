@@ -28,6 +28,9 @@ pub enum ProfilePanelShader {
 
 	#[serde(rename = "fade")]
 	Fade(ProfilePanelFadeShader),
+
+	#[serde(rename = "slide")]
+	Slide(ProfilePanelSlideShader),
 }
 
 /// Panel shader none
@@ -38,7 +41,7 @@ pub struct ProfilePanelNoneShader {
 	pub background_color: [f32; 4],
 }
 
-/// Panel shader fade
+/// Panel fade shader
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanelFadeShader {
@@ -51,7 +54,7 @@ pub struct ProfilePanelFadeShader {
 	pub inner: ProfilePanelFadeShaderInner,
 }
 
-/// Panel shader fade inner
+/// Panel fade shader inner
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "fade")]
@@ -67,4 +70,22 @@ pub enum ProfilePanelFadeShaderInner {
 
 	#[serde(rename = "in")]
 	In { strength: f32 },
+}
+
+/// Panel slide shader
+#[derive(Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ProfilePanelSlideShader {
+	/// Inner
+	#[serde(flatten)]
+	pub inner: ProfilePanelSlideShaderInner,
+}
+
+/// Panel shader slide inner
+#[derive(Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(tag = "slide")]
+pub enum ProfilePanelSlideShaderInner {
+	#[serde(rename = "basic")]
+	Basic,
 }

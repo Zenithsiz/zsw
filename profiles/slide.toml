@@ -1,0 +1,14 @@
+[[panels]]
+display = "multiple"
+
+[panels.shader]
+type  = "slide"
+slide = "basic"
+
+
+[[panels]]
+display = "quarter"
+
+[panels.shader]
+type  = "slide"
+slide = "basic"

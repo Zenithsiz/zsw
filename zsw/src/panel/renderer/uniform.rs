@@ -113,6 +113,14 @@ pub struct FadeIn {
 	pub _unused: u32,
 }
 
+/// Slide
+#[derive(PartialEq, Clone, Copy, Default, Debug)]
+#[derive(Zeroable, Pod)]
+#[repr(C)]
+pub struct Slide {
+	pub pos_matrix: Matrix4x4,
+}
+
 /// The maximum uniform size
 pub const MAX_UNIFORM_SIZE: usize = zsw_util::array_max(&[
 	size_of::<None>(),
@@ -120,5 +128,6 @@ pub const MAX_UNIFORM_SIZE: usize = zsw_util::array_max(&[
 	size_of::<FadeWhite>(),
 	size_of::<FadeOut>(),
 	size_of::<FadeIn>(),
+	size_of::<Slide>(),
 ])
 .expect("No max uniform size");

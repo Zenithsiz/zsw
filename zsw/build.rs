@@ -30,6 +30,7 @@ fn main() {
 		PanelShader::Fade(PanelFadeShader::White),
 		PanelShader::Fade(PanelFadeShader::Out),
 		PanelShader::Fade(PanelFadeShader::In),
+		PanelShader::Slide(PanelSlideShader::Basic),
 	];
 
 	thread::scope(|s| {
@@ -55,15 +56,22 @@ fn main() {
 enum PanelShader {
 	None,
 	Fade(PanelFadeShader),
+	Slide(PanelSlideShader),
 }
 
-/// Panel shader fade
+/// Panel fade shader
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum PanelFadeShader {
 	Basic,
 	White,
 	Out,
 	In,
+}
+
+/// Panel slide shader
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum PanelSlideShader {
+	Basic,
 }
 
 
@@ -73,6 +81,7 @@ impl PanelShader {
 		match self {
 			Self::None => "panels/none.wgsl",
 			Self::Fade(_) => "panels/fade.wgsl",
+			Self::Slide(_) => "panels/slide.wgsl",
 		}
 	}
 
@@ -85,6 +94,9 @@ impl PanelShader {
 				PanelFadeShader::White => "panels/fade-white.json",
 				PanelFadeShader::Out => "panels/fade-out.json",
 				PanelFadeShader::In => "panels/fade-in.json",
+			},
+			Self::Slide(slide) => match slide {
+				PanelSlideShader::Basic => "panels/slide.json",
 			},
 		}
 	}
@@ -134,6 +146,9 @@ fn parse(shader: PanelShader, shader_src_path: &Path) -> Result<naga::Module, Ap
 			PanelFadeShader::White => _ = shader_defs.insert("FADE_WHITE"),
 			PanelFadeShader::Out => _ = shader_defs.insert("FADE_OUT"),
 			PanelFadeShader::In => _ = shader_defs.insert("FADE_IN"),
+		},
+		PanelShader::Slide(slide) => match slide {
+			PanelSlideShader::Basic => _ = shader_defs.insert("SLIDE_BASIC"),
 		},
 	}
 

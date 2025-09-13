@@ -381,9 +381,11 @@ async fn paint_egui(
 
 			// Pause any double-clicked panels
 			if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 				match &mut panel.state {
 					panel::PanelState::None(_) => (),
 					panel::PanelState::Fade(state) => state.toggle_paused(),
+					panel::PanelState::Slide(_) => (),
 				}
 				break;
 			}
@@ -393,9 +395,11 @@ async fn paint_egui(
 				(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
 					input.pointer.button_clicked(egui::PointerButton::Middle)
 			}) {
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 				match &mut panel.state {
 					panel::PanelState::None(_) => (),
 					panel::PanelState::Fade(state) => state.skip(&shared.wgpu).await,
+					panel::PanelState::Slide(_) => (),
 				}
 				break;
 			}
@@ -403,6 +407,7 @@ async fn paint_egui(
 			// Scroll panels
 			let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
 			if scroll_delta != 0.0 {
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 				match &mut panel.state {
 					panel::PanelState::None(_) => (),
 					panel::PanelState::Fade(state) => {
@@ -420,6 +425,7 @@ async fn paint_egui(
 						state.step(&shared.wgpu, time_delta).await;
 						break;
 					},
+					panel::PanelState::Slide(_) => (),
 				}
 			}
 		}

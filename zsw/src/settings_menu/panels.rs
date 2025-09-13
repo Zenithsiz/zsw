@@ -4,7 +4,16 @@
 use {
 	crate::{
 		display::Display,
-		panel::{PanelFadeImage, PanelFadeShader, PanelFadeState, PanelNoneState, PanelState, Panels},
+		panel::{
+			PanelFadeImage,
+			PanelFadeShader,
+			PanelFadeState,
+			PanelNoneState,
+			PanelSlideShader,
+			PanelSlideState,
+			PanelState,
+			Panels,
+		},
 	},
 	core::time::Duration,
 	egui::{Widget, color_picker},
@@ -40,9 +49,11 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 		}
 
 		ui.collapsing(name, |ui| {
+			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 			match &mut panel.state {
 				PanelState::None(_) => (),
 				PanelState::Fade(state) => self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &mut display),
+				PanelState::Slide(_) => (),
 			}
 
 			ui.collapsing("Shader", |ui| {
@@ -177,6 +188,7 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 		.selected_text(match state {
 			PanelState::None(_) => "None",
 			PanelState::Fade(_) => "Fade",
+			PanelState::Slide(_) => "Slide",
 		})
 		.show_ui(ui, |ui| {
 			// TODO: Review these defaults?
@@ -191,6 +203,9 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 						Duration::from_secs(5),
 						PanelFadeShader::Out { strength: 1.5 },
 					))
+				}),
+				("Slide", matches!(state, PanelState::Slide(_)), || {
+					PanelState::Slide(PanelSlideState::new(PanelSlideShader::Basic))
 				}),
 			];
 
@@ -250,6 +265,21 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 						egui::Slider::new(strength, 0.0..=2.0).ui(ui);
 					});
 				},
+			}
+		},
+		PanelState::Slide(state) => {
+			egui::ComboBox::from_id_salt("Slide shader menu")
+				.selected_text(state.shader().name())
+				.show_ui(ui, |ui| {
+					// TODO: Not have default values here?
+					let shaders = [PanelSlideShader::Basic];
+					for shader in shaders {
+						ui.selectable_value(state.shader_mut(), shader, shader.name());
+					}
+				});
+
+			match state.shader_mut() {
+				PanelSlideShader::Basic => (),
 			}
 		},
 	}
