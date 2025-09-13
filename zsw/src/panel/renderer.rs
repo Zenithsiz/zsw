@@ -44,8 +44,7 @@ pub struct PanelsRendererShared {
 	uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Fade image bind group layout
-	// TODO: Only create this if using the fade shader?
-	fade_image_bind_group_layout: wgpu::BindGroupLayout,
+	fade_image_bind_group_layout: Option<wgpu::BindGroupLayout>,
 }
 
 impl PanelsRendererShared {
@@ -56,14 +55,13 @@ impl PanelsRendererShared {
 		let vertices = self::create_vertices(wgpu);
 
 		let uniforms_bind_group_layout = self::create_uniforms_bind_group_layout(wgpu);
-		let fade_image_bind_group_layout = self::create_fade_image_bind_group_layout(wgpu);
 
 		Self {
 			render_pipelines: Mutex::new(HashMap::new()),
 			vertices,
 			indices,
 			uniforms_bind_group_layout,
-			fade_image_bind_group_layout,
+			fade_image_bind_group_layout: None,
 		}
 	}
 }
@@ -115,7 +113,7 @@ impl PanelsRenderer {
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu: &Wgpu,
-		shared: &PanelsRendererShared,
+		shared: &mut PanelsRendererShared,
 		panels: &mut [Panel],
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
@@ -189,8 +187,12 @@ impl PanelsRenderer {
 				hash_map::Entry::Vacant(entry) => {
 					let bind_group_layouts = match panel.state {
 						PanelState::None(_) => &[&shared.uniforms_bind_group_layout] as &[_],
-						PanelState::Fade(_) =>
-							&[&shared.uniforms_bind_group_layout, &shared.fade_image_bind_group_layout],
+						PanelState::Fade(_) => {
+							let fade_image_bind_group_layout = shared
+								.fade_image_bind_group_layout
+								.get_or_insert_with(|| self::create_fade_image_bind_group_layout(wgpu));
+							&[&shared.uniforms_bind_group_layout, fade_image_bind_group_layout]
+						},
 						PanelState::Slide(_) => &[&shared.uniforms_bind_group_layout],
 					};
 
@@ -223,9 +225,12 @@ impl PanelsRenderer {
 						.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
 
 					let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
+						let fade_image_bind_group_layout = shared
+								.fade_image_bind_group_layout
+								.get_or_insert_with(|| self::create_fade_image_bind_group_layout(wgpu));
 						self::create_image_bind_group(
 							wgpu,
-							&shared.fade_image_bind_group_layout,
+							fade_image_bind_group_layout,
 							prev,
 							cur,
 							next,
