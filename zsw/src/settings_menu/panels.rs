@@ -30,13 +30,14 @@ pub fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_g
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
 fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_geometry: Rect<i32, u32>) {
-	let mut panels = panels.get_all().block_on();
+	let panels = panels.get_all().block_on();
 	if panels.is_empty() {
 		ui.label("None loaded");
 		return;
 	}
 
-	for panel in &mut *panels {
+	for panel in panels {
+		let panel = &mut *panel.lock().block_on();
 		let mut display = panel.display.write().block_on();
 
 		let mut name = egui::WidgetText::from(display.name.to_string());

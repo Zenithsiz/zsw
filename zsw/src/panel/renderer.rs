@@ -162,7 +162,9 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(shared.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, shared.vertices.slice(..));
 
-		for panel in &mut *panels.get_all().await {
+		for panel in panels.get_all().await {
+			let panel = &mut *panel.lock().await;
+
 			// Update the panel before drawing it
 			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 			match &mut panel.state {

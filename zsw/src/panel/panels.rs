@@ -17,12 +17,11 @@ use {
 		},
 	},
 	app_error::Context,
-	core::ops::DerefMut,
 	futures::{StreamExt, TryStreamExt, stream::FuturesUnordered},
 	std::sync::Arc,
 	tokio::{
 		fs,
-		sync::{Mutex, MutexGuard, RwLock},
+		sync::{Mutex, RwLock},
 	},
 	zsw_util::{AppError, UnwrapOrReturnExt, WalkDir},
 	zutil_cloned::cloned,
@@ -35,7 +34,7 @@ struct Inner {
 	profile: Option<Arc<RwLock<Profile>>>,
 
 	/// Panels
-	panels: Vec<Panel>,
+	panels: Vec<Arc<Mutex<Panel>>>,
 }
 
 /// Panels
@@ -57,8 +56,8 @@ impl Panels {
 	}
 
 	/// Gets all of the panels
-	pub async fn get_all(&self) -> impl DerefMut<Target = [Panel]> {
-		MutexGuard::map(self.inner.lock().await, |inner| inner.panels.as_mut_slice())
+	pub async fn get_all(&self) -> Vec<Arc<Mutex<Panel>>> {
+		self.inner.lock().await.panels.clone()
 	}
 
 	/// Sets the current profile.
@@ -141,7 +140,7 @@ impl Panels {
 				};
 
 				let panel = Panel::new(display, panel_state);
-				self.inner.lock().await.panels.push(panel);
+				self.inner.lock().await.panels.push(Arc::new(Mutex::new(panel)));
 
 				Ok::<_, AppError>(())
 			})

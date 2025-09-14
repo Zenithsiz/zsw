@@ -391,7 +391,8 @@ async fn paint_egui(
 			return Ok(());
 		};
 		let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
-		for panel in &mut *shared.panels.get_all().await {
+		for panel in shared.panels.get_all().await {
+			let panel = &mut *panel.lock().await;
 			let display = panel.display.read().await;
 
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
