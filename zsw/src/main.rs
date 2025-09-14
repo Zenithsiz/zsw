@@ -53,8 +53,8 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::lock::Mutex,
 	std::{collections::HashMap, fs, sync::Arc, time::Instant},
+	tokio::sync::Mutex,
 	winit::{
 		application::ApplicationHandler,
 		dpi::PhysicalSize,
@@ -351,7 +351,7 @@ async fn renderer(
 			render_panels: frame_render_panels,
 			render_egui:   frame_render_egui,
 			render_finish: frame_render_finish,
-			resize:         frame_resize,
+			resize:        frame_resize,
 		});
 	}
 }

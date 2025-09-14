@@ -19,8 +19,8 @@ pub use self::{
 // Imports
 use {
 	crate::{display::Display, playlist::PlaylistPlayer},
-	futures::lock::Mutex,
 	std::sync::Arc,
+	tokio::sync::Mutex,
 };
 
 /// Panel

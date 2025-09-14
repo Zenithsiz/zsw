@@ -14,7 +14,7 @@ use {
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
-	futures::lock::Mutex,
+	tokio::sync::Mutex,
 	itertools::Itertools,
 	std::{
 		borrow::Cow,

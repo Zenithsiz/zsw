@@ -18,19 +18,18 @@ use {
 	},
 	app_error::Context,
 	core::ops::DerefMut,
-	futures::{
-		StreamExt,
-		TryStreamExt,
-		lock::{Mutex, MutexGuard},
-		stream::FuturesUnordered,
-	},
+	futures::{StreamExt, TryStreamExt, stream::FuturesUnordered},
 	std::sync::Arc,
-	tokio::fs,
+	tokio::{
+		fs,
+		sync::{Mutex, MutexGuard},
+	},
 	zsw_util::{AppError, UnwrapOrReturnExt, WalkDir},
 	zutil_cloned::cloned,
 };
 
 /// Inner
+#[derive(Debug)]
 struct Inner {
 	/// Profile
 	profile: Option<Arc<Mutex<Profile>>>,

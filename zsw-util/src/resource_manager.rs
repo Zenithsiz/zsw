@@ -5,10 +5,10 @@ use {
 	crate::AppError,
 	app_error::{Context, app_error},
 	core::marker::PhantomData,
-	futures::{TryStreamExt, lock::Mutex},
+	futures::TryStreamExt,
 	serde::{Serialize, de::DeserializeOwned},
 	std::{collections::HashMap, ffi::OsStr, hash::Hash, path::PathBuf, sync::Arc},
-	tokio::sync::OnceCell,
+	tokio::sync::{Mutex, OnceCell},
 	tokio_stream::{StreamExt, wrappers::ReadDirStream},
 	zutil_cloned::cloned,
 };

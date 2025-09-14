@@ -12,7 +12,7 @@ use {
 		profile::Profiles,
 	},
 	crossbeam::atomic::AtomicCell,
-	futures::lock::Mutex,
+	tokio::sync::Mutex,
 	std::sync::Arc,
 	winit::{dpi::PhysicalPosition, event_loop::EventLoopProxy},
 	zsw_wgpu::Wgpu,

@@ -6,8 +6,8 @@ use {
 	crate::playlist::PlaylistPlayer,
 	chrono::TimeDelta,
 	core::time::Duration,
-	futures::lock::Mutex,
 	std::{sync::Arc, time::Instant},
+	tokio::sync::Mutex,
 	zsw_wgpu::Wgpu,
 };
 
@@ -227,7 +227,8 @@ impl PanelFadeState {
 
 	/// Skips to the next image.
 	pub async fn skip(&mut self, wgpu: &Wgpu) {
-		self.progress = match self.images.step_next(&mut *self.playlist_player.lock().await, wgpu) {
+		let mut playlist_player = self.playlist_player.lock().await;
+		self.progress = match self.images.step_next(&mut playlist_player, wgpu) {
 			Ok(()) => self.fade_duration,
 			Err(()) => self.max_progress(),
 		}
