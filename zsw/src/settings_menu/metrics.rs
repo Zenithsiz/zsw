@@ -4,6 +4,8 @@
 use {
 	crate::metrics::{FrameTime, Metrics},
 	core::time::Duration,
+	egui::Widget,
+	std::collections::HashMap,
 	winit::window::WindowId,
 };
 
@@ -20,6 +22,12 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 		*cur_window_id = Some(window_id);
 	}
 
+	// TODO: Turn this into some enum between histogram / time
+	let is_histogram = super::get_data::<bool>(ui, "metrics-tab-histogram");
+	let mut is_histogram = is_histogram.lock();
+
+	let histogram_time_scale = super::get_data_with_default::<f64>(ui, "metrics-tab-histogram-time-scale", || 20.0);
+	let mut histogram_time_scale = histogram_time_scale.lock();
 
 	let stack_charts = super::get_data_with_default::<bool>(ui, "metrics-tab-chart-stacks", || true);
 	let mut stack_charts = stack_charts.lock();
@@ -40,7 +48,22 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 				metrics.frame_times_pause(window_id, is_paused);
 			}
 
-			ui.toggle_value(&mut stack_charts, "Stack charts");
+			ui.toggle_value(&mut is_histogram, "Histogram");
+
+			match *is_histogram {
+				true => {
+					ui.horizontal(|ui| {
+						ui.label("Time scale: ");
+						egui::Slider::new(&mut *histogram_time_scale, 1.0..=1000.0)
+							.logarithmic(true)
+							.clamping(egui::SliderClamping::Always)
+							.ui(ui);
+					});
+				},
+				false => {
+					ui.toggle_value(&mut stack_charts, "Stack charts");
+				},
+			}
 		});
 	});
 
@@ -51,33 +74,61 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 
 	let mut charts = vec![];
 	for duration_idx in 0..6 {
-		let bars = frame_times
-			.iter()
-			.enumerate()
-			.map(|(frame_idx, frame_time)| {
-				egui_plot::Bar::new(
-					frame_idx as f64,
-					self::frame_time_non_cumulative(frame_time, duration_idx).as_millis_f64(),
-				)
-			})
-			.collect();
+		let bars = match *is_histogram {
+			true => {
+				let mut buckets = HashMap::<_, usize>::new();
+				for frame_time in frame_times {
+					let frame_time = self::frame_time_non_cumulative(frame_time, duration_idx).as_millis_f64();
+					#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
+					let bucket_idx = (frame_time * *histogram_time_scale) as usize;
+
+					*buckets.entry(bucket_idx).or_default() += 1;
+				}
+
+				buckets
+					.into_iter()
+					.map(|(bucket_idx, bucket)| {
+						let width = 1.0 / *histogram_time_scale;
+						let center = bucket_idx as f64 / *histogram_time_scale + width / 2.0;
+						let height = *histogram_time_scale * bucket as f64 / frame_times.len() as f64;
+
+						egui_plot::Bar::new(center, height).width(width)
+					})
+					.collect()
+			},
+			false => frame_times
+				.iter()
+				.enumerate()
+				.map(|(frame_idx, frame_time)| {
+					egui_plot::Bar::new(
+						frame_idx as f64,
+						self::frame_time_non_cumulative(frame_time, duration_idx).as_millis_f64(),
+					)
+				})
+				.collect(),
+		};
 
 		let mut chart = egui_plot::BarChart::new(self::frame_time_name(duration_idx), bars);
-		if *stack_charts {
+		if !*is_histogram && *stack_charts {
 			chart = chart.stack_on(&charts.iter().collect::<Vec<_>>());
 		}
 		charts.push(chart);
 	}
 
-	egui_plot::Plot::new("Frame times")
+	let plot = egui_plot::Plot::new("Frame times")
 		.legend(egui_plot::Legend::default())
-		.clamp_grid(true)
-		.y_axis_label("Time")
-		.show(ui, |plot_ui| {
-			for chart in charts {
-				plot_ui.bar_chart(chart);
-			}
-		});
+		.clamp_grid(true);
+
+	let plot = match *is_histogram {
+		true => plot.x_axis_label("Time").y_axis_label("Occurrences (normalized)"),
+		false => plot.x_axis_label("Frame").y_axis_label("Time"),
+	};
+
+	plot.show(ui, |plot_ui| {
+		for chart in charts {
+			plot_ui.bar_chart(chart);
+		}
+	});
 }
 
 /// Returns the duration with index `idx`
