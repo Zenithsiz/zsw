@@ -312,7 +312,7 @@ async fn renderer(
 				&wgpu_renderer,
 				&shared.wgpu,
 				&shared.panels_renderer_shared,
-				&mut shared.panels.get_all().await,
+				&shared.panels,
 				window,
 				window_geometry,
 			)

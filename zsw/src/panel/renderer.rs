@@ -10,16 +10,15 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{Panel, PanelFadeImage, PanelGeometryUniforms, PanelState},
+	super::{PanelFadeImage, PanelGeometryUniforms, PanelState, Panels},
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
-	std::sync::OnceLock,
 	itertools::Itertools,
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
-		sync::Arc,
+		sync::{Arc, OnceLock},
 	},
 	tokio::sync::Mutex,
 	wgpu::util::DeviceExt,
@@ -115,7 +114,7 @@ impl PanelsRenderer {
 		wgpu_renderer: &WgpuRenderer,
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
-		panels: &mut [Panel],
+		panels: &Panels,
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
 	) -> Result<(), AppError> {
@@ -163,7 +162,7 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(shared.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, shared.vertices.slice(..));
 
-		for panel in panels {
+		for panel in &mut *panels.get_all().await {
 			// Update the panel before drawing it
 			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 			match &mut panel.state {
