@@ -20,6 +20,7 @@ crossbeam          = { workspace = true }
 derive_more        = { features = ["full"], workspace = true }
 directories        = { workspace = true }
 egui               = { features = ["default_fonts"], workspace = true }
+egui_plot          = { workspace = true }
 futures            = { workspace = true }
 image              = { workspace = true }
 itertools          = { workspace = true }

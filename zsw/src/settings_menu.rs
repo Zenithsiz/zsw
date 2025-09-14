@@ -5,13 +5,14 @@
 
 // Modules
 mod displays;
+mod metrics;
 mod panels;
 mod playlists;
 mod profiles;
 
 // Imports
 use {
-	crate::{AppEvent, display::Displays, panel::Panels, playlist::Playlists, profile::Profiles},
+	crate::{AppEvent, display::Displays, metrics::Metrics, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, str::FromStr, time::Duration},
 	egui::{Widget, mutex::Mutex},
 	std::{path::Path, sync::Arc},
@@ -49,6 +50,7 @@ impl SettingsMenu {
 		playlists: &Arc<Playlists>,
 		profiles: &Arc<Profiles>,
 		panels: &Arc<Panels>,
+		metrics: &Metrics,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		cursor_pos: Option<LogicalPosition<f32>>,
 		window_geometry: Rect<i32, u32>,
@@ -79,6 +81,7 @@ impl SettingsMenu {
 				Tab::Displays => displays::draw_displays_tab(ui, displays),
 				Tab::Playlists => playlists::draw_playlists_tab(ui, playlists),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, displays, playlists, profiles, panels),
+				Tab::Metrics => metrics::draw_metrics_tab(ui, metrics),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
 		});
@@ -155,6 +158,9 @@ enum Tab {
 	#[display("Profiles")]
 	Profiles,
 
+	#[display("Metrics")]
+	Metrics,
+
 	#[display("Settings")]
 	Settings,
 }
@@ -164,8 +170,16 @@ fn get_data<T>(ui: &egui::Ui, id: impl Into<egui::Id>) -> Arc<Mutex<T>>
 where
 	T: Default + Send + 'static,
 {
+	self::get_data_with_default(ui, id, T::default)
+}
+
+/// Gets an `Arc<Mutex<T>>` from the egui data with id `id` with a default value
+fn get_data_with_default<T>(ui: &egui::Ui, id: impl Into<egui::Id>, default: impl FnOnce() -> T) -> Arc<Mutex<T>>
+where
+	T: Send + 'static,
+{
 	ui.data_mut(|map| {
-		let value = map.get_persisted_mut_or_default(id.into());
+		let value = map.get_persisted_mut_or_insert_with(id.into(), || Arc::new(Mutex::new(default())));
 		Arc::clone(value)
 	})
 }

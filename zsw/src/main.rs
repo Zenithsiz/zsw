@@ -11,7 +11,10 @@
 	iter_partition_in_place,
 	type_alias_impl_trait,
 	proc_macro_hygiene,
-	stmt_expr_attributes
+	stmt_expr_attributes,
+	nonpoison_mutex,
+	sync_nonpoison,
+	duration_millis_float
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -22,6 +25,7 @@ mod config;
 mod config_dirs;
 mod display;
 mod init;
+mod metrics;
 mod panel;
 mod playlist;
 mod profile;
@@ -35,6 +39,7 @@ use {
 		config::Config,
 		config_dirs::ConfigDirs,
 		display::Displays,
+		metrics::Metrics,
 		panel::{PanelGeometry, Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
@@ -49,7 +54,7 @@ use {
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	futures::lock::Mutex,
-	std::{collections::HashMap, fs, sync::Arc},
+	std::{collections::HashMap, fs, sync::Arc, time::Instant},
 	winit::{
 		application::ApplicationHandler,
 		dpi::PhysicalSize,
@@ -200,6 +205,7 @@ impl WinitApp {
 			playlists,
 			profiles,
 			panels: Arc::new(Panels::new()),
+			metrics: Metrics::new(),
 		};
 		let shared = Arc::new(shared);
 
@@ -277,6 +283,8 @@ async fn renderer(
 	mut settings_menu: SettingsMenu,
 ) -> Result<(), AppError> {
 	loop {
+		let frame_start = Instant::now();
+
 		// TODO: Only update this when we receive a move/resize event instead of querying each frame?
 		let window_geometry = self::window_geometry(window)?;
 
@@ -290,11 +298,13 @@ async fn renderer(
 					(vec![], None)
 				},
 			};
+		let frame_paint_egui = frame_start.elapsed();
 
 		// Start rendering
 		let mut frame = wgpu_renderer
 			.start_render(&shared.wgpu)
 			.context("Unable to start frame")?;
+		let frame_render_start = frame_start.elapsed();
 
 		// Render panels
 		panels_renderer
@@ -309,11 +319,14 @@ async fn renderer(
 			)
 			.await
 			.context("Unable to render panels")?;
+		let frame_render_panels = frame_start.elapsed();
 
 		// Render egui
 		egui_renderer
 			.render_egui(&mut frame, window, &shared.wgpu, &egui_paint_jobs, egui_textures_delta)
 			.context("Unable to render egui")?;
+
+		let frame_render_egui = frame_start.elapsed();
 
 		// Finish the frame
 		if frame.finish(&shared.wgpu) {
@@ -321,6 +334,7 @@ async fn renderer(
 				.reconfigure(&shared.wgpu)
 				.context("Unable to reconfigure wgpu")?;
 		}
+		let frame_render_finish = frame_start.elapsed();
 
 		// Resize if we need to
 		if let Some(resize) = shared.last_resize.swap(None) {
@@ -329,6 +343,16 @@ async fn renderer(
 				.context("Unable to resize wgpu")?;
 			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, resize.size);
 		}
+		let frame_resize = frame_start.elapsed();
+
+		shared.metrics.frame_times_add(window.id(), metrics::FrameTime {
+			paint_egui:    frame_paint_egui,
+			render_start:  frame_render_start,
+			render_panels: frame_render_panels,
+			render_egui:   frame_render_egui,
+			render_finish: frame_render_finish,
+			resize:         frame_resize,
+		});
 	}
 }
 
@@ -355,6 +379,7 @@ async fn paint_egui(
 				&shared.playlists,
 				&shared.profiles,
 				&shared.panels,
+				&shared.metrics,
 				&shared.event_loop_proxy,
 				cursor_pos,
 				window_geometry,

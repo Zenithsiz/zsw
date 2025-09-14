@@ -6,6 +6,7 @@ use {
 		AppEvent,
 		Resize,
 		display::Displays,
+		metrics::Metrics,
 		panel::{Panels, PanelsRendererShared},
 		playlist::Playlists,
 		profile::Profiles,
@@ -33,4 +34,6 @@ pub struct Shared {
 	pub profiles:  Arc<Profiles>,
 
 	pub panels: Arc<Panels>,
+
+	pub metrics: Metrics,
 }
