@@ -34,9 +34,6 @@ impl Metrics {
 
 	/// Adds a frame time to the metrics
 	pub fn frame_times_add(&self, window_id: WindowId, frame_time: FrameTime) {
-		// TODO: Make this customizable?
-		const MAX_FRAME_TIMES: usize = 60 * 10;
-
 		let mut inner = self.inner.lock();
 		let frame_times = inner.frame_times.entry(window_id).or_default();
 		if frame_times.paused {
@@ -44,8 +41,8 @@ impl Metrics {
 		}
 
 		frame_times.times.push_back(frame_time);
-		if frame_times.times.len() > MAX_FRAME_TIMES {
-			_ = frame_times.times.drain(..frame_times.times.len() - MAX_FRAME_TIMES);
+		if frame_times.times.len() > frame_times.max_len {
+			_ = frame_times.times.drain(..frame_times.times.len() - frame_times.max_len);
 		}
 	}
 
@@ -62,6 +59,19 @@ impl Metrics {
 		}
 	}
 
+	/// Returns the max number of frame times kept
+	pub fn frame_times_max_len(&self, window_id: WindowId) -> usize {
+		match self.inner.lock().frame_times.get(&window_id) {
+			Some(frame_times) => frame_times.max_len,
+			None => 0,
+		}
+	}
+
+	/// Sets the max number of frame times kept
+	pub fn frame_times_set_max_len(&self, window_id: WindowId, max_len: usize) {
+		self.inner.lock().frame_times.entry(window_id).or_default().max_len = max_len;
+	}
+
 	/// Returns the frame times from the metrics
 	pub fn frame_times(&self) -> BTreeMap<WindowId, Vec<FrameTime>> {
 		self.inner
@@ -74,13 +84,27 @@ impl Metrics {
 }
 
 /// Frame times
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct FrameTimes {
 	/// Frame times
 	times: VecDeque<FrameTime>,
 
+	/// Maximum frame times
+	max_len: usize,
+
 	/// Paused
 	paused: bool,
+}
+
+impl Default for FrameTimes {
+	fn default() -> Self {
+		Self {
+			times:   VecDeque::new(),
+			// 10 seconds worth on 60 Hz
+			max_len: 60 * 10,
+			paused:  false,
+		}
+	}
 }
 
 /// Frame time.

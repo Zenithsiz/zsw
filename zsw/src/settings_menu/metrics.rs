@@ -10,6 +10,7 @@ use {
 };
 
 /// Draws the metrics tab
+#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 	let frame_times = metrics.frame_times();
 
@@ -47,6 +48,14 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 			if ui.toggle_value(&mut is_paused, "Pause").changed() {
 				metrics.frame_times_pause(window_id, is_paused);
 			}
+
+			let mut max_len = metrics.frame_times_max_len(window_id);
+			ui.horizontal(|ui| {
+				ui.label("Maximum frames: ");
+				if egui::Slider::new(&mut max_len, 0..=60 * 100).ui(ui).changed() {
+					metrics.frame_times_set_max_len(window_id, max_len);
+				}
+			});
 
 			ui.toggle_value(&mut is_histogram, "Histogram");
 
