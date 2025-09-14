@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	crate::metrics::{FrameTime, Metrics},
+	crate::metrics::{Metrics, RenderFrameTime},
 	core::time::Duration,
 	egui::Widget,
 	std::collections::HashMap,
@@ -12,13 +12,13 @@ use {
 /// Draws the metrics tab
 #[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
-	let frame_times = metrics.frame_times();
+	let render_frame_times = metrics.render_frame_times();
 
 	// Use the first window as the current window if we hadn't selected one yet
 	let cur_window_id = super::get_data::<Option<WindowId>>(ui, "metrics-tab-cur-window");
 	let mut cur_window_id = cur_window_id.lock();
 	if cur_window_id.is_none() &&
-		let Some((&window_id, _)) = frame_times.first_key_value()
+		let Some((&window_id, _)) = render_frame_times.first_key_value()
 	{
 		*cur_window_id = Some(window_id);
 	}
@@ -37,23 +37,23 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 			.selected_text(format!("{cur_window_id:?}"))
 			.show_ui(ui, |ui| {
 				// TODO: Get windows through another way?
-				for &window_id in frame_times.keys() {
+				for &window_id in render_frame_times.keys() {
 					ui.selectable_value(&mut *cur_window_id, Some(window_id), format!("{window_id:?}"));
 				}
 			});
 
 		ui.horizontal(|ui| {
 			let Some(window_id) = *cur_window_id else { return };
-			let mut is_paused = metrics.frame_times_is_paused(window_id);
+			let mut is_paused = metrics.render_frame_times_is_paused(window_id);
 			if ui.toggle_value(&mut is_paused, "Pause").changed() {
-				metrics.frame_times_pause(window_id, is_paused);
+				metrics.render_frame_times_pause(window_id, is_paused);
 			}
 
-			let mut max_len = metrics.frame_times_max_len(window_id);
+			let mut max_len = metrics.render_frame_times_max_len(window_id);
 			ui.horizontal(|ui| {
 				ui.label("Maximum frames: ");
 				if egui::Slider::new(&mut max_len, 0..=60 * 100).ui(ui).changed() {
-					metrics.frame_times_set_max_len(window_id, max_len);
+					metrics.render_frame_times_set_max_len(window_id, max_len);
 				}
 			});
 
@@ -77,7 +77,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 	});
 
 	let Some(window_id) = *cur_window_id else { return };
-	let Some(frame_times) = frame_times.get(&window_id) else {
+	let Some(render_frame_times) = render_frame_times.get(&window_id) else {
 		return;
 	};
 
@@ -86,10 +86,11 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 		let bars = match *is_histogram {
 			true => {
 				let mut buckets = HashMap::<_, usize>::new();
-				for frame_time in frame_times {
-					let frame_time = self::frame_time_non_cumulative(frame_time, duration_idx).as_millis_f64();
+				for render_frame_time in render_frame_times {
+					let render_frame_time =
+						self::render_frame_time_non_cumulative(render_frame_time, duration_idx).as_millis_f64();
 					#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
-					let bucket_idx = (frame_time * *histogram_time_scale) as usize;
+					let bucket_idx = (render_frame_time * *histogram_time_scale) as usize;
 
 					*buckets.entry(bucket_idx).or_default() += 1;
 				}
@@ -99,26 +100,26 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 					.map(|(bucket_idx, bucket)| {
 						let width = 1.0 / *histogram_time_scale;
 						let center = bucket_idx as f64 / *histogram_time_scale + width / 2.0;
-						let height = *histogram_time_scale * bucket as f64 / frame_times.len() as f64;
+						let height = *histogram_time_scale * bucket as f64 / render_frame_times.len() as f64;
 
 						egui_plot::Bar::new(center, height).width(width)
 					})
 					.collect()
 			},
-			false => frame_times
+			false => render_frame_times
 				.iter()
 				.enumerate()
-				.map(|(frame_idx, frame_time)| {
+				.map(|(frame_idx, render_frame_time)| {
 					egui_plot::Bar::new(
 						frame_idx as f64,
-						self::frame_time_non_cumulative(frame_time, duration_idx).as_millis_f64(),
+						self::render_frame_time_non_cumulative(render_frame_time, duration_idx).as_millis_f64(),
 					)
 					.width(1.0)
 				})
 				.collect(),
 		};
 
-		let mut chart = egui_plot::BarChart::new(self::frame_time_name(duration_idx), bars);
+		let mut chart = egui_plot::BarChart::new(self::render_frame_time_name(duration_idx), bars);
 		if !*is_histogram && *stack_charts {
 			chart = chart.stack_on(&charts.iter().collect::<Vec<_>>());
 		}
@@ -142,7 +143,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 }
 
 /// Returns the duration with index `idx`
-pub fn frame_time(frame_time: &FrameTime, idx: usize) -> Duration {
+pub fn render_frame_time(frame_time: &RenderFrameTime, idx: usize) -> Duration {
 	match idx {
 		0 => frame_time.paint_egui,
 		1 => frame_time.render_start,
@@ -155,15 +156,15 @@ pub fn frame_time(frame_time: &FrameTime, idx: usize) -> Duration {
 }
 
 /// Returns the non-cumulative duration with index `idx`
-pub fn frame_time_non_cumulative(frame_time: &FrameTime, idx: usize) -> Duration {
+pub fn render_frame_time_non_cumulative(frame_time: &RenderFrameTime, idx: usize) -> Duration {
 	match idx {
-		0 => self::frame_time(frame_time, 0),
-		_ => self::frame_time(frame_time, idx) - self::frame_time(frame_time, idx - 1),
+		0 => self::render_frame_time(frame_time, 0),
+		_ => self::render_frame_time(frame_time, idx) - self::render_frame_time(frame_time, idx - 1),
 	}
 }
 
 /// Returns the name for a frame time duration
-pub fn frame_time_name(idx: usize) -> &'static str {
+pub fn render_frame_time_name(idx: usize) -> &'static str {
 	match idx {
 		0 => "Paint egui",
 		1 => "Render start",

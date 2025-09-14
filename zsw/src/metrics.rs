@@ -13,7 +13,7 @@ use {
 /// Inner
 #[derive(Debug)]
 struct Inner {
-	frame_times: HashMap<WindowId, FrameTimes>,
+	frame_times: HashMap<WindowId, RenderFrameTimes>,
 }
 
 /// Metrics
@@ -33,7 +33,7 @@ impl Metrics {
 	}
 
 	/// Adds a frame time to the metrics
-	pub fn frame_times_add(&self, window_id: WindowId, frame_time: FrameTime) {
+	pub fn render_frame_times_add(&self, window_id: WindowId, frame_time: RenderFrameTime) {
 		let mut inner = self.inner.lock();
 		let frame_times = inner.frame_times.entry(window_id).or_default();
 		if frame_times.paused {
@@ -47,12 +47,12 @@ impl Metrics {
 	}
 
 	/// Pauses the frame times for a window
-	pub fn frame_times_pause(&self, window_id: WindowId, pause: bool) {
+	pub fn render_frame_times_pause(&self, window_id: WindowId, pause: bool) {
 		self.inner.lock().frame_times.entry(window_id).or_default().paused = pause;
 	}
 
 	/// Returns if the frame time is paused
-	pub fn frame_times_is_paused(&self, window_id: WindowId) -> bool {
+	pub fn render_frame_times_is_paused(&self, window_id: WindowId) -> bool {
 		match self.inner.lock().frame_times.get(&window_id) {
 			Some(frame_times) => frame_times.paused,
 			None => true,
@@ -60,7 +60,7 @@ impl Metrics {
 	}
 
 	/// Returns the max number of frame times kept
-	pub fn frame_times_max_len(&self, window_id: WindowId) -> usize {
+	pub fn render_frame_times_max_len(&self, window_id: WindowId) -> usize {
 		match self.inner.lock().frame_times.get(&window_id) {
 			Some(frame_times) => frame_times.max_len,
 			None => 0,
@@ -68,12 +68,12 @@ impl Metrics {
 	}
 
 	/// Sets the max number of frame times kept
-	pub fn frame_times_set_max_len(&self, window_id: WindowId, max_len: usize) {
+	pub fn render_frame_times_set_max_len(&self, window_id: WindowId, max_len: usize) {
 		self.inner.lock().frame_times.entry(window_id).or_default().max_len = max_len;
 	}
 
 	/// Returns the frame times from the metrics
-	pub fn frame_times(&self) -> BTreeMap<WindowId, Vec<FrameTime>> {
+	pub fn render_frame_times(&self) -> BTreeMap<WindowId, Vec<RenderFrameTime>> {
 		self.inner
 			.lock()
 			.frame_times
@@ -83,11 +83,11 @@ impl Metrics {
 	}
 }
 
-/// Frame times
+/// Render frame times
 #[derive(Debug)]
-struct FrameTimes {
-	/// Frame times
-	times: VecDeque<FrameTime>,
+struct RenderFrameTimes {
+	/// Render frame times
+	times: VecDeque<RenderFrameTime>,
 
 	/// Maximum frame times
 	max_len: usize,
@@ -96,7 +96,7 @@ struct FrameTimes {
 	paused: bool,
 }
 
-impl Default for FrameTimes {
+impl Default for RenderFrameTimes {
 	fn default() -> Self {
 		Self {
 			times:   VecDeque::new(),
@@ -107,12 +107,12 @@ impl Default for FrameTimes {
 	}
 }
 
-/// Frame time.
+/// Render frame time.
 ///
 /// These are the durations (cumulative by order) that it
 /// took to perform each step of the frame
 #[derive(Clone, Copy, Debug)]
-pub struct FrameTime {
+pub struct RenderFrameTime {
 	pub paint_egui:    Duration,
 	pub render_start:  Duration,
 	pub render_panels: Duration,

@@ -347,14 +347,16 @@ async fn renderer(
 		}
 		let frame_resize = frame_start.elapsed();
 
-		shared.metrics.frame_times_add(window.id(), metrics::FrameTime {
-			paint_egui:    frame_paint_egui,
-			render_start:  frame_render_start,
-			render_panels: frame_render_panels,
-			render_egui:   frame_render_egui,
-			render_finish: frame_render_finish,
-			resize:        frame_resize,
-		});
+		shared
+			.metrics
+			.render_frame_times_add(window.id(), metrics::RenderFrameTime {
+				paint_egui:    frame_paint_egui,
+				render_start:  frame_render_start,
+				render_panels: frame_render_panels,
+				render_egui:   frame_render_egui,
+				render_finish: frame_render_finish,
+				resize:        frame_resize,
+			});
 	}
 }
 
