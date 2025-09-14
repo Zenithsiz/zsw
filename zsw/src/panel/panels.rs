@@ -22,7 +22,7 @@ use {
 	std::sync::Arc,
 	tokio::{
 		fs,
-		sync::{Mutex, MutexGuard},
+		sync::{Mutex, MutexGuard, RwLock},
 	},
 	zsw_util::{AppError, UnwrapOrReturnExt, WalkDir},
 	zutil_cloned::cloned,
@@ -32,7 +32,7 @@ use {
 #[derive(Debug)]
 struct Inner {
 	/// Profile
-	profile: Option<Arc<Mutex<Profile>>>,
+	profile: Option<Arc<RwLock<Profile>>>,
 
 	/// Panels
 	panels: Vec<Panel>,
@@ -81,7 +81,7 @@ impl Panels {
 		{
 			let mut inner = self.inner.lock().await;
 			if let Some(old_profile) = &inner.profile {
-				tracing::info!("Dropping previous profile: {:?}", old_profile.lock().await.name);
+				tracing::info!("Dropping previous profile: {:?}", old_profile.read().await.name);
 				inner.panels.clear();
 			}
 			inner.profile = Some(Arc::clone(&profile));
@@ -91,7 +91,7 @@ impl Panels {
 
 		// Then load it's panels
 		profile
-			.lock()
+			.read()
 			.await
 			.panels
 			.iter()
@@ -163,7 +163,7 @@ async fn load_playlist(
 		.load(playlist_name.clone())
 		.await
 		.context("Unable to load playlist")?
-		.lock()
+		.read()
 		.await
 		.items
 		.iter()

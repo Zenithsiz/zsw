@@ -8,13 +8,13 @@ use {
 	futures::TryStreamExt,
 	serde::{Serialize, de::DeserializeOwned},
 	std::{collections::HashMap, ffi::OsStr, hash::Hash, path::PathBuf, sync::Arc},
-	tokio::sync::{Mutex, OnceCell},
+	tokio::sync::{Mutex, OnceCell, RwLock},
 	tokio_stream::{StreamExt, wrappers::ReadDirStream},
 	zutil_cloned::cloned,
 };
 
 /// Resource storage
-type ResourceStorage<V> = Arc<OnceCell<Arc<Mutex<V>>>>;
+type ResourceStorage<V> = Arc<OnceCell<Arc<RwLock<V>>>>;
 
 /// Resource manager
 #[derive(Debug)]
@@ -48,7 +48,7 @@ impl<N, V, S> ResourceManager<N, V, S> {
 	pub async fn load_all(self: &Arc<Self>) -> Result<(), AppError>
 	where
 		N: Eq + Hash + Clone + From<String> + AsRef<str> + Send + 'static,
-		V: FromSerialized<N, S> + Send + 'static,
+		V: FromSerialized<N, S> + Send + Sync + 'static,
 		S: DeserializeOwned + 'static,
 	{
 		tokio::fs::read_dir(&self.root)
@@ -92,11 +92,11 @@ impl<N, V, S> ResourceManager<N, V, S> {
 	}
 
 	/// Adds a new value
-	pub async fn add(&self, name: N, value: V) -> Arc<Mutex<V>>
+	pub async fn add(&self, name: N, value: V) -> Arc<RwLock<V>>
 	where
 		N: Eq + Hash,
 	{
-		let value = Arc::new(Mutex::new(value));
+		let value = Arc::new(RwLock::new(value));
 		_ = self
 			.values
 			.lock()
@@ -107,7 +107,7 @@ impl<N, V, S> ResourceManager<N, V, S> {
 	}
 
 	/// Loads a value by name
-	pub async fn load(&self, name: N) -> Result<Arc<Mutex<V>>, AppError>
+	pub async fn load(&self, name: N) -> Result<Arc<RwLock<V>>, AppError>
 	where
 		N: Eq + Hash + Clone + AsRef<str>,
 		V: FromSerialized<N, S>,
@@ -131,7 +131,7 @@ impl<N, V, S> ResourceManager<N, V, S> {
 				let value = toml::from_str::<S>(&toml).context("Unable to parse value")?;
 				let value = V::from_serialized(name, value);
 
-				Ok(Arc::new(Mutex::new(value)))
+				Ok(Arc::new(RwLock::new(value)))
 			})
 			.await
 			.map(Arc::clone)
@@ -157,7 +157,7 @@ impl<N, V, S> ResourceManager<N, V, S> {
 
 			Arc::clone(value)
 		};
-		let value = value.lock().await;
+		let value = value.read().await;
 		let value = value.to_serialized(name);
 
 		let value = toml::to_string_pretty(&value).context("Unable to serialize value")?;
@@ -169,7 +169,7 @@ impl<N, V, S> ResourceManager<N, V, S> {
 	}
 
 	/// Returns all values
-	pub async fn get_all(&self) -> Vec<Arc<Mutex<V>>> {
+	pub async fn get_all(&self) -> Vec<Arc<RwLock<V>>> {
 		self.values
 			.lock()
 			.await

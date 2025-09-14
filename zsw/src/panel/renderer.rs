@@ -250,7 +250,7 @@ impl PanelsRenderer {
 
 			// The display might have changed asynchronously from the panel geometries,
 			// so resize it to ensure we have a panel geometry for each display geometry.
-			let display = panel.display.lock().await;
+			let display = panel.display.read().await;
 			panel
 				.geometries
 				.resize_with(display.geometries.len(), PanelGeometry::new);

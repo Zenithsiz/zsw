@@ -17,7 +17,7 @@ pub fn draw_profiles_tab(
 	panels: &Arc<Panels>,
 ) {
 	for profile in profiles.get_all().block_on() {
-		let profile = profile.lock().block_on();
+		let profile = profile.read().block_on();
 
 		ui.collapsing(profile.name.to_string(), |ui| {
 			if ui.button("Set active").clicked() {

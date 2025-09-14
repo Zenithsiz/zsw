@@ -37,7 +37,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 	}
 
 	for panel in &mut *panels {
-		let mut display = panel.display.lock().block_on();
+		let mut display = panel.display.write().block_on();
 
 		let mut name = egui::WidgetText::from(display.name.to_string());
 		if display

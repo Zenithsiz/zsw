@@ -20,14 +20,14 @@ pub use self::{
 use {
 	crate::{display::Display, playlist::PlaylistPlayer},
 	std::sync::Arc,
-	tokio::sync::Mutex,
+	tokio::sync::RwLock,
 };
 
 /// Panel
 #[derive(Debug)]
 pub struct Panel {
 	/// Display
-	pub display: Arc<Mutex<Display>>,
+	pub display: Arc<RwLock<Display>>,
 
 	/// Geometries
 	pub geometries: Vec<PanelGeometry>,
@@ -38,7 +38,7 @@ pub struct Panel {
 
 impl Panel {
 	/// Creates a new panel
-	pub fn new(display: Arc<Mutex<Display>>, state: PanelState) -> Self {
+	pub fn new(display: Arc<RwLock<Display>>, state: PanelState) -> Self {
 		Self {
 			display,
 			geometries: vec![],

@@ -6,7 +6,7 @@ use {crate::playlist::Playlists, std::sync::Arc, zsw_util::TokioTaskBlockOn, zut
 /// Draws the playlists tab
 pub fn draw_playlists_tab(ui: &mut egui::Ui, playlists: &Arc<Playlists>) {
 	for playlist in playlists.get_all().block_on() {
-		let playlist = playlist.lock().block_on();
+		let playlist = playlist.read().block_on();
 
 		ui.collapsing(playlist.name.to_string(), |ui| {
 			if ui.button("Save").clicked() {
