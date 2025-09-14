@@ -18,9 +18,9 @@ use {
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
-		sync::{Arc, OnceLock},
+		sync::Arc,
 	},
-	tokio::sync::Mutex,
+	tokio::sync::{Mutex, OnceCell},
 	wgpu::util::DeviceExt,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_util::{AppError, Rect},
@@ -44,7 +44,7 @@ pub struct PanelsRendererShared {
 	uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Fade image bind group layout
-	fade_image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
+	fade_image_bind_group_layout: OnceCell<wgpu::BindGroupLayout>,
 }
 
 impl PanelsRendererShared {
@@ -61,7 +61,7 @@ impl PanelsRendererShared {
 			vertices,
 			indices,
 			uniforms_bind_group_layout,
-			fade_image_bind_group_layout: OnceLock::new(),
+			fade_image_bind_group_layout: OnceCell::new(),
 		}
 	}
 }
@@ -190,7 +190,8 @@ impl PanelsRenderer {
 						PanelState::Fade(_) => {
 							let fade_image_bind_group_layout = shared
 								.fade_image_bind_group_layout
-								.get_or_init(|| self::create_fade_image_bind_group_layout(wgpu));
+								.get_or_init(async || self::create_fade_image_bind_group_layout(wgpu))
+								.await;
 							&[&shared.uniforms_bind_group_layout, fade_image_bind_group_layout]
 						},
 						PanelState::Slide(_) => &[&shared.uniforms_bind_group_layout],
@@ -219,24 +220,29 @@ impl PanelsRenderer {
 					let panel_images = panel_state.images_mut();
 					let image_sampler = panel_images
 						.image_sampler
-						.get_or_init(|| self::create_image_sampler(wgpu));
+						.get_or_init(async || self::create_image_sampler(wgpu))
+						.await;
 
 					let [prev, cur, next] = [&panel_images.prev, &panel_images.cur, &panel_images.next]
 						.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
 
-					let image_bind_group = panel_images.image_bind_group.get_or_init(|| {
-						let fade_image_bind_group_layout = shared
-							.fade_image_bind_group_layout
-							.get_or_init(|| self::create_fade_image_bind_group_layout(wgpu));
-						self::create_image_bind_group(
-							wgpu,
-							fade_image_bind_group_layout,
-							prev,
-							cur,
-							next,
-							image_sampler,
-						)
-					});
+					let image_bind_group = panel_images
+						.image_bind_group
+						.get_or_init(async || {
+							let fade_image_bind_group_layout = shared
+								.fade_image_bind_group_layout
+								.get_or_init(async || self::create_fade_image_bind_group_layout(wgpu))
+								.await;
+							self::create_image_bind_group(
+								wgpu,
+								fade_image_bind_group_layout,
+								prev,
+								cur,
+								next,
+								image_sampler,
+							)
+						})
+						.await;
 					render_pass.set_bind_group(1, image_bind_group, &[]);
 				},
 				PanelState::Slide(_panel_state) => (),
