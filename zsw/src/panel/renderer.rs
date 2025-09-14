@@ -219,12 +219,12 @@ impl PanelsRenderer {
 					let panel_images = panel_state.images_mut();
 					let image_sampler = panel_images
 						.image_sampler
-						.get_or_insert_with(|| self::create_image_sampler(wgpu));
+						.get_or_init(|| self::create_image_sampler(wgpu));
 
 					let [prev, cur, next] = [&panel_images.prev, &panel_images.cur, &panel_images.next]
 						.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
 
-					let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
+					let image_bind_group = panel_images.image_bind_group.get_or_init(|| {
 						let fade_image_bind_group_layout = shared
 							.fade_image_bind_group_layout
 							.get_or_init(|| self::create_fade_image_bind_group_layout(wgpu));
@@ -237,7 +237,7 @@ impl PanelsRenderer {
 							image_sampler,
 						)
 					});
-					render_pass.set_bind_group(1, &*image_bind_group, &[]);
+					render_pass.set_bind_group(1, image_bind_group, &[]);
 				},
 				PanelState::Slide(_panel_state) => (),
 			}

@@ -6,7 +6,12 @@ use {
 	::image::DynamicImage,
 	app_error::Context,
 	image::imageops,
-	std::{self, mem, path::Path, sync::Arc},
+	std::{
+		self,
+		mem,
+		path::Path,
+		sync::{Arc, OnceLock},
+	},
 	zsw_util::{AppError, Loadable, loadable::Loader},
 	zsw_wgpu::Wgpu,
 	zutil_cloned::cloned,
@@ -25,10 +30,10 @@ pub struct PanelFadeImages {
 	pub next: Option<PanelFadeImage>,
 
 	/// Texture sampler
-	pub image_sampler: Option<wgpu::Sampler>,
+	pub image_sampler: OnceLock<wgpu::Sampler>,
 
 	/// Texture bind group
-	pub image_bind_group: Option<wgpu::BindGroup>,
+	pub image_bind_group: OnceLock<wgpu::BindGroup>,
 
 	/// Next image
 	pub next_image: Loadable<ImageLoadRes, NextImageLoader>,
@@ -63,8 +68,8 @@ impl PanelFadeImages {
 			prev:             None,
 			cur:              None,
 			next:             None,
-			image_sampler:    None,
-			image_bind_group: None,
+			image_sampler:    OnceLock::new(),
+			image_bind_group: OnceLock::new(),
 			next_image:       Loadable::new(NextImageLoader),
 		}
 	}
@@ -79,7 +84,7 @@ impl PanelFadeImages {
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = None;
-		self.image_bind_group = None;
+		self.image_bind_group = OnceLock::new();
 		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
@@ -99,7 +104,7 @@ impl PanelFadeImages {
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = None;
-		self.image_bind_group = None;
+		self.image_bind_group = OnceLock::new();
 		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
@@ -170,7 +175,7 @@ impl PanelFadeImages {
 				Slot::Cur => self.cur = Some(image),
 				Slot::Next => self.next = Some(image),
 			}
-			self.image_bind_group = None;
+			self.image_bind_group = OnceLock::new();
 		}
 	}
 
