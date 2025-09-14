@@ -14,6 +14,7 @@ use {
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
+	futures::{TryStreamExt, stream::FuturesUnordered},
 	itertools::Itertools,
 	std::{
 		borrow::Cow,
@@ -162,124 +163,136 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(shared.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, shared.vertices.slice(..));
 
-		for panel in panels.get_all().await {
-			let panel = &mut *panel.lock().await;
+		// Then render all panels simultaneously
+		let render_pass = Mutex::new(render_pass);
+		panels
+			.get_all()
+			.await
+			.into_iter()
+			.map(async |panel| {
+				let panel = &mut *panel.lock().await;
 
-			// Update the panel before drawing it
-			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-			match &mut panel.state {
-				PanelState::None(_) => (),
-				PanelState::Fade(state) => state.update(wgpu).await,
-				PanelState::Slide(_) => (),
-			}
-
-			// If the panel images are empty, there's no sense in rendering it either
-			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-			let are_images_empty = match &panel.state {
-				PanelState::None(_) => false,
-				PanelState::Fade(state) => state.images().is_empty(),
-				PanelState::Slide(_) => false,
-			};
-			if are_images_empty {
-				continue;
-			}
-
-			let render_pipeline = match shared.render_pipelines.lock().await.entry(panel.state.shader().name()) {
-				hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
-				hash_map::Entry::Vacant(entry) => {
-					let bind_group_layouts = match panel.state {
-						PanelState::None(_) => &[&shared.uniforms_bind_group_layout] as &[_],
-						PanelState::Fade(_) => {
-							let fade_image_bind_group_layout = shared
-								.fade_image_bind_group_layout
-								.get_or_init(async || self::create_fade_image_bind_group_layout(wgpu))
-								.await;
-							&[&shared.uniforms_bind_group_layout, fade_image_bind_group_layout]
-						},
-						PanelState::Slide(_) => &[&shared.uniforms_bind_group_layout],
-					};
-
-					let render_pipeline = self::create_render_pipeline(
-						wgpu_renderer,
-						wgpu,
-						bind_group_layouts,
-						panel.state.shader(),
-						self.msaa_samples,
-					)
-					.context("Unable to create render pipeline")?;
-
-					Arc::clone(entry.insert(Arc::new(render_pipeline)))
-				},
-			};
-
-			// Bind the pipeline for the specific shader
-			render_pass.set_pipeline(&render_pipeline);
-
-			// Bind the extra bind groups
-			match &mut panel.state {
-				PanelState::None(_panel_state) => (),
-				PanelState::Fade(panel_state) => {
-					let panel_images = panel_state.images_mut();
-					let image_sampler = panel_images
-						.image_sampler
-						.get_or_init(async || self::create_image_sampler(wgpu))
-						.await;
-
-					let [prev, cur, next] = [&panel_images.prev, &panel_images.cur, &panel_images.next]
-						.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
-
-					let image_bind_group = panel_images
-						.image_bind_group
-						.get_or_init(async || {
-							let fade_image_bind_group_layout = shared
-								.fade_image_bind_group_layout
-								.get_or_init(async || self::create_fade_image_bind_group_layout(wgpu))
-								.await;
-							self::create_image_bind_group(
-								wgpu,
-								fade_image_bind_group_layout,
-								prev,
-								cur,
-								next,
-								image_sampler,
-							)
-						})
-						.await;
-					render_pass.set_bind_group(1, image_bind_group, &[]);
-				},
-				PanelState::Slide(_panel_state) => (),
-			}
-
-			// The display might have changed asynchronously from the panel geometries,
-			// so resize it to ensure we have a panel geometry for each display geometry.
-			let display = panel.display.read().await;
-			panel
-				.geometries
-				.resize_with(display.geometries.len(), PanelGeometry::new);
-
-			for (&display_geometry, panel_geometry) in display.geometries.iter().zip_eq(&mut panel.geometries) {
-				// If this geometry is outside our window, we can safely ignore it
-				if window_geometry.intersection(display_geometry).is_none() {
-					continue;
+				// Update the panel before drawing it
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+				match &mut panel.state {
+					PanelState::None(_) => (),
+					PanelState::Fade(state) => state.update(wgpu).await,
+					PanelState::Slide(_) => (),
 				}
 
-				// Write and bind the uniforms
-				Self::write_bind_uniforms(
-					wgpu,
-					shared,
-					frame.surface_size,
-					&panel.state,
-					window_geometry,
-					window,
-					display_geometry,
-					panel_geometry,
-					&mut render_pass,
-				);
+				// If the panel images are empty, there's no sense in rendering it either
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+				let are_images_empty = match &panel.state {
+					PanelState::None(_) => false,
+					PanelState::Fade(state) => state.images().is_empty(),
+					PanelState::Slide(_) => false,
+				};
+				if are_images_empty {
+					return Ok(());
+				}
 
-				// Finally draw
-				render_pass.draw_indexed(0..6, 0, 0..1);
-			}
-		}
+				let render_pipeline = match shared.render_pipelines.lock().await.entry(panel.state.shader().name()) {
+					hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
+					hash_map::Entry::Vacant(entry) => {
+						let bind_group_layouts = match panel.state {
+							PanelState::None(_) => &[&shared.uniforms_bind_group_layout] as &[_],
+							PanelState::Fade(_) => {
+								let fade_image_bind_group_layout = shared
+									.fade_image_bind_group_layout
+									.get_or_init(async || self::create_fade_image_bind_group_layout(wgpu))
+									.await;
+								&[&shared.uniforms_bind_group_layout, fade_image_bind_group_layout]
+							},
+							PanelState::Slide(_) => &[&shared.uniforms_bind_group_layout],
+						};
+
+						let render_pipeline = self::create_render_pipeline(
+							wgpu_renderer,
+							wgpu,
+							bind_group_layouts,
+							panel.state.shader(),
+							self.msaa_samples,
+						)
+						.context("Unable to create render pipeline")?;
+
+						Arc::clone(entry.insert(Arc::new(render_pipeline)))
+					},
+				};
+
+				// Bind the pipeline for the specific shader
+				let mut render_pass = render_pass.lock().await;
+				render_pass.set_pipeline(&render_pipeline);
+
+				// Bind the extra bind groups
+				match &mut panel.state {
+					PanelState::None(_panel_state) => (),
+					PanelState::Fade(panel_state) => {
+						let panel_images = panel_state.images_mut();
+						let image_sampler = panel_images
+							.image_sampler
+							.get_or_init(async || self::create_image_sampler(wgpu))
+							.await;
+
+						let [prev, cur, next] = [&panel_images.prev, &panel_images.cur, &panel_images.next]
+							.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
+
+						let image_bind_group = panel_images
+							.image_bind_group
+							.get_or_init(async || {
+								let fade_image_bind_group_layout = shared
+									.fade_image_bind_group_layout
+									.get_or_init(async || self::create_fade_image_bind_group_layout(wgpu))
+									.await;
+								self::create_image_bind_group(
+									wgpu,
+									fade_image_bind_group_layout,
+									prev,
+									cur,
+									next,
+									image_sampler,
+								)
+							})
+							.await;
+						render_pass.set_bind_group(1, image_bind_group, &[]);
+					},
+					PanelState::Slide(_panel_state) => (),
+				}
+
+				// The display might have changed asynchronously from the panel geometries,
+				// so resize it to ensure we have a panel geometry for each display geometry.
+				let display = panel.display.read().await;
+				panel
+					.geometries
+					.resize_with(display.geometries.len(), PanelGeometry::new);
+
+				for (&display_geometry, panel_geometry) in display.geometries.iter().zip_eq(&mut panel.geometries) {
+					// If this geometry is outside our window, we can safely ignore it
+					if window_geometry.intersection(display_geometry).is_none() {
+						continue;
+					}
+
+					// Write and bind the uniforms
+					Self::write_bind_uniforms(
+						wgpu,
+						shared,
+						frame.surface_size,
+						&panel.state,
+						window_geometry,
+						window,
+						display_geometry,
+						panel_geometry,
+						&mut render_pass,
+					);
+
+					// Finally draw
+					render_pass.draw_indexed(0..6, 0, 0..1);
+				}
+
+				Ok::<_, AppError>(())
+			})
+			.collect::<FuturesUnordered<_>>()
+			.try_collect::<()>()
+			.await?;
 
 		Ok(())
 	}
