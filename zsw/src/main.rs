@@ -14,7 +14,10 @@
 	stmt_expr_attributes,
 	nonpoison_mutex,
 	sync_nonpoison,
-	duration_millis_float
+	duration_millis_float,
+	try_trait_v2,
+	async_fn_traits,
+	unwrap_infallible
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -53,7 +56,6 @@ use {
 	clap::Parser,
 	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
-	futures::{StreamExt, stream::FuturesUnordered},
 	std::{collections::HashMap, fs, sync::Arc, time::Instant},
 	winit::{
 		application::ApplicationHandler,
@@ -395,10 +397,7 @@ async fn paint_egui(
 			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
 			shared
 				.panels
-				.get_all()
-				.await
-				.into_iter()
-				.map(async |panel| {
+				.for_each(async |panel| {
 					let panel = &mut *panel.lock().await;
 					let display = panel.display.read().await;
 
@@ -457,8 +456,6 @@ async fn paint_egui(
 						}
 					}
 				})
-				.collect::<FuturesUnordered<_>>()
-				.collect::<()>()
 				.await;
 
 			Ok::<_, !>(())

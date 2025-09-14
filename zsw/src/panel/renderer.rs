@@ -14,7 +14,6 @@ use {
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
-	futures::{TryStreamExt, stream::FuturesUnordered},
 	itertools::Itertools,
 	std::{
 		borrow::Cow,
@@ -166,10 +165,7 @@ impl PanelsRenderer {
 		// Then render all panels simultaneously
 		let render_pass = Mutex::new(render_pass);
 		panels
-			.get_all()
-			.await
-			.into_iter()
-			.map(async |panel| {
+			.try_for_each(async |panel| {
 				let panel = &mut *panel.lock().await;
 
 				// Update the panel before drawing it
@@ -290,8 +286,6 @@ impl PanelsRenderer {
 
 				Ok::<_, AppError>(())
 			})
-			.collect::<FuturesUnordered<_>>()
-			.try_collect::<()>()
 			.await?;
 
 		Ok(())

@@ -17,6 +17,7 @@ use {
 		},
 	},
 	app_error::Context,
+	core::ops::{ControlFlow, Try},
 	futures::{StreamExt, TryStreamExt, stream::FuturesUnordered},
 	std::sync::Arc,
 	tokio::{
@@ -58,6 +59,53 @@ impl Panels {
 	/// Gets all of the panels
 	pub async fn get_all(&self) -> Vec<Arc<Mutex<Panel>>> {
 		self.inner.lock().await.panels.clone()
+	}
+
+	/// Executes an async closure for each panel in parallel
+	pub async fn for_each<F, Fut>(&self, mut f: F)
+	where
+		F: FnMut(Arc<Mutex<Panel>>) -> Fut,
+		Fut: Future<Output = ()>,
+	{
+		self.try_for_each(|panel| {
+			let fut = f(panel);
+			async move {
+				fut.await;
+				Ok::<_, !>(())
+			}
+		})
+		.await
+		.into_ok()
+	}
+
+	/// Executes an async closure for each panel in parallel
+	pub async fn try_for_each<T, F, Fut>(&self, mut f: F) -> T
+	where
+		T: Try<Output = ()>,
+		F: FnMut(Arc<Mutex<Panel>>) -> Fut,
+		Fut: Future<Output = T>,
+	{
+		let res = self
+			.get_all()
+			.await
+			.into_iter()
+			.map(|panel| {
+				let fut = f(panel);
+				async move {
+					match fut.await.branch() {
+						ControlFlow::Continue(()) => Ok(()),
+						ControlFlow::Break(res) => Err(res),
+					}
+				}
+			})
+			.collect::<FuturesUnordered<_>>()
+			.try_collect::<()>()
+			.await;
+
+		match res {
+			Ok(()) => T::from_output(()),
+			Err(res) => T::from_residual(res),
+		}
 	}
 
 	/// Sets the current profile.
