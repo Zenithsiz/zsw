@@ -12,7 +12,6 @@ use {
 		profile::Profiles,
 	},
 	crossbeam::atomic::AtomicCell,
-	tokio::sync::Mutex,
 	std::sync::Arc,
 	winit::{dpi::PhysicalPosition, event_loop::EventLoopProxy},
 	zsw_wgpu::Wgpu,
@@ -27,7 +26,7 @@ pub struct Shared {
 	pub cursor_pos:  AtomicCell<Option<PhysicalPosition<f64>>>,
 
 	pub wgpu:                   Wgpu,
-	pub panels_renderer_shared: Mutex<PanelsRendererShared>,
+	pub panels_renderer_shared: PanelsRendererShared,
 
 	pub displays:  Arc<Displays>,
 	pub playlists: Arc<Playlists>,

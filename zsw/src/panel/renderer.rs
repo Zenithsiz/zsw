@@ -14,13 +14,14 @@ use {
 	crate::panel::PanelGeometry,
 	app_error::Context,
 	cgmath::Vector2,
-	tokio::sync::Mutex,
+	std::sync::OnceLock,
 	itertools::Itertools,
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
 		sync::Arc,
 	},
+	tokio::sync::Mutex,
 	wgpu::util::DeviceExt,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_util::{AppError, Rect},
@@ -44,7 +45,7 @@ pub struct PanelsRendererShared {
 	uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Fade image bind group layout
-	fade_image_bind_group_layout: Option<wgpu::BindGroupLayout>,
+	fade_image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 }
 
 impl PanelsRendererShared {
@@ -61,7 +62,7 @@ impl PanelsRendererShared {
 			vertices,
 			indices,
 			uniforms_bind_group_layout,
-			fade_image_bind_group_layout: None,
+			fade_image_bind_group_layout: OnceLock::new(),
 		}
 	}
 }
@@ -113,7 +114,7 @@ impl PanelsRenderer {
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		wgpu: &Wgpu,
-		shared: &mut PanelsRendererShared,
+		shared: &PanelsRendererShared,
 		panels: &mut [Panel],
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
@@ -190,7 +191,7 @@ impl PanelsRenderer {
 						PanelState::Fade(_) => {
 							let fade_image_bind_group_layout = shared
 								.fade_image_bind_group_layout
-								.get_or_insert_with(|| self::create_fade_image_bind_group_layout(wgpu));
+								.get_or_init(|| self::create_fade_image_bind_group_layout(wgpu));
 							&[&shared.uniforms_bind_group_layout, fade_image_bind_group_layout]
 						},
 						PanelState::Slide(_) => &[&shared.uniforms_bind_group_layout],
@@ -226,8 +227,8 @@ impl PanelsRenderer {
 
 					let image_bind_group = panel_images.image_bind_group.get_or_insert_with(|| {
 						let fade_image_bind_group_layout = shared
-								.fade_image_bind_group_layout
-								.get_or_insert_with(|| self::create_fade_image_bind_group_layout(wgpu));
+							.fade_image_bind_group_layout
+							.get_or_init(|| self::create_fade_image_bind_group_layout(wgpu));
 						self::create_image_bind_group(
 							wgpu,
 							fade_image_bind_group_layout,
