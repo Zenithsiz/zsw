@@ -104,6 +104,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 						frame_idx as f64,
 						self::frame_time_non_cumulative(frame_time, duration_idx).as_millis_f64(),
 					)
+					.width(1.0)
 				})
 				.collect(),
 		};
