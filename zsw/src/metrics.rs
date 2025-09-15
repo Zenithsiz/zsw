@@ -81,6 +81,14 @@ impl Metrics {
 			.map(|(&window_id, frame_times)| (window_id, frame_times.times.iter().copied().collect()))
 			.collect()
 	}
+
+	/// Returns all window ids from the metrics
+	pub fn window_ids<C>(&self) -> C
+	where
+		C: FromIterator<WindowId>,
+	{
+		self.inner.lock().frame_times.keys().copied().collect()
+	}
 }
 
 /// Render frame times

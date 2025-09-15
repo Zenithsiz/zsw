@@ -5,23 +5,20 @@ use {
 	crate::metrics::{Metrics, RenderFrameTime},
 	core::time::Duration,
 	egui::Widget,
-	std::collections::HashMap,
+	std::collections::{BTreeSet, HashMap},
 	winit::window::WindowId,
 };
 
 /// Draws the metrics tab
-#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
+	// Get the window, otherwise we have nothing to render
+	let Some(window_id) = self::render_window_select(ui, metrics) else {
+		ui.weak("No window selected");
+		return;
+	};
+
 	let render_frame_times = metrics.render_frame_times();
 
-	// Use the first window as the current window if we hadn't selected one yet
-	let cur_window_id = super::get_data::<Option<WindowId>>(ui, "metrics-tab-cur-window");
-	let mut cur_window_id = cur_window_id.lock();
-	if cur_window_id.is_none() &&
-		let Some((&window_id, _)) = render_frame_times.first_key_value()
-	{
-		*cur_window_id = Some(window_id);
-	}
 
 	// TODO: Turn this into some enum between histogram / time
 	let is_histogram = super::get_data::<bool>(ui, "metrics-tab-histogram");
@@ -32,51 +29,39 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 
 	let stack_charts = super::get_data_with_default::<bool>(ui, "metrics-tab-chart-stacks", || true);
 	let mut stack_charts = stack_charts.lock();
-	egui::ScrollArea::horizontal().show(ui, |ui| {
-		egui::ComboBox::from_id_salt("Window")
-			.selected_text(format!("{cur_window_id:?}"))
-			.show_ui(ui, |ui| {
-				// TODO: Get windows through another way?
-				for &window_id in render_frame_times.keys() {
-					ui.selectable_value(&mut *cur_window_id, Some(window_id), format!("{window_id:?}"));
-				}
-			});
 
+	ui.horizontal(|ui| {
+		let mut is_paused = metrics.render_frame_times_is_paused(window_id);
+		if ui.toggle_value(&mut is_paused, "Pause").changed() {
+			metrics.render_frame_times_pause(window_id, is_paused);
+		}
+
+		let mut max_len = metrics.render_frame_times_max_len(window_id);
 		ui.horizontal(|ui| {
-			let Some(window_id) = *cur_window_id else { return };
-			let mut is_paused = metrics.render_frame_times_is_paused(window_id);
-			if ui.toggle_value(&mut is_paused, "Pause").changed() {
-				metrics.render_frame_times_pause(window_id, is_paused);
-			}
-
-			let mut max_len = metrics.render_frame_times_max_len(window_id);
-			ui.horizontal(|ui| {
-				ui.label("Maximum frames: ");
-				if egui::Slider::new(&mut max_len, 0..=60 * 100).ui(ui).changed() {
-					metrics.render_frame_times_set_max_len(window_id, max_len);
-				}
-			});
-
-			ui.toggle_value(&mut is_histogram, "Histogram");
-
-			match *is_histogram {
-				true => {
-					ui.horizontal(|ui| {
-						ui.label("Time scale: ");
-						egui::Slider::new(&mut *histogram_time_scale, 1.0..=1000.0)
-							.logarithmic(true)
-							.clamping(egui::SliderClamping::Always)
-							.ui(ui);
-					});
-				},
-				false => {
-					ui.toggle_value(&mut stack_charts, "Stack charts");
-				},
+			ui.label("Maximum frames: ");
+			if egui::Slider::new(&mut max_len, 0..=60 * 100).ui(ui).changed() {
+				metrics.render_frame_times_set_max_len(window_id, max_len);
 			}
 		});
+
+		ui.toggle_value(&mut is_histogram, "Histogram");
+
+		match *is_histogram {
+			true => {
+				ui.horizontal(|ui| {
+					ui.label("Time scale: ");
+					egui::Slider::new(&mut *histogram_time_scale, 1.0..=1000.0)
+						.logarithmic(true)
+						.clamping(egui::SliderClamping::Always)
+						.ui(ui);
+				});
+			},
+			false => {
+				ui.toggle_value(&mut stack_charts, "Stack charts");
+			},
+		}
 	});
 
-	let Some(window_id) = *cur_window_id else { return };
 	let Some(render_frame_times) = render_frame_times.get(&window_id) else {
 		return;
 	};
@@ -140,6 +125,31 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 			plot_ui.bar_chart(chart);
 		}
 	});
+}
+
+/// Renders the window select and returns the selected one
+pub fn render_window_select(ui: &mut egui::Ui, metrics: &Metrics) -> Option<WindowId> {
+	let cur_window_id = super::get_data::<Option<WindowId>>(ui, "metrics-tab-cur-window");
+	let mut cur_window_id = cur_window_id.lock();
+
+	let windows = metrics.window_ids::<BTreeSet<_>>();
+
+	// If we don't have a current window, use the first one available (if any)
+	if cur_window_id.is_none() &&
+		let Some(&window_id) = windows.first()
+	{
+		*cur_window_id = Some(window_id);
+	}
+
+	egui::ComboBox::from_id_salt("metrics-tab-window-selector")
+		.selected_text(cur_window_id.map_or("None".to_owned(), |id| format!("{id:?}")))
+		.show_ui(ui, |ui| {
+			for window_id in windows {
+				ui.selectable_value(&mut *cur_window_id, Some(window_id), format!("{window_id:?}"));
+			}
+		});
+
+	*cur_window_id
 }
 
 /// Returns the duration with index `idx`
