@@ -48,6 +48,7 @@ use {
 		profile::{ProfileName, Profiles},
 		settings_menu::SettingsMenu,
 		shared::Shared,
+		window::WindowMonitorNames,
 	},
 	app_error::Context,
 	args::Args,
@@ -208,6 +209,7 @@ impl WinitApp {
 			profiles,
 			panels: Arc::new(Panels::new()),
 			metrics: Metrics::new(),
+			window_monitor_names: WindowMonitorNames::new(),
 		};
 		let shared = Arc::new(shared);
 
@@ -234,6 +236,10 @@ impl WinitApp {
 	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let windows = window::create(event_loop).context("Unable to create winit event loop and window")?;
 		for app_window in windows {
+			self.shared
+				.window_monitor_names
+				.add(app_window.window.id(), app_window.monitor_name);
+
 			let window = Arc::new(app_window.window);
 			let wgpu_renderer =
 				WgpuRenderer::new(Arc::clone(&window), &self.shared.wgpu).context("Unable to create wgpu renderer")?;
@@ -385,6 +391,7 @@ async fn paint_egui(
 					&shared.profiles,
 					&shared.panels,
 					&shared.metrics,
+					&shared.window_monitor_names,
 					&shared.event_loop_proxy,
 					cursor_pos,
 					window_geometry,

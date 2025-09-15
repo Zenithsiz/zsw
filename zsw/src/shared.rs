@@ -10,6 +10,7 @@ use {
 		panel::{Panels, PanelsRendererShared},
 		playlist::Playlists,
 		profile::Profiles,
+		window::WindowMonitorNames,
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
@@ -35,4 +36,6 @@ pub struct Shared {
 	pub panels: Arc<Panels>,
 
 	pub metrics: Metrics,
+
+	pub window_monitor_names: WindowMonitorNames,
 }

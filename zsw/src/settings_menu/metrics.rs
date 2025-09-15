@@ -2,7 +2,10 @@
 
 // Imports
 use {
-	crate::metrics::{Metrics, RenderFrameTime},
+	crate::{
+		metrics::{Metrics, RenderFrameTime},
+		window::WindowMonitorNames,
+	},
 	core::time::Duration,
 	egui::Widget,
 	std::collections::{BTreeSet, HashMap},
@@ -10,9 +13,9 @@ use {
 };
 
 /// Draws the metrics tab
-pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
+pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_names: &WindowMonitorNames) {
 	// Get the window, otherwise we have nothing to render
-	let Some(window_id) = self::render_window_select(ui, metrics) else {
+	let Some(window_id) = self::render_window_select(ui, metrics, window_monitor_names) else {
 		ui.weak("No window selected");
 		return;
 	};
@@ -128,9 +131,19 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics) {
 }
 
 /// Renders the window select and returns the selected one
-pub fn render_window_select(ui: &mut egui::Ui, metrics: &Metrics) -> Option<WindowId> {
+pub fn render_window_select(
+	ui: &mut egui::Ui,
+	metrics: &Metrics,
+	window_monitor_names: &WindowMonitorNames,
+) -> Option<WindowId> {
 	let cur_window_id = super::get_data::<Option<WindowId>>(ui, "metrics-tab-cur-window");
 	let mut cur_window_id = cur_window_id.lock();
+
+	let window_name = |window_id| {
+		window_monitor_names
+			.get(window_id)
+			.unwrap_or_else(|| format!("{window_id:?}"))
+	};
 
 	let windows = metrics.window_ids::<BTreeSet<_>>();
 
@@ -142,10 +155,10 @@ pub fn render_window_select(ui: &mut egui::Ui, metrics: &Metrics) -> Option<Wind
 	}
 
 	egui::ComboBox::from_id_salt("metrics-tab-window-selector")
-		.selected_text(cur_window_id.map_or("None".to_owned(), |id| format!("{id:?}")))
+		.selected_text(cur_window_id.map_or("None".to_owned(), window_name))
 		.show_ui(ui, |ui| {
 			for window_id in windows {
-				ui.selectable_value(&mut *cur_window_id, Some(window_id), format!("{window_id:?}"));
+				ui.selectable_value(&mut *cur_window_id, Some(window_id), window_name(window_id));
 			}
 		});
 

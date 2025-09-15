@@ -12,7 +12,15 @@ mod profiles;
 
 // Imports
 use {
-	crate::{AppEvent, display::Displays, metrics::Metrics, panel::Panels, playlist::Playlists, profile::Profiles},
+	crate::{
+		AppEvent,
+		display::Displays,
+		metrics::Metrics,
+		panel::Panels,
+		playlist::Playlists,
+		profile::Profiles,
+		window::WindowMonitorNames,
+	},
 	core::{ops::RangeInclusive, str::FromStr, time::Duration},
 	egui::{Widget, mutex::Mutex},
 	std::{path::Path, sync::Arc},
@@ -51,6 +59,7 @@ impl SettingsMenu {
 		profiles: &Arc<Profiles>,
 		panels: &Arc<Panels>,
 		metrics: &Metrics,
+		window_monitor_names: &WindowMonitorNames,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		cursor_pos: Option<LogicalPosition<f32>>,
 		window_geometry: Rect<i32, u32>,
@@ -81,7 +90,7 @@ impl SettingsMenu {
 				Tab::Displays => displays::draw_displays_tab(ui, displays),
 				Tab::Playlists => playlists::draw_playlists_tab(ui, playlists),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, displays, playlists, profiles, panels),
-				Tab::Metrics => metrics::draw_metrics_tab(ui, metrics),
+				Tab::Metrics => metrics::draw_metrics_tab(ui, metrics, window_monitor_names),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
 		});

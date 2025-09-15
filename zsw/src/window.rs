@@ -4,10 +4,11 @@
 use {
 	app_error::Context,
 	cgmath::{Point2, Vector2},
+	std::{collections::HashMap, sync::nonpoison::Mutex},
 	winit::{
 		event_loop::ActiveEventLoop,
 		monitor::MonitorHandle,
-		window::{Fullscreen, Window, WindowAttributes, WindowLevel},
+		window::{Fullscreen, Window, WindowAttributes, WindowId, WindowLevel},
 	},
 	zsw_util::{AppError, Rect},
 };
@@ -16,7 +17,7 @@ use {
 #[derive(Debug)]
 pub struct AppWindow {
 	/// Monitor name
-	pub _monitor_name: String,
+	pub monitor_name: String,
 
 	/// Window
 	pub window: Window,
@@ -52,10 +53,7 @@ pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> 
 				.create_window(window_attrs)
 				.context("Unable to build window")?;
 
-			Ok(AppWindow {
-				_monitor_name: monitor_name,
-				window,
-			})
+			Ok(AppWindow { monitor_name, window })
 		})
 		.collect::<Result<_, AppError>>()
 		.context("Unable to create all windows")
@@ -68,5 +66,31 @@ fn monitor_geometry(monitor: &MonitorHandle) -> Rect<i32, u32> {
 	Rect {
 		pos:  Point2::new(monitor_pos.x, monitor_pos.y),
 		size: Vector2::new(monitor_size.width, monitor_size.height),
+	}
+}
+
+/// Window monitor names
+#[derive(Debug)]
+pub struct WindowMonitorNames {
+	/// Inner
+	inner: Mutex<HashMap<WindowId, String>>,
+}
+
+impl WindowMonitorNames {
+	/// Creates an empty map of window names
+	pub fn new() -> Self {
+		Self {
+			inner: Mutex::new(HashMap::new()),
+		}
+	}
+
+	/// Adds a window's monitor name
+	pub fn add(&self, window_id: WindowId, name: impl Into<String>) {
+		_ = self.inner.lock().insert(window_id, name.into())
+	}
+
+	/// Gets a window's monitor name.
+	pub fn get(&self, window_id: WindowId) -> Option<String> {
+		self.inner.lock().get(&window_id).cloned()
 	}
 }
