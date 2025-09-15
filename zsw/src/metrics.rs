@@ -2,11 +2,9 @@
 
 // Imports
 use {
-	core::time::Duration,
-	std::{
-		collections::{BTreeMap, HashMap, VecDeque},
-		sync::nonpoison::Mutex,
-	},
+	core::{ops::DerefMut, time::Duration},
+	std::collections::{HashMap, VecDeque},
+	tokio::sync::{Mutex, MutexGuard},
 	winit::window::WindowId,
 };
 
@@ -32,83 +30,26 @@ impl Metrics {
 		}
 	}
 
-	/// Adds a frame time to the metrics
-	pub fn render_frame_times_add(&self, window_id: WindowId, frame_time: RenderFrameTime) {
-		let mut window_metrics = self.window_metrics.lock();
-		let window_metrics = window_metrics.entry(window_id).or_default();
-		let frame_times = &mut window_metrics.render_frame_times;
-		if frame_times.paused {
-			return;
-		}
-
-		frame_times.times.push_back(frame_time);
-		if frame_times.times.len() > frame_times.max_len {
-			_ = frame_times.times.drain(..frame_times.times.len() - frame_times.max_len);
-		}
-	}
-
-	/// Pauses the frame times for a window
-	pub fn render_frame_times_pause(&self, window_id: WindowId, pause: bool) {
-		self.window_metrics
-			.lock()
-			.entry(window_id)
-			.or_default()
-			.render_frame_times
-			.paused = pause;
-	}
-
-	/// Returns if the frame time is paused
-	pub fn render_frame_times_is_paused(&self, window_id: WindowId) -> bool {
-		match self.window_metrics.lock().get(&window_id) {
-			Some(metrics) => metrics.render_frame_times.paused,
-			None => true,
-		}
-	}
-
-	/// Returns the max number of frame times kept
-	pub fn render_frame_times_max_len(&self, window_id: WindowId) -> usize {
-		match self.window_metrics.lock().get(&window_id) {
-			Some(metrics) => metrics.render_frame_times.max_len,
-			None => 0,
-		}
-	}
-
-	/// Sets the max number of frame times kept
-	pub fn render_frame_times_set_max_len(&self, window_id: WindowId, max_len: usize) {
-		self.window_metrics
-			.lock()
-			.entry(window_id)
-			.or_default()
-			.render_frame_times
-			.max_len = max_len;
-	}
-
-	/// Returns the frame times from the metrics
-	pub fn render_frame_times(&self) -> BTreeMap<WindowId, Vec<RenderFrameTime>> {
-		self.window_metrics
-			.lock()
-			.iter()
-			.map(|(&window_id, window_metrics)| {
-				(
-					window_id,
-					window_metrics.render_frame_times.times.iter().copied().collect(),
-				)
-			})
-			.collect()
+	/// Accesses render frame times metrics for a window
+	pub async fn render_frame_times(&self, window_id: WindowId) -> impl DerefMut<Target = RenderFrameTimes> {
+		let window_metrics = self.window_metrics.lock().await;
+		MutexGuard::map(window_metrics, |metrics| {
+			&mut metrics.entry(window_id).or_default().render_frame_times
+		})
 	}
 
 	/// Returns all window ids from the metrics
-	pub fn window_ids<C>(&self) -> C
+	pub async fn window_ids<C>(&self) -> C
 	where
 		C: FromIterator<WindowId>,
 	{
-		self.window_metrics.lock().keys().copied().collect()
+		self.window_metrics.lock().await.keys().copied().collect()
 	}
 }
 
 /// Render frame times
 #[derive(Debug)]
-struct RenderFrameTimes {
+pub struct RenderFrameTimes {
 	/// Render frame times
 	times: VecDeque<RenderFrameTime>,
 
@@ -117,6 +58,50 @@ struct RenderFrameTimes {
 
 	/// Paused
 	paused: bool,
+}
+
+impl RenderFrameTimes {
+	/// Adds a frame time to these metrics
+	pub fn add(&mut self, frame_time: RenderFrameTime) {
+		if self.paused {
+			return;
+		}
+
+		self.times.push_back(frame_time);
+		if self.times.len() > self.max_len {
+			_ = self.times.drain(..self.times.len() - self.max_len);
+		}
+	}
+
+	/// Pauses these metrics
+	pub fn pause(&mut self, pause: bool) {
+		self.paused = pause;
+	}
+
+	/// Returns if these metrics are paused
+	pub fn is_paused(&self) -> bool {
+		self.paused
+	}
+
+	/// Returns the max number of frame times kept in these metrics
+	pub fn max_len(&self) -> usize {
+		self.max_len
+	}
+
+	/// Sets the max number of frame times kept in these metrics
+	pub fn set_max_len(&mut self, max_len: usize) {
+		self.max_len = max_len;
+	}
+
+	/// Returns an iterator over the frame times in these metrics
+	pub fn iter(&self) -> impl Iterator<Item = &RenderFrameTime> {
+		self.times.iter()
+	}
+
+	/// Returns the number of frame times in these metrics
+	pub fn len(&self) -> usize {
+		self.times.len()
+	}
 }
 
 impl Default for RenderFrameTimes {

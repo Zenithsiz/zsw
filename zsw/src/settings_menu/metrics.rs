@@ -10,6 +10,7 @@ use {
 	egui::Widget,
 	std::collections::{BTreeSet, HashMap},
 	winit::window::WindowId,
+	zsw_util::TokioTaskBlockOn,
 };
 
 /// Draws the metrics tab
@@ -20,8 +21,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 		return;
 	};
 
-	let render_frame_times = metrics.render_frame_times();
-
+	let mut render_frame_times = metrics.render_frame_times(window_id).block_on();
 
 	// TODO: Turn this into some enum between histogram / time
 	let is_histogram = super::get_data::<bool>(ui, "metrics-tab-histogram");
@@ -34,16 +34,16 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 	let mut stack_charts = stack_charts.lock();
 
 	ui.horizontal(|ui| {
-		let mut is_paused = metrics.render_frame_times_is_paused(window_id);
+		let mut is_paused = render_frame_times.is_paused();
 		if ui.toggle_value(&mut is_paused, "Pause").changed() {
-			metrics.render_frame_times_pause(window_id, is_paused);
+			render_frame_times.pause(is_paused);
 		}
 
-		let mut max_len = metrics.render_frame_times_max_len(window_id);
+		let mut max_len = render_frame_times.max_len();
 		ui.horizontal(|ui| {
 			ui.label("Maximum frames: ");
 			if egui::Slider::new(&mut max_len, 0..=60 * 100).ui(ui).changed() {
-				metrics.render_frame_times_set_max_len(window_id, max_len);
+				render_frame_times.set_max_len(max_len);
 			}
 		});
 
@@ -65,16 +65,12 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 		}
 	});
 
-	let Some(render_frame_times) = render_frame_times.get(&window_id) else {
-		return;
-	};
-
 	let mut charts = vec![];
 	for duration_idx in 0..6 {
 		let bars = match *is_histogram {
 			true => {
 				let mut buckets = HashMap::<_, usize>::new();
-				for render_frame_time in render_frame_times {
+				for render_frame_time in render_frame_times.iter() {
 					let render_frame_time =
 						self::render_frame_time_non_cumulative(render_frame_time, duration_idx).as_millis_f64();
 					#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
@@ -145,7 +141,7 @@ pub fn render_window_select(
 			.unwrap_or_else(|| format!("{window_id:?}"))
 	};
 
-	let windows = metrics.window_ids::<BTreeSet<_>>();
+	let windows = metrics.window_ids::<BTreeSet<_>>().block_on();
 
 	// If we don't have a current window, use the first one available (if any)
 	if cur_window_id.is_none() &&

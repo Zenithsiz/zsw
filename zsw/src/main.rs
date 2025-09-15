@@ -355,7 +355,9 @@ async fn renderer(
 
 		shared
 			.metrics
-			.render_frame_times_add(window.id(), metrics::RenderFrameTime {
+			.render_frame_times(window.id())
+			.await
+			.add(metrics::RenderFrameTime {
 				paint_egui:    frame_paint_egui,
 				render_start:  frame_render_start,
 				render_panels: frame_render_panels,
