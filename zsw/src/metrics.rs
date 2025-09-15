@@ -10,32 +10,33 @@ use {
 	winit::window::WindowId,
 };
 
-/// Inner
-#[derive(Debug)]
-struct Inner {
-	frame_times: HashMap<WindowId, RenderFrameTimes>,
+/// Window metrics
+#[derive(Default, Debug)]
+struct WindowMetrics {
+	/// Render frame times
+	render_frame_times: RenderFrameTimes,
 }
 
 /// Metrics
 #[derive(Debug)]
 pub struct Metrics {
-	inner: Mutex<Inner>,
+	/// Per-window metrics
+	window_metrics: Mutex<HashMap<WindowId, WindowMetrics>>,
 }
 
 impl Metrics {
 	/// Creates new, empty, metrics
 	pub fn new() -> Self {
 		Self {
-			inner: Mutex::new(Inner {
-				frame_times: HashMap::new(),
-			}),
+			window_metrics: Mutex::new(HashMap::new()),
 		}
 	}
 
 	/// Adds a frame time to the metrics
 	pub fn render_frame_times_add(&self, window_id: WindowId, frame_time: RenderFrameTime) {
-		let mut inner = self.inner.lock();
-		let frame_times = inner.frame_times.entry(window_id).or_default();
+		let mut window_metrics = self.window_metrics.lock();
+		let window_metrics = window_metrics.entry(window_id).or_default();
+		let frame_times = &mut window_metrics.render_frame_times;
 		if frame_times.paused {
 			return;
 		}
@@ -48,37 +49,51 @@ impl Metrics {
 
 	/// Pauses the frame times for a window
 	pub fn render_frame_times_pause(&self, window_id: WindowId, pause: bool) {
-		self.inner.lock().frame_times.entry(window_id).or_default().paused = pause;
+		self.window_metrics
+			.lock()
+			.entry(window_id)
+			.or_default()
+			.render_frame_times
+			.paused = pause;
 	}
 
 	/// Returns if the frame time is paused
 	pub fn render_frame_times_is_paused(&self, window_id: WindowId) -> bool {
-		match self.inner.lock().frame_times.get(&window_id) {
-			Some(frame_times) => frame_times.paused,
+		match self.window_metrics.lock().get(&window_id) {
+			Some(metrics) => metrics.render_frame_times.paused,
 			None => true,
 		}
 	}
 
 	/// Returns the max number of frame times kept
 	pub fn render_frame_times_max_len(&self, window_id: WindowId) -> usize {
-		match self.inner.lock().frame_times.get(&window_id) {
-			Some(frame_times) => frame_times.max_len,
+		match self.window_metrics.lock().get(&window_id) {
+			Some(metrics) => metrics.render_frame_times.max_len,
 			None => 0,
 		}
 	}
 
 	/// Sets the max number of frame times kept
 	pub fn render_frame_times_set_max_len(&self, window_id: WindowId, max_len: usize) {
-		self.inner.lock().frame_times.entry(window_id).or_default().max_len = max_len;
+		self.window_metrics
+			.lock()
+			.entry(window_id)
+			.or_default()
+			.render_frame_times
+			.max_len = max_len;
 	}
 
 	/// Returns the frame times from the metrics
 	pub fn render_frame_times(&self) -> BTreeMap<WindowId, Vec<RenderFrameTime>> {
-		self.inner
+		self.window_metrics
 			.lock()
-			.frame_times
 			.iter()
-			.map(|(&window_id, frame_times)| (window_id, frame_times.times.iter().copied().collect()))
+			.map(|(&window_id, window_metrics)| {
+				(
+					window_id,
+					window_metrics.render_frame_times.times.iter().copied().collect(),
+				)
+			})
 			.collect()
 	}
 
@@ -87,7 +102,7 @@ impl Metrics {
 	where
 		C: FromIterator<WindowId>,
 	{
-		self.inner.lock().frame_times.keys().copied().collect()
+		self.window_metrics.lock().keys().copied().collect()
 	}
 }
 
