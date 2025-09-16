@@ -98,7 +98,6 @@ fn main(in: VertexOutput) -> FragOutput {
 		out.color.a = 1.0;
 
 	#else ifdef FADE_IN
-		// TODO: Use a background color instead of black?
 		let contained_prev = sample_prev.uvs.x >= 0.0 && sample_prev.uvs.x <= 1.0 && sample_prev.uvs.y >= 0.0 && sample_prev.uvs.y <= 1.0;
 		let contained_cur  = sample_cur .uvs.x >= 0.0 && sample_cur .uvs.x <= 1.0 && sample_cur .uvs.y >= 0.0 && sample_cur .uvs.y <= 1.0;
 		let contained_next = sample_next.uvs.x >= 0.0 && sample_next.uvs.x <= 1.0 && sample_next.uvs.y >= 0.0 && sample_next.uvs.y <= 1.0;
