@@ -22,8 +22,11 @@ use {
 		window::WindowMonitorNames,
 	},
 	core::{ops::RangeInclusive, str::FromStr, time::Duration},
-	egui::{Widget, mutex::Mutex},
-	std::{path::Path, sync::Arc},
+	egui::Widget,
+	std::{
+		path::Path,
+		sync::{Arc, nonpoison::Mutex},
+	},
 	strum::IntoEnumIterator,
 	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
 	zsw_util::{AppError, DurationDisplay, Rect},
