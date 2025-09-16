@@ -63,14 +63,16 @@ impl super::DurationIdx<RenderFrameTime> for DurationIdx {
 		}
 	}
 
-	fn duration_of(&self, frame_time: &RenderFrameTime) -> Duration {
-		match self {
+	fn duration_of(&self, frame_time: &RenderFrameTime) -> Option<Duration> {
+		let duration = match self {
 			Self::PaintEgui => frame_time.paint_egui,
 			Self::RenderStart => frame_time.render_start,
 			Self::RenderPanels => frame_time.render_panels,
 			Self::RenderEgui => frame_time.render_egui,
 			Self::RenderFinish => frame_time.render_finish,
 			Self::Resize => frame_time.resize,
-		}
+		};
+
+		Some(duration)
 	}
 }

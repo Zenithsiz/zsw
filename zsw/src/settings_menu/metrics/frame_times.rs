@@ -85,9 +85,11 @@ where
 		true => {
 			let mut buckets: HashMap<usize, usize> = HashMap::<_, usize>::new();
 			for frame_time in frame_times.iter() {
-				let duration = duration_idx.duration_of(frame_time).as_millis_f64();
+				let Some(duration) = duration_idx.duration_of(frame_time) else {
+					continue;
+				};
 				#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
-				let bucket_idx = (duration * histogram_time_scale) as usize;
+				let bucket_idx = (duration.as_millis_f64() * histogram_time_scale) as usize;
 
 				*buckets.entry(bucket_idx).or_default() += 1;
 			}
@@ -106,8 +108,9 @@ where
 		false => frame_times
 			.iter()
 			.enumerate()
-			.map(|(frame_idx, frame_time)| {
-				egui_plot::Bar::new(frame_idx as f64, duration_idx.duration_of(frame_time).as_millis_f64()).width(1.0)
+			.filter_map(|(frame_idx, frame_time)| {
+				let height = duration_idx.duration_of(frame_time)?.as_millis_f64();
+				Some(egui_plot::Bar::new(frame_idx as f64, height).width(1.0))
 			})
 			.collect(),
 	};
@@ -125,5 +128,5 @@ pub trait DurationIdx<T> {
 	fn name(&self) -> String;
 
 	/// Returns the duration relative to this index
-	fn duration_of(&self, frame_time: &T) -> Duration;
+	fn duration_of(&self, frame_time: &T) -> Option<Duration>;
 }
