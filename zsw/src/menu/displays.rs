@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	crate::display::{Display, DisplayName, Displays},
+	crate::display::{Display, DisplayGeometry, DisplayName, Displays},
 	std::sync::Arc,
 	zsw_util::{Rect, TokioTaskBlockOn},
 	zutil_cloned::cloned,
@@ -28,7 +28,7 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 
 	ui.collapsing("New", |ui| {
 		let name = super::get_data::<String>(ui, "display-tab-new-name");
-		let geometries = super::get_data::<Vec<Rect<i32, u32>>>(ui, "display-tab-new-geometries");
+		let geometries = super::get_data::<Vec<DisplayGeometry>>(ui, "display-tab-new-geometries");
 
 		ui.horizontal(|ui| {
 			ui.label("Name");
@@ -58,13 +58,13 @@ pub fn draw_displays_tab(ui: &mut egui::Ui, displays: &Arc<Displays>) {
 
 
 /// Draws a display's geometries
-pub fn draw_display_geometries(ui: &mut egui::Ui, geometries: &mut Vec<Rect<i32, u32>>) {
+pub fn draw_display_geometries(ui: &mut egui::Ui, geometries: &mut Vec<DisplayGeometry>) {
 	let mut geometry_idx = 0;
 	geometries.retain_mut(|geometry| {
 		let mut retain = true;
 		ui.horizontal(|ui| {
 			ui.label(format!("#{}: ", geometry_idx + 1));
-			super::draw_rect(ui, geometry);
+			super::draw_rect(ui, geometry.as_rect_mut());
 			if ui.button("-").clicked() {
 				retain = false;
 			}
@@ -75,6 +75,6 @@ pub fn draw_display_geometries(ui: &mut egui::Ui, geometries: &mut Vec<Rect<i32,
 	});
 
 	if ui.button("+").clicked() {
-		geometries.push(Rect::zero());
+		geometries.push(DisplayGeometry::new(Rect::zero()));
 	}
 }

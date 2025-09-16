@@ -46,7 +46,7 @@ use {
 		display::Displays,
 		menu::Menu,
 		metrics::Metrics,
-		panel::{PanelGeometry, Panels, PanelsRenderer, PanelsRendererShared},
+		panel::{Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
 		shared::Shared,
@@ -376,96 +376,97 @@ async fn paint_egui(
 	menu: &mut Menu,
 	window_geometry: Rect<i32, u32>,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
-	let full_output_fut =
-		egui_painter.draw(window, async |ctx| {
-			// Draw the menu
-			tokio::task::block_in_place(|| {
-				menu.draw(
-					ctx,
-					&shared.wgpu,
-					&shared.displays,
-					&shared.playlists,
-					&shared.profiles,
-					&shared.panels,
-					&shared.metrics,
-					&shared.window_monitor_names,
-					&shared.event_loop_proxy,
-					window_geometry,
-				)
-			});
-
-
-			// Then go through all panels checking for interactions with their geometries
-			// TODO: Should this be done here and not somewhere else?
-			let Some(pointer_pos) = ctx.input(|input| input.pointer.latest_pos()) else {
-				return Ok(());
-			};
-			let pointer_pos = Point2::new(pointer_pos.x as i32, pointer_pos.y as i32);
-			shared
-				.panels
-				.for_each(async |panel| {
-					let panel = &mut *panel.lock().await;
-					let display = panel.display.read().await;
-
-					// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
-					if ctx.is_pointer_over_area() ||
-						!display.geometries.iter().any(|&geometry| {
-							PanelGeometry::geometry_on(geometry, window_geometry).contains(pointer_pos)
-						}) {
-						return;
-					}
-
-					// Pause any double-clicked panels
-					if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
-						#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-						match &mut panel.state {
-							panel::PanelState::None(_) => (),
-							panel::PanelState::Fade(state) => state.toggle_paused(),
-							panel::PanelState::Slide(_) => (),
-						}
-					}
-
-					// Skip any ctrl-clicked/middle clicked panels
-					if ctx.input(|input| {
-						(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
-							input.pointer.button_clicked(egui::PointerButton::Middle)
-					}) {
-						#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-						match &mut panel.state {
-							panel::PanelState::None(_) => (),
-							panel::PanelState::Fade(state) => state.skip(&shared.wgpu).await,
-							panel::PanelState::Slide(_) => (),
-						}
-					}
-
-					// Scroll panels
-					let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
-					if scroll_delta != 0.0 {
-						#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-						match &mut panel.state {
-							panel::PanelState::None(_) => (),
-							panel::PanelState::Fade(state) => {
-								// TODO: Make this "speed" configurable
-								// TODO: Perform the conversion better without going through nanos
-								let speed = 1.0 / 1000.0;
-								let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
-								let time_delta_abs =
-									TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
-								let time_delta = match scroll_delta.is_sign_positive() {
-									true => -time_delta_abs,
-									false => time_delta_abs,
-								};
-
-								state.step(&shared.wgpu, time_delta).await;
-							},
-							panel::PanelState::Slide(_) => (),
-						}
-					}
-				})
-				.await;
-
-			Ok::<_, !>(())
+	let full_output_fut = egui_painter.draw(window, async |ctx| {
+		// Draw the menu
+		tokio::task::block_in_place(|| {
+			menu.draw(
+				ctx,
+				&shared.wgpu,
+				&shared.displays,
+				&shared.playlists,
+				&shared.profiles,
+				&shared.panels,
+				&shared.metrics,
+				&shared.window_monitor_names,
+				&shared.event_loop_proxy,
+				window_geometry,
+			)
 		});
+
+
+		// Then go through all panels checking for interactions with their geometries
+		// TODO: Should this be done here and not somewhere else?
+		let Some(pointer_pos) = ctx.input(|input| input.pointer.latest_pos()) else {
+			return Ok(());
+		};
+		let pointer_pos = Point2::new(pointer_pos.x as i32, pointer_pos.y as i32);
+		shared
+			.panels
+			.for_each(async |panel| {
+				let panel = &mut *panel.lock().await;
+				let display = panel.display.read().await;
+
+				// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
+				if ctx.is_pointer_over_area() ||
+					!display
+						.geometries
+						.iter()
+						.any(|&geometry| geometry.on_window(window_geometry).contains(pointer_pos))
+				{
+					return;
+				}
+
+				// Pause any double-clicked panels
+				if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
+					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+					match &mut panel.state {
+						panel::PanelState::None(_) => (),
+						panel::PanelState::Fade(state) => state.toggle_paused(),
+						panel::PanelState::Slide(_) => (),
+					}
+				}
+
+				// Skip any ctrl-clicked/middle clicked panels
+				if ctx.input(|input| {
+					(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
+						input.pointer.button_clicked(egui::PointerButton::Middle)
+				}) {
+					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+					match &mut panel.state {
+						panel::PanelState::None(_) => (),
+						panel::PanelState::Fade(state) => state.skip(&shared.wgpu).await,
+						panel::PanelState::Slide(_) => (),
+					}
+				}
+
+				// Scroll panels
+				let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
+				if scroll_delta != 0.0 {
+					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+					match &mut panel.state {
+						panel::PanelState::None(_) => (),
+						panel::PanelState::Fade(state) => {
+							// TODO: Make this "speed" configurable
+							// TODO: Perform the conversion better without going through nanos
+							let speed = 1.0 / 1000.0;
+							let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
+							let time_delta_abs =
+								TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
+							let time_delta = match scroll_delta.is_sign_positive() {
+								true => -time_delta_abs,
+								false => time_delta_abs,
+							};
+
+							state.step(&shared.wgpu, time_delta).await;
+						},
+						panel::PanelState::Slide(_) => (),
+					}
+				}
+			})
+			.await;
+
+		Ok::<_, !>(())
+	});
 	let full_output = full_output_fut.await?;
 	let paint_jobs = egui_painter
 		.tessellate_shapes(full_output.shapes, full_output.pixels_per_point)

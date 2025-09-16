@@ -12,6 +12,7 @@ use {
 	self::uniform::PanelImageUniforms,
 	super::{PanelGeometryUniforms, PanelState, Panels, state::fade::PanelFadeImagesShared},
 	crate::{
+		display::DisplayGeometry,
 		metrics::{self, Metrics},
 		panel::{PanelGeometry, state::fade::PanelFadeImage},
 		time,
@@ -252,11 +253,11 @@ impl PanelsRenderer {
 					create_render_pipeline,
 					geometries: HashMap::new(),
 				});
-			for (geometry_idx, (&display_geometry, panel_geometry)) in
+			for (geometry_idx, (display_geometry, panel_geometry)) in
 				display.geometries.iter().zip_eq(&mut panel.geometries).enumerate()
 			{
 				// If this geometry is outside our window, we can safely ignore it
-				if window_geometry.intersection(display_geometry).is_none() {
+				if !display_geometry.intersects_window(window_geometry) {
 					continue;
 				}
 
@@ -307,12 +308,12 @@ impl PanelsRenderer {
 		panel_state: &PanelState,
 		window_geometry: Rect<i32, u32>,
 		window: &Window,
-		display_geometry: Rect<i32, u32>,
+		display_geometry: &DisplayGeometry,
 		panel_geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
 		// Calculate the position matrix for the panel
-		let pos_matrix = PanelGeometry::pos_matrix(display_geometry, window_geometry, surface_size);
+		let pos_matrix = display_geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
 
 		// Writes uniforms `uniforms`
@@ -343,7 +344,7 @@ impl PanelsRenderer {
 						},
 					};
 
-					let ratio = PanelGeometry::image_ratio(display_geometry.size, size);
+					let ratio = display_geometry.image_ratio(size);
 					PanelImageUniforms::new(ratio, swap_dir)
 				};
 

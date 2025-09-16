@@ -42,7 +42,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 		if display
 			.geometries
 			.iter()
-			.all(|&geometry| window_geometry.intersection(geometry).is_none())
+			.all(|&geometry| !geometry.intersects_window(window_geometry))
 		{
 			name = name.weak();
 		}
@@ -83,12 +83,12 @@ fn draw_fade_panel_editor(
 		for (geometry_idx, geometry) in display.geometries.iter_mut().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
-				if window_geometry.intersection(*geometry).is_none() {
+				if !geometry.intersects_window(window_geometry) {
 					name = name.weak();
 				}
 
 				ui.label(name);
-				super::draw_rect(ui, geometry);
+				super::draw_rect(ui, geometry.as_rect_mut());
 			});
 		}
 	});

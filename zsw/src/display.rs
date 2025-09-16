@@ -1,12 +1,16 @@
 //! Display
 
 // Modules
+pub mod geometry;
 pub mod ser;
+
+// Exports
+pub use self::geometry::DisplayGeometry;
 
 // Imports
 use {
 	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::{Rect, ResourceManager, resource_manager},
+	zsw_util::{ResourceManager, resource_manager},
 };
 
 /// Displays
@@ -19,7 +23,7 @@ pub struct Display {
 	pub name: DisplayName,
 
 	/// Geometries
-	pub geometries: Vec<Rect<i32, u32>>,
+	pub geometries: Vec<DisplayGeometry>,
 }
 
 impl resource_manager::FromSerialized<DisplayName, ser::Display> for Display {
@@ -29,7 +33,7 @@ impl resource_manager::FromSerialized<DisplayName, ser::Display> for Display {
 			geometries: display
 				.geometries
 				.into_iter()
-				.map(|geometry| geometry.geometry)
+				.map(|geometry| DisplayGeometry::new(geometry.geometry))
 				.collect(),
 		}
 	}
@@ -41,7 +45,9 @@ impl resource_manager::ToSerialized<DisplayName, ser::Display> for Display {
 			geometries: self
 				.geometries
 				.iter()
-				.map(|&geometry| ser::DisplayGeometry { geometry })
+				.map(|&geometry| ser::DisplayGeometry {
+					geometry: geometry.into_inner(),
+				})
 				.collect(),
 		}
 	}
