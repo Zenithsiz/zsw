@@ -15,13 +15,31 @@ use {
 
 /// Draws the metrics tab
 pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_names: &WindowMonitorNames) {
-	// Get the window, otherwise we have nothing to render
-	let Some(window_id) = self::draw_window_select(ui, metrics, window_monitor_names) else {
-		ui.weak("No window selected");
-		return;
-	};
+	let cur_metric = super::get_data::<Metric>(ui, "metrics-tab-cur-metric");
+	let mut cur_metric = cur_metric.lock();
+	ui.horizontal(|ui| {
+		let metrics = [Metric::Window(WindowMetric::Render)];
 
-	self::draw_render_frame_times(ui, &mut metrics.render_frame_times(window_id).block_on());
+		ui.label("Metric: ");
+		for metric in metrics {
+			ui.selectable_value(&mut *cur_metric, metric, metric.to_string());
+		}
+	});
+
+	match *cur_metric {
+		Metric::Window(metric) => {
+			// Get the window, otherwise we have nothing to render
+			let Some(window_id) = self::draw_window_select(ui, metrics, window_monitor_names) else {
+				ui.weak("No window selected");
+				return;
+			};
+
+			match metric {
+				WindowMetric::Render =>
+					self::draw_render_frame_times(ui, &mut metrics.render_frame_times(window_id).block_on()),
+			}
+		},
+	}
 }
 
 /// Draws the render frame times
@@ -212,4 +230,27 @@ fn draw_window_select(
 		});
 
 	*cur_window_id
+}
+
+/// Metric to show
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(derive_more::Display)]
+enum Metric {
+	Window(WindowMetric),
+}
+
+impl Default for Metric {
+	fn default() -> Self {
+		Self::Window(WindowMetric::default())
+	}
+}
+
+/// Window metric to show
+#[derive(PartialEq, Eq, Clone, Copy, Default, Debug)]
+#[derive(derive_more::Display)]
+#[derive(strum::EnumIter)]
+enum WindowMetric {
+	#[default]
+	#[display("Render")]
+	Render,
 }
