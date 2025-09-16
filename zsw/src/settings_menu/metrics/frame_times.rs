@@ -70,20 +70,22 @@ fn draw_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T
 }
 
 /// Creates a chart of frame times
-fn add_frame_time_chart<T>(
+fn add_frame_time_chart<T, D>(
 	render_frame_times: &FrameTimes<T>,
 	is_histogram: bool,
 	histogram_time_scale: f64,
 	stack_charts: bool,
 	prev_charts: &[egui_plot::BarChart],
-	chart_name: &'static str,
-	get_duration: impl Fn(&T) -> Duration,
-) -> egui_plot::BarChart {
+	duration_idx: &D,
+) -> egui_plot::BarChart
+where
+	D: DurationIdx<T>,
+{
 	let bars = match is_histogram {
 		true => {
-			let mut buckets = HashMap::<_, usize>::new();
+			let mut buckets: HashMap<usize, usize> = HashMap::<_, usize>::new();
 			for render_frame_time in render_frame_times.iter() {
-				let render_frame_time = get_duration(render_frame_time).as_millis_f64();
+				let render_frame_time = duration_idx.duration_of(render_frame_time).as_millis_f64();
 				#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
 				let bucket_idx = (render_frame_time * histogram_time_scale) as usize;
 
@@ -105,14 +107,27 @@ fn add_frame_time_chart<T>(
 			.iter()
 			.enumerate()
 			.map(|(frame_idx, render_frame_time)| {
-				egui_plot::Bar::new(frame_idx as f64, get_duration(render_frame_time).as_millis_f64()).width(1.0)
+				egui_plot::Bar::new(
+					frame_idx as f64,
+					duration_idx.duration_of(render_frame_time).as_millis_f64(),
+				)
+				.width(1.0)
 			})
 			.collect(),
 	};
 
-	let mut chart = egui_plot::BarChart::new(chart_name, bars);
+	let mut chart = egui_plot::BarChart::new(duration_idx.name(), bars);
 	if !is_histogram && stack_charts {
 		chart = chart.stack_on(&prev_charts.iter().collect::<Vec<_>>());
 	}
 	chart
+}
+
+/// Duration index
+pub trait DurationIdx<T> {
+	/// Returns the name of this index
+	fn name(&self) -> String;
+
+	/// Returns the duration relative to this index
+	fn duration_of(&self, frame_time: &T) -> Duration;
 }
