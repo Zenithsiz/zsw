@@ -3,7 +3,7 @@
 // Imports
 use {
 	crate::{
-		metrics::{FrameTimes, Metrics},
+		metrics::{FrameTimes, Metrics, RenderFrameTime},
 		window::WindowMonitorNames,
 	},
 	core::time::Duration,
@@ -16,18 +16,22 @@ use {
 /// Draws the metrics tab
 pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_names: &WindowMonitorNames) {
 	// Get the window, otherwise we have nothing to render
-	let Some(window_id) = self::render_window_select(ui, metrics, window_monitor_names) else {
+	let Some(window_id) = self::draw_window_select(ui, metrics, window_monitor_names) else {
 		ui.weak("No window selected");
 		return;
 	};
 
-	let mut render_frame_times = metrics.render_frame_times(window_id).block_on();
-	let settings = self::render_frame_time_settings(ui, &mut *render_frame_times);
+	self::draw_render_frame_times(ui, &mut metrics.render_frame_times(window_id).block_on());
+}
+
+/// Draws the render frame times
+fn draw_render_frame_times(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderFrameTime>) {
+	let settings = self::draw_frame_time_settings(ui, render_frame_times);
 
 	let mut charts = vec![];
 	for duration_idx in 0..6 {
 		let chart = self::add_frame_time_chart(
-			&render_frame_times,
+			render_frame_times,
 			settings.is_histogram,
 			settings.histogram_time_scale,
 			settings.stack_charts,
@@ -54,13 +58,13 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 		charts.push(chart);
 	}
 
-	let plot = egui_plot::Plot::new("Frame times")
+	let plot = egui_plot::Plot::new("Render frame times")
 		.legend(egui_plot::Legend::default())
 		.clamp_grid(true);
 
 	let plot = match settings.is_histogram {
-		true => plot.x_axis_label("Time").y_axis_label("Occurrences (normalized)"),
-		false => plot.x_axis_label("Frame").y_axis_label("Time"),
+		true => plot.x_axis_label("Time (s)").y_axis_label("Occurrences (normalized)"),
+		false => plot.x_axis_label("Frame").y_axis_label("Time (s)"),
 	};
 
 	plot.show(ui, |plot_ui| {
@@ -76,8 +80,8 @@ struct RenderFrameTimeSettings {
 	stack_charts:         bool,
 }
 
-/// Renders a frame time's settings
-fn render_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> RenderFrameTimeSettings {
+/// Draws a frame time's settings
+fn draw_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> RenderFrameTimeSettings {
 	// TODO: Turn this into some enum between histogram / time
 	let is_histogram = super::get_data::<bool>(ui, "metrics-tab-histogram");
 	let mut is_histogram = is_histogram.lock();
@@ -175,8 +179,8 @@ fn add_frame_time_chart<T>(
 	chart
 }
 
-/// Renders the window select and returns the selected one
-fn render_window_select(
+/// Draws the window select and returns the selected one
+fn draw_window_select(
 	ui: &mut egui::Ui,
 	metrics: &Metrics,
 	window_monitor_names: &WindowMonitorNames,
