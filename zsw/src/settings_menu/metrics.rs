@@ -221,13 +221,16 @@ fn draw_window_select(
 		*cur_window_id = Some(window_id);
 	}
 
-	egui::ComboBox::from_id_salt("metrics-tab-window-selector")
-		.selected_text(cur_window_id.map_or("None".to_owned(), window_name))
-		.show_ui(ui, |ui| {
-			for window_id in windows {
-				ui.selectable_value(&mut *cur_window_id, Some(window_id), window_name(window_id));
-			}
-		});
+	ui.horizontal(|ui| {
+		ui.label("Window: ");
+		egui::ComboBox::from_id_salt("metrics-tab-window-selector")
+			.selected_text(cur_window_id.map_or("None".to_owned(), window_name))
+			.show_ui(ui, |ui| {
+				for window_id in windows {
+					ui.selectable_value(&mut *cur_window_id, Some(window_id), window_name(window_id));
+				}
+			});
+	});
 
 	*cur_window_id
 }
