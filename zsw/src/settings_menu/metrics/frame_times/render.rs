@@ -9,22 +9,15 @@ use {
 
 /// Draws the render frame times
 pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderFrameTime>) {
-	let settings = super::draw_settings(ui, render_frame_times);
+	let display = super::draw_display_settings(ui, render_frame_times);
 
 	let mut charts = vec![];
 	for duration_idx in DurationIdx::iter() {
-		let chart = super::add_frame_time_chart(
-			render_frame_times,
-			settings.is_histogram,
-			settings.histogram_time_scale,
-			settings.stack_charts,
-			&charts,
-			&duration_idx,
-		);
+		let chart = super::add_frame_time_chart(render_frame_times, &display, &charts, &duration_idx);
 		charts.push(chart);
 	}
 
-	super::draw_plot(ui, &settings, charts);
+	super::draw_plot(ui, &display, charts);
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

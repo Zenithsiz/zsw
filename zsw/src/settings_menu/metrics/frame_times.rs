@@ -13,16 +13,16 @@ use {
 };
 
 /// Draws a frame time's plot
-fn draw_plot(ui: &mut egui::Ui, settings: &FrameTimeSettings, charts: impl IntoIterator<Item = egui_plot::BarChart>) {
+fn draw_plot(ui: &mut egui::Ui, display: &FrameTimesDisplay, charts: impl IntoIterator<Item = egui_plot::BarChart>) {
 	let legend = egui_plot::Legend::default().follow_insertion_order(true);
 
 	let plot = egui_plot::Plot::new("Render frame times")
 		.legend(legend)
 		.clamp_grid(true);
 
-	let plot = match settings.is_histogram {
-		true => plot.x_axis_label("Time (ms)").y_axis_label("Occurrences (normalized)"),
-		false => plot.x_axis_label("Frame").y_axis_label("Time (ms)"),
+	let plot = match display {
+		FrameTimesDisplay::Histogram { .. } => plot.x_axis_label("Time (ms)").y_axis_label("Occurrences (normalized)"),
+		FrameTimesDisplay::TimeGraph { .. } => plot.x_axis_label("Frame").y_axis_label("Time (ms)"),
 	};
 
 	plot.show(ui, |plot_ui| {
@@ -32,24 +32,49 @@ fn draw_plot(ui: &mut egui::Ui, settings: &FrameTimeSettings, charts: impl IntoI
 	});
 }
 
-struct FrameTimeSettings {
-	is_histogram:         bool,
-	histogram_time_scale: f64,
-	stack_charts:         bool,
+/// Display
+#[derive(Clone, Copy, Debug)]
+#[expect(variant_size_differences, reason = "It'll be heap allocated anyway")]
+enum FrameTimesDisplay {
+	/// Time graph
+	TimeGraph { stack_charts: bool },
+
+	/// Histogram
+	Histogram { time_scale: f64 },
 }
 
-/// Draws a frame time's settings
-fn draw_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> FrameTimeSettings {
-	// TODO: Turn this into some enum between histogram / time
-	let is_histogram = settings_menu::get_data::<bool>(ui, "metrics-tab-histogram");
-	let mut is_histogram = is_histogram.lock();
+/// Draws a the frame time display settings
+fn draw_display_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> FrameTimesDisplay {
+	// Note: We don't store a `FrameTimesDisplay` directly so we can keep track of
+	//       each field separately in it's own instance.
+	#[derive(PartialEq, Clone, Copy, Default, Debug)]
+	#[derive(derive_more::Display, strum::EnumIter)]
+	enum FrameTimesDisplayKind {
+		#[display("Time graph")]
+		#[default]
+		TimeGraph,
+		#[display("Histogram")]
+		Histogram,
+	}
+	#[derive(Clone, Copy, Default, Debug)]
+	struct FrameTimesDisplayData {
+		time_graph: FrameTimesDisplayTimeGraphData,
+		histogram:  FrameTimesDisplayHistogramData,
+	}
+	#[derive(Clone, Copy, Default, Debug)]
+	struct FrameTimesDisplayTimeGraphData {
+		stack_charts: bool = true,
+	}
+	#[derive(Clone, Copy, Default, Debug)]
+	struct FrameTimesDisplayHistogramData {
+		time_scale:    f64 = 10.0,
+	}
 
-	let histogram_time_scale =
-		settings_menu::get_data_with_default::<f64>(ui, "metrics-tab-histogram-time-scale", || 20.0);
-	let mut histogram_time_scale = histogram_time_scale.lock();
+	let cur_kind = settings_menu::get_data::<FrameTimesDisplayKind>(ui, "metrics-tab-display-kind");
+	let mut cur_kind = cur_kind.lock();
 
-	let stack_charts = settings_menu::get_data_with_default::<bool>(ui, "metrics-tab-chart-stacks", || true);
-	let mut stack_charts = stack_charts.lock();
+	let cur_data = settings_menu::get_data::<FrameTimesDisplayData>(ui, "metrics-tab-display-data");
+	let mut cur_data = cur_data.lock();
 
 	ui.horizontal(|ui| {
 		let mut is_paused = frame_times.is_paused();
@@ -65,52 +90,60 @@ fn draw_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> Frame
 			}
 		});
 
-		ui.toggle_value(&mut is_histogram, "Histogram");
+		egui::ComboBox::from_id_salt("metrics-tab-display-selector")
+			.selected_text(cur_kind.to_string())
+			.show_ui(ui, |ui| {
+				let kin = [FrameTimesDisplayKind::TimeGraph, FrameTimesDisplayKind::Histogram];
+				for kind in kin {
+					ui.selectable_value(&mut *cur_kind, kind, kind.to_string());
+				}
+			});
 
-		match *is_histogram {
-			true => {
+		match &mut *cur_kind {
+			FrameTimesDisplayKind::Histogram => {
 				ui.horizontal(|ui| {
 					ui.label("Time scale: ");
-					egui::Slider::new(&mut *histogram_time_scale, 1.0..=1000.0)
+					egui::Slider::new(&mut cur_data.histogram.time_scale, 1.0..=1000.0)
 						.logarithmic(true)
 						.clamping(egui::SliderClamping::Always)
 						.ui(ui);
 				});
 			},
-			false => {
-				ui.toggle_value(&mut stack_charts, "Stack charts");
+			FrameTimesDisplayKind::TimeGraph => {
+				ui.toggle_value(&mut cur_data.time_graph.stack_charts, "Stack charts");
 			},
 		}
 	});
 
-	FrameTimeSettings {
-		is_histogram:         *is_histogram,
-		histogram_time_scale: *histogram_time_scale,
-		stack_charts:         *stack_charts,
+	match *cur_kind {
+		FrameTimesDisplayKind::TimeGraph => FrameTimesDisplay::TimeGraph {
+			stack_charts: cur_data.time_graph.stack_charts,
+		},
+		FrameTimesDisplayKind::Histogram => FrameTimesDisplay::Histogram {
+			time_scale: cur_data.histogram.time_scale,
+		},
 	}
 }
 
 /// Creates a chart of frame times
 fn add_frame_time_chart<T, D>(
 	frame_times: &FrameTimes<T>,
-	is_histogram: bool,
-	histogram_time_scale: f64,
-	stack_charts: bool,
+	display: &FrameTimesDisplay,
 	prev_charts: &[egui_plot::BarChart],
 	duration_idx: &D,
 ) -> egui_plot::BarChart
 where
 	D: DurationIdx<T>,
 {
-	let bars = match is_histogram {
-		true => {
+	let bars = match display {
+		FrameTimesDisplay::Histogram { time_scale } => {
 			let mut buckets: HashMap<usize, usize> = HashMap::<_, usize>::new();
 			for frame_time in frame_times.iter() {
 				let Some(duration) = duration_idx.duration_of(frame_time) else {
 					continue;
 				};
 				#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
-				let bucket_idx = (duration.as_millis_f64() * histogram_time_scale) as usize;
+				let bucket_idx = (duration.as_millis_f64() * time_scale) as usize;
 
 				*buckets.entry(bucket_idx).or_default() += 1;
 			}
@@ -118,15 +151,15 @@ where
 			buckets
 				.into_iter()
 				.map(|(bucket_idx, bucket)| {
-					let width = 1.0 / histogram_time_scale;
-					let center = bucket_idx as f64 / histogram_time_scale + width / 2.0;
-					let height = histogram_time_scale * bucket as f64 / frame_times.len() as f64;
+					let width = 1.0 / time_scale;
+					let center = bucket_idx as f64 / time_scale + width / 2.0;
+					let height = time_scale * bucket as f64 / frame_times.len() as f64;
 
 					egui_plot::Bar::new(center, height).width(width)
 				})
 				.collect()
 		},
-		false => frame_times
+		FrameTimesDisplay::TimeGraph { .. } => frame_times
 			.iter()
 			.enumerate()
 			.filter_map(|(frame_idx, frame_time)| {
@@ -137,7 +170,9 @@ where
 	};
 
 	let mut chart = egui_plot::BarChart::new(duration_idx.name(), bars);
-	if !is_histogram && stack_charts {
+	if let FrameTimesDisplay::TimeGraph { stack_charts } = display &&
+		*stack_charts
+	{
 		chart = chart.stack_on(&prev_charts.iter().collect::<Vec<_>>());
 	}
 	chart

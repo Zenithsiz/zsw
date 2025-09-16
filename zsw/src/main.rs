@@ -18,7 +18,8 @@
 	try_trait_v2,
 	async_fn_traits,
 	unwrap_infallible,
-	macro_attr
+	macro_attr,
+	default_field_values
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
