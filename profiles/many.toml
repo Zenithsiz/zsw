@@ -1,0 +1,9 @@
+[[panels]]
+display = "many"
+
+[panels.shader]
+type          = "fade"
+playlists     = ["example1"]
+duration      = "60s"
+fade_duration = "3s"
+fade          = "basic"
