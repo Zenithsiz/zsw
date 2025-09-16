@@ -89,6 +89,10 @@ fn draw_display_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) 
 				frame_times.set_max_len(max_len);
 			}
 		});
+	});
+
+	ui.horizontal(|ui| {
+		ui.label("Display: ");
 
 		egui::ComboBox::from_id_salt("metrics-tab-display-selector")
 			.selected_text(cur_kind.to_string())
