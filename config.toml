@@ -3,4 +3,6 @@ log_file             = "latest.log"
 
 default.profile = "default"
 #default.profile = "full"
+#default.profile = "many"
+#default.profile = "many-quarter"
 #default.profile = "cross-screen"
