@@ -9,7 +9,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 
 // Imports
 use {
-	self::uniform::PanelImageUniforms,
+	self::uniform::PanelFadeImageUniforms,
 	super::{PanelGeometryUniforms, PanelState, Panels, state::fade::PanelFadeImagesShared},
 	crate::{
 		display::DisplayGeometry,
@@ -345,7 +345,7 @@ impl PanelsRenderer {
 					};
 
 					let ratio = display_geometry.image_ratio(size);
-					PanelImageUniforms::new(ratio, swap_dir)
+					PanelFadeImageUniforms::new(ratio, swap_dir)
 				};
 
 				let prev = image_uniforms(panel_state.images().prev.as_ref());

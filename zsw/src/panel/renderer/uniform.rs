@@ -21,17 +21,17 @@ pub struct Vec4(pub [f32; 4]);
 #[repr(C, align(16))]
 pub struct Matrix4x4(pub [[f32; 4]; 4]);
 
-/// Panel image uniforms
+/// Panel fade image uniforms
 #[derive(PartialEq, Clone, Copy, Default, Debug)]
 #[derive(Zeroable, Pod)]
 #[repr(C)]
-pub struct PanelImageUniforms {
+pub struct PanelFadeImageUniforms {
 	ratio:    Vec2,
 	swap_dir: u32,
 	_unused:  u32,
 }
 
-impl PanelImageUniforms {
+impl PanelFadeImageUniforms {
 	pub fn new(ratio: impl Into<[f32; 2]>, swap_dir: bool) -> Self {
 		Self {
 			ratio:    Vec2(ratio.into()),
@@ -56,9 +56,9 @@ pub struct None {
 #[repr(C)]
 pub struct Fade {
 	pub pos_matrix:    Matrix4x4,
-	pub prev:          PanelImageUniforms,
-	pub cur:           PanelImageUniforms,
-	pub next:          PanelImageUniforms,
+	pub prev:          PanelFadeImageUniforms,
+	pub cur:           PanelFadeImageUniforms,
+	pub next:          PanelFadeImageUniforms,
 	pub fade_duration: f32,
 	pub progress:      f32,
 
@@ -71,9 +71,9 @@ pub struct Fade {
 #[repr(C)]
 pub struct FadeWhite {
 	pub pos_matrix:    Matrix4x4,
-	pub prev:          PanelImageUniforms,
-	pub cur:           PanelImageUniforms,
-	pub next:          PanelImageUniforms,
+	pub prev:          PanelFadeImageUniforms,
+	pub cur:           PanelFadeImageUniforms,
+	pub next:          PanelFadeImageUniforms,
 	pub fade_duration: f32,
 	pub progress:      f32,
 	pub strength:      f32,
@@ -87,9 +87,9 @@ pub struct FadeWhite {
 #[repr(C)]
 pub struct FadeOut {
 	pub pos_matrix:    Matrix4x4,
-	pub prev:          PanelImageUniforms,
-	pub cur:           PanelImageUniforms,
-	pub next:          PanelImageUniforms,
+	pub prev:          PanelFadeImageUniforms,
+	pub cur:           PanelFadeImageUniforms,
+	pub next:          PanelFadeImageUniforms,
 	pub fade_duration: f32,
 	pub progress:      f32,
 	pub strength:      f32,
@@ -103,9 +103,9 @@ pub struct FadeOut {
 #[repr(C)]
 pub struct FadeIn {
 	pub pos_matrix:    Matrix4x4,
-	pub prev:          PanelImageUniforms,
-	pub cur:           PanelImageUniforms,
-	pub next:          PanelImageUniforms,
+	pub prev:          PanelFadeImageUniforms,
+	pub cur:           PanelFadeImageUniforms,
+	pub next:          PanelFadeImageUniforms,
 	pub fade_duration: f32,
 	pub progress:      f32,
 	pub strength:      f32,
