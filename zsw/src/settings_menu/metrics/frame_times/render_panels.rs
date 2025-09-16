@@ -67,8 +67,10 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 		charts.push(chart);
 	}
 
+	let legend = egui_plot::Legend::default().follow_insertion_order(true);
+
 	let plot = egui_plot::Plot::new("Render frame times")
-		.legend(egui_plot::Legend::default())
+		.legend(legend)
 		.clamp_grid(true);
 
 	let plot = match settings.is_histogram {
