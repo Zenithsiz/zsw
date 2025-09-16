@@ -148,12 +148,6 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 		.await
 		.context("Unable to request device")?;
 
-	// Configure the device to not panic on errors
-	device.on_uncaptured_error(Box::new(|err| {
-		let err = AppError::new(&err);
-		tracing::error!("Wgpu error: {}", err.pretty());
-	}));
-
 	Ok((device, queue))
 }
 
