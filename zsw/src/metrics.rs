@@ -13,6 +13,9 @@ use {
 struct WindowMetrics {
 	/// Render frame times
 	render_frame_times: FrameTimes<RenderFrameTime>,
+
+	/// Render panels frame times
+	render_panels_frame_times: FrameTimes<RenderPanelsFrameTime>,
 }
 
 /// Metrics
@@ -35,6 +38,17 @@ impl Metrics {
 		let window_metrics = self.window_metrics.lock().await;
 		MutexGuard::map(window_metrics, |metrics| {
 			&mut metrics.entry(window_id).or_default().render_frame_times
+		})
+	}
+
+	/// Accesses render panel frame times metrics for a window
+	pub async fn render_panels_frame_times(
+		&self,
+		window_id: WindowId,
+	) -> impl DerefMut<Target = FrameTimes<RenderPanelsFrameTime>> {
+		let window_metrics = self.window_metrics.lock().await;
+		MutexGuard::map(window_metrics, |metrics| {
+			&mut metrics.entry(window_id).or_default().render_panels_frame_times
 		})
 	}
 
@@ -116,9 +130,6 @@ impl<T> Default for FrameTimes<T> {
 }
 
 /// Render frame time.
-///
-/// These are the durations that it
-/// took to perform each step of the frame
 #[derive(Clone, Copy, Debug)]
 pub struct RenderFrameTime {
 	pub paint_egui:    Duration,
@@ -127,4 +138,27 @@ pub struct RenderFrameTime {
 	pub render_egui:   Duration,
 	pub render_finish: Duration,
 	pub resize:        Duration,
+}
+
+/// Render panels frame time.
+#[derive(Clone, Debug)]
+pub struct RenderPanelsFrameTime {
+	pub create_render_pass: Duration,
+	pub lock_panels:        Duration,
+	pub panels:             HashMap<usize, RenderPanelFrameTime>,
+}
+
+/// Render panel frame time.
+#[derive(Clone, Debug)]
+pub struct RenderPanelFrameTime {
+	pub update_panel:           Duration,
+	pub create_render_pipeline: Duration,
+	pub geometries:             HashMap<usize, RenderPanelGeometryFrameTime>,
+}
+
+/// Render panel geometry frame time.
+#[derive(Clone, Debug)]
+pub struct RenderPanelGeometryFrameTime {
+	pub write_uniforms: Duration,
+	pub draw:           Duration,
 }

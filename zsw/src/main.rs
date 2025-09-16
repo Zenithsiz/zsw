@@ -322,6 +322,7 @@ async fn renderer(
 				&shared.wgpu,
 				&shared.panels_renderer_shared,
 				&shared.panels,
+				&shared.metrics,
 				window,
 				window_geometry,
 			)

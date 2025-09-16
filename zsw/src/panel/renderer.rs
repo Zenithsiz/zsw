@@ -11,7 +11,11 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 use {
 	self::uniform::PanelImageUniforms,
 	super::{PanelFadeImage, PanelGeometryUniforms, PanelState, Panels},
-	crate::panel::PanelGeometry,
+	crate::{
+		metrics::{self, Metrics},
+		panel::PanelGeometry,
+		time,
+	},
 	app_error::Context,
 	cgmath::Vector2,
 	futures::{StreamExt, stream::FuturesUnordered},
@@ -116,6 +120,7 @@ impl PanelsRenderer {
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
 		panels: &Panels,
+		metrics: &Metrics,
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
 	) -> Result<(), AppError> {
@@ -157,6 +162,7 @@ impl PanelsRenderer {
 			timestamp_writes:         None,
 			occlusion_query_set:      None,
 		};
+		#[time(create_render_pass)]
 		let mut render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
 
 		// Set our shared indices and vertices
@@ -164,16 +170,25 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, shared.vertices.slice(..));
 
 		// Then render all panels simultaneously
+		#[time(lock_panels)]
 		let panels = panels.get_all().await;
-		let mut panels = panels.iter().map(|panel| panel.lock()).collect::<FuturesUnordered<_>>();
-		while let Some(panel) = panels.next().await.as_deref_mut() {
+		let mut panels = panels
+			.iter()
+			.enumerate()
+			.map(|(panel_idx, panel)| async move { (panel_idx, panel.lock().await) })
+			.collect::<FuturesUnordered<_>>();
+		let mut panel_metrics = HashMap::new();
+		while let Some((panel_idx, mut panel)) = panels.next().await {
+			let panel = &mut *panel;
+
 			// Update the panel before drawing it
-			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-			match &mut panel.state {
+			#[time(update_panel)]
+			let () = match &mut panel.state {
 				PanelState::None(_) => (),
 				PanelState::Fade(state) => state.update(wgpu).await,
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 				PanelState::Slide(_) => (),
-			}
+			};
 
 			// If the panel images are empty, there's no sense in rendering it either
 			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
@@ -186,6 +201,7 @@ impl PanelsRenderer {
 				continue;
 			}
 
+			#[time(create_render_pipeline)]
 			let render_pipeline = match shared.render_pipelines.lock().await.entry(panel.state.shader().name()) {
 				hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
 				hash_map::Entry::Vacant(entry) => {
@@ -259,13 +275,23 @@ impl PanelsRenderer {
 				.geometries
 				.resize_with(display.geometries.len(), PanelGeometry::new);
 
-			for (&display_geometry, panel_geometry) in display.geometries.iter().zip_eq(&mut panel.geometries) {
+			let geometry_metrics = panel_metrics
+				.entry(panel_idx)
+				.or_insert_with(|| metrics::RenderPanelFrameTime {
+					update_panel,
+					create_render_pipeline,
+					geometries: HashMap::new(),
+				});
+			for (geometry_idx, (&display_geometry, panel_geometry)) in
+				display.geometries.iter().zip_eq(&mut panel.geometries).enumerate()
+			{
 				// If this geometry is outside our window, we can safely ignore it
 				if window_geometry.intersection(display_geometry).is_none() {
 					continue;
 				}
 
 				// Write and bind the uniforms
+				#[time(write_uniforms)]
 				Self::write_bind_uniforms(
 					wgpu,
 					shared,
@@ -279,9 +305,26 @@ impl PanelsRenderer {
 				);
 
 				// Finally draw
+				#[time(draw)]
 				render_pass.draw_indexed(0..6, 0, 0..1);
+
+				_ = geometry_metrics
+					.geometries
+					.insert(geometry_idx, metrics::RenderPanelGeometryFrameTime {
+						write_uniforms,
+						draw,
+					});
 			}
 		}
+
+		metrics
+			.render_panels_frame_times(window.id())
+			.await
+			.add(metrics::RenderPanelsFrameTime {
+				create_render_pass,
+				lock_panels,
+				panels: panel_metrics,
+			});
 
 		Ok(())
 	}

@@ -16,7 +16,10 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 	let cur_metric = super::get_data::<Metric>(ui, "metrics-tab-cur-metric");
 	let mut cur_metric = cur_metric.lock();
 	ui.horizontal(|ui| {
-		let metrics = [Metric::Window(WindowMetric::Render)];
+		let metrics = [
+			Metric::Window(WindowMetric::Render),
+			Metric::Window(WindowMetric::RenderPanels),
+		];
 
 		ui.label("Metric: ");
 		for metric in metrics {
@@ -35,6 +38,8 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 			match metric {
 				WindowMetric::Render =>
 					frame_times::render::draw(ui, &mut metrics.render_frame_times(window_id).block_on()),
+				WindowMetric::RenderPanels =>
+					frame_times::render_panels::draw(ui, &mut metrics.render_panels_frame_times(window_id).block_on()),
 			}
 		},
 	}
@@ -100,4 +105,7 @@ enum WindowMetric {
 	#[default]
 	#[display("Render")]
 	Render,
+
+	#[display("Render panels")]
+	RenderPanels,
 }
