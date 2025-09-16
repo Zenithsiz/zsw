@@ -17,7 +17,8 @@
 	duration_millis_float,
 	try_trait_v2,
 	async_fn_traits,
-	unwrap_infallible
+	unwrap_infallible,
+	macro_attr
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -291,13 +292,12 @@ async fn renderer(
 	mut settings_menu: SettingsMenu,
 ) -> Result<(), AppError> {
 	loop {
-		let frame_start = Instant::now();
-
 		// TODO: Only update this when we receive a move/resize event instead of querying each frame?
 		let window_geometry = self::window_geometry(window)?;
 
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
+		#[time(frame_paint_egui)]
 		let (egui_paint_jobs, egui_textures_delta) =
 			match self::paint_egui(shared, window, &egui_painter, &mut settings_menu, window_geometry).await {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
@@ -306,15 +306,15 @@ async fn renderer(
 					(vec![], None)
 				},
 			};
-		let frame_paint_egui = frame_start.elapsed();
 
 		// Start rendering
+		#[time(frame_render_start)]
 		let mut frame = wgpu_renderer
 			.start_render(&shared.wgpu)
 			.context("Unable to start frame")?;
-		let frame_render_start = frame_start.elapsed();
 
 		// Render panels
+		#[time(frame_render_panels)]
 		panels_renderer
 			.render(
 				&mut frame,
@@ -327,31 +327,30 @@ async fn renderer(
 			)
 			.await
 			.context("Unable to render panels")?;
-		let frame_render_panels = frame_start.elapsed();
 
 		// Render egui
+		#[time(frame_render_egui)]
 		egui_renderer
 			.render_egui(&mut frame, window, &shared.wgpu, &egui_paint_jobs, egui_textures_delta)
 			.context("Unable to render egui")?;
 
-		let frame_render_egui = frame_start.elapsed();
-
 		// Finish the frame
-		if frame.finish(&shared.wgpu) {
+		#[time(frame_render_finish)]
+		let () = if frame.finish(&shared.wgpu) {
 			wgpu_renderer
 				.reconfigure(&shared.wgpu)
 				.context("Unable to reconfigure wgpu")?;
-		}
-		let frame_render_finish = frame_start.elapsed();
+		};
 
 		// Resize if we need to
-		if let Some(resize) = shared.last_resize.swap(None) {
+		#[time(frame_resize)]
+		let () = if let Some(resize) = shared.last_resize.swap(None) {
 			wgpu_renderer
 				.resize(&shared.wgpu, resize.size)
 				.context("Unable to resize wgpu")?;
 			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, resize.size);
-		}
-		let frame_resize = frame_start.elapsed();
+		};
+
 
 		shared
 			.metrics
@@ -502,4 +501,21 @@ pub struct Resize {
 enum AppEvent {
 	/// Shutdown
 	Shutdown,
+}
+
+// TODO: Not configure this out on ra once it accepts `attr` macros.
+// TODO: Allow usage on `if cond { ... }`.
+#[cfg(not(rust_analyzer))]
+macro time {
+	attr($name:ident) ($s:stmt) => {
+		let start = Instant::now();
+		$s;
+		let $name = start.elapsed();
+	},
+
+	attr($name:ident) (let $binding:pat = $e:expr;) => {
+		let start = Instant::now();
+		let $binding = $e;
+		let $name = start.elapsed();
+	},
 }

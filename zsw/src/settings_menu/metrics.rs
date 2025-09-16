@@ -71,8 +71,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 			true => {
 				let mut buckets = HashMap::<_, usize>::new();
 				for render_frame_time in render_frame_times.iter() {
-					let render_frame_time =
-						self::render_frame_time_non_cumulative(render_frame_time, duration_idx).as_millis_f64();
+					let render_frame_time = self::render_frame_time(render_frame_time, duration_idx).as_millis_f64();
 					#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
 					let bucket_idx = (render_frame_time * *histogram_time_scale) as usize;
 
@@ -96,7 +95,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 				.map(|(frame_idx, render_frame_time)| {
 					egui_plot::Bar::new(
 						frame_idx as f64,
-						self::render_frame_time_non_cumulative(render_frame_time, duration_idx).as_millis_f64(),
+						self::render_frame_time(render_frame_time, duration_idx).as_millis_f64(),
 					)
 					.width(1.0)
 				})
@@ -171,14 +170,6 @@ pub fn render_frame_time(frame_time: &RenderFrameTime, idx: usize) -> Duration {
 		4 => frame_time.render_finish,
 		5 => frame_time.resize,
 		_ => Duration::ZERO,
-	}
-}
-
-/// Returns the non-cumulative duration with index `idx`
-pub fn render_frame_time_non_cumulative(frame_time: &RenderFrameTime, idx: usize) -> Duration {
-	match idx {
-		0 => self::render_frame_time(frame_time, 0),
-		_ => self::render_frame_time(frame_time, idx) - self::render_frame_time(frame_time, idx - 1),
 	}
 }
 

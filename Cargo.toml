@@ -183,3 +183,6 @@ clippy.similar_names = "allow"
 
 # False positives with `zutil_cloned::cloned`
 clippy.semicolon_if_nothing_returned = "allow"
+
+# We need to this to cfg out rust-analyzer
+rust.unexpected_cfgs = { check-cfg = ['cfg(rust_analyzer)'], level = "warn" }

@@ -117,7 +117,7 @@ impl Default for RenderFrameTimes {
 
 /// Render frame time.
 ///
-/// These are the durations (cumulative by order) that it
+/// These are the durations that it
 /// took to perform each step of the frame
 #[derive(Clone, Copy, Debug)]
 pub struct RenderFrameTime {
