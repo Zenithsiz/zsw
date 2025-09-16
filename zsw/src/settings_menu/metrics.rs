@@ -3,7 +3,7 @@
 // Imports
 use {
 	crate::{
-		metrics::{Metrics, RenderFrameTime},
+		metrics::{FrameTimes, Metrics},
 		window::WindowMonitorNames,
 	},
 	core::time::Duration,
@@ -67,45 +67,31 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 
 	let mut charts = vec![];
 	for duration_idx in 0..6 {
-		let bars = match *is_histogram {
-			true => {
-				let mut buckets = HashMap::<_, usize>::new();
-				for render_frame_time in render_frame_times.iter() {
-					let render_frame_time = self::render_frame_time(render_frame_time, duration_idx).as_millis_f64();
-					#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
-					let bucket_idx = (render_frame_time * *histogram_time_scale) as usize;
-
-					*buckets.entry(bucket_idx).or_default() += 1;
-				}
-
-				buckets
-					.into_iter()
-					.map(|(bucket_idx, bucket)| {
-						let width = 1.0 / *histogram_time_scale;
-						let center = bucket_idx as f64 / *histogram_time_scale + width / 2.0;
-						let height = *histogram_time_scale * bucket as f64 / render_frame_times.len() as f64;
-
-						egui_plot::Bar::new(center, height).width(width)
-					})
-					.collect()
+		let chart = self::add_frame_time_chart(
+			&render_frame_times,
+			*is_histogram,
+			*histogram_time_scale,
+			*stack_charts,
+			&charts,
+			match duration_idx {
+				0 => "Paint egui",
+				1 => "Render start",
+				2 => "Render panels",
+				3 => "Render egui",
+				4 => "Render finish",
+				5 => "Resize",
+				_ => "Unknown",
 			},
-			false => render_frame_times
-				.iter()
-				.enumerate()
-				.map(|(frame_idx, render_frame_time)| {
-					egui_plot::Bar::new(
-						frame_idx as f64,
-						self::render_frame_time(render_frame_time, duration_idx).as_millis_f64(),
-					)
-					.width(1.0)
-				})
-				.collect(),
-		};
-
-		let mut chart = egui_plot::BarChart::new(self::render_frame_time_name(duration_idx), bars);
-		if !*is_histogram && *stack_charts {
-			chart = chart.stack_on(&charts.iter().collect::<Vec<_>>());
-		}
+			|frame_time| match duration_idx {
+				0 => frame_time.paint_egui,
+				1 => frame_time.render_start,
+				2 => frame_time.render_panels,
+				3 => frame_time.render_egui,
+				4 => frame_time.render_finish,
+				5 => frame_time.resize,
+				_ => unreachable!(),
+			},
+		);
 		charts.push(chart);
 	}
 
@@ -125,8 +111,56 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 	});
 }
 
+/// Creates a chart of frame times
+fn add_frame_time_chart<T>(
+	render_frame_times: &FrameTimes<T>,
+	is_histogram: bool,
+	histogram_time_scale: f64,
+	stack_charts: bool,
+	prev_charts: &[egui_plot::BarChart],
+	chart_name: &'static str,
+	get_duration: impl Fn(&T) -> Duration,
+) -> egui_plot::BarChart {
+	let bars = match is_histogram {
+		true => {
+			let mut buckets = HashMap::<_, usize>::new();
+			for render_frame_time in render_frame_times.iter() {
+				let render_frame_time = get_duration(render_frame_time).as_millis_f64();
+				#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
+				let bucket_idx = (render_frame_time * histogram_time_scale) as usize;
+
+				*buckets.entry(bucket_idx).or_default() += 1;
+			}
+
+			buckets
+				.into_iter()
+				.map(|(bucket_idx, bucket)| {
+					let width = 1.0 / histogram_time_scale;
+					let center = bucket_idx as f64 / histogram_time_scale + width / 2.0;
+					let height = histogram_time_scale * bucket as f64 / render_frame_times.len() as f64;
+
+					egui_plot::Bar::new(center, height).width(width)
+				})
+				.collect()
+		},
+		false => render_frame_times
+			.iter()
+			.enumerate()
+			.map(|(frame_idx, render_frame_time)| {
+				egui_plot::Bar::new(frame_idx as f64, get_duration(render_frame_time).as_millis_f64()).width(1.0)
+			})
+			.collect(),
+	};
+
+	let mut chart = egui_plot::BarChart::new(chart_name, bars);
+	if !is_histogram && stack_charts {
+		chart = chart.stack_on(&prev_charts.iter().collect::<Vec<_>>());
+	}
+	chart
+}
+
 /// Renders the window select and returns the selected one
-pub fn render_window_select(
+fn render_window_select(
 	ui: &mut egui::Ui,
 	metrics: &Metrics,
 	window_monitor_names: &WindowMonitorNames,
@@ -158,30 +192,4 @@ pub fn render_window_select(
 		});
 
 	*cur_window_id
-}
-
-/// Returns the duration with index `idx`
-pub fn render_frame_time(frame_time: &RenderFrameTime, idx: usize) -> Duration {
-	match idx {
-		0 => frame_time.paint_egui,
-		1 => frame_time.render_start,
-		2 => frame_time.render_panels,
-		3 => frame_time.render_egui,
-		4 => frame_time.render_finish,
-		5 => frame_time.resize,
-		_ => Duration::ZERO,
-	}
-}
-
-/// Returns the name for a frame time duration
-pub fn render_frame_time_name(idx: usize) -> &'static str {
-	match idx {
-		0 => "Paint egui",
-		1 => "Render start",
-		2 => "Render panels",
-		3 => "Render egui",
-		4 => "Render finish",
-		5 => "Resize",
-		_ => "Unknown",
-	}
 }
