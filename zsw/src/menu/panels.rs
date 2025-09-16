@@ -5,14 +5,11 @@ use {
 	crate::{
 		display::Display,
 		panel::{
-			PanelFadeImage,
 			PanelFadeShader,
-			PanelFadeState,
-			PanelNoneState,
 			PanelSlideShader,
-			PanelSlideState,
 			PanelState,
 			Panels,
+			state::{PanelFadeState, PanelNoneState, PanelSlideState, fade::PanelFadeImage},
 		},
 	},
 	core::time::Duration,

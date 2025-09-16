@@ -5,7 +5,12 @@ use {
 	super::Panel,
 	crate::{
 		display::Displays,
-		panel::{PanelFadeShader, PanelFadeState, PanelNoneState, PanelSlideShader, PanelSlideState, PanelState},
+		panel::{
+			PanelFadeShader,
+			PanelSlideShader,
+			PanelState,
+			state::{PanelFadeState, PanelNoneState, PanelSlideState},
+		},
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
 		profile::{
 			Profile,

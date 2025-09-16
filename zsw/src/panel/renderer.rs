@@ -10,10 +10,10 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{PanelFadeImage, PanelGeometryUniforms, PanelState, Panels},
+	super::{PanelGeometryUniforms, PanelState, Panels},
 	crate::{
 		metrics::{self, Metrics},
-		panel::PanelGeometry,
+		panel::{PanelGeometry, state::fade::PanelFadeImage},
 		time,
 	},
 	app_error::Context,

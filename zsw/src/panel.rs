@@ -4,14 +4,14 @@
 mod geometry;
 mod panels;
 mod renderer;
-mod state;
+pub mod state;
 
 // Exports
 pub use self::{
 	geometry::{PanelGeometry, PanelGeometryUniforms},
 	panels::Panels,
 	renderer::{PanelFadeShader, PanelShader, PanelSlideShader, PanelsRenderer, PanelsRendererShared},
-	state::{PanelFadeImage, PanelFadeState, PanelNoneState, PanelSlideState, PanelState},
+	state::PanelState,
 };
 
 // Imports
