@@ -196,18 +196,6 @@ impl PanelFadeState {
 		self.paused
 	}
 
-	/// Update the last time this field was updated and returns
-	/// the duration since that update
-	fn update_delta(&mut self) -> Duration {
-		// TODO: this can fall out of sync after a lot of cycles due to precision,
-		//       should we do it in some other way?
-		let now = Instant::now();
-		let delta = now.duration_since(self.last_update);
-		self.last_update = now;
-
-		delta
-	}
-
 	/// Sets the pause state
 	pub fn set_paused(&mut self, paused: bool) {
 		self.paused = paused;
@@ -298,12 +286,17 @@ impl PanelFadeState {
 			return;
 		}
 
-		// Calculate the delta since the last update and step through it
-		// TODO: If the delta is small enough (<1ms), skip updating?
-		//       this happens when we have multiple renderers rendering
-		//       at the same time, one to try to update immediately after
-		//       the other has updated.
-		let delta = self.update_delta();
+		// Calculate the delta since the last update and step through it.
+		// Note: If the delta would be pretty small (sub-millisecond), we
+		//       instead skip it.
+		// TODO: Revisit this and get the minimum from the lowest refresh rate or something,
+		//       since eventually we might want to update at 1000 Hz
+		let now = Instant::now();
+		let delta = now.duration_since(self.last_update);
+		if delta.as_millis() < 1 {
+			return;
+		}
+		self.last_update = now;
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
 		self.step(wgpu, delta).await;
 	}
