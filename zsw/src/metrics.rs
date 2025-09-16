@@ -12,7 +12,7 @@ use {
 #[derive(Default, Debug)]
 struct WindowMetrics {
 	/// Render frame times
-	render_frame_times: RenderFrameTimes,
+	render_frame_times: FrameTimes<RenderFrameTime>,
 }
 
 /// Metrics
@@ -31,7 +31,7 @@ impl Metrics {
 	}
 
 	/// Accesses render frame times metrics for a window
-	pub async fn render_frame_times(&self, window_id: WindowId) -> impl DerefMut<Target = RenderFrameTimes> {
+	pub async fn render_frame_times(&self, window_id: WindowId) -> impl DerefMut<Target = FrameTimes<RenderFrameTime>> {
 		let window_metrics = self.window_metrics.lock().await;
 		MutexGuard::map(window_metrics, |metrics| {
 			&mut metrics.entry(window_id).or_default().render_frame_times
@@ -49,9 +49,9 @@ impl Metrics {
 
 /// Render frame times
 #[derive(Debug)]
-pub struct RenderFrameTimes {
+pub struct FrameTimes<T> {
 	/// Render frame times
-	times: VecDeque<RenderFrameTime>,
+	times: VecDeque<T>,
 
 	/// Maximum frame times
 	max_len: usize,
@@ -60,9 +60,9 @@ pub struct RenderFrameTimes {
 	paused: bool,
 }
 
-impl RenderFrameTimes {
+impl<T> FrameTimes<T> {
 	/// Adds a frame time to these metrics
-	pub fn add(&mut self, frame_time: RenderFrameTime) {
+	pub fn add(&mut self, frame_time: T) {
 		if self.paused {
 			return;
 		}
@@ -94,7 +94,7 @@ impl RenderFrameTimes {
 	}
 
 	/// Returns an iterator over the frame times in these metrics
-	pub fn iter(&self) -> impl Iterator<Item = &RenderFrameTime> {
+	pub fn iter(&self) -> impl Iterator<Item = &T> {
 		self.times.iter()
 	}
 
@@ -104,7 +104,7 @@ impl RenderFrameTimes {
 	}
 }
 
-impl Default for RenderFrameTimes {
+impl<T> Default for FrameTimes<T> {
 	fn default() -> Self {
 		Self {
 			times:   VecDeque::new(),
