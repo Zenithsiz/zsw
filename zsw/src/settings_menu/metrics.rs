@@ -63,8 +63,8 @@ fn draw_render_frame_times(ui: &mut egui::Ui, render_frame_times: &mut FrameTime
 		.clamp_grid(true);
 
 	let plot = match settings.is_histogram {
-		true => plot.x_axis_label("Time (s)").y_axis_label("Occurrences (normalized)"),
-		false => plot.x_axis_label("Frame").y_axis_label("Time (s)"),
+		true => plot.x_axis_label("Time (ms)").y_axis_label("Occurrences (normalized)"),
+		false => plot.x_axis_label("Frame").y_axis_label("Time (ms)"),
 	};
 
 	plot.show(ui, |plot_ui| {
