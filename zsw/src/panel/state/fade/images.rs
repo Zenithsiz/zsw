@@ -1,11 +1,10 @@
-//! Panel images
+//! Panel fade images
 
 // Imports
 use {
-	super::PlaylistPlayer,
-	::image::DynamicImage,
+	crate::playlist::PlaylistPlayer,
 	app_error::Context,
-	image::imageops,
+	image::{DynamicImage, imageops},
 	std::{self, mem, path::Path, sync::Arc},
 	tokio::sync::OnceCell,
 	zsw_util::{AppError, Loadable, loadable::Loader},

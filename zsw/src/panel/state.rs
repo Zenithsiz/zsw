@@ -6,7 +6,11 @@ pub mod none;
 pub mod slide;
 
 // Exports
-pub use self::{fade::PanelFadeState, none::PanelNoneState, slide::PanelSlideState};
+pub use self::{
+	fade::{PanelFadeImage, PanelFadeState},
+	none::PanelNoneState,
+	slide::PanelSlideState,
+};
 
 // Imports
 use super::PanelShader;

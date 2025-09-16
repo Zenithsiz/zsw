@@ -1,11 +1,14 @@
 //! Panel fade state
 
+// Modules
+pub mod images;
+
+// Exports
+pub use self::images::{PanelFadeImage, PanelFadeImages};
+
 // Imports
 use {
-	crate::{
-		panel::{PanelFadeImages, PanelFadeShader},
-		playlist::PlaylistPlayer,
-	},
+	crate::{panel::PanelFadeShader, playlist::PlaylistPlayer},
 	chrono::TimeDelta,
 	core::time::Duration,
 	std::{sync::Arc, time::Instant},
