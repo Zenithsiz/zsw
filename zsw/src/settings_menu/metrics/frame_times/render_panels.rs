@@ -67,22 +67,7 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 		charts.push(chart);
 	}
 
-	let legend = egui_plot::Legend::default().follow_insertion_order(true);
-
-	let plot = egui_plot::Plot::new("Render frame times")
-		.legend(legend)
-		.clamp_grid(true);
-
-	let plot = match settings.is_histogram {
-		true => plot.x_axis_label("Time (ms)").y_axis_label("Occurrences (normalized)"),
-		false => plot.x_axis_label("Frame").y_axis_label("Time (ms)"),
-	};
-
-	plot.show(ui, |plot_ui| {
-		for chart in charts {
-			plot_ui.bar_chart(chart);
-		}
-	});
+	super::draw_plot(ui, &settings, charts);
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]

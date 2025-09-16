@@ -12,6 +12,26 @@ use {
 	std::collections::HashMap,
 };
 
+/// Draws a frame time's plot
+fn draw_plot(ui: &mut egui::Ui, settings: &FrameTimeSettings, charts: impl IntoIterator<Item = egui_plot::BarChart>) {
+	let legend = egui_plot::Legend::default().follow_insertion_order(true);
+
+	let plot = egui_plot::Plot::new("Render frame times")
+		.legend(legend)
+		.clamp_grid(true);
+
+	let plot = match settings.is_histogram {
+		true => plot.x_axis_label("Time (ms)").y_axis_label("Occurrences (normalized)"),
+		false => plot.x_axis_label("Frame").y_axis_label("Time (ms)"),
+	};
+
+	plot.show(ui, |plot_ui| {
+		for chart in charts {
+			plot_ui.bar_chart(chart);
+		}
+	});
+}
+
 struct FrameTimeSettings {
 	is_histogram:         bool,
 	histogram_time_scale: f64,
