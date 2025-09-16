@@ -12,6 +12,22 @@ use {
 	zutil_cloned::cloned,
 };
 
+/// Panel fade images shared
+#[derive(Default, Debug)]
+pub struct PanelFadeImagesShared {
+	/// Image bind group layout
+	image_bind_group_layout: OnceCell<wgpu::BindGroupLayout>,
+}
+
+impl PanelFadeImagesShared {
+	/// Gets the image bind group layout, or initializes it, if uninitialized
+	pub async fn image_bind_group_layout(&self, wgpu: &Wgpu) -> &wgpu::BindGroupLayout {
+		self.image_bind_group_layout
+			.get_or_init(async || self::create_bind_group_layout(wgpu))
+			.await
+	}
+}
+
 /// Panel fade images
 #[derive(Debug)]
 pub struct PanelFadeImages {
@@ -103,6 +119,26 @@ impl PanelFadeImages {
 		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
+	}
+
+	/// Gets the image sampler, or initializes it, if uninitialized
+	pub async fn image_sampler(&self, wgpu: &Wgpu) -> &wgpu::Sampler {
+		self.image_sampler
+			.get_or_init(async || self::create_image_sampler(wgpu))
+			.await
+	}
+
+	/// Gets the image bind group, or initializes it, if uninitialized
+	pub async fn image_bind_group(&self, wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> &wgpu::BindGroup {
+		self.image_bind_group
+			.get_or_init(async || {
+				let [prev, cur, next] = [&self.prev, &self.cur, &self.next]
+					.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
+				let image_sampler = self.image_sampler(wgpu).await;
+				let layout = shared.image_bind_group_layout(wgpu).await;
+				self::create_image_bind_group(wgpu, layout, prev, cur, next, image_sampler)
+			})
+			.await
 	}
 
 	/// Loads any missing images, prioritizing the current, then next, then previous.
@@ -272,4 +308,100 @@ pub fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppEr
 	}
 
 	Ok(image)
+}
+
+/// Creates the fade image bind group layout
+fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+	let descriptor = wgpu::BindGroupLayoutDescriptor {
+		label:   Some("[zsw::panel] Fade image bind group layout"),
+		entries: &[
+			wgpu::BindGroupLayoutEntry {
+				binding:    0,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty:         wgpu::BindingType::Texture {
+					multisampled:   false,
+					view_dimension: wgpu::TextureViewDimension::D2,
+					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+				},
+				count:      None,
+			},
+			wgpu::BindGroupLayoutEntry {
+				binding:    1,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty:         wgpu::BindingType::Texture {
+					multisampled:   false,
+					view_dimension: wgpu::TextureViewDimension::D2,
+					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+				},
+				count:      None,
+			},
+			wgpu::BindGroupLayoutEntry {
+				binding:    2,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty:         wgpu::BindingType::Texture {
+					multisampled:   false,
+					view_dimension: wgpu::TextureViewDimension::D2,
+					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+				},
+				count:      None,
+			},
+			wgpu::BindGroupLayoutEntry {
+				binding:    3,
+				visibility: wgpu::ShaderStages::FRAGMENT,
+				ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+				count:      None,
+			},
+		],
+	};
+
+	wgpu.device.create_bind_group_layout(&descriptor)
+}
+
+/// Creates the texture bind group
+fn create_image_bind_group(
+	wgpu: &Wgpu,
+	bind_group_layout: &wgpu::BindGroupLayout,
+	view_prev: &wgpu::TextureView,
+	view_cur: &wgpu::TextureView,
+	view_next: &wgpu::TextureView,
+	sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+	let descriptor = wgpu::BindGroupDescriptor {
+		layout:  bind_group_layout,
+		entries: &[
+			wgpu::BindGroupEntry {
+				binding:  0,
+				resource: wgpu::BindingResource::TextureView(view_prev),
+			},
+			wgpu::BindGroupEntry {
+				binding:  1,
+				resource: wgpu::BindingResource::TextureView(view_cur),
+			},
+			wgpu::BindGroupEntry {
+				binding:  2,
+				resource: wgpu::BindingResource::TextureView(view_next),
+			},
+			wgpu::BindGroupEntry {
+				binding:  3,
+				resource: wgpu::BindingResource::Sampler(sampler),
+			},
+		],
+		label:   Some("[zsw::panel] Image bind group"),
+	};
+	wgpu.device.create_bind_group(&descriptor)
+}
+
+/// Creates the image sampler
+fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
+	let descriptor = wgpu::SamplerDescriptor {
+		label: Some("[zsw::panel] Image sampler"),
+		address_mode_u: wgpu::AddressMode::ClampToEdge,
+		address_mode_v: wgpu::AddressMode::ClampToEdge,
+		address_mode_w: wgpu::AddressMode::ClampToEdge,
+		mag_filter: wgpu::FilterMode::Linear,
+		min_filter: wgpu::FilterMode::Linear,
+		mipmap_filter: wgpu::FilterMode::Linear,
+		..wgpu::SamplerDescriptor::default()
+	};
+	wgpu.device.create_sampler(&descriptor)
 }

@@ -10,7 +10,7 @@ pub use self::{uniform::MAX_UNIFORM_SIZE, vertex::PanelVertex};
 // Imports
 use {
 	self::uniform::PanelImageUniforms,
-	super::{PanelGeometryUniforms, PanelState, Panels},
+	super::{PanelGeometryUniforms, PanelState, Panels, state::fade::PanelFadeImagesShared},
 	crate::{
 		metrics::{self, Metrics},
 		panel::{PanelGeometry, state::fade::PanelFadeImage},
@@ -25,7 +25,7 @@ use {
 		collections::{HashMap, hash_map},
 		sync::Arc,
 	},
-	tokio::sync::{Mutex, OnceCell},
+	tokio::sync::Mutex,
 	wgpu::util::DeviceExt,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_util::{AppError, Rect},
@@ -48,8 +48,8 @@ pub struct PanelsRendererShared {
 	/// Uniforms bind group layout
 	uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
-	/// Fade image bind group layout
-	fade_image_bind_group_layout: OnceCell<wgpu::BindGroupLayout>,
+	/// Fade
+	fade: PanelFadeImagesShared,
 }
 
 impl PanelsRendererShared {
@@ -66,7 +66,7 @@ impl PanelsRendererShared {
 			vertices,
 			indices,
 			uniforms_bind_group_layout,
-			fade_image_bind_group_layout: OnceCell::new(),
+			fade: PanelFadeImagesShared::default(),
 		}
 	}
 }
@@ -207,13 +207,10 @@ impl PanelsRenderer {
 				hash_map::Entry::Vacant(entry) => {
 					let bind_group_layouts = match panel.state {
 						PanelState::None(_) => &[&shared.uniforms_bind_group_layout] as &[_],
-						PanelState::Fade(_) => {
-							let fade_image_bind_group_layout = shared
-								.fade_image_bind_group_layout
-								.get_or_init(async || self::create_fade_image_bind_group_layout(wgpu))
-								.await;
-							&[&shared.uniforms_bind_group_layout, fade_image_bind_group_layout]
-						},
+						PanelState::Fade(_) => &[
+							&shared.uniforms_bind_group_layout,
+							shared.fade.image_bind_group_layout(wgpu).await,
+						],
 						PanelState::Slide(_) => &[&shared.uniforms_bind_group_layout],
 					};
 
@@ -236,35 +233,8 @@ impl PanelsRenderer {
 			// Bind the extra bind groups
 			match &mut panel.state {
 				PanelState::None(_panel_state) => (),
-				PanelState::Fade(panel_state) => {
-					let panel_images = panel_state.images_mut();
-					let image_sampler = panel_images
-						.image_sampler
-						.get_or_init(async || self::create_image_sampler(wgpu))
-						.await;
-
-					let [prev, cur, next] = [&panel_images.prev, &panel_images.cur, &panel_images.next]
-						.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
-
-					let image_bind_group = panel_images
-						.image_bind_group
-						.get_or_init(async || {
-							let fade_image_bind_group_layout = shared
-								.fade_image_bind_group_layout
-								.get_or_init(async || self::create_fade_image_bind_group_layout(wgpu))
-								.await;
-							self::create_image_bind_group(
-								wgpu,
-								fade_image_bind_group_layout,
-								prev,
-								cur,
-								next,
-								image_sampler,
-							)
-						})
-						.await;
-					render_pass.set_bind_group(1, image_bind_group, &[]);
-				},
+				PanelState::Fade(panel_state) =>
+					render_pass.set_bind_group(1, panel_state.images().image_bind_group(wgpu, &shared.fade).await, &[]),
 				PanelState::Slide(_panel_state) => (),
 			}
 
@@ -600,102 +570,6 @@ fn create_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	};
 
 	wgpu.device.create_bind_group_layout(&descriptor)
-}
-
-/// Creates the fade image bind group layout
-fn create_fade_image_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
-	let descriptor = wgpu::BindGroupLayoutDescriptor {
-		label:   Some("[zsw::panel] Fade image bind group layout"),
-		entries: &[
-			wgpu::BindGroupLayoutEntry {
-				binding:    0,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Texture {
-					multisampled:   false,
-					view_dimension: wgpu::TextureViewDimension::D2,
-					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
-				},
-				count:      None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding:    1,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Texture {
-					multisampled:   false,
-					view_dimension: wgpu::TextureViewDimension::D2,
-					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
-				},
-				count:      None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding:    2,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Texture {
-					multisampled:   false,
-					view_dimension: wgpu::TextureViewDimension::D2,
-					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
-				},
-				count:      None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding:    3,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-				count:      None,
-			},
-		],
-	};
-
-	wgpu.device.create_bind_group_layout(&descriptor)
-}
-
-/// Creates the texture bind group
-fn create_image_bind_group(
-	wgpu: &Wgpu,
-	bind_group_layout: &wgpu::BindGroupLayout,
-	view_prev: &wgpu::TextureView,
-	view_cur: &wgpu::TextureView,
-	view_next: &wgpu::TextureView,
-	sampler: &wgpu::Sampler,
-) -> wgpu::BindGroup {
-	let descriptor = wgpu::BindGroupDescriptor {
-		layout:  bind_group_layout,
-		entries: &[
-			wgpu::BindGroupEntry {
-				binding:  0,
-				resource: wgpu::BindingResource::TextureView(view_prev),
-			},
-			wgpu::BindGroupEntry {
-				binding:  1,
-				resource: wgpu::BindingResource::TextureView(view_cur),
-			},
-			wgpu::BindGroupEntry {
-				binding:  2,
-				resource: wgpu::BindingResource::TextureView(view_next),
-			},
-			wgpu::BindGroupEntry {
-				binding:  3,
-				resource: wgpu::BindingResource::Sampler(sampler),
-			},
-		],
-		label:   Some("[zsw::panel] Image bind group"),
-	};
-	wgpu.device.create_bind_group(&descriptor)
-}
-
-/// Creates the image sampler
-fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
-	let descriptor = wgpu::SamplerDescriptor {
-		label: Some("[zsw::panel] Image sampler"),
-		address_mode_u: wgpu::AddressMode::ClampToEdge,
-		address_mode_v: wgpu::AddressMode::ClampToEdge,
-		address_mode_w: wgpu::AddressMode::ClampToEdge,
-		mag_filter: wgpu::FilterMode::Linear,
-		min_filter: wgpu::FilterMode::Linear,
-		mipmap_filter: wgpu::FilterMode::Linear,
-		..wgpu::SamplerDescriptor::default()
-	};
-	wgpu.device.create_sampler(&descriptor)
 }
 
 /// Shader
