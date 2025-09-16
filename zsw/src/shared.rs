@@ -14,7 +14,7 @@ use {
 	},
 	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
-	winit::{dpi::PhysicalPosition, event_loop::EventLoopProxy},
+	winit::event_loop::EventLoopProxy,
 	zsw_wgpu::Wgpu,
 };
 
@@ -24,7 +24,6 @@ pub struct Shared {
 	pub event_loop_proxy: EventLoopProxy<AppEvent>,
 
 	pub last_resize: AtomicCell<Option<Resize>>,
-	pub cursor_pos:  AtomicCell<Option<PhysicalPosition<f64>>>,
 
 	pub wgpu:                   Wgpu,
 	pub panels_renderer_shared: PanelsRendererShared,

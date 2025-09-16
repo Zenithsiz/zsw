@@ -28,7 +28,7 @@ use {
 		sync::{Arc, nonpoison::Mutex},
 	},
 	strum::IntoEnumIterator,
-	winit::{dpi::LogicalPosition, event_loop::EventLoopProxy},
+	winit::event_loop::EventLoopProxy,
 	zsw_util::{AppError, DurationDisplay, Rect},
 	zsw_wgpu::Wgpu,
 };
@@ -64,18 +64,17 @@ impl Menu {
 		metrics: &Metrics,
 		window_monitor_names: &WindowMonitorNames,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
-		cursor_pos: Option<LogicalPosition<f32>>,
 		window_geometry: Rect<i32, u32>,
 	) {
 		// Create the window
 		let mut egui_window = egui::Window::new("Menu");
 
 		// Open it at the mouse if pressed
-		if let Some(cursor_pos) = cursor_pos &&
-			!ctx.is_pointer_over_area() &&
-			ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Secondary))
+		if !ctx.is_pointer_over_area() &&
+			ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Secondary)) &&
+			let Some(pointer_pos) = ctx.input(|input| input.pointer.latest_pos())
 		{
-			egui_window = egui_window.current_pos(egui::pos2(cursor_pos.x, cursor_pos.y));
+			egui_window = egui_window.current_pos(pointer_pos);
 			self.open = true;
 		}
 

@@ -152,9 +152,9 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 	}
 
 	fn window_event(&mut self, _event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+		#[expect(clippy::single_match, reason = "We'll add more in the future")]
 		match event {
 			WindowEvent::Resized(size) => self.shared.last_resize.store(Some(Resize { size })),
-			WindowEvent::CursorMoved { position, .. } => self.shared.cursor_pos.store(Some(position)),
 			_ => (),
 		}
 
@@ -203,7 +203,6 @@ impl WinitApp {
 		let shared = Shared {
 			event_loop_proxy,
 			last_resize: AtomicCell::new(None),
-			cursor_pos: AtomicCell::new(None),
 			wgpu,
 			panels_renderer_shared,
 			displays,
@@ -377,14 +376,9 @@ async fn paint_egui(
 	menu: &mut Menu,
 	window_geometry: Rect<i32, u32>,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
-	// Adjust cursor pos to account for the scale factor
-	let scale_factor = window.scale_factor();
-	let cursor_pos = shared.cursor_pos.load();
-
 	let full_output_fut =
 		egui_painter.draw(window, async |ctx| {
 			// Draw the menu
-			let cursor_pos = cursor_pos.map(|cursor_pos| cursor_pos.cast::<f32>().to_logical(scale_factor));
 			tokio::task::block_in_place(|| {
 				menu.draw(
 					ctx,
@@ -396,17 +390,17 @@ async fn paint_egui(
 					&shared.metrics,
 					&shared.window_monitor_names,
 					&shared.event_loop_proxy,
-					cursor_pos,
 					window_geometry,
 				)
 			});
 
 
 			// Then go through all panels checking for interactions with their geometries
-			let Some(cursor_pos) = shared.cursor_pos.load() else {
+			// TODO: Should this be done here and not somewhere else?
+			let Some(pointer_pos) = ctx.input(|input| input.pointer.latest_pos()) else {
 				return Ok(());
 			};
-			let cursor_pos = Point2::new(cursor_pos.x as i32, cursor_pos.y as i32);
+			let pointer_pos = Point2::new(pointer_pos.x as i32, pointer_pos.y as i32);
 			shared
 				.panels
 				.for_each(async |panel| {
@@ -416,7 +410,7 @@ async fn paint_egui(
 					// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 					if ctx.is_pointer_over_area() ||
 						!display.geometries.iter().any(|&geometry| {
-							PanelGeometry::geometry_on(geometry, window_geometry).contains(cursor_pos)
+							PanelGeometry::geometry_on(geometry, window_geometry).contains(pointer_pos)
 						}) {
 						return;
 					}
