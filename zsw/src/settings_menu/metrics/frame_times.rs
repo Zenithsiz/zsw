@@ -21,8 +21,8 @@ fn draw_plot(ui: &mut egui::Ui, display: &FrameTimesDisplay, charts: impl IntoIt
 		.clamp_grid(true);
 
 	let plot = match display {
-		FrameTimesDisplay::Histogram { .. } => plot.x_axis_label("Time (ms)").y_axis_label("Occurrences (normalized)"),
 		FrameTimesDisplay::TimeGraph { .. } => plot.x_axis_label("Frame").y_axis_label("Time (ms)"),
+		FrameTimesDisplay::Histogram { .. } => plot.x_axis_label("Time (ms)").y_axis_label("Occurrences (normalized)"),
 	};
 
 	plot.show(ui, |plot_ui| {
@@ -104,6 +104,9 @@ fn draw_display_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) 
 			});
 
 		match &mut *cur_kind {
+			FrameTimesDisplayKind::TimeGraph => {
+				ui.toggle_value(&mut cur_data.time_graph.stack_charts, "Stack charts");
+			},
 			FrameTimesDisplayKind::Histogram => {
 				ui.horizontal(|ui| {
 					ui.label("Time scale: ");
@@ -112,9 +115,6 @@ fn draw_display_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) 
 						.clamping(egui::SliderClamping::Always)
 						.ui(ui);
 				});
-			},
-			FrameTimesDisplayKind::TimeGraph => {
-				ui.toggle_value(&mut cur_data.time_graph.stack_charts, "Stack charts");
 			},
 		}
 	});
@@ -140,6 +140,14 @@ where
 	D: DurationIdx<T>,
 {
 	let bars = match display {
+		FrameTimesDisplay::TimeGraph { .. } => frame_times
+			.iter()
+			.enumerate()
+			.filter_map(|(frame_idx, frame_time)| {
+				let height = duration_idx.duration_of(frame_time)?.as_millis_f64();
+				Some(egui_plot::Bar::new(frame_idx as f64, height).width(1.0))
+			})
+			.collect(),
 		FrameTimesDisplay::Histogram { time_scale } => {
 			let mut buckets: HashMap<usize, usize> = HashMap::<_, usize>::new();
 			for frame_time in frame_times.iter() {
@@ -163,14 +171,6 @@ where
 				})
 				.collect()
 		},
-		FrameTimesDisplay::TimeGraph { .. } => frame_times
-			.iter()
-			.enumerate()
-			.filter_map(|(frame_idx, frame_time)| {
-				let height = duration_idx.duration_of(frame_time)?.as_millis_f64();
-				Some(egui_plot::Bar::new(frame_idx as f64, height).width(1.0))
-			})
-			.collect(),
 	};
 
 	let mut chart = egui_plot::BarChart::new(duration_idx.name(), bars);
