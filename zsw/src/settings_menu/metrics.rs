@@ -34,7 +34,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 
 			match metric {
 				WindowMetric::Render =>
-					frame_times::draw_render_frame_times(ui, &mut metrics.render_frame_times(window_id).block_on()),
+					frame_times::render::draw(ui, &mut metrics.render_frame_times(window_id).block_on()),
 			}
 		},
 	}
