@@ -17,6 +17,7 @@ use {
 	},
 	core::time::Duration,
 	egui::{Widget, color_picker},
+	std::ptr,
 	zsw_util::{Rect, TokioTaskBlockOn},
 	zsw_wgpu::Wgpu,
 };
@@ -49,18 +50,21 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 			name = name.weak();
 		}
 
-		ui.collapsing(name, |ui| {
-			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-			match &mut panel.state {
-				PanelState::None(_) => (),
-				PanelState::Fade(state) => self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &mut display),
-				PanelState::Slide(_) => (),
-			}
+		egui::CollapsingHeader::new(name)
+			.id_salt(ptr::from_ref(panel))
+			.show(&mut *ui, |ui| {
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+				match &mut panel.state {
+					PanelState::None(_) => (),
+					PanelState::Fade(state) =>
+						self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &mut display),
+					PanelState::Slide(_) => (),
+				}
 
-			ui.collapsing("Shader", |ui| {
-				self::draw_shader_select(ui, &mut panel.state);
+				ui.collapsing("Shader", |ui| {
+					self::draw_shader_select(ui, &mut panel.state);
+				});
 			});
-		});
 	}
 }
 
