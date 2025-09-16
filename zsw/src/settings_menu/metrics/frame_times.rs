@@ -11,14 +11,14 @@ use {
 	std::collections::HashMap,
 };
 
-struct RenderFrameTimeSettings {
+struct FrameTimeSettings {
 	is_histogram:         bool,
 	histogram_time_scale: f64,
 	stack_charts:         bool,
 }
 
 /// Draws a frame time's settings
-fn draw_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> RenderFrameTimeSettings {
+fn draw_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> FrameTimeSettings {
 	// TODO: Turn this into some enum between histogram / time
 	let is_histogram = settings_menu::get_data::<bool>(ui, "metrics-tab-histogram");
 	let mut is_histogram = is_histogram.lock();
@@ -62,7 +62,7 @@ fn draw_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T
 		}
 	});
 
-	RenderFrameTimeSettings {
+	FrameTimeSettings {
 		is_histogram:         *is_histogram,
 		histogram_time_scale: *histogram_time_scale,
 		stack_charts:         *stack_charts,
@@ -71,7 +71,7 @@ fn draw_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T
 
 /// Creates a chart of frame times
 fn add_frame_time_chart<T, D>(
-	render_frame_times: &FrameTimes<T>,
+	frame_times: &FrameTimes<T>,
 	is_histogram: bool,
 	histogram_time_scale: f64,
 	stack_charts: bool,
@@ -84,10 +84,10 @@ where
 	let bars = match is_histogram {
 		true => {
 			let mut buckets: HashMap<usize, usize> = HashMap::<_, usize>::new();
-			for render_frame_time in render_frame_times.iter() {
-				let render_frame_time = duration_idx.duration_of(render_frame_time).as_millis_f64();
+			for frame_time in frame_times.iter() {
+				let duration = duration_idx.duration_of(frame_time).as_millis_f64();
 				#[expect(clippy::cast_sign_loss, reason = "Durations are positive")]
-				let bucket_idx = (render_frame_time * histogram_time_scale) as usize;
+				let bucket_idx = (duration * histogram_time_scale) as usize;
 
 				*buckets.entry(bucket_idx).or_default() += 1;
 			}
@@ -97,21 +97,17 @@ where
 				.map(|(bucket_idx, bucket)| {
 					let width = 1.0 / histogram_time_scale;
 					let center = bucket_idx as f64 / histogram_time_scale + width / 2.0;
-					let height = histogram_time_scale * bucket as f64 / render_frame_times.len() as f64;
+					let height = histogram_time_scale * bucket as f64 / frame_times.len() as f64;
 
 					egui_plot::Bar::new(center, height).width(width)
 				})
 				.collect()
 		},
-		false => render_frame_times
+		false => frame_times
 			.iter()
 			.enumerate()
-			.map(|(frame_idx, render_frame_time)| {
-				egui_plot::Bar::new(
-					frame_idx as f64,
-					duration_idx.duration_of(render_frame_time).as_millis_f64(),
-				)
-				.width(1.0)
+			.map(|(frame_idx, frame_time)| {
+				egui_plot::Bar::new(frame_idx as f64, duration_idx.duration_of(frame_time).as_millis_f64()).width(1.0)
 			})
 			.collect(),
 	};
