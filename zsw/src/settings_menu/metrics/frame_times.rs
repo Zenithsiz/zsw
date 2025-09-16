@@ -39,7 +39,7 @@ struct FrameTimeSettings {
 }
 
 /// Draws a frame time's settings
-fn draw_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> FrameTimeSettings {
+fn draw_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> FrameTimeSettings {
 	// TODO: Turn this into some enum between histogram / time
 	let is_histogram = settings_menu::get_data::<bool>(ui, "metrics-tab-histogram");
 	let mut is_histogram = is_histogram.lock();

@@ -9,7 +9,7 @@ use {
 
 /// Draws the render frame times
 pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderFrameTime>) {
-	let settings = super::draw_frame_time_settings(ui, render_frame_times);
+	let settings = super::draw_settings(ui, render_frame_times);
 
 	let mut charts = vec![];
 	for duration_idx in DurationIdx::iter() {

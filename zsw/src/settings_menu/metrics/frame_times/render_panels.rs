@@ -10,7 +10,7 @@ use {
 
 /// Draws the render panel frame times
 pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsFrameTime>) {
-	let settings = super::draw_frame_time_settings(ui, render_frame_times);
+	let settings = super::draw_settings(ui, render_frame_times);
 
 	// Go through all frame times and record which panels and geometries we saw
 	// so we can create the correct indices after.
