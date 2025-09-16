@@ -30,11 +30,11 @@ mod config;
 mod config_dirs;
 mod display;
 mod init;
+mod menu;
 mod metrics;
 mod panel;
 mod playlist;
 mod profile;
-mod settings_menu;
 mod shared;
 mod window;
 
@@ -44,11 +44,11 @@ use {
 		config::Config,
 		config_dirs::ConfigDirs,
 		display::Displays,
+		menu::Menu,
 		metrics::Metrics,
 		panel::{PanelGeometry, Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
-		settings_menu::SettingsMenu,
 		shared::Shared,
 		window::WindowMonitorNames,
 	},
@@ -252,7 +252,7 @@ impl WinitApp {
 			let egui_event_handler = EguiEventHandler::new(&window);
 			let egui_painter = EguiPainter::new(&egui_event_handler);
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
-			let settings_menu = SettingsMenu::new();
+			let menu = Menu::new();
 
 			#[cloned(shared = self.shared, window)]
 			zsw_util::spawn_task("Renderer", async move {
@@ -263,7 +263,7 @@ impl WinitApp {
 					panels_renderer,
 					egui_renderer,
 					egui_painter,
-					settings_menu,
+					menu,
 				)
 				.await
 			});
@@ -290,7 +290,7 @@ async fn renderer(
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
 	egui_painter: EguiPainter,
-	mut settings_menu: SettingsMenu,
+	mut menu: Menu,
 ) -> Result<(), AppError> {
 	loop {
 		// TODO: Only update this when we receive a move/resize event instead of querying each frame?
@@ -300,7 +300,7 @@ async fn renderer(
 		// TODO: Have `egui_renderer` do this for us on render?
 		#[time(frame_paint_egui)]
 		let (egui_paint_jobs, egui_textures_delta) =
-			match self::paint_egui(shared, window, &egui_painter, &mut settings_menu, window_geometry).await {
+			match self::paint_egui(shared, window, &egui_painter, &mut menu, window_geometry).await {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {}", err.pretty());
@@ -374,7 +374,7 @@ async fn paint_egui(
 	shared: &Shared,
 	window: &Window,
 	egui_painter: &EguiPainter,
-	settings_menu: &mut SettingsMenu,
+	menu: &mut Menu,
 	window_geometry: Rect<i32, u32>,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
 	// Adjust cursor pos to account for the scale factor
@@ -383,10 +383,10 @@ async fn paint_egui(
 
 	let full_output_fut =
 		egui_painter.draw(window, async |ctx| {
-			// Draw the settings menu
+			// Draw the menu
 			let cursor_pos = cursor_pos.map(|cursor_pos| cursor_pos.cast::<f32>().to_logical(scale_factor));
 			tokio::task::block_in_place(|| {
-				settings_menu.draw(
+				menu.draw(
 					ctx,
 					&shared.wgpu,
 					&shared.displays,

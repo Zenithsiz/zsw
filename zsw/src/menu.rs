@@ -1,4 +1,4 @@
-//! Settings menu
+//! Menu
 
 // Lints
 #![allow(unused_results)] // Egui produces a lot of results we don't need to use
@@ -33,9 +33,9 @@ use {
 	zsw_wgpu::Wgpu,
 };
 
-/// Settings menu
+/// Menu
 #[derive(Debug)]
-pub struct SettingsMenu {
+pub struct Menu {
 	/// If open
 	open: bool,
 
@@ -43,8 +43,8 @@ pub struct SettingsMenu {
 	cur_tab: Tab,
 }
 
-impl SettingsMenu {
-	/// Creates the settings menu
+impl Menu {
+	/// Creates the menu
 	pub fn new() -> Self {
 		Self {
 			open:    false,
@@ -52,7 +52,7 @@ impl SettingsMenu {
 		}
 	}
 
-	/// Draws the settings menu
+	/// Draws the menu
 	pub fn draw(
 		&mut self,
 		ctx: &egui::Context,
@@ -68,7 +68,7 @@ impl SettingsMenu {
 		window_geometry: Rect<i32, u32>,
 	) {
 		// Create the window
-		let mut egui_window = egui::Window::new("Settings");
+		let mut egui_window = egui::Window::new("Menu");
 
 		// Open it at the mouse if pressed
 		if let Some(cursor_pos) = cursor_pos &&

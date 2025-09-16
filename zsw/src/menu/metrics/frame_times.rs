@@ -6,7 +6,7 @@ pub mod render_panels;
 
 // Imports
 use {
-	crate::{metrics::FrameTimes, settings_menu},
+	crate::{menu, metrics::FrameTimes},
 	core::time::Duration,
 	egui::Widget,
 	std::collections::HashMap,
@@ -70,10 +70,10 @@ fn draw_display_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) 
 		time_scale:    f64 = 10.0,
 	}
 
-	let cur_kind = settings_menu::get_data::<FrameTimesDisplayKind>(ui, "metrics-tab-display-kind");
+	let cur_kind = menu::get_data::<FrameTimesDisplayKind>(ui, "metrics-tab-display-kind");
 	let mut cur_kind = cur_kind.lock();
 
-	let cur_data = settings_menu::get_data::<FrameTimesDisplayData>(ui, "metrics-tab-display-data");
+	let cur_data = menu::get_data::<FrameTimesDisplayData>(ui, "metrics-tab-display-data");
 	let mut cur_data = cur_data.lock();
 
 	ui.horizontal(|ui| {
