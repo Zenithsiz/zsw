@@ -22,56 +22,15 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 	};
 
 	let mut render_frame_times = metrics.render_frame_times(window_id).block_on();
-
-	// TODO: Turn this into some enum between histogram / time
-	let is_histogram = super::get_data::<bool>(ui, "metrics-tab-histogram");
-	let mut is_histogram = is_histogram.lock();
-
-	let histogram_time_scale = super::get_data_with_default::<f64>(ui, "metrics-tab-histogram-time-scale", || 20.0);
-	let mut histogram_time_scale = histogram_time_scale.lock();
-
-	let stack_charts = super::get_data_with_default::<bool>(ui, "metrics-tab-chart-stacks", || true);
-	let mut stack_charts = stack_charts.lock();
-
-	ui.horizontal(|ui| {
-		let mut is_paused = render_frame_times.is_paused();
-		if ui.toggle_value(&mut is_paused, "Pause").changed() {
-			render_frame_times.pause(is_paused);
-		}
-
-		let mut max_len = render_frame_times.max_len();
-		ui.horizontal(|ui| {
-			ui.label("Maximum frames: ");
-			if egui::Slider::new(&mut max_len, 0..=60 * 100).ui(ui).changed() {
-				render_frame_times.set_max_len(max_len);
-			}
-		});
-
-		ui.toggle_value(&mut is_histogram, "Histogram");
-
-		match *is_histogram {
-			true => {
-				ui.horizontal(|ui| {
-					ui.label("Time scale: ");
-					egui::Slider::new(&mut *histogram_time_scale, 1.0..=1000.0)
-						.logarithmic(true)
-						.clamping(egui::SliderClamping::Always)
-						.ui(ui);
-				});
-			},
-			false => {
-				ui.toggle_value(&mut stack_charts, "Stack charts");
-			},
-		}
-	});
+	let settings = self::render_frame_time_settings(ui, &mut *render_frame_times);
 
 	let mut charts = vec![];
 	for duration_idx in 0..6 {
 		let chart = self::add_frame_time_chart(
 			&render_frame_times,
-			*is_histogram,
-			*histogram_time_scale,
-			*stack_charts,
+			settings.is_histogram,
+			settings.histogram_time_scale,
+			settings.stack_charts,
 			&charts,
 			match duration_idx {
 				0 => "Paint egui",
@@ -99,7 +58,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 		.legend(egui_plot::Legend::default())
 		.clamp_grid(true);
 
-	let plot = match *is_histogram {
+	let plot = match settings.is_histogram {
 		true => plot.x_axis_label("Time").y_axis_label("Occurrences (normalized)"),
 		false => plot.x_axis_label("Frame").y_axis_label("Time"),
 	};
@@ -109,6 +68,63 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 			plot_ui.bar_chart(chart);
 		}
 	});
+}
+
+struct RenderFrameTimeSettings {
+	is_histogram:         bool,
+	histogram_time_scale: f64,
+	stack_charts:         bool,
+}
+
+/// Renders a frame time's settings
+fn render_frame_time_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) -> RenderFrameTimeSettings {
+	// TODO: Turn this into some enum between histogram / time
+	let is_histogram = super::get_data::<bool>(ui, "metrics-tab-histogram");
+	let mut is_histogram = is_histogram.lock();
+
+	let histogram_time_scale = super::get_data_with_default::<f64>(ui, "metrics-tab-histogram-time-scale", || 20.0);
+	let mut histogram_time_scale = histogram_time_scale.lock();
+
+	let stack_charts = super::get_data_with_default::<bool>(ui, "metrics-tab-chart-stacks", || true);
+	let mut stack_charts = stack_charts.lock();
+
+	ui.horizontal(|ui| {
+		let mut is_paused = frame_times.is_paused();
+		if ui.toggle_value(&mut is_paused, "Pause").changed() {
+			frame_times.pause(is_paused);
+		}
+
+		let mut max_len = frame_times.max_len();
+		ui.horizontal(|ui| {
+			ui.label("Maximum frames: ");
+			if egui::Slider::new(&mut max_len, 0..=60 * 100).ui(ui).changed() {
+				frame_times.set_max_len(max_len);
+			}
+		});
+
+		ui.toggle_value(&mut is_histogram, "Histogram");
+
+		match *is_histogram {
+			true => {
+				ui.horizontal(|ui| {
+					ui.label("Time scale: ");
+					egui::Slider::new(&mut *histogram_time_scale, 1.0..=1000.0)
+						.logarithmic(true)
+						.clamping(egui::SliderClamping::Always)
+						.ui(ui);
+				});
+			},
+			false => {
+				ui.toggle_value(&mut stack_charts, "Stack charts");
+			},
+		}
+	});
+
+	RenderFrameTimeSettings {
+		is_histogram:         *is_histogram,
+		histogram_time_scale: *histogram_time_scale,
+		stack_charts:         *stack_charts,
+	}
 }
 
 /// Creates a chart of frame times
