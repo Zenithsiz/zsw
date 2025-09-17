@@ -2,7 +2,10 @@
 
 // Imports
 use {
-	crate::panel::{PanelSlideShader, geometry::PanelGeometrySlideUniforms, renderer::uniform},
+	crate::panel::{PanelSlideShader, renderer::uniform},
+	std::{collections::HashMap, sync::Arc},
+	tokio::sync::Mutex,
+	winit::window::WindowId,
 	zsw_wgpu::Wgpu,
 };
 
@@ -11,12 +14,18 @@ use {
 pub struct PanelSlideState {
 	/// Shader
 	shader: PanelSlideShader,
+
+	/// Geometry uniforms
+	geometry_uniforms: Mutex<HashMap<WindowId, Arc<PanelSlideGeometryUniforms>>>,
 }
 
 impl PanelSlideState {
 	/// Creates new state
 	pub fn new(shader: PanelSlideShader) -> Self {
-		Self { shader }
+		Self {
+			shader,
+			geometry_uniforms: Mutex::new(HashMap::new()),
+		}
 	}
 
 	/// Returns the panel shader
@@ -27,6 +36,20 @@ impl PanelSlideState {
 	/// Returns the panel shader mutably
 	pub fn shader_mut(&mut self) -> &mut PanelSlideShader {
 		&mut self.shader
+	}
+
+	/// Returns the geometry uniforms
+	pub async fn geometry_uniforms(
+		&self,
+		wgpu: &Wgpu,
+		shared: &PanelSlideShared,
+		window_id: WindowId,
+	) -> Arc<PanelSlideGeometryUniforms> {
+		let mut geometry_uniforms = self.geometry_uniforms.lock().await;
+		let geometry_uniforms = geometry_uniforms
+			.entry(window_id)
+			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)));
+		Arc::clone(geometry_uniforms)
 	}
 }
 
@@ -46,6 +69,16 @@ impl PanelSlideShared {
 			geometry_uniforms_bind_group_layout,
 		}
 	}
+}
+
+/// Panel geometry slide uniforms
+#[derive(Debug)]
+pub struct PanelSlideGeometryUniforms {
+	/// Buffer
+	pub buffer: wgpu::Buffer,
+
+	/// Bind group
+	pub bind_group: wgpu::BindGroup,
 }
 
 /// Creates the geometry uniforms bind group layout
@@ -68,7 +101,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 }
 
 /// Creates the panel none geometry uniforms
-pub fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelSlideShared) -> PanelGeometrySlideUniforms {
+pub fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelSlideShared) -> PanelSlideGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),
@@ -92,5 +125,5 @@ pub fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelSlideShared) -> Panel
 	};
 	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
-	PanelGeometrySlideUniforms { buffer, bind_group }
+	PanelSlideGeometryUniforms { buffer, bind_group }
 }

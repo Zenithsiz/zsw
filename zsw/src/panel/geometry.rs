@@ -2,13 +2,9 @@
 
 // Imports
 use {
-	super::state::{
-		fade::{self, PanelFadeImagesShared},
-		slide::{self, PanelSlideShared},
-	},
+	super::state::fade::{self, PanelFadeImagesShared},
 	crate::panel::state::fade::PanelFadeImageSlot,
 	std::collections::HashMap,
-	tokio::sync::OnceCell,
 	winit::window::WindowId,
 	zsw_wgpu::Wgpu,
 };
@@ -23,19 +19,8 @@ pub struct PanelGeometry {
 /// Panel geometry uniforms
 #[derive(Default, Debug)]
 pub struct PanelGeometryUniforms {
-	pub fade:  PanelGeometryFadeUniforms,
-	pub slide: OnceCell<PanelGeometrySlideUniforms>,
+	pub fade: PanelGeometryFadeUniforms,
 }
-
-impl PanelGeometryUniforms {
-	/// Returns the slide uniforms
-	pub async fn slide(&self, wgpu: &Wgpu, shared: &PanelSlideShared) -> &PanelGeometrySlideUniforms {
-		self.slide
-			.get_or_init(async || slide::create_geometry_uniforms(wgpu, shared))
-			.await
-	}
-}
-
 
 /// Panel geometry fade uniforms
 #[derive(Default, Debug)]
@@ -67,15 +52,6 @@ pub struct PanelGeometryFadeImageUniforms {
 	pub bind_group: wgpu::BindGroup,
 }
 
-/// Panel geometry slide uniforms
-#[derive(Debug)]
-pub struct PanelGeometrySlideUniforms {
-	/// Buffer
-	pub buffer: wgpu::Buffer,
-
-	/// Bind group
-	pub bind_group: wgpu::BindGroup,
-}
 
 impl PanelGeometry {
 	pub fn new() -> Self {

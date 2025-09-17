@@ -13,7 +13,7 @@ use {
 		Panel,
 		PanelState,
 		Panels,
-		geometry::{PanelGeometryFadeUniforms, PanelGeometrySlideUniforms, PanelGeometryUniforms},
+		geometry::{PanelGeometryFadeUniforms, PanelGeometryUniforms},
 		state::{
 			PanelFadeState,
 			PanelNoneState,
@@ -406,14 +406,10 @@ impl PanelsRenderer {
 			)
 			.await
 			.into(),
-			PanelState::Slide(panel_state) => Self::render_panel_slide_geometry(
-				wgpu,
-				render_pass,
-				pos_matrix,
-				geometry_uniforms.slide(wgpu, &shared.slide).await,
-				panel_state,
-			)
-			.into(),
+			PanelState::Slide(panel_state) =>
+				Self::render_panel_slide_geometry(wgpu, render_pass, window_id, &shared.slide, pos_matrix, panel_state)
+					.await
+					.into(),
 		}
 	}
 
@@ -548,13 +544,16 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel slide's geometry
-	fn render_panel_slide_geometry(
+	async fn render_panel_slide_geometry(
 		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
+		window_id: WindowId,
+		shared: &PanelSlideShared,
 		pos_matrix: uniform::Matrix4x4,
-		geometry_uniforms: &PanelGeometrySlideUniforms,
-		_panel_state: &PanelSlideState,
+		panel_state: &PanelSlideState,
 	) -> metrics::RenderPanelGeometrySlideFrameTime {
+		let geometry_uniforms = panel_state.geometry_uniforms(wgpu, shared, window_id).await;
+
 		#[time(write_uniforms)]
 		let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
 
