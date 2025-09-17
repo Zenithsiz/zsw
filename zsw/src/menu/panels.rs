@@ -70,13 +70,13 @@ fn draw_fade_panel_editor(
 	ui: &mut egui::Ui,
 	wgpu: &Wgpu,
 	window_geometry: Rect<i32, u32>,
-	panel_state: &mut PanelFadeState,
+	state: &mut PanelFadeState,
 	display: &mut Display,
 ) {
 	{
-		let mut is_paused = panel_state.is_paused();
+		let mut is_paused = state.is_paused();
 		ui.checkbox(&mut is_paused, "Paused");
-		panel_state.set_paused(is_paused);
+		state.set_paused(is_paused);
 	}
 
 	ui.collapsing("Geometries", |ui| {
@@ -99,51 +99,51 @@ fn draw_fade_panel_editor(
 		// Note: We only allow up until the duration - 1 so that you don't get stuck
 		//       skipping images when you hold it at the max value
 		// TODO: This max needs to be `duration - min_frame_duration` to not skip ahead.
-		let max = panel_state.duration().mul_f32(0.99);
-		let mut progress = panel_state.progress();
+		let max = state.duration().mul_f32(0.99);
+		let mut progress = state.progress();
 		super::draw_duration(ui, &mut progress, Duration::ZERO..=max);
-		panel_state.set_progress(progress);
+		state.set_progress(progress);
 	});
 
 	ui.horizontal(|ui| {
 		ui.label("Fade Duration");
 		let min = Duration::ZERO;
-		let max = panel_state.duration() / 2;
+		let max = state.duration() / 2;
 
-		let mut fade_duration = panel_state.fade_duration();
+		let mut fade_duration = state.fade_duration();
 		super::draw_duration(ui, &mut fade_duration, min..=max);
-		panel_state.set_fade_duration(fade_duration);
+		state.set_fade_duration(fade_duration);
 	});
 
 	ui.horizontal(|ui| {
 		ui.label("Duration");
 
-		let mut duration = panel_state.duration();
+		let mut duration = state.duration();
 		super::draw_duration(ui, &mut duration, Duration::ZERO..=Duration::from_secs_f32(180.0));
-		panel_state.set_duration(duration);
+		state.set_duration(duration);
 	});
 
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			panel_state.skip(wgpu).block_on();
+			state.skip(wgpu).block_on();
 		}
 	});
 
 	ui.collapsing("Images", |ui| {
 		ui.collapsing("Previous", |ui| {
-			self::draw_fade_panel_image(ui, &mut panel_state.images_mut().prev);
+			self::draw_fade_panel_image(ui, &mut state.images_mut().prev);
 		});
 		ui.collapsing("Current", |ui| {
-			self::draw_fade_panel_image(ui, &mut panel_state.images_mut().cur);
+			self::draw_fade_panel_image(ui, &mut state.images_mut().cur);
 		});
 		ui.collapsing("Next", |ui| {
-			self::draw_fade_panel_image(ui, &mut panel_state.images_mut().next);
+			self::draw_fade_panel_image(ui, &mut state.images_mut().next);
 		});
 	});
 
 	ui.collapsing("Playlist", |ui| {
-		let playlist_player = panel_state.playlist_player().lock().block_on();
+		let playlist_player = state.playlist_player().lock().block_on();
 
 		let row_height = ui.text_style_height(&egui::TextStyle::Body);
 

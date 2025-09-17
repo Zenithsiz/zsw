@@ -154,7 +154,7 @@ impl Panels {
 					.with_context(|| format!("Unable to load display {:?}", profile_panel.display))?;
 
 
-				let panel_state = match &profile_panel.shader {
+				let state = match &profile_panel.shader {
 					ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
 					ProfilePanelShader::Fade(shader) => {
 						let state = PanelFadeState::new(shader.duration, shader.fade_duration, match shader.inner {
@@ -192,7 +192,7 @@ impl Panels {
 					},
 				};
 
-				let panel = Panel::new(display, panel_state);
+				let panel = Panel::new(display, state);
 				self.inner.lock().await.panels.push(Arc::new(Mutex::new(panel)));
 
 				Ok::<_, AppError>(())
