@@ -260,14 +260,6 @@ impl PanelsRenderer {
 			// Bind the pipeline for the specific shader
 			render_pass.set_pipeline(&render_pipeline);
 
-			// Bind the extra bind groups
-			match &mut panel.state {
-				PanelState::None(_panel_state) => (),
-				PanelState::Fade(panel_state) =>
-					render_pass.set_bind_group(1, panel_state.images().image_bind_group(wgpu, &shared.fade).await, &[]),
-				PanelState::Slide(_panel_state) => (),
-			}
-
 			// The display might have changed asynchronously from the panel geometries,
 			// so resize it to ensure we have a panel geometry for each display geometry.
 			let display = panel.display.read().await;
@@ -442,6 +434,9 @@ impl PanelsRenderer {
 
 				// Bind the geometry uniforms
 				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+				// Bind the image uniforms
+				render_pass.set_bind_group(1, panel_state.images().image_bind_group(wgpu, &shared.fade).await, &[]);
 
 				#[time(draw)]
 				render_pass.draw_indexed(0..6, 0, 0..1);
