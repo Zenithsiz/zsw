@@ -13,7 +13,12 @@ use {
 		Panel,
 		PanelState,
 		Panels,
-		geometry::{PanelGeometryFadeUniforms, PanelGeometryNoneUniforms, PanelGeometrySlideUniforms},
+		geometry::{
+			PanelGeometryFadeUniforms,
+			PanelGeometryNoneUniforms,
+			PanelGeometrySlideUniforms,
+			PanelGeometryUniforms,
+		},
 		state::{
 			PanelFadeState,
 			PanelNoneState,
@@ -353,15 +358,15 @@ impl PanelsRenderer {
 			}
 
 			// Render the panel geometry
+			let geometry_uniforms = panel_geometry.uniforms.entry(window.id()).or_default();
 			let geometry_metrics = Self::render_panel_geometry(
 				wgpu,
 				shared,
 				surface_size,
 				&panel.state,
 				window_geometry,
-				window,
 				display_geometry,
-				panel_geometry,
+				geometry_uniforms,
 				render_pass,
 			)
 			.await;
@@ -377,16 +382,14 @@ impl PanelsRenderer {
 		surface_size: PhysicalSize<u32>,
 		panel_state: &PanelState,
 		window_geometry: Rect<i32, u32>,
-		window: &Window,
 		display_geometry: &DisplayGeometry,
-		panel_geometry: &mut PanelGeometry,
+		geometry_uniforms: &mut PanelGeometryUniforms,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) -> metrics::RenderPanelGeometryFrameTime {
 		// Calculate the position matrix for the panel
 		let pos_matrix = display_geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
 
-		let geometry_uniforms = panel_geometry.uniforms.entry(window.id()).or_default();
 		match panel_state {
 			PanelState::None(panel_state) => Self::render_panel_none_geometry(
 				wgpu,
