@@ -396,18 +396,19 @@ impl PanelsRenderer {
 					.none(wgpu, &shared.none.geometry_uniforms_bind_group_layout)
 					.await,
 				panel_state,
-			),
-			PanelState::Fade(panel_state) =>
-				Self::render_panel_fade_geometry(
-					wgpu,
-					shared,
-					display_geometry,
-					render_pass,
-					pos_matrix,
-					&mut geometry_uniforms.fade,
-					panel_state,
-				)
-				.await,
+			)
+			.into(),
+			PanelState::Fade(panel_state) => Self::render_panel_fade_geometry(
+				wgpu,
+				shared,
+				display_geometry,
+				render_pass,
+				pos_matrix,
+				&mut geometry_uniforms.fade,
+				panel_state,
+			)
+			.await
+			.into(),
 			PanelState::Slide(panel_state) => Self::render_panel_slide_geometry(
 				wgpu,
 				render_pass,
@@ -416,7 +417,8 @@ impl PanelsRenderer {
 					.slide(wgpu, &shared.slide.geometry_uniforms_bind_group_layout)
 					.await,
 				panel_state,
-			),
+			)
+			.into(),
 		}
 	}
 
@@ -427,7 +429,7 @@ impl PanelsRenderer {
 		pos_matrix: uniform::Matrix4x4,
 		geometry_uniforms: &PanelGeometryNoneUniforms,
 		panel_state: &PanelNoneState,
-	) -> metrics::RenderPanelGeometryFrameTime {
+	) -> metrics::RenderPanelGeometryNoneFrameTime {
 		#[time(write_uniforms)]
 		let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
 			pos_matrix,
@@ -440,7 +442,7 @@ impl PanelsRenderer {
 		#[time(draw)]
 		render_pass.draw_indexed(0..6, 0, 0..1);
 
-		metrics::RenderPanelGeometryFrameTime::None(metrics::RenderPanelGeometryNoneFrameTime { write_uniforms, draw })
+		metrics::RenderPanelGeometryNoneFrameTime { write_uniforms, draw }
 	}
 
 	async fn render_panel_fade_geometry(
@@ -451,7 +453,7 @@ impl PanelsRenderer {
 		pos_matrix: uniform::Matrix4x4,
 		geometry_uniforms: &mut PanelGeometryFadeUniforms,
 		panel_state: &PanelFadeState,
-	) -> metrics::RenderPanelGeometryFrameTime {
+	) -> metrics::RenderPanelGeometryFadeFrameTime {
 		let p = panel_state.progress_norm();
 		let f = panel_state.fade_duration_norm();
 
@@ -545,7 +547,7 @@ impl PanelsRenderer {
 			});
 		}
 
-		metrics::RenderPanelGeometryFrameTime::Fade(metrics::RenderPanelGeometryFadeFrameTime { images: image_metrics })
+		metrics::RenderPanelGeometryFadeFrameTime { images: image_metrics }
 	}
 
 	/// Renders a panel slide's geometry
@@ -555,7 +557,7 @@ impl PanelsRenderer {
 		pos_matrix: uniform::Matrix4x4,
 		geometry_uniforms: &PanelGeometrySlideUniforms,
 		_panel_state: &PanelSlideState,
-	) -> metrics::RenderPanelGeometryFrameTime {
+	) -> metrics::RenderPanelGeometrySlideFrameTime {
 		#[time(write_uniforms)]
 		let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
 
@@ -565,10 +567,7 @@ impl PanelsRenderer {
 		#[time(draw)]
 		render_pass.draw_indexed(0..6, 0, 0..1);
 
-		metrics::RenderPanelGeometryFrameTime::Slide(metrics::RenderPanelGeometrySlideFrameTime {
-			write_uniforms,
-			draw,
-		})
+		metrics::RenderPanelGeometrySlideFrameTime { write_uniforms, draw }
 	}
 
 	/// Writes `uniforms` into `buffer`.

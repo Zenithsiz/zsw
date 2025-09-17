@@ -159,6 +159,7 @@ pub struct RenderPanelFrameTime {
 
 /// Render panel geometry frame time.
 #[derive(Clone, Debug)]
+#[derive(derive_more::From)]
 pub enum RenderPanelGeometryFrameTime {
 	None(RenderPanelGeometryNoneFrameTime),
 	Fade(RenderPanelGeometryFadeFrameTime),
