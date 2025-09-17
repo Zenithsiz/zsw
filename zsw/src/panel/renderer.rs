@@ -178,7 +178,7 @@ impl PanelsRenderer {
 			.enumerate()
 			.map(|(panel_idx, panel)| async move { (panel_idx, panel.lock().await) })
 			.collect::<FuturesUnordered<_>>();
-		let mut panel_metrics = HashMap::new();
+		let mut panels_metrics = HashMap::new();
 		while let Some((panel_idx, mut panel)) = panels.next().await {
 			let panel = &mut *panel;
 
@@ -260,7 +260,7 @@ impl PanelsRenderer {
 				.geometries
 				.resize_with(display.geometries.len(), PanelGeometry::new);
 
-			let geometry_metrics = panel_metrics
+			let panel_metrics = panels_metrics
 				.entry(panel_idx)
 				.or_insert_with(|| metrics::RenderPanelFrameTime {
 					update_panel,
@@ -275,9 +275,8 @@ impl PanelsRenderer {
 					continue;
 				}
 
-				// Write and bind the uniforms
-				#[time(write_uniforms)]
-				Self::write_bind_uniforms(
+				// Render the panel geometry
+				let geometry_metrics = Self::render_panel_geometry(
 					wgpu,
 					shared,
 					frame.surface_size,
@@ -289,16 +288,7 @@ impl PanelsRenderer {
 					&mut render_pass,
 				);
 
-				// Finally draw
-				#[time(draw)]
-				render_pass.draw_indexed(0..6, 0, 0..1);
-
-				_ = geometry_metrics
-					.geometries
-					.insert(geometry_idx, metrics::RenderPanelGeometryFrameTime {
-						write_uniforms,
-						draw,
-					});
+				_ = panel_metrics.geometries.insert(geometry_idx, geometry_metrics);
 			}
 		}
 
@@ -308,14 +298,14 @@ impl PanelsRenderer {
 			.add(metrics::RenderPanelsFrameTime {
 				create_render_pass,
 				lock_panels,
-				panels: panel_metrics,
+				panels: panels_metrics,
 			});
 
 		Ok(())
 	}
 
-	/// Writes and binds the uniforms
-	pub fn write_bind_uniforms(
+	/// Renders a panel's geometry
+	pub fn render_panel_geometry(
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
 		surface_size: PhysicalSize<u32>,
@@ -325,7 +315,7 @@ impl PanelsRenderer {
 		display_geometry: &DisplayGeometry,
 		panel_geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
-	) {
+	) -> metrics::RenderPanelGeometryFrameTime {
 		// Calculate the position matrix for the panel
 		let pos_matrix = display_geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
@@ -342,11 +332,22 @@ impl PanelsRenderer {
 			write_uniforms(bytemuck::bytes_of(&$uniforms))
 		}
 
+		// Bind the geometry uniforms
+		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
 		match panel_state {
-			PanelState::None(panel_state) => write_uniforms!(uniform::None {
-				pos_matrix,
-				background_color: uniform::Vec4(panel_state.background_color),
-			}),
+			PanelState::None(panel_state) => {
+				#[time(write_uniforms)]
+				let () = write_uniforms!(uniform::None {
+					pos_matrix,
+					background_color: uniform::Vec4(panel_state.background_color),
+				});
+
+				#[time(draw)]
+				render_pass.draw_indexed(0..6, 0, 0..1);
+
+				metrics::RenderPanelGeometryFrameTime { write_uniforms, draw }
+			},
 			PanelState::Fade(panel_state) => {
 				let image_uniforms = |image: Option<&PanelFadeImage>| {
 					let (size, swap_dir) = match image {
@@ -368,7 +369,8 @@ impl PanelsRenderer {
 
 				let fade_duration = panel_state.fade_duration_norm();
 				let progress = panel_state.progress_norm();
-				match panel_state.shader() {
+				#[time(write_uniforms)]
+				let () = match panel_state.shader() {
 					PanelFadeShader::Basic => write_uniforms!(uniform::Fade {
 						pos_matrix,
 						prev,
@@ -408,12 +410,23 @@ impl PanelsRenderer {
 						strength,
 						_unused: 0,
 					}),
-				}
-			},
-			PanelState::Slide(_panel_state) => write_uniforms!(uniform::Slide { pos_matrix }),
-		}
+				};
 
-		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+				#[time(draw)]
+				render_pass.draw_indexed(0..6, 0, 0..1);
+
+				metrics::RenderPanelGeometryFrameTime { write_uniforms, draw }
+			},
+			PanelState::Slide(_panel_state) => {
+				#[time(write_uniforms)]
+				let () = write_uniforms!(uniform::Slide { pos_matrix });
+
+				#[time(draw)]
+				render_pass.draw_indexed(0..6, 0, 0..1);
+
+				metrics::RenderPanelGeometryFrameTime { write_uniforms, draw }
+			},
+		}
 	}
 }
 
