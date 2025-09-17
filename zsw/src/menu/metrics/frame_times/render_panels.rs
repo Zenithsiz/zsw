@@ -26,44 +26,37 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 
 	// Go through all frame times and record which panels and geometries we saw
 	// so we can create the correct indices after.
+	#[derive(Default, Debug)]
 	struct DurationIdxTree {
 		panels: HashMap<usize, DurationPanelIdxTree>,
 	}
+	#[derive(Default, Debug)]
 	struct DurationPanelIdxTree {
 		geometries: HashMap<usize, DurationPanelGeometryIdxTree>,
 	}
+	#[derive(Default, Debug)]
 	struct DurationPanelGeometryIdxTree {
 		images: HashSet<PanelFadeImageSlot>,
 	}
-	let duration_idxs_tree = DurationIdxTree {
-		panels: render_frame_times
-			.iter()
-			.flat_map(|frame_time| {
-				frame_time.panels.iter().map(|(&panel_idx, panel)| {
-					let panel = DurationPanelIdxTree {
-						geometries: panel
-							.geometries
-							.iter()
-							.map(|(&geometry_idx, geometry)| {
-								let geometry = DurationPanelGeometryIdxTree {
-									#[expect(clippy::match_same_arms, reason = "They won't be in the future")]
-									images:
-										match geometry {
-											RenderPanelGeometryFrameTime::None(_) => HashSet::new(),
-											RenderPanelGeometryFrameTime::Fade(images) =>
-												images.images.iter().map(|(&image_slot, _image)| image_slot).collect(),
-											RenderPanelGeometryFrameTime::Slide(_) => HashSet::new(),
-										},
-								};
-								(geometry_idx, geometry)
-							})
-							.collect(),
-					};
-					(panel_idx, panel)
-				})
-			})
-			.collect(),
-	};
+	let mut duration_idxs_tree = DurationIdxTree::default();
+	#[expect(clippy::iter_over_hash_type, reason = "We're collecting it into another hash type")]
+	for frame_time in render_frame_times.iter() {
+		for (&panel_idx, panel) in &frame_time.panels {
+			let duration_panel_idxs_tree = duration_idxs_tree.panels.entry(panel_idx).or_default();
+			for (&geometry_idx, geometry) in &panel.geometries {
+				let duration_panel_geometry_idxs_tree =
+					duration_panel_idxs_tree.geometries.entry(geometry_idx).or_default();
+				match geometry {
+					RenderPanelGeometryFrameTime::None(_) => todo!(),
+					RenderPanelGeometryFrameTime::Fade(images) =>
+						for &image_slot in images.images.keys() {
+							duration_panel_geometry_idxs_tree.images.insert(image_slot);
+						},
+					RenderPanelGeometryFrameTime::Slide(_) => todo!(),
+				}
+			}
+		}
+	}
 
 	// Create all duration indices based on all of the panels and geometries we saw.
 	let duration_idxs = iter::chain(
