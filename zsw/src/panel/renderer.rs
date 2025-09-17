@@ -231,6 +231,7 @@ impl PanelsRenderer {
 					let render_pipeline = self::create_render_pipeline(
 						wgpu_renderer,
 						wgpu,
+						render_pipeline_id,
 						bind_group_layouts,
 						panel.state.shader(),
 						self.msaa_samples,
@@ -477,6 +478,17 @@ pub enum RenderPipelineId {
 	Slide(RenderPipelineSlideId),
 }
 
+impl RenderPipelineId {
+	/// Returns this pipeline's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::None => "none",
+			Self::Fade(id) => id.name(),
+			Self::Slide(id) => id.name(),
+		}
+	}
+}
+
 /// Render pipeline fade id
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 pub enum RenderPipelineFadeId {
@@ -486,22 +498,45 @@ pub enum RenderPipelineFadeId {
 	In,
 }
 
+impl RenderPipelineFadeId {
+	/// Returns this pipeline's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::Basic => "fade-basic",
+			Self::White => "fade-white",
+			Self::Out => "fade-out",
+			Self::In => "fade-in",
+		}
+	}
+}
+
 /// Render pipeline slide id
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 pub enum RenderPipelineSlideId {
 	Basic,
 }
 
+impl RenderPipelineSlideId {
+	/// Returns this pipeline's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::Basic => "slide-basic",
+		}
+	}
+}
+
 /// Creates the render pipeline
 fn create_render_pipeline(
 	wgpu_renderer: &WgpuRenderer,
 	wgpu: &Wgpu,
+	id: RenderPipelineId,
 	bind_group_layouts: &[&wgpu::BindGroupLayout],
 	shader: PanelShader,
 	msaa_samples: u32,
 ) -> Result<wgpu::RenderPipeline, AppError> {
+	let render_pipeline_name = id.name();
 	let shader_name = shader.name();
-	tracing::debug!("Creating render pipeline for shader {shader_name:?}");
+	tracing::debug!("Creating render pipeline {render_pipeline_name:?} for shader {shader_name:?}");
 
 	// Parse the shader from the build script
 	let shader_module =
@@ -516,7 +551,7 @@ fn create_render_pipeline(
 
 	// Create the pipeline layout
 	let render_pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
-		label: Some(&format!("[zsw::panel] Shader {shader_name:?} render pipeline layout")),
+		label: Some(&format!("[zsw::panel] Render pipeline {render_pipeline_name:?} layout")),
 		bind_group_layouts,
 		push_constant_ranges: &[],
 	};
@@ -528,7 +563,7 @@ fn create_render_pipeline(
 		write_mask: wgpu::ColorWrites::ALL,
 	})];
 	let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
-		label:  Some(&format!("[zsw::panel] Shader {shader_name:?} render pipeline")),
+		label:  Some(&format!("[zsw::panel] Render pipeline {render_pipeline_name:?}")),
 		layout: Some(&render_pipeline_layout),
 
 		vertex:        wgpu::VertexState {
