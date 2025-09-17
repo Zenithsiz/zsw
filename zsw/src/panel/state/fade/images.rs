@@ -2,7 +2,10 @@
 
 // Imports
 use {
-	crate::playlist::PlaylistPlayer,
+	crate::{
+		panel::{geometry::PanelGeometryFadeImageUniforms, renderer::uniform},
+		playlist::PlaylistPlayer,
+	},
 	app_error::Context,
 	image::{DynamicImage, imageops},
 	std::{self, mem, path::Path, sync::Arc},
@@ -385,6 +388,40 @@ fn create_image_bind_group(
 		],
 	};
 	wgpu.device.create_bind_group(&descriptor)
+}
+
+/// Creates the image geometry uniforms
+pub fn create_image_geometry_uniforms(wgpu: &Wgpu, layout: &wgpu::BindGroupLayout) -> PanelGeometryFadeImageUniforms {
+	// Create the uniforms
+	let buffer_descriptor = wgpu::BufferDescriptor {
+		label:              Some("zsw-panel-fade-geometry-uniforms-buffer"),
+		usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+		size:               u64::try_from(
+			zsw_util::array_max(&[
+				size_of::<uniform::FadeBasic>(),
+				size_of::<uniform::FadeWhite>(),
+				size_of::<uniform::FadeOut>(),
+				size_of::<uniform::FadeIn>(),
+			])
+			.expect("No max uniform size"),
+		)
+		.expect("Maximum uniform size didn't fit into a `u64`"),
+		mapped_at_creation: false,
+	};
+	let buffer = wgpu.device.create_buffer(&buffer_descriptor);
+
+	// Create the uniform bind group
+	let bind_group_descriptor = wgpu::BindGroupDescriptor {
+		label: Some("zsw-panel-fade-geometry-uniforms-bind-group"),
+		layout,
+		entries: &[wgpu::BindGroupEntry {
+			binding:  0,
+			resource: buffer.as_entire_binding(),
+		}],
+	};
+	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
+
+	PanelGeometryFadeImageUniforms { buffer, bind_group }
 }
 
 /// Creates the image sampler
