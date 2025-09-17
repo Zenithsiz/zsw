@@ -27,7 +27,7 @@
 // Modules
 mod args;
 mod config;
-mod config_dirs;
+mod dirs;
 mod display;
 mod init;
 mod menu;
@@ -42,7 +42,7 @@ mod window;
 use {
 	self::{
 		config::Config,
-		config_dirs::ConfigDirs,
+		dirs::Dirs,
 		display::Displays,
 		menu::Menu,
 		metrics::Metrics,
@@ -89,13 +89,13 @@ fn main() -> Result<(), AppError> {
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.toml"));
 	let config = Config::get_or_create_default(&config_path);
 	let config = Arc::new(config);
-	let config_dirs = ConfigDirs::new(
+	let dirs = Dirs::new(
 		config_path
 			.parent()
 			.expect("Config file had no parent directory")
 			.to_path_buf(),
 	);
-	let config_dirs = Arc::new(config_dirs);
+	let dirs = Arc::new(dirs);
 	tracing::debug!("Loaded config: {config:?}");
 
 	// Initialize the logger properly now
@@ -114,7 +114,7 @@ fn main() -> Result<(), AppError> {
 		.context("Unable to build winit event loop")?;
 
 	// Initialize the app
-	let mut app = WinitApp::new(config, config_dirs, event_loop.create_proxy())
+	let mut app = WinitApp::new(config, dirs, event_loop.create_proxy())
 		.block_on()
 		.context("Unable to create winit app")?;
 
@@ -169,14 +169,14 @@ impl WinitApp {
 	/// Creates a new app
 	pub async fn new(
 		config: Arc<Config>,
-		config_dirs: Arc<ConfigDirs>,
+		dirs: Arc<Dirs>,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
 		let wgpu = Wgpu::new().await.context("Unable to initialize wgpu")?;
 		let panels_renderer_shared = PanelsRendererShared::new(&wgpu);
 
 		// Create and stat loading the displays
-		let displays = Displays::new(config_dirs.displays().to_path_buf())
+		let displays = Displays::new(dirs.displays().to_path_buf())
 			.await
 			.context("Unable to create displays")?;
 		let displays = Arc::new(displays);
@@ -184,7 +184,7 @@ impl WinitApp {
 		zsw_util::spawn_task("Load displays", async move { displays.load_all().await });
 
 		// Create and stat loading the playlists
-		let playlists = Playlists::new(config_dirs.playlists().to_path_buf())
+		let playlists = Playlists::new(dirs.playlists().to_path_buf())
 			.await
 			.context("Unable to create playlists")?;
 		let playlists = Arc::new(playlists);
@@ -192,7 +192,7 @@ impl WinitApp {
 		zsw_util::spawn_task("Load playlists", async move { playlists.load_all().await });
 
 		// Create and stat loading the profiles
-		let profiles = Profiles::new(config_dirs.profiles().to_path_buf())
+		let profiles = Profiles::new(dirs.profiles().to_path_buf())
 			.await
 			.context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);

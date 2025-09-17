@@ -1,4 +1,4 @@
-//! Configuration directories
+//! Project directories
 
 // Imports
 use std::{
@@ -6,11 +6,11 @@ use std::{
 	sync::OnceLock,
 };
 
-/// Config directories
+/// Directories
 #[derive(Debug)]
-pub struct ConfigDirs {
+pub struct Dirs {
 	/// Root config directory
-	root: PathBuf,
+	config_dir: PathBuf,
 
 	/// Displays directory
 	displays: OnceLock<PathBuf>,
@@ -22,11 +22,11 @@ pub struct ConfigDirs {
 	profiles: OnceLock<PathBuf>,
 }
 
-impl ConfigDirs {
-	/// Creates new config dirs from the root path
-	pub fn new(root: PathBuf) -> Self {
+impl Dirs {
+	/// Creates new directories from a few root paths
+	pub fn new(config_dir: PathBuf) -> Self {
 		Self {
-			root,
+			config_dir,
 			displays: OnceLock::new(),
 			playlists: OnceLock::new(),
 			profiles: OnceLock::new(),
@@ -36,7 +36,7 @@ impl ConfigDirs {
 	/// Returns the displays directory
 	pub fn displays(&self) -> &Path {
 		self.displays.get_or_init(|| {
-			let path = self.root.join("displays");
+			let path = self.config_dir.join("displays");
 			tracing::info!("Panels path: {path:?}");
 			path
 		})
@@ -45,7 +45,7 @@ impl ConfigDirs {
 	/// Returns the playlists directory
 	pub fn playlists(&self) -> &Path {
 		self.playlists.get_or_init(|| {
-			let path = self.root.join("playlists");
+			let path = self.config_dir.join("playlists");
 			tracing::info!("Playlists path: {path:?}");
 			path
 		})
@@ -54,7 +54,7 @@ impl ConfigDirs {
 	/// Returns the profiles directory
 	pub fn profiles(&self) -> &Path {
 		self.profiles.get_or_init(|| {
-			let path = self.root.join("profiles");
+			let path = self.config_dir.join("profiles");
 			tracing::info!("Playlists path: {path:?}");
 			path
 		})
