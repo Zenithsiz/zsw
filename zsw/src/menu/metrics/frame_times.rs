@@ -8,14 +8,14 @@ pub mod render_panels;
 use {
 	crate::{menu, metrics::FrameTimes},
 	core::time::Duration,
-	egui::Widget,
-	std::collections::HashMap,
+	egui::{Widget, style},
+	std::collections::{HashMap, HashSet},
 };
 
 /// Draws a frame time's plot
 fn draw_plot<T, I, D>(ui: &mut egui::Ui, frame_times: &FrameTimes<T>, display: &FrameTimesDisplay, duration_idxs: I)
 where
-	I: IntoIterator<Item = D>,
+	I: IntoIterator<Item = D> + Clone,
 	D: DurationIdx<T>,
 {
 	let legend = egui_plot::Legend::default().follow_insertion_order(true);
@@ -29,10 +29,41 @@ where
 		FrameTimesDisplay::Histogram { .. } => plot.x_axis_label("Time (ms)").y_axis_label("Occurrences (normalized)"),
 	};
 
+	let disabled_duration_idxs =
+		menu::get_data::<HashSet<String>>(ui, format!("metrics-tab-disabled-durations-{frame_times:p}"));
+	let mut disabled_duration_idxs = disabled_duration_idxs.lock();
+
+	egui::CollapsingHeader::new("Enable").show(ui, |ui| {
+		ui.style_mut().spacing.scroll = style::ScrollStyle::solid();
+		egui::ScrollArea::horizontal().show(ui, |ui| {
+			ui.horizontal(|ui| {
+				for duration_idx in duration_idxs.clone() {
+					let name = duration_idx.name();
+					let mut is_enabled = !disabled_duration_idxs.contains(&name);
+					if ui.checkbox(&mut is_enabled, &name).clicked() {
+						match is_enabled {
+							true => _ = disabled_duration_idxs.remove(&name),
+							false => _ = disabled_duration_idxs.insert(name),
+						}
+					}
+				}
+			});
+		});
+	});
+
 	plot.show(ui, |plot_ui| {
 		let mut prev_heights = vec![0.0; frame_times.len()];
-		let charts = duration_idxs.into_iter().map(move |duration_idx| {
-			self::create_frame_time_chart(frame_times, display, &mut prev_heights, &duration_idx)
+		let charts = duration_idxs.into_iter().filter_map(move |duration_idx| {
+			if disabled_duration_idxs.contains(&duration_idx.name()) {
+				return None;
+			}
+
+			Some(self::create_frame_time_chart(
+				frame_times,
+				display,
+				&mut prev_heights,
+				&duration_idx,
+			))
 		});
 
 		for chart in charts {

@@ -93,9 +93,10 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 			.map(move |inner| DurationIdx::Panels { panel_idx, inner })
 		}),
 	)
-	.sorted();
+	.sorted()
+	.collect::<Vec<_>>();
 
-	super::draw_plot(ui, render_frame_times, &display, duration_idxs);
+	super::draw_plot(ui, render_frame_times, &display, duration_idxs.iter().copied());
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
