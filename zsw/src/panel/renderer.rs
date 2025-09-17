@@ -13,7 +13,9 @@ use {
 		Panel,
 		PanelState,
 		Panels,
+		geometry::PanelGeometryNoneUniforms,
 		state::{
+			PanelNoneState,
 			fade::{PanelFadeImageSlot, PanelFadeImagesShared},
 			none::PanelNoneImagesShared,
 			slide::PanelSlideImagesShared,
@@ -385,28 +387,15 @@ impl PanelsRenderer {
 
 		let geometry_uniforms = panel_geometry.uniforms.entry(window.id()).or_default();
 		match panel_state {
-			PanelState::None(panel_state) => {
-				let geometry_uniforms = geometry_uniforms
+			PanelState::None(panel_state) => Self::render_panel_none_geometry(
+				wgpu,
+				render_pass,
+				pos_matrix,
+				geometry_uniforms
 					.none(wgpu, &shared.none.geometry_uniforms_bind_group_layout)
-					.await;
-
-				#[time(write_uniforms)]
-				let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
-					pos_matrix,
-					background_color: uniform::Vec4(panel_state.background_color),
-				});
-
-				// Bind the geometry uniforms
-				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
-
-				#[time(draw)]
-				render_pass.draw_indexed(0..6, 0, 0..1);
-
-				metrics::RenderPanelGeometryFrameTime::None(metrics::RenderPanelGeometryNoneFrameTime {
-					write_uniforms,
-					draw,
-				})
-			},
+					.await,
+				panel_state,
+			),
 			PanelState::Fade(panel_state) => {
 				let p = panel_state.progress_norm();
 				let f = panel_state.fade_duration_norm();
@@ -529,6 +518,29 @@ impl PanelsRenderer {
 				})
 			},
 		}
+	}
+
+	/// Renders a panel none's geometry
+	fn render_panel_none_geometry(
+		wgpu: &Wgpu,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		pos_matrix: uniform::Matrix4x4,
+		geometry_uniforms: &PanelGeometryNoneUniforms,
+		panel_state: &PanelNoneState,
+	) -> metrics::RenderPanelGeometryFrameTime {
+		#[time(write_uniforms)]
+		let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
+			pos_matrix,
+			background_color: uniform::Vec4(panel_state.background_color),
+		});
+
+		// Bind the geometry uniforms
+		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+		#[time(draw)]
+		render_pass.draw_indexed(0..6, 0, 0..1);
+
+		metrics::RenderPanelGeometryFrameTime::None(metrics::RenderPanelGeometryNoneFrameTime { write_uniforms, draw })
 	}
 
 	/// Writes `uniforms` into `buffer`.
