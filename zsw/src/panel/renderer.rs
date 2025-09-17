@@ -10,6 +10,7 @@ pub use self::vertex::PanelVertex;
 // Imports
 use {
 	super::{
+		Panel,
 		PanelState,
 		Panels,
 		state::{
@@ -258,13 +259,6 @@ impl PanelsRenderer {
 			// Bind the pipeline for the specific shader
 			render_pass.set_pipeline(&render_pipeline);
 
-			// The display might have changed asynchronously from the panel geometries,
-			// so resize it to ensure we have a panel geometry for each display geometry.
-			let display = panel.display.read().await;
-			panel
-				.geometries
-				.resize_with(display.geometries.len(), PanelGeometry::new);
-
 			let panel_metrics = panels_metrics
 				.entry(panel_idx)
 				.or_insert_with(|| metrics::RenderPanelFrameTime {
@@ -272,30 +266,19 @@ impl PanelsRenderer {
 					create_render_pipeline,
 					geometries: HashMap::new(),
 				});
-			for (geometry_idx, (display_geometry, panel_geometry)) in
-				display.geometries.iter().zip_eq(&mut panel.geometries).enumerate()
-			{
-				// If this geometry is outside our window, we can safely ignore it
-				if !display_geometry.intersects_window(window_geometry) {
-					continue;
-				}
 
-				// Render the panel geometry
-				let geometry_metrics = Self::render_panel_geometry(
-					wgpu,
-					shared,
-					frame.surface_size,
-					&panel.state,
-					window_geometry,
-					window,
-					display_geometry,
-					panel_geometry,
-					&mut render_pass,
-				)
-				.await;
-
-				_ = panel_metrics.geometries.insert(geometry_idx, geometry_metrics);
-			}
+			// Then render the panel
+			Self::render_panel_geometries(
+				wgpu,
+				shared,
+				frame.surface_size,
+				window,
+				window_geometry,
+				&mut render_pass,
+				panel,
+				panel_metrics,
+			)
+			.await;
 		}
 
 		metrics
@@ -308,6 +291,51 @@ impl PanelsRenderer {
 			});
 
 		Ok(())
+	}
+
+	/// Renders a panel's geometries
+	async fn render_panel_geometries(
+		wgpu: &Wgpu,
+		shared: &PanelsRendererShared,
+		surface_size: PhysicalSize<u32>,
+		window: &Window,
+		window_geometry: Rect<i32, u32>,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		panel: &mut Panel,
+		panel_metrics: &mut metrics::RenderPanelFrameTime,
+	) {
+		// The display might have changed asynchronously from the panel geometries,
+		// so resize it to ensure we have a panel geometry for each display geometry.
+		let display = panel.display.read().await;
+		panel
+			.geometries
+			.resize_with(display.geometries.len(), PanelGeometry::new);
+
+		// Go through all geometries of the panel display and render each one
+		for (geometry_idx, (display_geometry, panel_geometry)) in
+			display.geometries.iter().zip_eq(&mut panel.geometries).enumerate()
+		{
+			// If this geometry is outside our window, we can safely ignore it
+			if !display_geometry.intersects_window(window_geometry) {
+				continue;
+			}
+
+			// Render the panel geometry
+			let geometry_metrics = Self::render_panel_geometry(
+				wgpu,
+				shared,
+				surface_size,
+				&panel.state,
+				window_geometry,
+				window,
+				display_geometry,
+				panel_geometry,
+				render_pass,
+			)
+			.await;
+
+			_ = panel_metrics.geometries.insert(geometry_idx, geometry_metrics);
+		}
 	}
 
 	/// Renders a panel's geometry
