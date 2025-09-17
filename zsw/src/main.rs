@@ -50,7 +50,6 @@ use {
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
 		shared::{Shared, SharedWindow},
-		window::WindowMonitorNames,
 	},
 	app_error::Context,
 	args::Args,
@@ -222,8 +221,7 @@ impl WinitApp {
 			profiles,
 			panels: Arc::new(Panels::new()),
 			metrics: Metrics::new(),
-			window_monitor_names: WindowMonitorNames::new(),
-			windows: Mutex::new(vec![]),
+			windows: Mutex::new(HashMap::new()),
 		};
 		let shared = Arc::new(shared);
 
@@ -252,10 +250,6 @@ impl WinitApp {
 		let windows = window::create(event_loop, self.config.transparent_windows)
 			.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
-			self.shared
-				.window_monitor_names
-				.add(app_window.window.id(), app_window.monitor_name.clone());
-
 			let window = Arc::new(app_window.window);
 			let wgpu_renderer =
 				WgpuRenderer::new(Arc::clone(&window), &self.shared.wgpu).context("Unable to create wgpu renderer")?;
@@ -270,7 +264,7 @@ impl WinitApp {
 
 			let shared_window = Arc::new(SharedWindow {
 				window,
-				_monitor_name: app_window.monitor_name,
+				monitor_name: app_window.monitor_name,
 				monitor_geometry: Mutex::new(app_window.monitor_geometry),
 			});
 
@@ -294,7 +288,12 @@ impl WinitApp {
 				egui_event_handler,
 				renderer_event_tx,
 			});
-			self.shared.windows.lock().await.push(shared_window);
+			_ = self
+				.shared
+				.windows
+				.lock()
+				.await
+				.insert(shared_window.window.id(), shared_window);
 		}
 
 		Ok(())
@@ -448,7 +447,7 @@ async fn paint_egui(
 				&shared.profiles,
 				&shared.panels,
 				&shared.metrics,
-				&shared.window_monitor_names,
+				&shared.windows.lock().block_on(),
 				&shared.event_loop_proxy,
 				window_geometry,
 			)

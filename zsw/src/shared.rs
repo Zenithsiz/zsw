@@ -9,11 +9,13 @@ use {
 		panel::{Panels, PanelsRendererShared},
 		playlist::Playlists,
 		profile::Profiles,
-		window::WindowMonitorNames,
 	},
-	std::sync::Arc,
+	std::{collections::HashMap, sync::Arc},
 	tokio::sync::Mutex,
-	winit::{event_loop::EventLoopProxy, window::Window},
+	winit::{
+		event_loop::EventLoopProxy,
+		window::{Window, WindowId},
+	},
 	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
@@ -34,9 +36,7 @@ pub struct Shared {
 
 	pub metrics: Metrics,
 
-	pub window_monitor_names: WindowMonitorNames,
-
-	pub windows: Mutex<Vec<Arc<SharedWindow>>>,
+	pub windows: Mutex<HashMap<WindowId, Arc<SharedWindow>>>,
 }
 
 /// Shared window data
@@ -46,7 +46,7 @@ pub struct SharedWindow {
 	pub window: Arc<Window>,
 
 	/// Monitor name
-	pub _monitor_name: String,
+	pub monitor_name: String,
 
 	/// Monitor geometry
 	pub monitor_geometry: Mutex<Rect<i32, u32>>,

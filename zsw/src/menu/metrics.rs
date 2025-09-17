@@ -5,14 +5,17 @@ mod frame_times;
 
 // Imports
 use {
-	crate::{metrics::Metrics, window::WindowMonitorNames},
-	std::collections::BTreeSet,
+	crate::{metrics::Metrics, shared::SharedWindow},
+	std::{
+		collections::{BTreeSet, HashMap},
+		sync::Arc,
+	},
 	winit::window::WindowId,
 	zsw_util::TokioTaskBlockOn,
 };
 
 /// Draws the metrics tab
-pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_names: &WindowMonitorNames) {
+pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, shared_windows: &HashMap<WindowId, Arc<SharedWindow>>) {
 	let cur_metric = super::get_data::<Metric>(ui, "metrics-tab-cur-metric");
 	let mut cur_metric = cur_metric.lock();
 	ui.horizontal(|ui| {
@@ -30,7 +33,7 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 	match *cur_metric {
 		Metric::Window(metric) => {
 			// Get the window, otherwise we have nothing to render
-			let Some(window_id) = self::draw_window_select(ui, metrics, window_monitor_names) else {
+			let Some(window_id) = self::draw_window_select(ui, metrics, shared_windows) else {
 				ui.weak("No window selected");
 				return;
 			};
@@ -49,15 +52,16 @@ pub fn draw_metrics_tab(ui: &mut egui::Ui, metrics: &Metrics, window_monitor_nam
 fn draw_window_select(
 	ui: &mut egui::Ui,
 	metrics: &Metrics,
-	window_monitor_names: &WindowMonitorNames,
+	shared_windows: &HashMap<WindowId, Arc<SharedWindow>>,
 ) -> Option<WindowId> {
 	let cur_window_id = super::get_data::<Option<WindowId>>(ui, "metrics-tab-cur-window");
 	let mut cur_window_id = cur_window_id.lock();
 
 	let window_name = |window_id| {
-		window_monitor_names
-			.get(window_id)
-			.unwrap_or_else(|| format!("{window_id:?}"))
+		shared_windows.get(&window_id).map_or_else(
+			|| format!("{window_id:?}"),
+			|shared_window| shared_window.monitor_name.clone(),
+		)
 	};
 
 	let windows = metrics.window_ids::<BTreeSet<_>>().block_on();
