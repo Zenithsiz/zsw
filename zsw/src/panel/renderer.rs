@@ -329,14 +329,7 @@ impl PanelsRenderer {
 		let pos_matrix = display_geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
 
-		// Writes uniforms `uniforms`
 		let geometry_uniforms = panel_geometry.uniforms.entry(window.id()).or_default();
-		let write_uniforms = |buffer, bytes| {
-			wgpu.queue.write_buffer(buffer, 0, bytes);
-		};
-		macro write_uniforms($buffer:expr, $uniforms:expr) {
-			write_uniforms(&$buffer, bytemuck::bytes_of(&$uniforms))
-		}
 		match panel_state {
 			PanelState::None(panel_state) => {
 				let geometry_uniforms = geometry_uniforms
@@ -347,7 +340,7 @@ impl PanelsRenderer {
 					.await;
 
 				#[time(write_uniforms)]
-				let () = write_uniforms!(geometry_uniforms.buffer, uniform::None {
+				let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
 					pos_matrix,
 					background_color: uniform::Vec4(panel_state.background_color),
 				});
@@ -390,7 +383,7 @@ impl PanelsRenderer {
 				let progress = panel_state.progress_norm();
 				#[time(write_uniforms)]
 				let () = match panel_state.shader() {
-					PanelFadeShader::Basic => write_uniforms!(geometry_uniforms.buffer, uniform::Fade {
+					PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Fade {
 						pos_matrix,
 						prev,
 						cur,
@@ -400,7 +393,7 @@ impl PanelsRenderer {
 						_unused: [0; 2],
 					}),
 					PanelFadeShader::White { strength } =>
-						write_uniforms!(geometry_uniforms.buffer, uniform::FadeWhite {
+						Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeWhite {
 							pos_matrix,
 							prev,
 							cur,
@@ -410,26 +403,28 @@ impl PanelsRenderer {
 							strength,
 							_unused: 0,
 						}),
-					PanelFadeShader::Out { strength } => write_uniforms!(geometry_uniforms.buffer, uniform::FadeOut {
-						pos_matrix,
-						prev,
-						cur,
-						next,
-						fade_duration,
-						progress,
-						strength,
-						_unused: 0,
-					}),
-					PanelFadeShader::In { strength } => write_uniforms!(geometry_uniforms.buffer, uniform::FadeIn {
-						pos_matrix,
-						prev,
-						cur,
-						next,
-						fade_duration,
-						progress,
-						strength,
-						_unused: 0,
-					}),
+					PanelFadeShader::Out { strength } =>
+						Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeOut {
+							pos_matrix,
+							prev,
+							cur,
+							next,
+							fade_duration,
+							progress,
+							strength,
+							_unused: 0,
+						}),
+					PanelFadeShader::In { strength } =>
+						Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeIn {
+							pos_matrix,
+							prev,
+							cur,
+							next,
+							fade_duration,
+							progress,
+							strength,
+							_unused: 0,
+						}),
 				};
 
 				// Bind the geometry uniforms
@@ -452,7 +447,7 @@ impl PanelsRenderer {
 					.await;
 
 				#[time(write_uniforms)]
-				let () = write_uniforms!(geometry_uniforms.buffer, uniform::Slide { pos_matrix });
+				let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
 
 				// Bind the geometry uniforms
 				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
@@ -463,6 +458,14 @@ impl PanelsRenderer {
 				metrics::RenderPanelGeometryFrameTime { write_uniforms, draw }
 			},
 		}
+	}
+
+	/// Writes `uniforms` into `buffer`.
+	fn write_uniforms<T>(wgpu: &Wgpu, buffer: &wgpu::Buffer, uniforms: T)
+	where
+		T: bytemuck::NoUninit,
+	{
+		wgpu.queue.write_buffer(buffer, 0, bytemuck::bytes_of(&uniforms));
 	}
 }
 
