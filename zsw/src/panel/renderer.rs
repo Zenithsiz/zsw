@@ -36,9 +36,9 @@ use {
 /// Panels renderer shared
 #[derive(Debug)]
 pub struct PanelsRendererShared {
-	/// Render pipeline for each shader by shader name
+	/// Render pipeline for each shader
 	// TODO: Prune ones that aren't used?
-	render_pipelines: Mutex<HashMap<&'static str, Arc<wgpu::RenderPipeline>>>,
+	render_pipelines: Mutex<HashMap<RenderPipelineId, Arc<wgpu::RenderPipeline>>>,
 
 	/// Vertex buffer
 	vertices: wgpu::Buffer,
@@ -202,8 +202,21 @@ impl PanelsRenderer {
 				continue;
 			}
 
+			let render_pipeline_id = match &panel.state {
+				PanelState::None(_) => RenderPipelineId::None,
+				PanelState::Fade(state) => RenderPipelineId::Fade(match state.shader() {
+					PanelFadeShader::Basic => RenderPipelineFadeId::Basic,
+					PanelFadeShader::White { .. } => RenderPipelineFadeId::White,
+					PanelFadeShader::Out { .. } => RenderPipelineFadeId::Out,
+					PanelFadeShader::In { .. } => RenderPipelineFadeId::In,
+				}),
+				PanelState::Slide(state) => RenderPipelineId::Slide(match state.shader() {
+					PanelSlideShader::Basic => RenderPipelineSlideId::Basic,
+				}),
+			};
+
 			#[time(create_render_pipeline)]
-			let render_pipeline = match shared.render_pipelines.lock().await.entry(panel.state.shader().name()) {
+			let render_pipeline = match shared.render_pipelines.lock().await.entry(render_pipeline_id) {
 				hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
 				hash_map::Entry::Vacant(entry) => {
 					let bind_group_layouts = match panel.state {
@@ -449,6 +462,34 @@ fn create_indices(wgpu: &Wgpu) -> wgpu::Buffer {
 	};
 
 	wgpu.device.create_buffer_init(&descriptor)
+}
+
+/// Render pipeline id
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
+pub enum RenderPipelineId {
+	/// None shader
+	None,
+
+	/// Fade shader
+	Fade(RenderPipelineFadeId),
+
+	/// Slide
+	Slide(RenderPipelineSlideId),
+}
+
+/// Render pipeline fade id
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
+pub enum RenderPipelineFadeId {
+	Basic,
+	White,
+	Out,
+	In,
+}
+
+/// Render pipeline slide id
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
+pub enum RenderPipelineSlideId {
+	Basic,
 }
 
 /// Creates the render pipeline
