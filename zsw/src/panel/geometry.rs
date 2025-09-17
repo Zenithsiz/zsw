@@ -1,8 +1,7 @@
 //! Panel geometry
 
 // Imports
-use {std::collections::HashMap, winit::window::WindowId};
-
+use {std::collections::HashMap, tokio::sync::OnceCell, winit::window::WindowId};
 
 /// Panel geometry
 #[derive(Debug)]
@@ -12,8 +11,36 @@ pub struct PanelGeometry {
 }
 
 /// Panel geometry uniforms
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct PanelGeometryUniforms {
+	pub none:  OnceCell<PanelGeometryNoneUniforms>,
+	pub fade:  OnceCell<PanelGeometryFadeUniforms>,
+	pub slide: OnceCell<PanelGeometrySlideUniforms>,
+}
+
+/// Panel geometry none uniforms
+#[derive(Debug)]
+pub struct PanelGeometryNoneUniforms {
+	/// Buffer
+	pub buffer: wgpu::Buffer,
+
+	/// Bind group
+	pub bind_group: wgpu::BindGroup,
+}
+
+/// Panel geometry fade uniforms
+#[derive(Debug)]
+pub struct PanelGeometryFadeUniforms {
+	/// Buffer
+	pub buffer: wgpu::Buffer,
+
+	/// Bind group
+	pub bind_group: wgpu::BindGroup,
+}
+
+/// Panel geometry slide uniforms
+#[derive(Debug)]
+pub struct PanelGeometrySlideUniforms {
 	/// Buffer
 	pub buffer: wgpu::Buffer,
 

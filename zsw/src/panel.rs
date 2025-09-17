@@ -8,7 +8,7 @@ pub mod state;
 
 // Exports
 pub use self::{
-	geometry::{PanelGeometry, PanelGeometryUniforms},
+	geometry::PanelGeometry,
 	panels::Panels,
 	renderer::{PanelFadeShader, PanelShader, PanelSlideShader, PanelsRenderer, PanelsRendererShared},
 	state::PanelState,
