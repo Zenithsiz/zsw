@@ -1,33 +1,25 @@
 //! Loadable
 
 // Imports
-use {
-	crate::AppError,
-	core::{fmt, task::Poll},
-	futures::FutureExt,
-	std::task,
-};
+use {crate::AppError, core::task::Poll, futures::FutureExt, std::task};
 
 /// Loadable value
-pub struct Loadable<T, F> {
+#[derive(Debug)]
+pub struct Loadable<T> {
 	/// Current value, if any
 	value: Option<T>,
 
 	/// Loading task
 	task: Option<tokio::task::JoinHandle<T>>,
-
-	/// Loader
-	loader: F,
 }
 
-impl<T, F> Loadable<T, F> {
+impl<T> Loadable<T> {
 	/// Creates a new, empty, loadable
 	#[must_use]
-	pub fn new(loader: F) -> Self {
+	pub fn new() -> Self {
 		Self {
 			value: None,
-			task: None,
-			loader,
+			task:  None,
 		}
 	}
 
@@ -52,11 +44,14 @@ impl<T, F> Loadable<T, F> {
 		self.value.take()
 	}
 
-	/// Tries to load the inner value
-	pub fn try_load<Args>(&mut self, args: Args) -> Option<&mut T>
+	/// Tries to load the inner value.
+	///
+	/// If the value isn't loading, `spawn_task` is called to spawn a
+	/// task that loads the value
+	pub fn try_load<F>(&mut self, spawn_task: F) -> Option<&mut T>
 	where
 		T: Send + 'static,
-		F: Loader<Args, T>,
+		F: FnOnce() -> Result<tokio::task::JoinHandle<T>, AppError>,
 	{
 		// If the value is loaded, we're done
 		// Note: We can't use if-let due to a borrow-checker limitation
@@ -88,7 +83,7 @@ impl<T, F> Loadable<T, F> {
 				}
 			},
 			None => {
-				match self.loader.spawn(args) {
+				match spawn_task() {
 					Ok(task) => self.task = Some(task),
 					Err(err) => tracing::warn!("Unable to spawn task: {}", err.pretty()),
 				}
@@ -99,18 +94,8 @@ impl<T, F> Loadable<T, F> {
 	}
 }
 
-/// Loader trait
-pub trait Loader<Args, T> {
-	/// Spawns the loader future
-	fn spawn(&mut self, args: Args) -> Result<tokio::task::JoinHandle<T>, AppError>;
-}
-
-impl<T: fmt::Debug, F> fmt::Debug for Loadable<T, F> {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.debug_struct("Loadable")
-			.field("value", &self.value)
-			.field("task", &self.task)
-			.field("loader", &"..")
-			.finish()
+impl<T> Default for Loadable<T> {
+	fn default() -> Self {
+		Self::new()
 	}
 }

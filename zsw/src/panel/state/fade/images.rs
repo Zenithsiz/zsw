@@ -7,7 +7,7 @@ use {
 	image::{DynamicImage, imageops},
 	std::{self, mem, path::Path, sync::Arc},
 	tokio::sync::OnceCell,
-	zsw_util::{AppError, Loadable, loadable::Loader},
+	zsw_util::{AppError, Loadable},
 	zsw_wgpu::Wgpu,
 	zutil_cloned::cloned,
 };
@@ -47,7 +47,7 @@ pub struct PanelFadeImages {
 	pub image_bind_group: OnceCell<wgpu::BindGroup>,
 
 	/// Next image
-	pub next_image: Loadable<ImageLoadRes, NextImageLoader>,
+	pub next_image: Loadable<ImageLoadRes>,
 }
 
 /// Panel's fade image
@@ -63,14 +63,6 @@ pub struct PanelFadeImage {
 	pub path: Arc<Path>,
 }
 
-
-/// Arguments to the next image loader
-pub struct NextImageArgs {
-	playlist_pos:   usize,
-	path:           Arc<Path>,
-	max_image_size: u32,
-}
-
 impl PanelFadeImages {
 	/// Creates a new panel
 	#[must_use]
@@ -81,7 +73,7 @@ impl PanelFadeImages {
 			next:             None,
 			image_sampler:    OnceCell::new(),
 			image_bind_group: OnceCell::new(),
-			next_image:       Loadable::new(NextImageLoader),
+			next_image:       Loadable::new(),
 		}
 	}
 
@@ -240,35 +232,24 @@ impl PanelFadeImages {
 
 		let max_image_size = wgpu.device.limits().max_texture_dimension_2d;
 
-		self.next_image.try_load(NextImageArgs {
-			playlist_pos,
-			path,
-			max_image_size,
+		self.next_image.try_load(|| {
+			tokio::task::Builder::new()
+				.name(&format!("Load image {path:?}"))
+				.spawn_blocking(move || {
+					let image_res = self::load(&path, max_image_size);
+					ImageLoadRes {
+						path,
+						playlist_pos,
+						image_res,
+					}
+				})
+				.context("Unable to spawn task")
 		})
 	}
 
 	/// Returns if all images are empty
 	pub fn is_empty(&self) -> bool {
 		self.prev.is_none() && self.cur.is_none() && self.next.is_none()
-	}
-}
-
-/// Next image loader
-pub struct NextImageLoader;
-
-impl Loader<NextImageArgs, ImageLoadRes> for NextImageLoader {
-	fn spawn(&mut self, args: NextImageArgs) -> Result<tokio::task::JoinHandle<ImageLoadRes>, AppError> {
-		tokio::task::Builder::new()
-			.name(&format!("Load image {:?}", args.path))
-			.spawn_blocking(move || {
-				let image_res = self::load(&args.path, args.max_image_size);
-				ImageLoadRes {
-					path: args.path,
-					playlist_pos: args.playlist_pos,
-					image_res,
-				}
-			})
-			.context("Unable to spawn task")
 	}
 }
 
