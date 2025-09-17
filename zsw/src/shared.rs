@@ -4,7 +4,6 @@
 use {
 	crate::{
 		AppEvent,
-		Resize,
 		display::Displays,
 		metrics::Metrics,
 		panel::{Panels, PanelsRendererShared},
@@ -12,7 +11,6 @@ use {
 		profile::Profiles,
 		window::WindowMonitorNames,
 	},
-	crossbeam::atomic::AtomicCell,
 	std::sync::Arc,
 	winit::event_loop::EventLoopProxy,
 	zsw_wgpu::Wgpu,
@@ -22,8 +20,6 @@ use {
 #[derive(Debug)]
 pub struct Shared {
 	pub event_loop_proxy: EventLoopProxy<AppEvent>,
-
-	pub last_resize: AtomicCell<Option<Resize>>,
 
 	pub wgpu:                   Wgpu,
 	pub panels_renderer_shared: PanelsRendererShared,

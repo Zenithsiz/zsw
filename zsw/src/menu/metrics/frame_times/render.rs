@@ -28,7 +28,7 @@ enum DurationIdx {
 	RenderPanels,
 	RenderEgui,
 	RenderFinish,
-	Resize,
+	HandleEvents,
 }
 
 impl super::DurationIdx<RenderFrameTime> for DurationIdx {
@@ -39,7 +39,7 @@ impl super::DurationIdx<RenderFrameTime> for DurationIdx {
 			Self::RenderPanels => "Render panels".to_owned(),
 			Self::RenderEgui => "Render egui".to_owned(),
 			Self::RenderFinish => "Render finish".to_owned(),
-			Self::Resize => "Resize".to_owned(),
+			Self::HandleEvents => "Handle events".to_owned(),
 		}
 	}
 
@@ -50,7 +50,7 @@ impl super::DurationIdx<RenderFrameTime> for DurationIdx {
 			Self::RenderPanels => frame_time.render_panels,
 			Self::RenderEgui => frame_time.render_egui,
 			Self::RenderFinish => frame_time.render_finish,
-			Self::Resize => frame_time.resize,
+			Self::HandleEvents => frame_time.handle_events,
 		};
 
 		Some(duration)

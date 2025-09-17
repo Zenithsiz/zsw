@@ -57,9 +57,9 @@ use {
 	cgmath::Point2,
 	chrono::TimeDelta,
 	clap::Parser,
-	crossbeam::atomic::AtomicCell,
 	directories::ProjectDirs,
 	std::{collections::HashMap, fs, sync::Arc, time::Instant},
+	tokio::sync::mpsc,
 	winit::{
 		application::ApplicationHandler,
 		dpi::PhysicalSize,
@@ -125,10 +125,20 @@ fn main() -> Result<(), AppError> {
 	Ok(())
 }
 
+#[derive(Debug)]
 struct WinitApp {
-	window_event_handlers: HashMap<WindowId, EguiEventHandler>,
-	shared:                Arc<Shared>,
-	transparent_windows:   bool,
+	windows:             HashMap<WindowId, WinitAppWindow>,
+	shared:              Arc<Shared>,
+	transparent_windows: bool,
+}
+
+#[derive(Debug)]
+struct WinitAppWindow {
+	/// Egui event handle
+	egui_event_handler: EguiEventHandler,
+
+	/// Renderer event sender
+	renderer_event_tx: mpsc::UnboundedSender<RendererEvent>,
 }
 
 impl ApplicationHandler<AppEvent> for WinitApp {
@@ -153,14 +163,16 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 	}
 
 	fn window_event(&mut self, _event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-		#[expect(clippy::single_match, reason = "We'll add more in the future")]
-		match event {
-			WindowEvent::Resized(size) => self.shared.last_resize.store(Some(Resize { size })),
-			_ => (),
-		}
+		match self.windows.get(&window_id) {
+			Some(window) => {
+				#[expect(clippy::single_match, reason = "We'll add more in the future")]
+				match event {
+					WindowEvent::Resized(size) => _ = window.renderer_event_tx.send(RendererEvent::Resize { size }),
+					_ => (),
+				}
 
-		match self.window_event_handlers.get(&window_id) {
-			Some(egui_event_handler) => egui_event_handler.handle_event(&event).block_on(),
+				window.egui_event_handler.handle_event(&event).block_on();
+			},
 			None => tracing::warn!("Received window event for unknown window {window_id:?}: {event:?}"),
 		}
 	}
@@ -203,7 +215,6 @@ impl WinitApp {
 		// Shared state
 		let shared = Shared {
 			event_loop_proxy,
-			last_resize: AtomicCell::new(None),
 			wgpu,
 			panels_renderer_shared,
 			displays,
@@ -229,7 +240,7 @@ impl WinitApp {
 		}
 
 		Ok(Self {
-			window_event_handlers: HashMap::new(),
+			windows: HashMap::new(),
 			shared,
 			transparent_windows: config.transparent_windows,
 		})
@@ -256,11 +267,13 @@ impl WinitApp {
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
 			let menu = Menu::new();
 
+			let (renderer_event_tx, renderer_event_rx) = mpsc::unbounded_channel();
 			#[cloned(shared = self.shared, window)]
 			zsw_util::spawn_task("Renderer", async move {
 				self::renderer(
 					&shared,
 					&window,
+					renderer_event_rx,
 					wgpu_renderer,
 					panels_renderer,
 					egui_renderer,
@@ -270,7 +283,10 @@ impl WinitApp {
 				.await
 			});
 
-			_ = self.window_event_handlers.insert(window.id(), egui_event_handler);
+			_ = self.windows.insert(window.id(), WinitAppWindow {
+				egui_event_handler,
+				renderer_event_tx,
+			});
 		}
 
 		Ok(())
@@ -284,10 +300,18 @@ impl WinitApp {
 	}
 }
 
+/// Renderer event
+#[derive(Debug)]
+enum RendererEvent {
+	/// Resize
+	Resize { size: PhysicalSize<u32> },
+}
+
 /// Renderer task
 async fn renderer(
 	shared: &Shared,
 	window: &Window,
+	mut renderer_event_rx: mpsc::UnboundedReceiver<RendererEvent>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
@@ -346,13 +370,27 @@ async fn renderer(
 				.context("Unable to reconfigure wgpu")?;
 		};
 
-		// Resize if we need to
-		#[time(frame_resize)]
-		let () = if let Some(resize) = shared.last_resize.swap(None) {
-			wgpu_renderer
-				.resize(&shared.wgpu, resize.size)
-				.context("Unable to resize wgpu")?;
-			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, resize.size);
+		// Handle events
+		#[time(frame_handle_events)]
+		let () = {
+			let mut resize = None;
+
+			while let Ok(event) = renderer_event_rx.try_recv() {
+				tracing::trace!("Received renderer event: {event:?}");
+				match event {
+					// Note: We don't handle the resize right now since it's likely
+					//       we might have received quite a few and we only care to
+					//       resize to the latest.
+					RendererEvent::Resize { size } => resize = Some(size),
+				}
+			}
+
+			if let Some(size) = resize {
+				wgpu_renderer
+					.resize(&shared.wgpu, size)
+					.context("Unable to resize wgpu")?;
+				panels_renderer.resize(&wgpu_renderer, &shared.wgpu, size)
+			}
 		};
 
 
@@ -366,7 +404,7 @@ async fn renderer(
 				render_panels: frame_render_panels,
 				render_egui:   frame_render_egui,
 				render_finish: frame_render_finish,
-				resize:        frame_resize,
+				handle_events: frame_handle_events,
 			});
 	}
 }
@@ -487,13 +525,6 @@ fn window_geometry(window: &Window) -> Result<Rect<i32, u32>, AppError> {
 		pos:  cgmath::point2(window_pos.x, window_pos.y),
 		size: cgmath::vec2(window_size.width, window_size.height),
 	})
-}
-
-/// A resize
-#[derive(Clone, Copy, Debug)]
-pub struct Resize {
-	/// New size
-	size: PhysicalSize<u32>,
 }
 
 /// App event

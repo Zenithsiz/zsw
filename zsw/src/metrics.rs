@@ -138,7 +138,7 @@ pub struct RenderFrameTime {
 	pub render_panels: Duration,
 	pub render_egui:   Duration,
 	pub render_finish: Duration,
-	pub resize:        Duration,
+	pub handle_events: Duration,
 }
 
 /// Render panels frame time.
