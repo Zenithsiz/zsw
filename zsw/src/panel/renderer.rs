@@ -54,9 +54,6 @@ pub struct PanelsRendererShared {
 	/// Uniforms none bind group layout
 	none_uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
-	/// Uniforms fade bind group layout
-	fade_uniforms_bind_group_layout: wgpu::BindGroupLayout,
-
 	/// Uniforms slide bind group layout
 	slide_uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
@@ -72,17 +69,16 @@ impl PanelsRendererShared {
 		let vertices = self::create_vertices(wgpu);
 
 		let none_uniforms_bind_group_layout = self::create_none_uniforms_bind_group_layout(wgpu);
-		let fade_uniforms_bind_group_layout = self::create_fade_uniforms_bind_group_layout(wgpu);
 		let slide_uniforms_bind_group_layout = self::create_slide_uniforms_bind_group_layout(wgpu);
 
+		let fade = PanelFadeImagesShared::new(wgpu);
 		Self {
 			render_pipelines: Mutex::new(HashMap::new()),
 			vertices,
 			indices,
 			none_uniforms_bind_group_layout,
-			fade_uniforms_bind_group_layout,
 			slide_uniforms_bind_group_layout,
-			fade: PanelFadeImagesShared::default(),
+			fade,
 		}
 	}
 }
@@ -237,7 +233,7 @@ impl PanelsRenderer {
 					let bind_group_layouts = match panel.state {
 						PanelState::None(_) => &[&shared.none_uniforms_bind_group_layout] as &[_],
 						PanelState::Fade(_) => &[
-							&shared.fade_uniforms_bind_group_layout,
+							&shared.fade.geometry_uniforms_bind_group_layout,
 							shared.fade.image_bind_group_layout(wgpu).await,
 						],
 						PanelState::Slide(_) => &[&shared.slide_uniforms_bind_group_layout],
@@ -371,7 +367,10 @@ impl PanelsRenderer {
 							.images
 							.entry(panel_image_slot)
 							.or_insert_with(|| {
-								self::create_geometry_fade_image_uniforms(wgpu, &shared.fade_uniforms_bind_group_layout)
+								self::create_geometry_fade_image_uniforms(
+									wgpu,
+									&shared.fade.geometry_uniforms_bind_group_layout,
+								)
 							});
 
 					let progress = match panel_image_slot {
@@ -770,25 +769,6 @@ fn create_msaa_framebuffer(
 fn create_none_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("zsw-panel-none-geometry-uniforms-bind-group-layout"),
-		entries: &[wgpu::BindGroupLayoutEntry {
-			binding:    0,
-			visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-			ty:         wgpu::BindingType::Buffer {
-				ty:                 wgpu::BufferBindingType::Uniform,
-				has_dynamic_offset: false,
-				min_binding_size:   None,
-			},
-			count:      None,
-		}],
-	};
-
-	wgpu.device.create_bind_group_layout(&descriptor)
-}
-
-/// Creates the fade uniforms bind group layout
-fn create_fade_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
-	let descriptor = wgpu::BindGroupLayoutDescriptor {
-		label:   Some("zsw-panel-fade-geometry-uniforms-bind-group-layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
 			binding:    0,
 			visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
