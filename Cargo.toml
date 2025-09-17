@@ -121,7 +121,6 @@ rust.unused_crate_dependencies           = "warn"
 rust.unused_lifetimes                    = "warn"
 rust.unused_macro_rules                  = "warn"
 rust.unused_results                      = "warn"
-rust.variant_size_differences            = "warn"
 
 
 # We want to annotate unsafe inside unsafe fns

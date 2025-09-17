@@ -34,7 +34,6 @@ fn draw_plot(ui: &mut egui::Ui, display: &FrameTimesDisplay, charts: impl IntoIt
 
 /// Display
 #[derive(Clone, Copy, Debug)]
-#[expect(variant_size_differences, reason = "It'll be heap allocated anyway")]
 enum FrameTimesDisplay {
 	/// Time graph
 	TimeGraph { stack_charts: bool },
