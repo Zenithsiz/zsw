@@ -389,9 +389,6 @@ impl PanelsRenderer {
 					};
 
 					// If the alpha is 0, we can skip this image
-					// TODO: If alpha of a previous layer is 1, should we also skip it?
-					//       Right now that's fine, since with alpha 1, we always cover the
-					//       whole screen, but that's not guaranteed in the future.
 					if alpha == 0.0 {
 						continue;
 					}
