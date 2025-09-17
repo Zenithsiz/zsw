@@ -132,13 +132,13 @@ fn draw_fade_panel_editor(
 
 	ui.collapsing("Images", |ui| {
 		ui.collapsing("Previous", |ui| {
-			self::draw_panel_image(ui, &mut panel_state.images_mut().prev);
+			self::draw_fade_panel_image(ui, &mut panel_state.images_mut().prev);
 		});
 		ui.collapsing("Current", |ui| {
-			self::draw_panel_image(ui, &mut panel_state.images_mut().cur);
+			self::draw_fade_panel_image(ui, &mut panel_state.images_mut().cur);
 		});
 		ui.collapsing("Next", |ui| {
-			self::draw_panel_image(ui, &mut panel_state.images_mut().next);
+			self::draw_fade_panel_image(ui, &mut panel_state.images_mut().next);
 		});
 	});
 
@@ -168,8 +168,8 @@ fn draw_fade_panel_editor(
 	});
 }
 
-/// Draws a panel image
-fn draw_panel_image(ui: &mut egui::Ui, image: &mut Option<PanelFadeImage>) {
+/// Draws a fade panel image
+fn draw_fade_panel_image(ui: &mut egui::Ui, image: &mut Option<PanelFadeImage>) {
 	match image {
 		None => {
 			ui.label("[Unloaded]");
