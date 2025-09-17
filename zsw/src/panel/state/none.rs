@@ -58,7 +58,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 }
 
 /// Creates the panel none geometry uniforms
-pub fn create_geometry_uniforms(wgpu: &Wgpu, layout: &wgpu::BindGroupLayout) -> PanelGeometryNoneUniforms {
+pub fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> PanelGeometryNoneUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),
@@ -73,8 +73,8 @@ pub fn create_geometry_uniforms(wgpu: &Wgpu, layout: &wgpu::BindGroupLayout) -> 
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
-		label: Some("zsw-panel-none-geometry-uniforms-bind-group"),
-		layout,
+		label:   Some("zsw-panel-none-geometry-uniforms-bind-group"),
+		layout:  &shared.geometry_uniforms_bind_group_layout,
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),

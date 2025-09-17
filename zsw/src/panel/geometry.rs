@@ -2,9 +2,13 @@
 
 // Imports
 use {
-	super::state::{fade, none, slide},
+	super::state::{
+		fade::{self, PanelFadeImagesShared},
+		none::{self, PanelNoneShared},
+		slide::{self, PanelSlideShared},
+	},
 	crate::panel::state::fade::PanelFadeImageSlot,
-	std::collections::HashMap,
+	std::collections::{HashMap, hash_map},
 	tokio::sync::OnceCell,
 	winit::window::WindowId,
 	zsw_wgpu::Wgpu,
@@ -27,16 +31,16 @@ pub struct PanelGeometryUniforms {
 
 impl PanelGeometryUniforms {
 	/// Returns the none uniforms
-	pub async fn none(&self, wgpu: &Wgpu, layout: &wgpu::BindGroupLayout) -> &PanelGeometryNoneUniforms {
+	pub async fn none(&self, wgpu: &Wgpu, shared: &PanelNoneShared) -> &PanelGeometryNoneUniforms {
 		self.none
-			.get_or_init(async || none::create_geometry_uniforms(wgpu, layout))
+			.get_or_init(async || none::create_geometry_uniforms(wgpu, shared))
 			.await
 	}
 
 	/// Returns the slide uniforms
-	pub async fn slide(&self, wgpu: &Wgpu, layout: &wgpu::BindGroupLayout) -> &PanelGeometrySlideUniforms {
+	pub async fn slide(&self, wgpu: &Wgpu, shared: &PanelSlideShared) -> &PanelGeometrySlideUniforms {
 		self.slide
-			.get_or_init(async || slide::create_geometry_uniforms(wgpu, layout))
+			.get_or_init(async || slide::create_geometry_uniforms(wgpu, shared))
 			.await
 	}
 }
@@ -59,15 +63,17 @@ pub struct PanelGeometryFadeUniforms {
 }
 impl PanelGeometryFadeUniforms {
 	/// Returns an image's uniforms
-	pub fn image(
+	pub async fn image(
 		&mut self,
 		wgpu: &Wgpu,
-		layout: &wgpu::BindGroupLayout,
+		shared: &PanelFadeImagesShared,
 		slot: PanelFadeImageSlot,
 	) -> &mut PanelGeometryFadeImageUniforms {
-		self.images
-			.entry(slot)
-			.or_insert_with(|| fade::images::create_image_geometry_uniforms(wgpu, layout))
+		match self.images.entry(slot) {
+			hash_map::Entry::Occupied(entry) => entry.into_mut(),
+			hash_map::Entry::Vacant(entry) =>
+				entry.insert(fade::images::create_image_geometry_uniforms(wgpu, shared).await),
+		}
 	}
 }
 

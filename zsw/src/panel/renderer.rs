@@ -395,15 +395,13 @@ impl PanelsRenderer {
 				wgpu,
 				render_pass,
 				pos_matrix,
-				geometry_uniforms
-					.none(wgpu, &shared.none.geometry_uniforms_bind_group_layout)
-					.await,
+				geometry_uniforms.none(wgpu, &shared.none).await,
 				panel_state,
 			)
 			.into(),
 			PanelState::Fade(panel_state) => Self::render_panel_fade_geometry(
 				wgpu,
-				shared,
+				&shared.fade,
 				display_geometry,
 				render_pass,
 				pos_matrix,
@@ -416,9 +414,7 @@ impl PanelsRenderer {
 				wgpu,
 				render_pass,
 				pos_matrix,
-				geometry_uniforms
-					.slide(wgpu, &shared.slide.geometry_uniforms_bind_group_layout)
-					.await,
+				geometry_uniforms.slide(wgpu, &shared.slide).await,
 				panel_state,
 			)
 			.into(),
@@ -450,7 +446,7 @@ impl PanelsRenderer {
 
 	async fn render_panel_fade_geometry(
 		wgpu: &Wgpu,
-		shared: &PanelsRendererShared,
+		shared: &PanelFadeShared,
 		display_geometry: &DisplayGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		pos_matrix: uniform::Matrix4x4,
@@ -465,8 +461,7 @@ impl PanelsRenderer {
 
 		let mut image_metrics = HashMap::new();
 		for (panel_image_slot, panel_image) in panel_state.images().iter() {
-			let geometry_uniforms =
-				geometry_uniforms.image(wgpu, &shared.fade.geometry_uniforms_bind_group_layout, panel_image_slot);
+			let geometry_uniforms = geometry_uniforms.image(wgpu, &shared.images, panel_image_slot).await;
 
 			let progress = match panel_image_slot {
 				PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
@@ -539,7 +534,7 @@ impl PanelsRenderer {
 
 			// Bind the image uniforms
 			let sampler = panel_state.images().image_sampler(wgpu).await;
-			render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.fade.images).await, &[]);
+			render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.images).await, &[]);
 
 			#[time(draw)]
 			render_pass.draw_indexed(0..6, 0, 0..1);

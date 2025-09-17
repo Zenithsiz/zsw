@@ -366,7 +366,10 @@ fn create_image_bind_group(
 }
 
 /// Creates the image geometry uniforms
-pub fn create_image_geometry_uniforms(wgpu: &Wgpu, layout: &wgpu::BindGroupLayout) -> PanelGeometryFadeImageUniforms {
+pub async fn create_image_geometry_uniforms(
+	wgpu: &Wgpu,
+	shared: &PanelFadeImagesShared,
+) -> PanelGeometryFadeImageUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-fade-geometry-uniforms-buffer"),
@@ -387,8 +390,8 @@ pub fn create_image_geometry_uniforms(wgpu: &Wgpu, layout: &wgpu::BindGroupLayou
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
-		label: Some("zsw-panel-fade-geometry-uniforms-bind-group"),
-		layout,
+		label:   Some("zsw-panel-fade-geometry-uniforms-bind-group"),
+		layout:  shared.image_bind_group_layout(wgpu).await,
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),
