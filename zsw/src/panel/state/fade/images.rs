@@ -43,9 +43,6 @@ pub struct PanelFadeImages {
 	/// Image sampler
 	pub image_sampler: OnceCell<wgpu::Sampler>,
 
-	/// Image bind group
-	pub image_bind_group: OnceCell<wgpu::BindGroup>,
-
 	/// Next image
 	pub next_image: Loadable<ImageLoadRes>,
 }
@@ -56,6 +53,9 @@ pub struct PanelFadeImage {
 	/// Texture view
 	pub texture_view: wgpu::TextureView,
 
+	/// Bind group
+	pub bind_group: OnceCell<wgpu::BindGroup>,
+
 	/// Swap direction
 	pub swap_dir: bool,
 
@@ -63,18 +63,45 @@ pub struct PanelFadeImage {
 	pub path: Arc<Path>,
 }
 
+impl PanelFadeImage {
+	/// Gets the bind group, or initializes it, if uninitialized
+	pub async fn bind_group(
+		&self,
+		wgpu: &Wgpu,
+		sampler: &wgpu::Sampler,
+		shared: &PanelFadeImagesShared,
+	) -> &wgpu::BindGroup {
+		self.bind_group
+			.get_or_init(async || {
+				let layout = shared.image_bind_group_layout(wgpu).await;
+				self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
+			})
+			.await
+	}
+}
+
 impl PanelFadeImages {
 	/// Creates a new panel
 	#[must_use]
 	pub fn new() -> Self {
 		Self {
-			prev:             None,
-			cur:              None,
-			next:             None,
-			image_sampler:    OnceCell::new(),
-			image_bind_group: OnceCell::new(),
-			next_image:       Loadable::new(),
+			prev:          None,
+			cur:           None,
+			next:          None,
+			image_sampler: OnceCell::new(),
+			next_image:    Loadable::new(),
 		}
+	}
+
+	/// Returns an iterator over all images
+	pub fn iter(&self) -> impl Iterator<Item = (PanelFadeImageSlot, &PanelFadeImage)> {
+		[
+			(PanelFadeImageSlot::Prev, &self.prev),
+			(PanelFadeImageSlot::Cur, &self.cur),
+			(PanelFadeImageSlot::Next, &self.next),
+		]
+		.into_iter()
+		.filter_map(|(slot, img)| img.as_ref().map(|img| (slot, img)))
 	}
 
 	/// Steps to the previous image, if any
@@ -87,7 +114,6 @@ impl PanelFadeImages {
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = None;
-		self.image_bind_group = OnceCell::new();
 		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
@@ -107,7 +133,6 @@ impl PanelFadeImages {
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = None;
-		self.image_bind_group = OnceCell::new();
 		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
@@ -117,19 +142,6 @@ impl PanelFadeImages {
 	pub async fn image_sampler(&self, wgpu: &Wgpu) -> &wgpu::Sampler {
 		self.image_sampler
 			.get_or_init(async || self::create_image_sampler(wgpu))
-			.await
-	}
-
-	/// Gets the image bind group, or initializes it, if uninitialized
-	pub async fn image_bind_group(&self, wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> &wgpu::BindGroup {
-		self.image_bind_group
-			.get_or_init(async || {
-				let [prev, cur, next] = [&self.prev, &self.cur, &self.next]
-					.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
-				let image_sampler = self.image_sampler(wgpu).await;
-				let layout = shared.image_bind_group_layout(wgpu).await;
-				self::create_image_bind_group(wgpu, layout, prev, cur, next, image_sampler)
-			})
 			.await
 	}
 
@@ -164,9 +176,9 @@ impl PanelFadeImages {
 		// Get which slot to load the image into
 		let slot = {
 			match res.playlist_pos {
-				pos if Some(pos) == playlist_player.prev_pos() => Some(Slot::Prev),
-				pos if pos == playlist_player.cur_pos() => Some(Slot::Cur),
-				pos if pos == playlist_player.next_pos() => Some(Slot::Next),
+				pos if Some(pos) == playlist_player.prev_pos() => Some(PanelFadeImageSlot::Prev),
+				pos if pos == playlist_player.cur_pos() => Some(PanelFadeImageSlot::Cur),
+				pos if pos == playlist_player.next_pos() => Some(PanelFadeImageSlot::Next),
 				pos => {
 					tracing::warn!(
 						pos,
@@ -192,14 +204,14 @@ impl PanelFadeImages {
 				texture_view,
 				swap_dir: rand::random(),
 				path: res.path,
+				bind_group: OnceCell::new(),
 			};
 
 			match slot {
-				Slot::Prev => self.prev = Some(image),
-				Slot::Cur => self.cur = Some(image),
-				Slot::Next => self.next = Some(image),
+				PanelFadeImageSlot::Prev => self.prev = Some(image),
+				PanelFadeImageSlot::Cur => self.cur = Some(image),
+				PanelFadeImageSlot::Next => self.next = Some(image),
 			}
-			self.image_bind_group = OnceCell::new();
 		}
 	}
 
@@ -255,8 +267,8 @@ impl PanelFadeImages {
 }
 
 /// Image slot
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-enum Slot {
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
+pub enum PanelFadeImageSlot {
 	Prev,
 	Cur,
 	Next,
@@ -310,26 +322,6 @@ fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 			wgpu::BindGroupLayoutEntry {
 				binding:    1,
 				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Texture {
-					multisampled:   false,
-					view_dimension: wgpu::TextureViewDimension::D2,
-					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
-				},
-				count:      None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding:    2,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Texture {
-					multisampled:   false,
-					view_dimension: wgpu::TextureViewDimension::D2,
-					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
-				},
-				count:      None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding:    3,
-				visibility: wgpu::ShaderStages::FRAGMENT,
 				ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
 				count:      None,
 			},
@@ -343,9 +335,7 @@ fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 fn create_image_bind_group(
 	wgpu: &Wgpu,
 	bind_group_layout: &wgpu::BindGroupLayout,
-	view_prev: &wgpu::TextureView,
-	view_cur: &wgpu::TextureView,
-	view_next: &wgpu::TextureView,
+	view: &wgpu::TextureView,
 	sampler: &wgpu::Sampler,
 ) -> wgpu::BindGroup {
 	let descriptor = wgpu::BindGroupDescriptor {
@@ -354,18 +344,10 @@ fn create_image_bind_group(
 		entries: &[
 			wgpu::BindGroupEntry {
 				binding:  0,
-				resource: wgpu::BindingResource::TextureView(view_prev),
+				resource: wgpu::BindingResource::TextureView(view),
 			},
 			wgpu::BindGroupEntry {
 				binding:  1,
-				resource: wgpu::BindingResource::TextureView(view_cur),
-			},
-			wgpu::BindGroupEntry {
-				binding:  2,
-				resource: wgpu::BindingResource::TextureView(view_next),
-			},
-			wgpu::BindGroupEntry {
-				binding:  3,
 				resource: wgpu::BindingResource::Sampler(sampler),
 			},
 		],

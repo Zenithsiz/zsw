@@ -4,7 +4,7 @@
 pub mod images;
 
 // Exports
-pub use self::images::{PanelFadeImage, PanelFadeImages, PanelFadeImagesShared};
+pub use self::images::{PanelFadeImage, PanelFadeImageSlot, PanelFadeImages, PanelFadeImagesShared};
 
 // Imports
 use {

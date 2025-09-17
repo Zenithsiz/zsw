@@ -1,7 +1,12 @@
 //! Panel geometry
 
 // Imports
-use {std::collections::HashMap, tokio::sync::OnceCell, winit::window::WindowId};
+use {
+	crate::panel::state::fade::PanelFadeImageSlot,
+	std::collections::HashMap,
+	tokio::sync::OnceCell,
+	winit::window::WindowId,
+};
 
 /// Panel geometry
 #[derive(Debug)]
@@ -14,7 +19,7 @@ pub struct PanelGeometry {
 #[derive(Default, Debug)]
 pub struct PanelGeometryUniforms {
 	pub none:  OnceCell<PanelGeometryNoneUniforms>,
-	pub fade:  OnceCell<PanelGeometryFadeUniforms>,
+	pub fade:  PanelGeometryFadeUniforms,
 	pub slide: OnceCell<PanelGeometrySlideUniforms>,
 }
 
@@ -29,8 +34,15 @@ pub struct PanelGeometryNoneUniforms {
 }
 
 /// Panel geometry fade uniforms
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct PanelGeometryFadeUniforms {
+	/// Images
+	pub images: HashMap<PanelFadeImageSlot, PanelGeometryFadeImageUniforms>,
+}
+
+/// Panel geometry fade image uniforms
+#[derive(Debug)]
+pub struct PanelGeometryFadeImageUniforms {
 	/// Buffer
 	pub buffer: wgpu::Buffer,
 

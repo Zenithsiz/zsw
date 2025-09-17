@@ -2,14 +2,17 @@
 
 // Imports
 use {
-	crate::metrics::{
-		FrameTimes,
-		RenderPanelFrameTime,
-		RenderPanelGeometryFadeFrameTime,
-		RenderPanelGeometryFrameTime,
-		RenderPanelGeometryNoneFrameTime,
-		RenderPanelGeometrySlideFrameTime,
-		RenderPanelsFrameTime,
+	crate::{
+		metrics::{
+			FrameTimes,
+			RenderPanelFrameTime,
+			RenderPanelGeometryFadeImageFrameTime,
+			RenderPanelGeometryFrameTime,
+			RenderPanelGeometryNoneFrameTime,
+			RenderPanelGeometrySlideFrameTime,
+			RenderPanelsFrameTime,
+		},
+		panel::state::fade::PanelFadeImageSlot,
 	},
 	core::{iter, time::Duration},
 	itertools::Itertools,
@@ -27,7 +30,10 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 		panels: HashMap<usize, DurationPanelIdxTree>,
 	}
 	struct DurationPanelIdxTree {
-		geometries: HashSet<usize>,
+		geometries: HashMap<usize, DurationPanelGeometryIdxTree>,
+	}
+	struct DurationPanelGeometryIdxTree {
+		images: HashSet<PanelFadeImageSlot>,
 	}
 	let duration_idxs_tree = DurationIdxTree {
 		panels: render_frame_times
@@ -35,7 +41,23 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 			.flat_map(|frame_time| {
 				frame_time.panels.iter().map(|(&panel_idx, panel)| {
 					let panel = DurationPanelIdxTree {
-						geometries: panel.geometries.keys().copied().collect(),
+						geometries: panel
+							.geometries
+							.iter()
+							.map(|(&geometry_idx, geometry)| {
+								let geometry = DurationPanelGeometryIdxTree {
+									#[expect(clippy::match_same_arms, reason = "They won't be in the future")]
+									images:
+										match geometry {
+											RenderPanelGeometryFrameTime::None(_) => HashSet::new(),
+											RenderPanelGeometryFrameTime::Fade(images) =>
+												images.images.iter().map(|(&image_slot, _image)| image_slot).collect(),
+											RenderPanelGeometryFrameTime::Slide(_) => HashSet::new(),
+										},
+								};
+								(geometry_idx, geometry)
+							})
+							.collect(),
 					};
 					(panel_idx, panel)
 				})
@@ -51,7 +73,7 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 			iter::chain(
 				// Panel specific indices
 				[DurationPanelIdx::UpdatePanel, DurationPanelIdx::CreateRenderPipeline],
-				panel.geometries.into_iter().flat_map(|geometry_idx| {
+				panel.geometries.into_iter().flat_map(|(geometry_idx, geometry)| {
 					// Panel & geometry specific indices
 					iter_chain!(
 						[
@@ -59,11 +81,13 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 							DurationPanelGeometryNoneIdx::Draw,
 						]
 						.map(move |inner| DurationPanelGeometryIdx::None { inner }),
-						[
-							DurationPanelGeometryFadeIdx::WriteUniforms,
-							DurationPanelGeometryFadeIdx::Draw,
-						]
-						.map(move |inner| DurationPanelGeometryIdx::Fade { inner }),
+						geometry.images.into_iter().flat_map(|image_slot| {
+							[
+								DurationPanelGeometryFadeIdx::WriteUniforms,
+								DurationPanelGeometryFadeIdx::Draw,
+							]
+							.map(move |inner| DurationPanelGeometryIdx::Fade { image_slot, inner })
+						}),
 						[
 							DurationPanelGeometrySlideIdx::WriteUniforms,
 							DurationPanelGeometrySlideIdx::Draw,
@@ -152,16 +176,23 @@ impl DurationPanelIdx {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
 enum DurationPanelGeometryIdx {
-	None { inner: DurationPanelGeometryNoneIdx },
-	Fade { inner: DurationPanelGeometryFadeIdx },
-	Slide { inner: DurationPanelGeometrySlideIdx },
+	None {
+		inner: DurationPanelGeometryNoneIdx,
+	},
+	Fade {
+		image_slot: PanelFadeImageSlot,
+		inner:      DurationPanelGeometryFadeIdx,
+	},
+	Slide {
+		inner: DurationPanelGeometrySlideIdx,
+	},
 }
 
 impl DurationPanelGeometryIdx {
 	pub fn name(self, panel_idx: usize, geometry_idx: usize) -> String {
 		match self {
 			Self::None { inner } => inner.name(panel_idx, geometry_idx),
-			Self::Fade { inner } => inner.name(panel_idx, geometry_idx),
+			Self::Fade { image_slot, inner } => inner.name(panel_idx, geometry_idx, image_slot),
 			Self::Slide { inner } => inner.name(panel_idx, geometry_idx),
 		}
 	}
@@ -169,7 +200,10 @@ impl DurationPanelGeometryIdx {
 	pub fn duration(self, frame_time: &RenderPanelGeometryFrameTime) -> Option<Duration> {
 		match (self, frame_time) {
 			(Self::None { inner }, RenderPanelGeometryFrameTime::None(frame_time)) => inner.duration(frame_time),
-			(Self::Fade { inner }, RenderPanelGeometryFrameTime::Fade(frame_time)) => inner.duration(frame_time),
+			(Self::Fade { image_slot, inner }, RenderPanelGeometryFrameTime::Fade(frame_time)) => frame_time
+				.images
+				.get(&image_slot)
+				.and_then(|image| inner.duration(image)),
 			(Self::Slide { inner }, RenderPanelGeometryFrameTime::Slide(frame_time)) => inner.duration(frame_time),
 			_ => None,
 		}
@@ -206,15 +240,17 @@ enum DurationPanelGeometryFadeIdx {
 }
 
 impl DurationPanelGeometryFadeIdx {
-	pub fn name(self, panel_idx: usize, geometry_idx: usize) -> String {
+	pub fn name(self, panel_idx: usize, geometry_idx: usize, image_slot: PanelFadeImageSlot) -> String {
 		match self {
-			Self::WriteUniforms =>
-				format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$Fade] Write uniforms"),
-			Self::Draw => format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$Fade] Draw"),
+			Self::WriteUniforms => format!(
+				"[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$Fade] [Image${image_slot:?}] Write uniforms"
+			),
+			Self::Draw =>
+				format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$Fade] [Image${image_slot:?}] Draw"),
 		}
 	}
 
-	pub fn duration(self, frame_time: &RenderPanelGeometryFadeFrameTime) -> Option<Duration> {
+	pub fn duration(self, frame_time: &RenderPanelGeometryFadeImageFrameTime) -> Option<Duration> {
 		match self {
 			Self::WriteUniforms => Some(frame_time.write_uniforms),
 			Self::Draw => Some(frame_time.draw),

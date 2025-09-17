@@ -2,6 +2,7 @@
 
 // Imports
 use {
+	crate::panel::state::fade::PanelFadeImageSlot,
 	core::{ops::DerefMut, time::Duration},
 	std::collections::{HashMap, VecDeque},
 	tokio::sync::{Mutex, MutexGuard},
@@ -174,6 +175,12 @@ pub struct RenderPanelGeometryNoneFrameTime {
 /// Render panel geometry fade frame time.
 #[derive(Clone, Debug)]
 pub struct RenderPanelGeometryFadeFrameTime {
+	pub images: HashMap<PanelFadeImageSlot, RenderPanelGeometryFadeImageFrameTime>,
+}
+
+/// Render panel geometry fade image frame time.
+#[derive(Clone, Debug)]
+pub struct RenderPanelGeometryFadeImageFrameTime {
 	pub write_uniforms: Duration,
 	pub draw:           Duration,
 }

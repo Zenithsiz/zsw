@@ -21,26 +21,6 @@ pub struct Vec4(pub [f32; 4]);
 #[repr(C, align(16))]
 pub struct Matrix4x4(pub [[f32; 4]; 4]);
 
-/// Panel fade image uniforms
-#[derive(PartialEq, Clone, Copy, Default, Debug)]
-#[derive(Zeroable, Pod)]
-#[repr(C)]
-pub struct PanelFadeImageUniforms {
-	ratio:    Vec2,
-	swap_dir: u32,
-	_unused:  u32,
-}
-
-impl PanelFadeImageUniforms {
-	pub fn new(ratio: impl Into<[f32; 2]>, swap_dir: bool) -> Self {
-		Self {
-			ratio:    Vec2(ratio.into()),
-			swap_dir: swap_dir.into(),
-			_unused:  0,
-		}
-	}
-}
-
 /// None
 #[derive(PartialEq, Clone, Copy, Default, Debug)]
 #[derive(Zeroable, Pod)]
@@ -54,15 +34,11 @@ pub struct None {
 #[derive(PartialEq, Clone, Copy, Default, Debug)]
 #[derive(Zeroable, Pod)]
 #[repr(C)]
-pub struct Fade {
-	pub pos_matrix:    Matrix4x4,
-	pub prev:          PanelFadeImageUniforms,
-	pub cur:           PanelFadeImageUniforms,
-	pub next:          PanelFadeImageUniforms,
-	pub fade_duration: f32,
-	pub progress:      f32,
-
-	pub _unused: [u32; 2],
+pub struct FadeBasic {
+	pub pos_matrix:  Matrix4x4,
+	pub image_ratio: Vec2,
+	pub progress:    f32,
+	pub alpha:       f32,
 }
 
 /// Fade-white
@@ -70,15 +46,13 @@ pub struct Fade {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeWhite {
-	pub pos_matrix:    Matrix4x4,
-	pub prev:          PanelFadeImageUniforms,
-	pub cur:           PanelFadeImageUniforms,
-	pub next:          PanelFadeImageUniforms,
-	pub fade_duration: f32,
-	pub progress:      f32,
-	pub strength:      f32,
+	pub pos_matrix:   Matrix4x4,
+	pub image_ratio:  Vec2,
+	pub progress:     f32,
+	pub alpha:        f32,
+	pub mix_strength: f32,
 
-	pub _unused: u32,
+	pub _unused: [u32; 3],
 }
 
 /// Fade-out
@@ -86,15 +60,13 @@ pub struct FadeWhite {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeOut {
-	pub pos_matrix:    Matrix4x4,
-	pub prev:          PanelFadeImageUniforms,
-	pub cur:           PanelFadeImageUniforms,
-	pub next:          PanelFadeImageUniforms,
-	pub fade_duration: f32,
-	pub progress:      f32,
-	pub strength:      f32,
+	pub pos_matrix:  Matrix4x4,
+	pub image_ratio: Vec2,
+	pub progress:    f32,
+	pub alpha:       f32,
+	pub strength:    f32,
 
-	pub _unused: u32,
+	pub _unused: [u32; 3],
 }
 
 /// Fade-in
@@ -102,15 +74,13 @@ pub struct FadeOut {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeIn {
-	pub pos_matrix:    Matrix4x4,
-	pub prev:          PanelFadeImageUniforms,
-	pub cur:           PanelFadeImageUniforms,
-	pub next:          PanelFadeImageUniforms,
-	pub fade_duration: f32,
-	pub progress:      f32,
-	pub strength:      f32,
+	pub pos_matrix:  Matrix4x4,
+	pub image_ratio: Vec2,
+	pub progress:    f32,
+	pub alpha:       f32,
+	pub strength:    f32,
 
-	pub _unused: u32,
+	pub _unused: [u32; 3],
 }
 
 /// Slide
@@ -124,7 +94,7 @@ pub struct Slide {
 /// The maximum uniform size
 pub const MAX_UNIFORM_SIZE: usize = zsw_util::array_max(&[
 	size_of::<None>(),
-	size_of::<Fade>(),
+	size_of::<FadeBasic>(),
 	size_of::<FadeWhite>(),
 	size_of::<FadeOut>(),
 	size_of::<FadeIn>(),
