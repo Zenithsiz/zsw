@@ -129,7 +129,7 @@ fn draw_display_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) 
 }
 
 /// Creates a chart of frame times
-fn add_frame_time_chart<T, D>(
+fn create_frame_time_chart<T, D>(
 	frame_times: &FrameTimes<T>,
 	display: &FrameTimesDisplay,
 	prev_heights: &mut [f64],

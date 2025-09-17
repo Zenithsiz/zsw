@@ -13,7 +13,7 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderFrameTi
 
 	let mut prev_heights = vec![0.0; render_frame_times.len()];
 	let charts = DurationIdx::iter().map(|duration_idx| {
-		super::add_frame_time_chart(render_frame_times, &display, &mut prev_heights, &duration_idx)
+		super::create_frame_time_chart(render_frame_times, &display, &mut prev_heights, &duration_idx)
 	});
 
 	super::draw_plot(ui, &display, charts);
