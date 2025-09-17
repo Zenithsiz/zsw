@@ -13,8 +13,9 @@ use {
 		Panel,
 		PanelState,
 		Panels,
-		geometry::PanelGeometryNoneUniforms,
+		geometry::{PanelGeometryFadeUniforms, PanelGeometryNoneUniforms},
 		state::{
+			PanelFadeState,
 			PanelNoneState,
 			fade::{PanelFadeImageSlot, PanelFadeImagesShared},
 			none::PanelNoneImagesShared,
@@ -369,7 +370,6 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel's geometry
-	#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 	pub async fn render_panel_geometry(
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
@@ -396,108 +396,17 @@ impl PanelsRenderer {
 					.await,
 				panel_state,
 			),
-			PanelState::Fade(panel_state) => {
-				let p = panel_state.progress_norm();
-				let f = panel_state.fade_duration_norm();
-
-				// Full duration an image is on screen (including the fades)
-				let d = 1.0 + 2.0 * f;
-
-				let mut image_metrics = HashMap::new();
-				for (panel_image_slot, panel_image) in panel_state.images().iter() {
-					let geometry_uniforms = geometry_uniforms.fade.image(
-						wgpu,
-						&shared.fade.geometry_uniforms_bind_group_layout,
-						panel_image_slot,
-					);
-
-					let progress = match panel_image_slot {
-						PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
-						PanelFadeImageSlot::Cur => (p + f) / d,
-						PanelFadeImageSlot::Next => f32::max((p - 1.0 + f) / d, 0.0),
-					};
-					let progress = match panel_image.swap_dir {
-						true => 1.0 - progress,
-						false => progress,
-					};
-
-					let alpha_prev = 0.5 * f32::clamp(1.0 - p / f, 0.0, 1.0);
-					let alpha_next = 0.5 * f32::clamp(1.0 - (1.0 - p) / f, 0.0, 1.0);
-					let alpha_cur = 1.0 - f32::max(alpha_prev, alpha_next);
-					let alpha = match panel_image_slot {
-						PanelFadeImageSlot::Prev => alpha_prev,
-						PanelFadeImageSlot::Cur => alpha_cur,
-						PanelFadeImageSlot::Next => alpha_next,
-					};
-
-					// If the alpha is 0, we can skip this image
-					if alpha == 0.0 {
-						continue;
-					}
-
-					// Calculate the position matrix for the panel
-					let image_size = panel_image.texture_view.texture().size();
-					let image_size = Vector2::new(image_size.width, image_size.height);
-					let image_ratio = display_geometry.image_ratio(image_size);
-
-					#[time(write_uniforms)]
-					let () = match panel_state.shader() {
-						PanelFadeShader::Basic =>
-							Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeBasic {
-								pos_matrix,
-								image_ratio: uniform::Vec2(image_ratio.into()),
-								progress,
-								alpha,
-							}),
-						PanelFadeShader::White { strength } =>
-							Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeWhite {
-								pos_matrix,
-								image_ratio: uniform::Vec2(image_ratio.into()),
-								progress,
-								alpha,
-								mix_strength: strength * 4.0 * f32::max(alpha_cur * alpha_prev, alpha_cur * alpha_next),
-								_unused: [0; _],
-							}),
-						PanelFadeShader::Out { strength } =>
-							Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeOut {
-								pos_matrix,
-								image_ratio: uniform::Vec2(image_ratio.into()),
-								progress,
-								alpha,
-								strength,
-								_unused: [0; _],
-							}),
-						PanelFadeShader::In { strength } =>
-							Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeIn {
-								pos_matrix,
-								image_ratio: uniform::Vec2(image_ratio.into()),
-								progress,
-								alpha,
-								strength,
-								_unused: [0; _],
-							}),
-					};
-
-					// Bind the geometry uniforms
-					render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
-
-					// Bind the image uniforms
-					let sampler = panel_state.images().image_sampler(wgpu).await;
-					render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.fade).await, &[]);
-
-					#[time(draw)]
-					render_pass.draw_indexed(0..6, 0, 0..1);
-
-					_ = image_metrics.insert(panel_image_slot, metrics::RenderPanelGeometryFadeImageFrameTime {
-						write_uniforms,
-						draw,
-					});
-				}
-
-				metrics::RenderPanelGeometryFrameTime::Fade(metrics::RenderPanelGeometryFadeFrameTime {
-					images: image_metrics,
-				})
-			},
+			PanelState::Fade(panel_state) =>
+				Self::render_panel_fade_geometry(
+					wgpu,
+					shared,
+					display_geometry,
+					render_pass,
+					pos_matrix,
+					&mut geometry_uniforms.fade,
+					panel_state,
+				)
+				.await,
 			PanelState::Slide(_panel_state) => {
 				let geometry_uniforms = geometry_uniforms
 					.slide(wgpu, &shared.slide.geometry_uniforms_bind_group_layout)
@@ -541,6 +450,111 @@ impl PanelsRenderer {
 		render_pass.draw_indexed(0..6, 0, 0..1);
 
 		metrics::RenderPanelGeometryFrameTime::None(metrics::RenderPanelGeometryNoneFrameTime { write_uniforms, draw })
+	}
+
+	async fn render_panel_fade_geometry(
+		wgpu: &Wgpu,
+		shared: &PanelsRendererShared,
+		display_geometry: &DisplayGeometry,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		pos_matrix: uniform::Matrix4x4,
+		geometry_uniforms: &mut PanelGeometryFadeUniforms,
+		panel_state: &PanelFadeState,
+	) -> metrics::RenderPanelGeometryFrameTime {
+		let p = panel_state.progress_norm();
+		let f = panel_state.fade_duration_norm();
+
+		// Full duration an image is on screen (including the fades)
+		let d = 1.0 + 2.0 * f;
+
+		let mut image_metrics = HashMap::new();
+		for (panel_image_slot, panel_image) in panel_state.images().iter() {
+			let geometry_uniforms =
+				geometry_uniforms.image(wgpu, &shared.fade.geometry_uniforms_bind_group_layout, panel_image_slot);
+
+			let progress = match panel_image_slot {
+				PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
+				PanelFadeImageSlot::Cur => (p + f) / d,
+				PanelFadeImageSlot::Next => f32::max((p - 1.0 + f) / d, 0.0),
+			};
+			let progress = match panel_image.swap_dir {
+				true => 1.0 - progress,
+				false => progress,
+			};
+
+			let alpha_prev = 0.5 * f32::clamp(1.0 - p / f, 0.0, 1.0);
+			let alpha_next = 0.5 * f32::clamp(1.0 - (1.0 - p) / f, 0.0, 1.0);
+			let alpha_cur = 1.0 - f32::max(alpha_prev, alpha_next);
+			let alpha = match panel_image_slot {
+				PanelFadeImageSlot::Prev => alpha_prev,
+				PanelFadeImageSlot::Cur => alpha_cur,
+				PanelFadeImageSlot::Next => alpha_next,
+			};
+
+			// If the alpha is 0, we can skip this image
+			if alpha == 0.0 {
+				continue;
+			}
+
+			// Calculate the position matrix for the panel
+			let image_size = panel_image.texture_view.texture().size();
+			let image_size = Vector2::new(image_size.width, image_size.height);
+			let image_ratio = display_geometry.image_ratio(image_size);
+
+			#[time(write_uniforms)]
+			let () = match panel_state.shader() {
+				PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeBasic {
+					pos_matrix,
+					image_ratio: uniform::Vec2(image_ratio.into()),
+					progress,
+					alpha,
+				}),
+				PanelFadeShader::White { strength } =>
+					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeWhite {
+						pos_matrix,
+						image_ratio: uniform::Vec2(image_ratio.into()),
+						progress,
+						alpha,
+						mix_strength: strength * 4.0 * f32::max(alpha_cur * alpha_prev, alpha_cur * alpha_next),
+						_unused: [0; _],
+					}),
+				PanelFadeShader::Out { strength } =>
+					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeOut {
+						pos_matrix,
+						image_ratio: uniform::Vec2(image_ratio.into()),
+						progress,
+						alpha,
+						strength,
+						_unused: [0; _],
+					}),
+				PanelFadeShader::In { strength } =>
+					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeIn {
+						pos_matrix,
+						image_ratio: uniform::Vec2(image_ratio.into()),
+						progress,
+						alpha,
+						strength,
+						_unused: [0; _],
+					}),
+			};
+
+			// Bind the geometry uniforms
+			render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+			// Bind the image uniforms
+			let sampler = panel_state.images().image_sampler(wgpu).await;
+			render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.fade).await, &[]);
+
+			#[time(draw)]
+			render_pass.draw_indexed(0..6, 0, 0..1);
+
+			_ = image_metrics.insert(panel_image_slot, metrics::RenderPanelGeometryFadeImageFrameTime {
+				write_uniforms,
+				draw,
+			});
+		}
+
+		metrics::RenderPanelGeometryFrameTime::Fade(metrics::RenderPanelGeometryFadeFrameTime { images: image_metrics })
 	}
 
 	/// Writes `uniforms` into `buffer`.
