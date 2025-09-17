@@ -127,9 +127,9 @@ fn main() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
-	windows:             HashMap<WindowId, WinitAppWindow>,
-	shared:              Arc<Shared>,
-	transparent_windows: bool,
+	windows: HashMap<WindowId, WinitAppWindow>,
+	shared:  Arc<Shared>,
+	config:  Arc<Config>,
 }
 
 #[derive(Debug)]
@@ -243,13 +243,13 @@ impl WinitApp {
 		Ok(Self {
 			windows: HashMap::new(),
 			shared,
-			transparent_windows: config.transparent_windows,
+			config,
 		})
 	}
 
 	/// Initializes the window related things
 	pub async fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
-		let windows = window::create(event_loop, self.transparent_windows)
+		let windows = window::create(event_loop, self.config.transparent_windows)
 			.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
 			self.shared
