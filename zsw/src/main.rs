@@ -62,7 +62,7 @@ use {
 	tokio::sync::mpsc,
 	winit::{
 		application::ApplicationHandler,
-		dpi::PhysicalSize,
+		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
 		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
 		platform::{run_on_demand::EventLoopExtRunOnDemand, x11::EventLoopBuilderExtX11},
@@ -165,9 +165,9 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 	fn window_event(&mut self, _event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
 		match self.windows.get(&window_id) {
 			Some(window) => {
-				#[expect(clippy::single_match, reason = "We'll add more in the future")]
 				match event {
 					WindowEvent::Resized(size) => _ = window.renderer_event_tx.send(RendererEvent::Resize { size }),
+					WindowEvent::Moved(pos) => _ = window.renderer_event_tx.send(RendererEvent::Move { pos }),
 					_ => (),
 				}
 
@@ -305,6 +305,9 @@ impl WinitApp {
 enum RendererEvent {
 	/// Resize
 	Resize { size: PhysicalSize<u32> },
+
+	/// Move
+	Move { pos: PhysicalPosition<i32> },
 }
 
 /// Renderer task
@@ -374,6 +377,7 @@ async fn renderer(
 		#[time(frame_handle_events)]
 		let () = {
 			let mut resize = None;
+			let mut move_pos = None;
 
 			while let Ok(event) = renderer_event_rx.try_recv() {
 				tracing::trace!("Received renderer event: {event:?}");
@@ -382,6 +386,7 @@ async fn renderer(
 					//       we might have received quite a few and we only care to
 					//       resize to the latest.
 					RendererEvent::Resize { size } => resize = Some(size),
+					RendererEvent::Move { pos } => move_pos = Some(pos),
 				}
 			}
 
@@ -390,6 +395,9 @@ async fn renderer(
 					.resize(&shared.wgpu, size)
 					.context("Unable to resize wgpu")?;
 				panels_renderer.resize(&wgpu_renderer, &shared.wgpu, size)
+			}
+			if let Some(_pos) = move_pos {
+				// TODO: Update position of window
 			}
 		};
 
