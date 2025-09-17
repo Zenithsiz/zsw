@@ -23,7 +23,7 @@ use {
 			PanelFadeState,
 			PanelNoneState,
 			PanelSlideState,
-			fade::{PanelFadeImageSlot, PanelFadeImagesShared},
+			fade::{PanelFadeImageSlot, PanelFadeShared},
 			none::PanelNoneShared,
 			slide::PanelSlideShared,
 		},
@@ -67,7 +67,7 @@ pub struct PanelsRendererShared {
 	none: PanelNoneShared,
 
 	/// Fade
-	fade: PanelFadeImagesShared,
+	fade: PanelFadeShared,
 
 	/// Slide
 	slide: PanelSlideShared,
@@ -81,7 +81,7 @@ impl PanelsRendererShared {
 		let vertices = self::create_vertices(wgpu);
 
 		let none = PanelNoneShared::new(wgpu);
-		let fade = PanelFadeImagesShared::new(wgpu);
+		let fade = PanelFadeShared::new(wgpu);
 		let slide = PanelSlideShared::new(wgpu);
 
 		Self {
@@ -284,7 +284,7 @@ impl PanelsRenderer {
 					PanelState::None(_) => &[&shared.none.geometry_uniforms_bind_group_layout] as &[_],
 					PanelState::Fade(_) => &[
 						&shared.fade.geometry_uniforms_bind_group_layout,
-						shared.fade.image_bind_group_layout(wgpu).await,
+						shared.fade.images.image_bind_group_layout(wgpu).await,
 					],
 					PanelState::Slide(_) => &[&shared.slide.geometry_uniforms_bind_group_layout],
 				};
@@ -539,7 +539,7 @@ impl PanelsRenderer {
 
 			// Bind the image uniforms
 			let sampler = panel_state.images().image_sampler(wgpu).await;
-			render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.fade).await, &[]);
+			render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.fade.images).await, &[]);
 
 			#[time(draw)]
 			render_pass.draw_indexed(0..6, 0, 0..1);
