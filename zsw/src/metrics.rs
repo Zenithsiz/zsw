@@ -168,8 +168,9 @@ pub enum RenderPanelGeometryFrameTime {
 /// Render panel geometry none frame time.
 #[derive(Clone, Debug)]
 pub struct RenderPanelGeometryNoneFrameTime {
-	pub write_uniforms: Duration,
-	pub draw:           Duration,
+	pub create_uniforms: Duration,
+	pub write_uniforms:  Duration,
+	pub draw:            Duration,
 }
 
 /// Render panel geometry fade frame time.
@@ -181,13 +182,15 @@ pub struct RenderPanelGeometryFadeFrameTime {
 /// Render panel geometry fade image frame time.
 #[derive(Clone, Debug)]
 pub struct RenderPanelGeometryFadeImageFrameTime {
-	pub write_uniforms: Duration,
-	pub draw:           Duration,
+	pub create_uniforms: Duration,
+	pub write_uniforms:  Duration,
+	pub draw:            Duration,
 }
 
 /// Render panel geometry slide frame time.
 #[derive(Clone, Debug)]
 pub struct RenderPanelGeometrySlideFrameTime {
-	pub write_uniforms: Duration,
-	pub draw:           Duration,
+	pub create_uniforms: Duration,
+	pub write_uniforms:  Duration,
+	pub draw:            Duration,
 }
