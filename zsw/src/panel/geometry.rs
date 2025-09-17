@@ -4,7 +4,6 @@
 use {
 	super::state::{
 		fade::{self, PanelFadeImagesShared},
-		none::{self, PanelNoneShared},
 		slide::{self, PanelSlideShared},
 	},
 	crate::panel::state::fade::PanelFadeImageSlot,
@@ -24,19 +23,11 @@ pub struct PanelGeometry {
 /// Panel geometry uniforms
 #[derive(Default, Debug)]
 pub struct PanelGeometryUniforms {
-	pub none:  OnceCell<PanelGeometryNoneUniforms>,
 	pub fade:  PanelGeometryFadeUniforms,
 	pub slide: OnceCell<PanelGeometrySlideUniforms>,
 }
 
 impl PanelGeometryUniforms {
-	/// Returns the none uniforms
-	pub async fn none(&self, wgpu: &Wgpu, shared: &PanelNoneShared) -> &PanelGeometryNoneUniforms {
-		self.none
-			.get_or_init(async || none::create_geometry_uniforms(wgpu, shared))
-			.await
-	}
-
 	/// Returns the slide uniforms
 	pub async fn slide(&self, wgpu: &Wgpu, shared: &PanelSlideShared) -> &PanelGeometrySlideUniforms {
 		self.slide
@@ -45,15 +36,6 @@ impl PanelGeometryUniforms {
 	}
 }
 
-/// Panel geometry none uniforms
-#[derive(Debug)]
-pub struct PanelGeometryNoneUniforms {
-	/// Buffer
-	pub buffer: wgpu::Buffer,
-
-	/// Bind group
-	pub bind_group: wgpu::BindGroup,
-}
 
 /// Panel geometry fade uniforms
 #[derive(Default, Debug)]

@@ -2,7 +2,10 @@
 
 // Imports
 use {
-	crate::panel::{geometry::PanelGeometryNoneUniforms, renderer::uniform},
+	crate::panel::renderer::uniform,
+	std::{collections::HashMap, sync::Arc},
+	tokio::sync::Mutex,
+	winit::window::WindowId,
 	zsw_wgpu::Wgpu,
 };
 
@@ -11,12 +14,32 @@ use {
 pub struct PanelNoneState {
 	/// Background color
 	pub background_color: [f32; 4],
+
+	/// Geometry uniforms
+	pub geometry_uniforms: Mutex<HashMap<WindowId, Arc<PanelNoneGeometryUniforms>>>,
 }
 
 impl PanelNoneState {
 	/// Creates new state
 	pub fn new(background_color: [f32; 4]) -> Self {
-		Self { background_color }
+		Self {
+			background_color,
+			geometry_uniforms: Mutex::new(HashMap::new()),
+		}
+	}
+
+	/// Returns the geometry uniforms
+	pub async fn geometry_uniforms(
+		&self,
+		wgpu: &Wgpu,
+		shared: &PanelNoneShared,
+		window_id: WindowId,
+	) -> Arc<PanelNoneGeometryUniforms> {
+		let mut geometry_uniforms = self.geometry_uniforms.lock().await;
+		let geometry_uniforms = geometry_uniforms
+			.entry(window_id)
+			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)));
+		Arc::clone(geometry_uniforms)
 	}
 }
 
@@ -36,6 +59,16 @@ impl PanelNoneShared {
 			geometry_uniforms_bind_group_layout,
 		}
 	}
+}
+
+/// Panel geometry none uniforms
+#[derive(Debug)]
+pub struct PanelNoneGeometryUniforms {
+	/// Buffer
+	pub buffer: wgpu::Buffer,
+
+	/// Bind group
+	pub bind_group: wgpu::BindGroup,
 }
 
 /// Creates the geometry uniforms bind group layout
@@ -58,7 +91,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 }
 
 /// Creates the panel none geometry uniforms
-pub fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> PanelGeometryNoneUniforms {
+pub fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> PanelNoneGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),
@@ -82,5 +115,5 @@ pub fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> PanelG
 	};
 	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
-	PanelGeometryNoneUniforms { buffer, bind_group }
+	PanelNoneGeometryUniforms { buffer, bind_group }
 }

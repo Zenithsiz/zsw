@@ -13,12 +13,7 @@ use {
 		Panel,
 		PanelState,
 		Panels,
-		geometry::{
-			PanelGeometryFadeUniforms,
-			PanelGeometryNoneUniforms,
-			PanelGeometrySlideUniforms,
-			PanelGeometryUniforms,
-		},
+		geometry::{PanelGeometryFadeUniforms, PanelGeometrySlideUniforms, PanelGeometryUniforms},
 		state::{
 			PanelFadeState,
 			PanelNoneState,
@@ -45,7 +40,10 @@ use {
 	},
 	tokio::sync::Mutex,
 	wgpu::util::DeviceExt,
-	winit::{dpi::PhysicalSize, window::Window},
+	winit::{
+		dpi::PhysicalSize,
+		window::{Window, WindowId},
+	},
 	zsw_util::{AppError, Rect},
 	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
@@ -362,6 +360,7 @@ impl PanelsRenderer {
 			let geometry_metrics = Self::render_panel_geometry(
 				wgpu,
 				shared,
+				window.id(),
 				surface_size,
 				&panel.state,
 				window_geometry,
@@ -379,6 +378,7 @@ impl PanelsRenderer {
 	pub async fn render_panel_geometry(
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
+		window_id: WindowId,
 		surface_size: PhysicalSize<u32>,
 		panel_state: &PanelState,
 		window_geometry: Rect<i32, u32>,
@@ -391,14 +391,10 @@ impl PanelsRenderer {
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
 
 		match panel_state {
-			PanelState::None(panel_state) => Self::render_panel_none_geometry(
-				wgpu,
-				render_pass,
-				pos_matrix,
-				geometry_uniforms.none(wgpu, &shared.none).await,
-				panel_state,
-			)
-			.into(),
+			PanelState::None(panel_state) =>
+				Self::render_panel_none_geometry(wgpu, render_pass, window_id, &shared.none, pos_matrix, panel_state)
+					.await
+					.into(),
 			PanelState::Fade(panel_state) => Self::render_panel_fade_geometry(
 				wgpu,
 				&shared.fade,
@@ -422,13 +418,16 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel none's geometry
-	fn render_panel_none_geometry(
+	async fn render_panel_none_geometry(
 		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
+		window_id: WindowId,
+		shared: &PanelNoneShared,
 		pos_matrix: uniform::Matrix4x4,
-		geometry_uniforms: &PanelGeometryNoneUniforms,
 		panel_state: &PanelNoneState,
 	) -> metrics::RenderPanelGeometryNoneFrameTime {
+		let geometry_uniforms = panel_state.geometry_uniforms(wgpu, shared, window_id).await;
+
 		#[time(write_uniforms)]
 		let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
 			pos_matrix,
