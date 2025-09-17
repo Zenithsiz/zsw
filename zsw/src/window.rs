@@ -19,6 +19,9 @@ pub struct AppWindow {
 	/// Monitor name
 	pub monitor_name: String,
 
+	/// Monitor geometry
+	pub monitor_geometry: Rect<i32, u32>,
+
 	/// Window
 	pub window: Window,
 }
@@ -53,7 +56,11 @@ pub fn create(event_loop: &ActiveEventLoop, transparent_windows: bool) -> Result
 				.create_window(window_attrs)
 				.context("Unable to build window")?;
 
-			Ok(AppWindow { monitor_name, window })
+			Ok(AppWindow {
+				monitor_name,
+				monitor_geometry,
+				window,
+			})
 		})
 		.collect::<Result<_, AppError>>()
 		.context("Unable to create all windows")

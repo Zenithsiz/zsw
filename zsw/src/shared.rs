@@ -12,7 +12,9 @@ use {
 		window::WindowMonitorNames,
 	},
 	std::sync::Arc,
-	winit::event_loop::EventLoopProxy,
+	tokio::sync::Mutex,
+	winit::{event_loop::EventLoopProxy, window::Window},
+	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
 
@@ -33,4 +35,19 @@ pub struct Shared {
 	pub metrics: Metrics,
 
 	pub window_monitor_names: WindowMonitorNames,
+
+	pub windows: Mutex<Vec<Arc<SharedWindow>>>,
+}
+
+/// Shared window data
+#[derive(Debug)]
+pub struct SharedWindow {
+	/// Window
+	pub window: Arc<Window>,
+
+	/// Monitor name
+	pub _monitor_name: String,
+
+	/// Monitor geometry
+	pub monitor_geometry: Mutex<Rect<i32, u32>>,
 }

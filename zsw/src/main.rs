@@ -49,7 +49,7 @@ use {
 		panel::{Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
-		shared::Shared,
+		shared::{Shared, SharedWindow},
 		window::WindowMonitorNames,
 	},
 	app_error::Context,
@@ -59,7 +59,7 @@ use {
 	clap::Parser,
 	directories::ProjectDirs,
 	std::{collections::HashMap, fs, sync::Arc, time::Instant},
-	tokio::sync::mpsc,
+	tokio::sync::{Mutex, mpsc},
 	winit::{
 		application::ApplicationHandler,
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -143,7 +143,7 @@ struct WinitAppWindow {
 
 impl ApplicationHandler<AppEvent> for WinitApp {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-		if let Err(err) = self.init_window(event_loop) {
+		if let Err(err) = self.init_window(event_loop).block_on() {
 			tracing::warn!("Unable to initialize window: {}", err.pretty());
 			event_loop.exit();
 		}
@@ -223,6 +223,7 @@ impl WinitApp {
 			panels: Arc::new(Panels::new()),
 			metrics: Metrics::new(),
 			window_monitor_names: WindowMonitorNames::new(),
+			windows: Mutex::new(vec![]),
 		};
 		let shared = Arc::new(shared);
 
@@ -247,13 +248,13 @@ impl WinitApp {
 	}
 
 	/// Initializes the window related things
-	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
+	pub async fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let windows = window::create(event_loop, self.transparent_windows)
 			.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
 			self.shared
 				.window_monitor_names
-				.add(app_window.window.id(), app_window.monitor_name);
+				.add(app_window.window.id(), app_window.monitor_name.clone());
 
 			let window = Arc::new(app_window.window);
 			let wgpu_renderer =
@@ -267,12 +268,18 @@ impl WinitApp {
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
 			let menu = Menu::new();
 
+			let shared_window = Arc::new(SharedWindow {
+				window,
+				_monitor_name: app_window.monitor_name,
+				monitor_geometry: Mutex::new(app_window.monitor_geometry),
+			});
+
 			let (renderer_event_tx, renderer_event_rx) = mpsc::unbounded_channel();
-			#[cloned(shared = self.shared, window)]
+			#[cloned(shared = self.shared, shared_window)]
 			zsw_util::spawn_task("Renderer", async move {
 				self::renderer(
 					&shared,
-					&window,
+					&shared_window,
 					renderer_event_rx,
 					wgpu_renderer,
 					panels_renderer,
@@ -283,10 +290,11 @@ impl WinitApp {
 				.await
 			});
 
-			_ = self.windows.insert(window.id(), WinitAppWindow {
+			_ = self.windows.insert(shared_window.window.id(), WinitAppWindow {
 				egui_event_handler,
 				renderer_event_tx,
 			});
+			self.shared.windows.lock().await.push(shared_window);
 		}
 
 		Ok(())
@@ -313,7 +321,7 @@ enum RendererEvent {
 /// Renderer task
 async fn renderer(
 	shared: &Shared,
-	window: &Window,
+	shared_window: &SharedWindow,
 	mut renderer_event_rx: mpsc::UnboundedReceiver<RendererEvent>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
@@ -322,14 +330,13 @@ async fn renderer(
 	mut menu: Menu,
 ) -> Result<(), AppError> {
 	loop {
-		// TODO: Only update this when we receive a move/resize event instead of querying each frame?
-		let window_geometry = self::window_geometry(window)?;
+		let window_geometry = *shared_window.monitor_geometry.lock().await;
 
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
 		#[time(frame_paint_egui)]
 		let (egui_paint_jobs, egui_textures_delta) =
-			match self::paint_egui(shared, window, &egui_painter, &mut menu, window_geometry).await {
+			match self::paint_egui(shared, &shared_window.window, &egui_painter, &mut menu, window_geometry).await {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {}", err.pretty());
@@ -353,7 +360,7 @@ async fn renderer(
 				&shared.panels_renderer_shared,
 				&shared.panels,
 				&shared.metrics,
-				window,
+				&shared_window.window,
 				window_geometry,
 			)
 			.await
@@ -362,7 +369,13 @@ async fn renderer(
 		// Render egui
 		#[time(frame_render_egui)]
 		egui_renderer
-			.render_egui(&mut frame, window, &shared.wgpu, &egui_paint_jobs, egui_textures_delta)
+			.render_egui(
+				&mut frame,
+				&shared_window.window,
+				&shared.wgpu,
+				&egui_paint_jobs,
+				egui_textures_delta,
+			)
 			.context("Unable to render egui")?;
 
 		// Finish the frame
@@ -396,15 +409,14 @@ async fn renderer(
 					.context("Unable to resize wgpu")?;
 				panels_renderer.resize(&wgpu_renderer, &shared.wgpu, size)
 			}
-			if let Some(_pos) = move_pos {
-				// TODO: Update position of window
+			if let Some(pos) = move_pos {
+				shared_window.monitor_geometry.lock().await.pos = cgmath::point2(pos.x, pos.y);
 			}
 		};
 
-
 		shared
 			.metrics
-			.render_frame_times(window.id())
+			.render_frame_times(shared_window.window.id())
 			.await
 			.add(metrics::RenderFrameTime {
 				paint_egui:    frame_paint_egui,
@@ -523,16 +535,6 @@ async fn paint_egui(
 	let textures_delta = full_output.textures_delta;
 
 	Ok((paint_jobs, textures_delta))
-}
-
-/// Gets the window geometry for a window
-fn window_geometry(window: &Window) -> Result<Rect<i32, u32>, AppError> {
-	let window_pos = window.inner_position().context("Unable to get window position")?;
-	let window_size = window.inner_size();
-	Ok(Rect {
-		pos:  cgmath::point2(window_pos.x, window_pos.y),
-		size: cgmath::vec2(window_size.width, window_size.height),
-	})
 }
 
 /// App event
