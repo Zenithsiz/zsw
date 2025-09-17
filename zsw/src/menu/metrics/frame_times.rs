@@ -13,7 +13,11 @@ use {
 };
 
 /// Draws a frame time's plot
-fn draw_plot(ui: &mut egui::Ui, display: &FrameTimesDisplay, charts: impl IntoIterator<Item = egui_plot::BarChart>) {
+fn draw_plot<T, I, D>(ui: &mut egui::Ui, frame_times: &FrameTimes<T>, display: &FrameTimesDisplay, duration_idxs: I)
+where
+	I: IntoIterator<Item = D>,
+	D: DurationIdx<T>,
+{
 	let legend = egui_plot::Legend::default().follow_insertion_order(true);
 
 	let plot = egui_plot::Plot::new("Render frame times")
@@ -26,6 +30,11 @@ fn draw_plot(ui: &mut egui::Ui, display: &FrameTimesDisplay, charts: impl IntoIt
 	};
 
 	plot.show(ui, |plot_ui| {
+		let mut prev_heights = vec![0.0; frame_times.len()];
+		let charts = duration_idxs.into_iter().map(move |duration_idx| {
+			self::create_frame_time_chart(frame_times, display, &mut prev_heights, &duration_idx)
+		});
+
 		for chart in charts {
 			plot_ui.bar_chart(chart);
 		}
