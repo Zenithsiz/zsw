@@ -30,14 +30,14 @@ impl PanelSlideState {
 	}
 }
 
-/// Panel slide images shared
+/// Panel slide shared
 #[derive(Debug)]
-pub struct PanelSlideImagesShared {
+pub struct PanelSlideShared {
 	/// Geometry uniforms bind group layout
 	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
 }
 
-impl PanelSlideImagesShared {
+impl PanelSlideShared {
 	/// Creates the shared
 	pub fn new(wgpu: &Wgpu) -> Self {
 		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu);

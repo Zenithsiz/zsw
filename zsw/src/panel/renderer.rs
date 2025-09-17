@@ -24,8 +24,8 @@ use {
 			PanelNoneState,
 			PanelSlideState,
 			fade::{PanelFadeImageSlot, PanelFadeImagesShared},
-			none::PanelNoneImagesShared,
-			slide::PanelSlideImagesShared,
+			none::PanelNoneShared,
+			slide::PanelSlideShared,
 		},
 	},
 	crate::{
@@ -64,13 +64,13 @@ pub struct PanelsRendererShared {
 	indices: wgpu::Buffer,
 
 	/// None
-	none: PanelNoneImagesShared,
+	none: PanelNoneShared,
 
 	/// Fade
 	fade: PanelFadeImagesShared,
 
 	/// Slide
-	slide: PanelSlideImagesShared,
+	slide: PanelSlideShared,
 }
 
 impl PanelsRendererShared {
@@ -80,9 +80,9 @@ impl PanelsRendererShared {
 		let indices = self::create_indices(wgpu);
 		let vertices = self::create_vertices(wgpu);
 
-		let none = PanelNoneImagesShared::new(wgpu);
+		let none = PanelNoneShared::new(wgpu);
 		let fade = PanelFadeImagesShared::new(wgpu);
-		let slide = PanelSlideImagesShared::new(wgpu);
+		let slide = PanelSlideShared::new(wgpu);
 
 		Self {
 			render_pipelines: Mutex::new(HashMap::new()),

@@ -20,14 +20,14 @@ impl PanelNoneState {
 	}
 }
 
-/// Panel none images shared
+/// Panel none shared
 #[derive(Debug)]
-pub struct PanelNoneImagesShared {
+pub struct PanelNoneShared {
 	/// Geometry uniforms bind group layout
 	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
 }
 
-impl PanelNoneImagesShared {
+impl PanelNoneShared {
 	/// Creates the shared
 	pub fn new(wgpu: &Wgpu) -> Self {
 		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu);
