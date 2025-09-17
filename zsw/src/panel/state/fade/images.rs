@@ -2,14 +2,12 @@
 
 // Imports
 use {
-	crate::{
-		panel::{geometry::PanelGeometryFadeImageUniforms, renderer::uniform},
-		playlist::PlaylistPlayer,
-	},
+	crate::{panel::renderer::uniform, playlist::PlaylistPlayer},
 	app_error::Context,
 	image::{DynamicImage, imageops},
-	std::{self, mem, path::Path, sync::Arc},
-	tokio::sync::OnceCell,
+	std::{self, collections::HashMap, mem, path::Path, sync::Arc},
+	tokio::sync::{Mutex, OnceCell},
+	winit::window::WindowId,
 	zsw_util::{AppError, Loadable},
 	zsw_wgpu::Wgpu,
 	zutil_cloned::cloned,
@@ -72,6 +70,9 @@ pub struct PanelFadeImage {
 	/// Bind group
 	pub bind_group: OnceCell<wgpu::BindGroup>,
 
+	/// Geometry uniforms
+	pub geometry_uniforms: Mutex<HashMap<WindowId, Arc<PanelFadeImageGeometryUniforms>>>,
+
 	/// Swap direction
 	pub swap_dir: bool,
 
@@ -93,6 +94,20 @@ impl PanelFadeImage {
 				self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
 			})
 			.await
+	}
+
+	/// Returns the geometry uniforms
+	pub async fn geometry_uniforms(
+		&self,
+		wgpu: &Wgpu,
+		shared: &PanelFadeImagesShared,
+		window_id: WindowId,
+	) -> Arc<PanelFadeImageGeometryUniforms> {
+		let mut geometry_uniforms = self.geometry_uniforms.lock().await;
+		let geometry_uniforms = geometry_uniforms
+			.entry(window_id)
+			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)));
+		Arc::clone(geometry_uniforms)
 	}
 }
 
@@ -218,9 +233,10 @@ impl PanelFadeImages {
 
 			let image = PanelFadeImage {
 				texture_view,
+				bind_group: OnceCell::new(),
+				geometry_uniforms: Mutex::new(HashMap::new()),
 				swap_dir: rand::random(),
 				path: res.path,
-				bind_group: OnceCell::new(),
 			};
 
 			match slot {
@@ -390,8 +406,18 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 	wgpu.device.create_bind_group_layout(&descriptor)
 }
 
+/// Panel fade geometry image uniforms
+#[derive(Debug)]
+pub struct PanelFadeImageGeometryUniforms {
+	/// Buffer
+	pub buffer: wgpu::Buffer,
+
+	/// Bind group
+	pub bind_group: wgpu::BindGroup,
+}
+
 /// Creates the image geometry uniforms
-pub fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> PanelGeometryFadeImageUniforms {
+fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> PanelFadeImageGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-fade-geometry-uniforms-buffer"),
@@ -421,7 +447,7 @@ pub fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShare
 	};
 	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
-	PanelGeometryFadeImageUniforms { buffer, bind_group }
+	PanelFadeImageGeometryUniforms { buffer, bind_group }
 }
 
 /// Creates the image sampler

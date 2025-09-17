@@ -13,7 +13,6 @@ use {
 		Panel,
 		PanelState,
 		Panels,
-		geometry::{PanelGeometryFadeUniforms, PanelGeometryUniforms},
 		state::{
 			PanelFadeState,
 			PanelNoneState,
@@ -26,13 +25,11 @@ use {
 	crate::{
 		display::DisplayGeometry,
 		metrics::{self, Metrics},
-		panel::PanelGeometry,
 		time,
 	},
 	app_error::Context,
 	cgmath::Vector2,
 	futures::{StreamExt, stream::FuturesUnordered},
-	itertools::Itertools,
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
@@ -336,27 +333,21 @@ impl PanelsRenderer {
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		panel: &mut Panel,
+		panel: &Panel,
 		panel_metrics: &mut metrics::RenderPanelFrameTime,
 	) {
 		// The display might have changed asynchronously from the panel geometries,
 		// so resize it to ensure we have a panel geometry for each display geometry.
 		let display = panel.display.read().await;
-		panel
-			.geometries
-			.resize_with(display.geometries.len(), PanelGeometry::new);
 
 		// Go through all geometries of the panel display and render each one
-		for (geometry_idx, (display_geometry, panel_geometry)) in
-			display.geometries.iter().zip_eq(&mut panel.geometries).enumerate()
-		{
+		for (geometry_idx, display_geometry) in display.geometries.iter().enumerate() {
 			// If this geometry is outside our window, we can safely ignore it
 			if !display_geometry.intersects_window(window_geometry) {
 				continue;
 			}
 
 			// Render the panel geometry
-			let geometry_uniforms = panel_geometry.uniforms.entry(window.id()).or_default();
 			let geometry_metrics = Self::render_panel_geometry(
 				wgpu,
 				shared,
@@ -365,7 +356,6 @@ impl PanelsRenderer {
 				&panel.state,
 				window_geometry,
 				display_geometry,
-				geometry_uniforms,
 				render_pass,
 			)
 			.await;
@@ -383,7 +373,6 @@ impl PanelsRenderer {
 		panel_state: &PanelState,
 		window_geometry: Rect<i32, u32>,
 		display_geometry: &DisplayGeometry,
-		geometry_uniforms: &mut PanelGeometryUniforms,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) -> metrics::RenderPanelGeometryFrameTime {
 		// Calculate the position matrix for the panel
@@ -397,11 +386,11 @@ impl PanelsRenderer {
 					.into(),
 			PanelState::Fade(panel_state) => Self::render_panel_fade_geometry(
 				wgpu,
+				render_pass,
+				window_id,
 				&shared.fade,
 				display_geometry,
-				render_pass,
 				pos_matrix,
-				&mut geometry_uniforms.fade,
 				panel_state,
 			)
 			.await
@@ -441,11 +430,11 @@ impl PanelsRenderer {
 
 	async fn render_panel_fade_geometry(
 		wgpu: &Wgpu,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		window_id: WindowId,
 		shared: &PanelFadeShared,
 		display_geometry: &DisplayGeometry,
-		render_pass: &mut wgpu::RenderPass<'_>,
 		pos_matrix: uniform::Matrix4x4,
-		geometry_uniforms: &mut PanelGeometryFadeUniforms,
 		panel_state: &PanelFadeState,
 	) -> metrics::RenderPanelGeometryFadeFrameTime {
 		let p = panel_state.progress_norm();
@@ -456,7 +445,7 @@ impl PanelsRenderer {
 
 		let mut image_metrics = HashMap::new();
 		for (panel_image_slot, panel_image) in panel_state.images().iter() {
-			let geometry_uniforms = geometry_uniforms.image(wgpu, &shared.images, panel_image_slot);
+			let geometry_uniforms = panel_image.geometry_uniforms(wgpu, &shared.images, window_id).await;
 
 			let progress = match panel_image_slot {
 				PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
