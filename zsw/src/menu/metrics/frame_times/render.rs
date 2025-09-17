@@ -11,11 +11,10 @@ use {
 pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderFrameTime>) {
 	let display = super::draw_display_settings(ui, render_frame_times);
 
-	let mut charts = vec![];
-	for duration_idx in DurationIdx::iter() {
-		let chart = super::add_frame_time_chart(render_frame_times, &display, &charts, &duration_idx);
-		charts.push(chart);
-	}
+	let mut prev_heights = vec![0.0; render_frame_times.len()];
+	let charts = DurationIdx::iter().map(|duration_idx| {
+		super::add_frame_time_chart(render_frame_times, &display, &mut prev_heights, &duration_idx)
+	});
 
 	super::draw_plot(ui, &display, charts);
 }

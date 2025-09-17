@@ -132,19 +132,26 @@ fn draw_display_settings<T>(ui: &mut egui::Ui, frame_times: &mut FrameTimes<T>) 
 fn add_frame_time_chart<T, D>(
 	frame_times: &FrameTimes<T>,
 	display: &FrameTimesDisplay,
-	prev_charts: &[egui_plot::BarChart],
+	prev_heights: &mut [f64],
 	duration_idx: &D,
 ) -> egui_plot::BarChart
 where
 	D: DurationIdx<T>,
 {
 	let bars = match display {
-		FrameTimesDisplay::TimeGraph { .. } => frame_times
+		FrameTimesDisplay::TimeGraph { stack_charts } => frame_times
 			.iter()
 			.enumerate()
 			.filter_map(|(frame_idx, frame_time)| {
 				let height = duration_idx.duration_of(frame_time)?.as_millis_f64();
-				Some(egui_plot::Bar::new(frame_idx as f64, height).width(1.0))
+				let mut bar = egui_plot::Bar::new(frame_idx as f64, height).width(1.0);
+
+				if *stack_charts {
+					bar = bar.base_offset(prev_heights[frame_idx]);
+					prev_heights[frame_idx] += height;
+				}
+
+				Some(bar)
 			})
 			.collect(),
 		FrameTimesDisplay::Histogram { time_scale } => {
@@ -172,13 +179,7 @@ where
 		},
 	};
 
-	let mut chart = egui_plot::BarChart::new(duration_idx.name(), bars);
-	if let FrameTimesDisplay::TimeGraph { stack_charts } = display &&
-		*stack_charts
-	{
-		chart = chart.stack_on(&prev_charts.iter().collect::<Vec<_>>());
-	}
-	chart
+	egui_plot::BarChart::new(duration_idx.name(), bars)
 }
 
 /// Duration index

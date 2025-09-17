@@ -100,14 +100,12 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 			.map(move |inner| DurationIdx::Panels { panel_idx, inner })
 		}),
 	)
-	.sorted()
-	.collect::<Vec<_>>();
+	.sorted();
 
-	let mut charts = vec![];
-	for duration_idx in duration_idxs {
-		let chart = super::add_frame_time_chart(render_frame_times, &display, &charts, &duration_idx);
-		charts.push(chart);
-	}
+	let mut prev_heights = vec![0.0; render_frame_times.len()];
+	let charts = duration_idxs.map(|duration_idx| {
+		super::add_frame_time_chart(render_frame_times, &display, &mut prev_heights, &duration_idx)
+	});
 
 	super::draw_plot(ui, &display, charts);
 }
