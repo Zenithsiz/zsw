@@ -5,18 +5,18 @@
 #import fade::uniforms::{uniforms, ImageUniforms}
 
 // Bindings
-@group(1) @binding(0) var texture_prev: texture_2d<f32>;
-@group(1) @binding(1) var texture_cur: texture_2d<f32>;
-@group(1) @binding(2) var texture_next: texture_2d<f32>;
-@group(1) @binding(3) var texture_sampler: sampler;
+@group(1) @binding(0) var image_prev: texture_2d<f32>;
+@group(1) @binding(1) var image_cur: texture_2d<f32>;
+@group(1) @binding(2) var image_next: texture_2d<f32>;
+@group(1) @binding(3) var image_sampler: sampler;
 
 struct Sampled {
 	color: vec4<f32>,
 	uvs  : vec2<f32>,
 }
 
-// Samples a texture
-fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUniforms, progress_raw: f32, alpha: f32) -> Sampled {
+// Samples an image
+fn sample(image: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUniforms, progress_raw: f32, alpha: f32) -> Sampled {
 	var sampled: Sampled;
 	var uvs = in_uvs;
 
@@ -42,7 +42,7 @@ fn sample(texture: texture_2d<f32>, in_uvs: vec2<f32>, image_uniforms: ImageUnif
 
 	#endif
 
-	sampled.color = textureSample(texture, texture_sampler, uvs);
+	sampled.color = textureSample(image, image_sampler, uvs);
 	sampled.uvs = uvs;
 
 	return sampled;
@@ -65,10 +65,10 @@ fn main(in: VertexOutput) -> FragOutput {
 	let alpha_next = 0.5 * saturate(1.0 - (1.0 - p) / f);
 	let alpha_cur  = 1.0 - max(alpha_prev, alpha_next);
 
-	// Sample the textures
-	let sample_prev = sample(texture_prev, in.uvs, uniforms.prev, progress_prev, alpha_prev);
-	let sample_cur  = sample( texture_cur, in.uvs, uniforms.cur , progress_cur , alpha_cur );
-	let sample_next = sample(texture_next, in.uvs, uniforms.next, progress_next, alpha_next);
+	// Sample the images
+	let sample_prev = sample(image_prev, in.uvs, uniforms.prev, progress_prev, alpha_prev);
+	let sample_cur  = sample( image_cur, in.uvs, uniforms.cur , progress_cur , alpha_cur );
+	let sample_next = sample(image_next, in.uvs, uniforms.next, progress_next, alpha_next);
 
 	// Then mix the color
 	// TODO: Don't repeat this once we're able to use `defined(FADE_BASIC) || defined(FADE_OUT)`

@@ -40,10 +40,10 @@ pub struct PanelFadeImages {
 	/// Next image
 	pub next: Option<PanelFadeImage>,
 
-	/// Texture sampler
+	/// Image sampler
 	pub image_sampler: OnceCell<wgpu::Sampler>,
 
-	/// Texture bind group
+	/// Image bind group
 	pub image_bind_group: OnceCell<wgpu::BindGroup>,
 
 	/// Next image
@@ -338,7 +338,7 @@ fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	wgpu.device.create_bind_group_layout(&descriptor)
 }
 
-/// Creates the texture bind group
+/// Creates the image bind group
 fn create_image_bind_group(
 	wgpu: &Wgpu,
 	bind_group_layout: &wgpu::BindGroupLayout,
