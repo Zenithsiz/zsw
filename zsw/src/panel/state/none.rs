@@ -16,7 +16,7 @@ pub struct PanelNoneState {
 	pub background_color: [f32; 4],
 
 	/// Geometry uniforms
-	pub geometry_uniforms: Mutex<HashMap<WindowId, Arc<PanelNoneGeometryUniforms>>>,
+	pub geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelNoneGeometryUniforms>>>,
 }
 
 impl PanelNoneState {
@@ -34,10 +34,11 @@ impl PanelNoneState {
 		wgpu: &Wgpu,
 		shared: &PanelNoneShared,
 		window_id: WindowId,
+		geometry_idx: usize,
 	) -> Arc<PanelNoneGeometryUniforms> {
 		let mut geometry_uniforms = self.geometry_uniforms.lock().await;
 		let geometry_uniforms = geometry_uniforms
-			.entry(window_id)
+			.entry((window_id, geometry_idx))
 			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)));
 		Arc::clone(geometry_uniforms)
 	}

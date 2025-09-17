@@ -71,7 +71,7 @@ pub struct PanelFadeImage {
 	pub bind_group: OnceCell<wgpu::BindGroup>,
 
 	/// Geometry uniforms
-	pub geometry_uniforms: Mutex<HashMap<WindowId, Arc<PanelFadeImageGeometryUniforms>>>,
+	pub geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelFadeImageGeometryUniforms>>>,
 
 	/// Swap direction
 	pub swap_dir: bool,
@@ -102,10 +102,11 @@ impl PanelFadeImage {
 		wgpu: &Wgpu,
 		shared: &PanelFadeImagesShared,
 		window_id: WindowId,
+		geometry_idx: usize,
 	) -> Arc<PanelFadeImageGeometryUniforms> {
 		let mut geometry_uniforms = self.geometry_uniforms.lock().await;
 		let geometry_uniforms = geometry_uniforms
-			.entry(window_id)
+			.entry((window_id, geometry_idx))
 			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)));
 		Arc::clone(geometry_uniforms)
 	}

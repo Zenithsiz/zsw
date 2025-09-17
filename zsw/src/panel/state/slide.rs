@@ -16,7 +16,7 @@ pub struct PanelSlideState {
 	shader: PanelSlideShader,
 
 	/// Geometry uniforms
-	geometry_uniforms: Mutex<HashMap<WindowId, Arc<PanelSlideGeometryUniforms>>>,
+	geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelSlideGeometryUniforms>>>,
 }
 
 impl PanelSlideState {
@@ -44,10 +44,11 @@ impl PanelSlideState {
 		wgpu: &Wgpu,
 		shared: &PanelSlideShared,
 		window_id: WindowId,
+		geometry_idx: usize,
 	) -> Arc<PanelSlideGeometryUniforms> {
 		let mut geometry_uniforms = self.geometry_uniforms.lock().await;
 		let geometry_uniforms = geometry_uniforms
-			.entry(window_id)
+			.entry((window_id, geometry_idx))
 			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)));
 		Arc::clone(geometry_uniforms)
 	}
