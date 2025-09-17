@@ -13,10 +13,11 @@ use {
 		Panel,
 		PanelState,
 		Panels,
-		geometry::{PanelGeometryFadeUniforms, PanelGeometryNoneUniforms},
+		geometry::{PanelGeometryFadeUniforms, PanelGeometryNoneUniforms, PanelGeometrySlideUniforms},
 		state::{
 			PanelFadeState,
 			PanelNoneState,
+			PanelSlideState,
 			fade::{PanelFadeImageSlot, PanelFadeImagesShared},
 			none::PanelNoneImagesShared,
 			slide::PanelSlideImagesShared,
@@ -407,25 +408,15 @@ impl PanelsRenderer {
 					panel_state,
 				)
 				.await,
-			PanelState::Slide(_panel_state) => {
-				let geometry_uniforms = geometry_uniforms
+			PanelState::Slide(panel_state) => Self::render_panel_slide_geometry(
+				wgpu,
+				render_pass,
+				pos_matrix,
+				geometry_uniforms
 					.slide(wgpu, &shared.slide.geometry_uniforms_bind_group_layout)
-					.await;
-
-				#[time(write_uniforms)]
-				let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
-
-				// Bind the geometry uniforms
-				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
-
-				#[time(draw)]
-				render_pass.draw_indexed(0..6, 0, 0..1);
-
-				metrics::RenderPanelGeometryFrameTime::Slide(metrics::RenderPanelGeometrySlideFrameTime {
-					write_uniforms,
-					draw,
-				})
-			},
+					.await,
+				panel_state,
+			),
 		}
 	}
 
@@ -555,6 +546,29 @@ impl PanelsRenderer {
 		}
 
 		metrics::RenderPanelGeometryFrameTime::Fade(metrics::RenderPanelGeometryFadeFrameTime { images: image_metrics })
+	}
+
+	/// Renders a panel slide's geometry
+	fn render_panel_slide_geometry(
+		wgpu: &Wgpu,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		pos_matrix: uniform::Matrix4x4,
+		geometry_uniforms: &PanelGeometrySlideUniforms,
+		_panel_state: &PanelSlideState,
+	) -> metrics::RenderPanelGeometryFrameTime {
+		#[time(write_uniforms)]
+		let () = Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
+
+		// Bind the geometry uniforms
+		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+		#[time(draw)]
+		render_pass.draw_indexed(0..6, 0, 0..1);
+
+		metrics::RenderPanelGeometryFrameTime::Slide(metrics::RenderPanelGeometrySlideFrameTime {
+			write_uniforms,
+			draw,
+		})
 	}
 
 	/// Writes `uniforms` into `buffer`.
