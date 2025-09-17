@@ -2,10 +2,19 @@
 
 // Imports
 use {
-	crate::metrics::{FrameTimes, RenderPanelFrameTime, RenderPanelGeometryFrameTime, RenderPanelsFrameTime},
+	crate::metrics::{
+		FrameTimes,
+		RenderPanelFrameTime,
+		RenderPanelGeometryFadeFrameTime,
+		RenderPanelGeometryFrameTime,
+		RenderPanelGeometryNoneFrameTime,
+		RenderPanelGeometrySlideFrameTime,
+		RenderPanelsFrameTime,
+	},
 	core::{iter, time::Duration},
 	itertools::Itertools,
 	std::collections::{HashMap, HashSet},
+	zsw_util::iter_chain,
 };
 
 /// Draws the render panel frame times
@@ -44,8 +53,24 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderPanelsF
 				[DurationPanelIdx::UpdatePanel, DurationPanelIdx::CreateRenderPipeline],
 				panel.geometries.into_iter().flat_map(|geometry_idx| {
 					// Panel & geometry specific indices
-					[DurationPanelGeometryIdx::WriteUniforms, DurationPanelGeometryIdx::Draw]
-						.map(move |inner| DurationPanelIdx::Geometries { geometry_idx, inner })
+					iter_chain!(
+						[
+							DurationPanelGeometryNoneIdx::WriteUniforms,
+							DurationPanelGeometryNoneIdx::Draw,
+						]
+						.map(move |inner| DurationPanelGeometryIdx::None { inner }),
+						[
+							DurationPanelGeometryFadeIdx::WriteUniforms,
+							DurationPanelGeometryFadeIdx::Draw,
+						]
+						.map(move |inner| DurationPanelGeometryIdx::Fade { inner }),
+						[
+							DurationPanelGeometrySlideIdx::WriteUniforms,
+							DurationPanelGeometrySlideIdx::Draw,
+						]
+						.map(move |inner| DurationPanelGeometryIdx::Slide { inner }),
+					)
+					.map(move |inner| DurationPanelIdx::Geometries { geometry_idx, inner })
 				}),
 			)
 			.map(move |inner| DurationIdx::Panels { panel_idx, inner })
@@ -127,19 +152,92 @@ impl DurationPanelIdx {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
 enum DurationPanelGeometryIdx {
-	WriteUniforms,
-	Draw,
+	None { inner: DurationPanelGeometryNoneIdx },
+	Fade { inner: DurationPanelGeometryFadeIdx },
+	Slide { inner: DurationPanelGeometrySlideIdx },
 }
 
 impl DurationPanelGeometryIdx {
 	pub fn name(self, panel_idx: usize, geometry_idx: usize) -> String {
 		match self {
-			Self::WriteUniforms => format!("[Panel${panel_idx}] [Geometry${geometry_idx}] Write uniforms"),
-			Self::Draw => format!("[Panel${panel_idx}] [Geometry${geometry_idx}] Draw"),
+			Self::None { inner } => inner.name(panel_idx, geometry_idx),
+			Self::Fade { inner } => inner.name(panel_idx, geometry_idx),
+			Self::Slide { inner } => inner.name(panel_idx, geometry_idx),
 		}
 	}
 
 	pub fn duration(self, frame_time: &RenderPanelGeometryFrameTime) -> Option<Duration> {
+		match (self, frame_time) {
+			(Self::None { inner }, RenderPanelGeometryFrameTime::None(frame_time)) => inner.duration(frame_time),
+			(Self::Fade { inner }, RenderPanelGeometryFrameTime::Fade(frame_time)) => inner.duration(frame_time),
+			(Self::Slide { inner }, RenderPanelGeometryFrameTime::Slide(frame_time)) => inner.duration(frame_time),
+			_ => None,
+		}
+	}
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
+enum DurationPanelGeometryNoneIdx {
+	WriteUniforms,
+	Draw,
+}
+
+impl DurationPanelGeometryNoneIdx {
+	pub fn name(self, panel_idx: usize, geometry_idx: usize) -> String {
+		match self {
+			Self::WriteUniforms =>
+				format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$None] Write uniforms"),
+			Self::Draw => format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$None] Draw"),
+		}
+	}
+
+	pub fn duration(self, frame_time: &RenderPanelGeometryNoneFrameTime) -> Option<Duration> {
+		match self {
+			Self::WriteUniforms => Some(frame_time.write_uniforms),
+			Self::Draw => Some(frame_time.draw),
+		}
+	}
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
+enum DurationPanelGeometryFadeIdx {
+	WriteUniforms,
+	Draw,
+}
+
+impl DurationPanelGeometryFadeIdx {
+	pub fn name(self, panel_idx: usize, geometry_idx: usize) -> String {
+		match self {
+			Self::WriteUniforms =>
+				format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$Fade] Write uniforms"),
+			Self::Draw => format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$Fade] Draw"),
+		}
+	}
+
+	pub fn duration(self, frame_time: &RenderPanelGeometryFadeFrameTime) -> Option<Duration> {
+		match self {
+			Self::WriteUniforms => Some(frame_time.write_uniforms),
+			Self::Draw => Some(frame_time.draw),
+		}
+	}
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
+enum DurationPanelGeometrySlideIdx {
+	WriteUniforms,
+	Draw,
+}
+
+impl DurationPanelGeometrySlideIdx {
+	pub fn name(self, panel_idx: usize, geometry_idx: usize) -> String {
+		match self {
+			Self::WriteUniforms =>
+				format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$Slide] Write uniforms"),
+			Self::Draw => format!("[Panel${panel_idx}] [Geometry${geometry_idx}] [Shader$Slide] Draw"),
+		}
+	}
+
+	pub fn duration(self, frame_time: &RenderPanelGeometrySlideFrameTime) -> Option<Duration> {
 		match self {
 			Self::WriteUniforms => Some(frame_time.write_uniforms),
 			Self::Draw => Some(frame_time.draw),

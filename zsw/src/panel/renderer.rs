@@ -351,7 +351,10 @@ impl PanelsRenderer {
 				#[time(draw)]
 				render_pass.draw_indexed(0..6, 0, 0..1);
 
-				metrics::RenderPanelGeometryFrameTime { write_uniforms, draw }
+				metrics::RenderPanelGeometryFrameTime::None(metrics::RenderPanelGeometryNoneFrameTime {
+					write_uniforms,
+					draw,
+				})
 			},
 			PanelState::Fade(panel_state) => {
 				let geometry_uniforms = geometry_uniforms
@@ -436,7 +439,10 @@ impl PanelsRenderer {
 				#[time(draw)]
 				render_pass.draw_indexed(0..6, 0, 0..1);
 
-				metrics::RenderPanelGeometryFrameTime { write_uniforms, draw }
+				metrics::RenderPanelGeometryFrameTime::Fade(metrics::RenderPanelGeometryFadeFrameTime {
+					write_uniforms,
+					draw,
+				})
 			},
 			PanelState::Slide(_panel_state) => {
 				let geometry_uniforms = geometry_uniforms
@@ -455,7 +461,10 @@ impl PanelsRenderer {
 				#[time(draw)]
 				render_pass.draw_indexed(0..6, 0, 0..1);
 
-				metrics::RenderPanelGeometryFrameTime { write_uniforms, draw }
+				metrics::RenderPanelGeometryFrameTime::Slide(metrics::RenderPanelGeometrySlideFrameTime {
+					write_uniforms,
+					draw,
+				})
 			},
 		}
 	}

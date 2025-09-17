@@ -170,3 +170,14 @@ where
 		tracing::warn!("Unable to spawn task {name:?}: {}", err.pretty());
 	}
 }
+
+/// Iterator chain
+pub macro iter_chain {
+	($only:expr $(,)?) => {
+		$only
+	},
+
+	($first:expr, $($rest:expr),* $(,)?) => {
+		std::iter::chain($first, $crate::iter_chain!($($rest,)*))
+	},
+}

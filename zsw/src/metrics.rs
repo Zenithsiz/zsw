@@ -158,7 +158,29 @@ pub struct RenderPanelFrameTime {
 
 /// Render panel geometry frame time.
 #[derive(Clone, Debug)]
-pub struct RenderPanelGeometryFrameTime {
+pub enum RenderPanelGeometryFrameTime {
+	None(RenderPanelGeometryNoneFrameTime),
+	Fade(RenderPanelGeometryFadeFrameTime),
+	Slide(RenderPanelGeometrySlideFrameTime),
+}
+
+/// Render panel geometry none frame time.
+#[derive(Clone, Debug)]
+pub struct RenderPanelGeometryNoneFrameTime {
+	pub write_uniforms: Duration,
+	pub draw:           Duration,
+}
+
+/// Render panel geometry fade frame time.
+#[derive(Clone, Debug)]
+pub struct RenderPanelGeometryFadeFrameTime {
+	pub write_uniforms: Duration,
+	pub draw:           Duration,
+}
+
+/// Render panel geometry slide frame time.
+#[derive(Clone, Debug)]
+pub struct RenderPanelGeometrySlideFrameTime {
 	pub write_uniforms: Duration,
 	pub draw:           Duration,
 }
