@@ -127,7 +127,6 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
-	#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 	pub async fn render(
 		&self,
 		frame: &mut FrameRender,
@@ -194,91 +193,19 @@ impl PanelsRenderer {
 			.collect::<FuturesUnordered<_>>();
 		let mut panels_metrics = HashMap::new();
 		while let Some((panel_idx, mut panel)) = panels.next().await {
-			let panel = &mut *panel;
-
-			// Update the panel before drawing it
-			#[time(update_panel)]
-			let () = match &mut panel.state {
-				PanelState::None(_) => (),
-				PanelState::Fade(state) => state.update(wgpu).await,
-				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-				PanelState::Slide(_) => (),
-			};
-
-			// If the panel images are empty, there's no sense in rendering it either
-			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-			let are_images_empty = match &panel.state {
-				PanelState::None(_) => false,
-				PanelState::Fade(state) => state.images().is_empty(),
-				PanelState::Slide(_) => false,
-			};
-			if are_images_empty {
-				continue;
-			}
-
-			let render_pipeline_id = match &panel.state {
-				PanelState::None(_) => RenderPipelineId::None,
-				PanelState::Fade(state) => RenderPipelineId::Fade(match state.shader() {
-					PanelFadeShader::Basic => RenderPipelineFadeId::Basic,
-					PanelFadeShader::White { .. } => RenderPipelineFadeId::White,
-					PanelFadeShader::Out { .. } => RenderPipelineFadeId::Out,
-					PanelFadeShader::In { .. } => RenderPipelineFadeId::In,
-				}),
-				PanelState::Slide(state) => RenderPipelineId::Slide(match state.shader() {
-					PanelSlideShader::Basic => RenderPipelineSlideId::Basic,
-				}),
-			};
-
-			#[time(create_render_pipeline)]
-			let render_pipeline = match shared.render_pipelines.lock().await.entry(render_pipeline_id) {
-				hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
-				hash_map::Entry::Vacant(entry) => {
-					let bind_group_layouts = match panel.state {
-						PanelState::None(_) => &[&shared.none.geometry_uniforms_bind_group_layout] as &[_],
-						PanelState::Fade(_) => &[
-							&shared.fade.geometry_uniforms_bind_group_layout,
-							shared.fade.image_bind_group_layout(wgpu).await,
-						],
-						PanelState::Slide(_) => &[&shared.slide.geometry_uniforms_bind_group_layout],
-					};
-
-					let render_pipeline = self::create_render_pipeline(
-						wgpu_renderer,
-						wgpu,
-						render_pipeline_id,
-						bind_group_layouts,
-						panel.state.shader(),
-						self.msaa_samples,
-					)
-					.context("Unable to create render pipeline")?;
-
-					Arc::clone(entry.insert(Arc::new(render_pipeline)))
-				},
-			};
-
-			// Bind the pipeline for the specific shader
-			render_pass.set_pipeline(&render_pipeline);
-
-			let panel_metrics = panels_metrics
-				.entry(panel_idx)
-				.or_insert_with(|| metrics::RenderPanelFrameTime {
-					update_panel,
-					create_render_pipeline,
-					geometries: HashMap::new(),
-				});
-
-			// Then render the panel
-			Self::render_panel_geometries(
+			self.render_panel(
 				wgpu,
 				shared,
+				wgpu_renderer,
 				frame.surface_size,
 				window,
 				window_geometry,
 				&mut render_pass,
-				panel,
-				panel_metrics,
+				panel_idx,
+				&mut panel,
+				&mut panels_metrics,
 			)
-			.await;
+			.await?;
 		}
 
 		metrics
@@ -289,6 +216,107 @@ impl PanelsRenderer {
 				lock_panels,
 				panels: panels_metrics,
 			});
+
+		Ok(())
+	}
+
+	/// Renders a panel
+	async fn render_panel(
+		&self,
+		wgpu: &Wgpu,
+		shared: &PanelsRendererShared,
+		wgpu_renderer: &WgpuRenderer,
+		surface_size: PhysicalSize<u32>,
+		window: &Window,
+		window_geometry: Rect<i32, u32>,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		panel_idx: usize,
+		panel: &mut Panel,
+		panels_metrics: &mut HashMap<usize, metrics::RenderPanelFrameTime>,
+	) -> Result<(), app_error::AppError> {
+		// Update the panel before drawing it
+		#[time(update_panel)]
+		let () = match &mut panel.state {
+			PanelState::None(_) => (),
+			PanelState::Fade(state) => state.update(wgpu).await,
+			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+			PanelState::Slide(_) => (),
+		};
+
+		// If the panel images are empty, there's no sense in rendering it either
+		#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+		let are_images_empty = match &panel.state {
+			PanelState::None(_) => false,
+			PanelState::Fade(state) => state.images().is_empty(),
+			PanelState::Slide(_) => false,
+		};
+		if are_images_empty {
+			return Ok(());
+		}
+
+		let render_pipeline_id = match &panel.state {
+			PanelState::None(_) => RenderPipelineId::None,
+			PanelState::Fade(state) => RenderPipelineId::Fade(match state.shader() {
+				PanelFadeShader::Basic => RenderPipelineFadeId::Basic,
+				PanelFadeShader::White { .. } => RenderPipelineFadeId::White,
+				PanelFadeShader::Out { .. } => RenderPipelineFadeId::Out,
+				PanelFadeShader::In { .. } => RenderPipelineFadeId::In,
+			}),
+			PanelState::Slide(state) => RenderPipelineId::Slide(match state.shader() {
+				PanelSlideShader::Basic => RenderPipelineSlideId::Basic,
+			}),
+		};
+
+		#[time(create_render_pipeline)]
+		let render_pipeline = match shared.render_pipelines.lock().await.entry(render_pipeline_id) {
+			hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
+			hash_map::Entry::Vacant(entry) => {
+				let bind_group_layouts = match panel.state {
+					PanelState::None(_) => &[&shared.none.geometry_uniforms_bind_group_layout] as &[_],
+					PanelState::Fade(_) => &[
+						&shared.fade.geometry_uniforms_bind_group_layout,
+						shared.fade.image_bind_group_layout(wgpu).await,
+					],
+					PanelState::Slide(_) => &[&shared.slide.geometry_uniforms_bind_group_layout],
+				};
+
+				let render_pipeline = self::create_render_pipeline(
+					wgpu_renderer,
+					wgpu,
+					render_pipeline_id,
+					bind_group_layouts,
+					panel.state.shader(),
+					self.msaa_samples,
+				)
+				.context("Unable to create render pipeline")?;
+
+				Arc::clone(entry.insert(Arc::new(render_pipeline)))
+			},
+		};
+
+		// Bind the pipeline for the specific shader
+		render_pass.set_pipeline(&render_pipeline);
+
+		let panel_metrics = panels_metrics
+			.entry(panel_idx)
+			.or_insert_with(|| metrics::RenderPanelFrameTime {
+				update_panel,
+				create_render_pipeline,
+				geometries: HashMap::new(),
+			});
+
+		// Then render the panel
+		Self::render_panel_geometries(
+			wgpu,
+			shared,
+			surface_size,
+			window,
+			window_geometry,
+			render_pass,
+			panel,
+			panel_metrics,
+		)
+		.await;
 
 		Ok(())
 	}
