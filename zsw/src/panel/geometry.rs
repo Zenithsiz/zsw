@@ -8,7 +8,7 @@ use {
 		slide::{self, PanelSlideShared},
 	},
 	crate::panel::state::fade::PanelFadeImageSlot,
-	std::collections::{HashMap, hash_map},
+	std::collections::HashMap,
 	tokio::sync::OnceCell,
 	winit::window::WindowId,
 	zsw_wgpu::Wgpu,
@@ -63,17 +63,15 @@ pub struct PanelGeometryFadeUniforms {
 }
 impl PanelGeometryFadeUniforms {
 	/// Returns an image's uniforms
-	pub async fn image(
+	pub fn image(
 		&mut self,
 		wgpu: &Wgpu,
 		shared: &PanelFadeImagesShared,
 		slot: PanelFadeImageSlot,
 	) -> &mut PanelGeometryFadeImageUniforms {
-		match self.images.entry(slot) {
-			hash_map::Entry::Occupied(entry) => entry.into_mut(),
-			hash_map::Entry::Vacant(entry) =>
-				entry.insert(fade::images::create_image_geometry_uniforms(wgpu, shared).await),
-		}
+		self.images
+			.entry(slot)
+			.or_insert_with(|| fade::images::create_image_geometry_uniforms(wgpu, shared))
 	}
 }
 

@@ -283,7 +283,7 @@ impl PanelsRenderer {
 				let bind_group_layouts = match panel.state {
 					PanelState::None(_) => &[&shared.none.geometry_uniforms_bind_group_layout] as &[_],
 					PanelState::Fade(_) => &[
-						&shared.fade.geometry_uniforms_bind_group_layout,
+						&shared.fade.images.geometry_uniforms_bind_group_layout,
 						shared.fade.images.image_bind_group_layout(wgpu).await,
 					],
 					PanelState::Slide(_) => &[&shared.slide.geometry_uniforms_bind_group_layout],
@@ -461,7 +461,7 @@ impl PanelsRenderer {
 
 		let mut image_metrics = HashMap::new();
 		for (panel_image_slot, panel_image) in panel_state.images().iter() {
-			let geometry_uniforms = geometry_uniforms.image(wgpu, &shared.images, panel_image_slot).await;
+			let geometry_uniforms = geometry_uniforms.image(wgpu, &shared.images, panel_image_slot);
 
 			let progress = match panel_image_slot {
 				PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),

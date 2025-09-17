@@ -18,14 +18,20 @@ use {
 /// Panel fade images shared
 #[derive(Debug)]
 pub struct PanelFadeImagesShared {
+	/// Geometry uniforms bind group layout
+	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
+
 	/// Image bind group layout
 	pub image_bind_group_layout: OnceCell<wgpu::BindGroupLayout>,
 }
 
 impl PanelFadeImagesShared {
 	/// Creates the shared
-	pub fn new() -> Self {
+	pub fn new(wgpu: &Wgpu) -> Self {
+		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu);
+
 		Self {
+			geometry_uniforms_bind_group_layout,
 			image_bind_group_layout: OnceCell::new(),
 		}
 	}
@@ -365,11 +371,27 @@ fn create_image_bind_group(
 	wgpu.device.create_bind_group(&descriptor)
 }
 
+/// Creates the geometry uniforms bind group layout
+fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+	let descriptor = wgpu::BindGroupLayoutDescriptor {
+		label:   Some("zsw-panel-fade-geometry-uniforms-bind-group-layout"),
+		entries: &[wgpu::BindGroupLayoutEntry {
+			binding:    0,
+			visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+			ty:         wgpu::BindingType::Buffer {
+				ty:                 wgpu::BufferBindingType::Uniform,
+				has_dynamic_offset: false,
+				min_binding_size:   None,
+			},
+			count:      None,
+		}],
+	};
+
+	wgpu.device.create_bind_group_layout(&descriptor)
+}
+
 /// Creates the image geometry uniforms
-pub async fn create_image_geometry_uniforms(
-	wgpu: &Wgpu,
-	shared: &PanelFadeImagesShared,
-) -> PanelGeometryFadeImageUniforms {
+pub fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> PanelGeometryFadeImageUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-fade-geometry-uniforms-buffer"),
@@ -391,7 +413,7 @@ pub async fn create_image_geometry_uniforms(
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
 		label:   Some("zsw-panel-fade-geometry-uniforms-bind-group"),
-		layout:  shared.image_bind_group_layout(wgpu).await,
+		layout:  &shared.geometry_uniforms_bind_group_layout,
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),

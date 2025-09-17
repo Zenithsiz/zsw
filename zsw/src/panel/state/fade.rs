@@ -269,9 +269,6 @@ impl PanelFadeState {
 /// Panel fade shared
 #[derive(Debug)]
 pub struct PanelFadeShared {
-	/// Geometry uniforms bind group layout
-	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
-
 	/// Images
 	pub images: PanelFadeImagesShared,
 }
@@ -279,33 +276,12 @@ pub struct PanelFadeShared {
 impl PanelFadeShared {
 	/// Creates the shared
 	pub fn new(wgpu: &Wgpu) -> Self {
-		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu);
-
 		Self {
-			geometry_uniforms_bind_group_layout,
-			images: PanelFadeImagesShared::new(),
+			images: PanelFadeImagesShared::new(wgpu),
 		}
 	}
 }
 
-/// Creates the geometry uniforms bind group layout
-fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
-	let descriptor = wgpu::BindGroupLayoutDescriptor {
-		label:   Some("zsw-panel-fade-geometry-uniforms-bind-group-layout"),
-		entries: &[wgpu::BindGroupLayoutEntry {
-			binding:    0,
-			visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-			ty:         wgpu::BindingType::Buffer {
-				ty:                 wgpu::BufferBindingType::Uniform,
-				has_dynamic_offset: false,
-				min_binding_size:   None,
-			},
-			count:      None,
-		}],
-	};
-
-	wgpu.device.create_bind_group_layout(&descriptor)
-}
 
 /// Converts a chrono time delta into a duration, indicating whether it's positive or negative
 fn time_delta_to_duration(delta: TimeDelta) -> (Duration, bool) {
