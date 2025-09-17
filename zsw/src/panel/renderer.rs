@@ -442,7 +442,7 @@ impl PanelsRenderer {
 				let geometry_uniforms = geometry_uniforms
 					.slide
 					.get_or_init(async || {
-						self::create_geometry_slide_uniforms(wgpu, &shared.none_uniforms_bind_group_layout)
+						self::create_geometry_slide_uniforms(wgpu, &shared.slide_uniforms_bind_group_layout)
 					})
 					.await;
 
