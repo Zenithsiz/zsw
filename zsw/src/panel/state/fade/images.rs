@@ -15,7 +15,7 @@ use {
 /// Panel fade images shared
 #[derive(Debug)]
 pub struct PanelFadeImagesShared {
-	/// Geometry uniforms fade bind group layout
+	/// Geometry uniforms bind group layout
 	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Image bind group layout
