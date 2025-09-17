@@ -14,7 +14,6 @@ use {
 	app_error::Context,
 	core::sync::atomic::{self, AtomicBool},
 	image::DynamicImage,
-	std::path::Path,
 	wgpu::{util as wgpu_util, util::DeviceExt},
 	zsw_util::AppError,
 };
@@ -76,7 +75,7 @@ impl Wgpu {
 	/// Creates a texture from an image.
 	pub fn create_texture_from_image(
 		&self,
-		path: &Path,
+		label: &str,
 		image: DynamicImage,
 	) -> Result<(wgpu::Texture, wgpu::TextureView), AppError> {
 		// Get the image's format, converting if necessary.
@@ -104,7 +103,7 @@ impl Wgpu {
 		);
 
 		let texture_descriptor = wgpu::TextureDescriptor {
-			label: Some(&format!("[zsw] Image ({path:?})")),
+			label: Some(label),
 			size: wgpu::Extent3d {
 				width:                 image.width(),
 				height:                image.height(),
@@ -125,7 +124,10 @@ impl Wgpu {
 			image.as_bytes(),
 		);
 
-		let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+		let texture_view_descriptor = wgpu::TextureViewDescriptor {
+			label: Some(&format!("{label}-view")),
+			..Default::default()
+		};
 		let texture_view = texture.create_view(&texture_view_descriptor);
 
 		Ok((texture, texture_view))
@@ -136,7 +138,7 @@ impl Wgpu {
 async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), AppError> {
 	// Request the device without any features
 	let device_descriptor = wgpu::DeviceDescriptor {
-		label:             Some("[zsw] Device"),
+		label:             Some("zsw-device"),
 		required_features: wgpu::Features::default(),
 		required_limits:   wgpu::Limits::default(),
 		memory_hints:      wgpu::MemoryHints::default(),
@@ -185,7 +187,7 @@ async fn create_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, AppE
 fn create_empty_image_texture(device: &wgpu::Device) -> (wgpu::Texture, wgpu::TextureView) {
 	// TODO: Pass some view formats?
 	let texture_descriptor = wgpu::TextureDescriptor {
-		label:           Some("[zsw] Empty image"),
+		label:           Some("zsw-texture-empty"),
 		size:            wgpu::Extent3d {
 			width:                 1,
 			height:                1,
@@ -200,7 +202,10 @@ fn create_empty_image_texture(device: &wgpu::Device) -> (wgpu::Texture, wgpu::Te
 	};
 
 	let texture = device.create_texture(&texture_descriptor);
-	let texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+	let texture_view_descriptor = wgpu::TextureViewDescriptor {
+		label: Some("zsw-texture-empty-view"),
+		..Default::default()
+	};
 	let texture_view = texture.create_view(&texture_view_descriptor);
 
 	(texture, texture_view)

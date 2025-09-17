@@ -87,14 +87,14 @@ impl WgpuRenderer {
 			}
 		});
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
-			label: Some("[zsw] Window surface texture view"),
+			label: Some("zsw-frame-surface-texture-view"),
 			..wgpu::TextureViewDescriptor::default()
 		};
 		let surface_texture_view = surface_texture.texture.create_view(&surface_view_descriptor);
 
 		// Then create an encoder for our frame
 		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
-			label: Some("[zsw] Frame render command encoder"),
+			label: Some("zsw-frame-command-encoder"),
 		};
 		let encoder = wgpu.device.create_command_encoder(&encoder_descriptor);
 

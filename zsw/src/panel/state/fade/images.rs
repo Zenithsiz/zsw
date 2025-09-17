@@ -179,7 +179,8 @@ impl PanelFadeImages {
 		};
 
 		if let Some(slot) = slot {
-			let texture_view = match wgpu.create_texture_from_image(&res.path, image) {
+			let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
+			let texture_view = match wgpu.create_texture_from_image(&texture_label, image) {
 				Ok((_, texture_view)) => texture_view,
 				Err(err) => {
 					tracing::warn!("Unable to create texture for image {:?}: {}", res.path, err.pretty());
@@ -294,7 +295,7 @@ pub fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppEr
 /// Creates the fade image bind group layout
 fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
-		label:   Some("[zsw::panel] Fade image bind group layout"),
+		label:   Some("zsw-panel-fade-image-bind-group-layout"),
 		entries: &[
 			wgpu::BindGroupLayoutEntry {
 				binding:    0,
@@ -348,6 +349,7 @@ fn create_image_bind_group(
 	sampler: &wgpu::Sampler,
 ) -> wgpu::BindGroup {
 	let descriptor = wgpu::BindGroupDescriptor {
+		label:   Some("zsw-panel-fade-image-bind-group"),
 		layout:  bind_group_layout,
 		entries: &[
 			wgpu::BindGroupEntry {
@@ -367,7 +369,6 @@ fn create_image_bind_group(
 				resource: wgpu::BindingResource::Sampler(sampler),
 			},
 		],
-		label:   Some("[zsw::panel] Image bind group"),
 	};
 	wgpu.device.create_bind_group(&descriptor)
 }
@@ -375,7 +376,7 @@ fn create_image_bind_group(
 /// Creates the image sampler
 fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
 	let descriptor = wgpu::SamplerDescriptor {
-		label: Some("[zsw::panel] Image sampler"),
+		label: Some("zsw-panel-fade-image-sampler"),
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
 		address_mode_v: wgpu::AddressMode::ClampToEdge,
 		address_mode_w: wgpu::AddressMode::ClampToEdge,

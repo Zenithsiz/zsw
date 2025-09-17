@@ -157,7 +157,7 @@ impl PanelsRenderer {
 			},
 		};
 		let render_pass_descriptor = wgpu::RenderPassDescriptor {
-			label:                    Some("[zsw::panel] Render pass"),
+			label:                    Some("zsw-panel-render-pass"),
 			color_attachments:        &[Some(render_pass_color_attachment)],
 			depth_stencil_attachment: None,
 			timestamp_writes:         None,
@@ -421,7 +421,7 @@ impl PanelsRenderer {
 fn create_panel_geometry_uniforms(wgpu: &Wgpu, shared: &PanelsRendererShared) -> PanelGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
-		label:              Some("[zsw::panel] Geometry uniforms buffer"),
+		label:              Some("zsw-panel-geometry-uniforms-buffer"),
 		usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 		size:               u64::try_from(MAX_UNIFORM_SIZE).expect("Maximum uniform size didn't fit into a `u64`"),
 		mapped_at_creation: false,
@@ -430,12 +430,12 @@ fn create_panel_geometry_uniforms(wgpu: &Wgpu, shared: &PanelsRendererShared) ->
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
+		label:   Some("zsw-panel-geometry-uniforms-bind-group"),
 		layout:  &shared.uniforms_bind_group_layout,
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),
 		}],
-		label:   Some("[zsw::panel] Geometry uniforms bind group"),
 	};
 	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
@@ -445,7 +445,7 @@ fn create_panel_geometry_uniforms(wgpu: &Wgpu, shared: &PanelsRendererShared) ->
 /// Creates the vertices
 fn create_vertices(wgpu: &Wgpu) -> wgpu::Buffer {
 	let descriptor = wgpu::util::BufferInitDescriptor {
-		label:    Some("[zsw::panel] Vertex buffer"),
+		label:    Some("zsw-panel-vertex-buffer"),
 		contents: bytemuck::cast_slice(&PanelVertex::QUAD),
 		usage:    wgpu::BufferUsages::VERTEX,
 	};
@@ -457,7 +457,7 @@ fn create_vertices(wgpu: &Wgpu) -> wgpu::Buffer {
 fn create_indices(wgpu: &Wgpu) -> wgpu::Buffer {
 	const INDICES: [u32; 6] = [0, 1, 3, 0, 3, 2];
 	let descriptor = wgpu::util::BufferInitDescriptor {
-		label:    Some("[zsw::panel] Index buffer"),
+		label:    Some("zsw-panel-index-buffer"),
 		contents: bytemuck::cast_slice(&INDICES),
 		usage:    wgpu::BufferUsages::INDEX,
 	};
@@ -544,14 +544,16 @@ fn create_render_pipeline(
 
 	// Load the shader
 	let shader_descriptor = wgpu::ShaderModuleDescriptor {
-		label:  Some(&format!("[zsw::panel] Shader {shader_name:?}")),
+		label:  Some(&format!("zsw-panel-shader[name={shader_name:?}]")),
 		source: wgpu::ShaderSource::Naga(Cow::Owned(shader_module)),
 	};
 	let shader = wgpu.device.create_shader_module(shader_descriptor);
 
 	// Create the pipeline layout
 	let render_pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
-		label: Some(&format!("[zsw::panel] Render pipeline {render_pipeline_name:?} layout")),
+		label: Some(&format!(
+			"zsw-panel-render-pipeline[name={render_pipeline_name:?}]-layout"
+		)),
 		bind_group_layouts,
 		push_constant_ranges: &[],
 	};
@@ -563,7 +565,7 @@ fn create_render_pipeline(
 		write_mask: wgpu::ColorWrites::ALL,
 	})];
 	let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
-		label:  Some(&format!("[zsw::panel] Render pipeline {render_pipeline_name:?}")),
+		label:  Some(&format!("zsw-panel-render-pipeline[name={render_pipeline_name:?}]")),
 		layout: Some(&render_pipeline_layout),
 
 		vertex:        wgpu::VertexState {
@@ -615,25 +617,28 @@ fn create_msaa_framebuffer(
 
 	let surface_config = wgpu_renderer.surface_config();
 	let msaa_frame_descriptor = wgpu::TextureDescriptor {
+		label:           Some("zsw-panel-framebuffer-msaa"),
 		size:            msaa_texture_extent,
 		mip_level_count: 1,
 		sample_count:    msaa_samples,
 		dimension:       wgpu::TextureDimension::D2,
 		format:          surface_config.format,
 		usage:           wgpu::TextureUsages::RENDER_ATTACHMENT,
-		label:           Some("[zsw::panel] MSAA framebuffer"),
 		view_formats:    &surface_config.view_formats,
 	};
 
 	wgpu.device
 		.create_texture(&msaa_frame_descriptor)
-		.create_view(&wgpu::TextureViewDescriptor::default())
+		.create_view(&wgpu::TextureViewDescriptor {
+			label: Some("zsw-panel-framebuffer-msaa-view"),
+			..Default::default()
+		})
 }
 
 /// Creates the uniforms bind group layout
 fn create_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
-		label:   Some("[zsw::panel] Geometry uniforms bind group layout"),
+		label:   Some("zsw-panel-geometry-uniforms-bind-group-layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
 			binding:    0,
 			visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
