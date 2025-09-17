@@ -1,6 +1,8 @@
 tokio_worker_threads = 2
 log_file             = "latest.log"
 
+transparent_windows = true
+
 default.profile = "default"
 #default.profile = "full"
 #default.profile = "many"

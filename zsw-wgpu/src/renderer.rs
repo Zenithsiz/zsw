@@ -188,7 +188,6 @@ fn configure_window_surface(
 
 	// Set some options
 	config.present_mode = wgpu::PresentMode::AutoVsync;
-	config.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied;
 	tracing::debug!(?config, "Updated surface configuration");
 
 	// Then configure it

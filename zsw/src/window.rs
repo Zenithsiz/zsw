@@ -24,7 +24,7 @@ pub struct AppWindow {
 }
 
 /// Creates the windows for each monitor, as well as the associated event loop
-pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> {
+pub fn create(event_loop: &ActiveEventLoop, transparent_windows: bool) -> Result<Vec<AppWindow>, AppError> {
 	event_loop
 		.available_monitors()
 		.enumerate()
@@ -45,7 +45,7 @@ pub fn create(event_loop: &ActiveEventLoop) -> Result<Vec<AppWindow>, AppError> 
 				.with_resizable(false)
 				.with_fullscreen(Some(Fullscreen::Borderless(Some(monitor))))
 				.with_window_level(WindowLevel::AlwaysOnBottom)
-				.with_transparent(true)
+				.with_transparent(transparent_windows)
 				.with_decorations(false);
 
 			// Finally build the window

@@ -128,6 +128,7 @@ fn main() -> Result<(), AppError> {
 struct WinitApp {
 	window_event_handlers: HashMap<WindowId, EguiEventHandler>,
 	shared:                Arc<Shared>,
+	transparent_windows:   bool,
 }
 
 impl ApplicationHandler<AppEvent> for WinitApp {
@@ -230,12 +231,14 @@ impl WinitApp {
 		Ok(Self {
 			window_event_handlers: HashMap::new(),
 			shared,
+			transparent_windows: config.transparent_windows,
 		})
 	}
 
 	/// Initializes the window related things
 	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
-		let windows = window::create(event_loop).context("Unable to create winit event loop and window")?;
+		let windows = window::create(event_loop, self.transparent_windows)
+			.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
 			self.shared
 				.window_monitor_names

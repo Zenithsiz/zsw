@@ -25,6 +25,10 @@ pub struct Config {
 	#[serde(default)]
 	pub log_file: Option<PathBuf>,
 
+	/// Transparent windows
+	#[serde(default)]
+	pub transparent_windows: bool,
+
 	/// Default
 	#[serde(default)]
 	pub default: ConfigDefault,
@@ -78,6 +82,7 @@ impl Default for Config {
 		Self {
 			tokio_worker_threads: None,
 			log_file:             None,
+			transparent_windows:  false,
 			default:              ConfigDefault::default(),
 		}
 	}
