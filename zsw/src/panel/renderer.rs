@@ -334,7 +334,7 @@ impl PanelsRenderer {
 		let geometry_uniforms = panel_geometry
 			.uniforms
 			.entry(window.id())
-			.or_insert_with(|| self::create_geometry_uniforms(wgpu, shared));
+			.or_insert_with(|| self::create_geometry_uniforms(wgpu, &shared.uniforms_bind_group_layout));
 		let write_uniforms = |uniforms_bytes| {
 			wgpu.queue.write_buffer(&geometry_uniforms.buffer, 0, uniforms_bytes);
 		};
@@ -418,7 +418,7 @@ impl PanelsRenderer {
 }
 
 /// Creates the panel geometry uniforms
-fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelsRendererShared) -> PanelGeometryUniforms {
+fn create_geometry_uniforms(wgpu: &Wgpu, layout: &wgpu::BindGroupLayout) -> PanelGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-geometry-uniforms-buffer"),
@@ -430,8 +430,8 @@ fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelsRendererShared) -> Panel
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
-		label:   Some("zsw-panel-geometry-uniforms-bind-group"),
-		layout:  &shared.uniforms_bind_group_layout,
+		label: Some("zsw-panel-geometry-uniforms-bind-group"),
+		layout,
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),
