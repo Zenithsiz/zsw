@@ -386,7 +386,6 @@ impl PanelsRenderer {
 		let geometry_uniforms = panel_geometry.uniforms.entry(window.id()).or_default();
 		match panel_state {
 			PanelState::None(panel_state) => {
-				#[time(create_uniforms)]
 				let geometry_uniforms = geometry_uniforms
 					.none(wgpu, &shared.none.geometry_uniforms_bind_group_layout)
 					.await;
@@ -404,7 +403,6 @@ impl PanelsRenderer {
 				render_pass.draw_indexed(0..6, 0, 0..1);
 
 				metrics::RenderPanelGeometryFrameTime::None(metrics::RenderPanelGeometryNoneFrameTime {
-					create_uniforms,
 					write_uniforms,
 					draw,
 				})
@@ -418,7 +416,6 @@ impl PanelsRenderer {
 
 				let mut image_metrics = HashMap::new();
 				for (panel_image_slot, panel_image) in panel_state.images().iter() {
-					#[time(create_uniforms)]
 					let geometry_uniforms = geometry_uniforms.fade.image(
 						wgpu,
 						&shared.fade.geometry_uniforms_bind_group_layout,
@@ -503,7 +500,6 @@ impl PanelsRenderer {
 					render_pass.draw_indexed(0..6, 0, 0..1);
 
 					_ = image_metrics.insert(panel_image_slot, metrics::RenderPanelGeometryFadeImageFrameTime {
-						create_uniforms,
 						write_uniforms,
 						draw,
 					});
@@ -514,7 +510,6 @@ impl PanelsRenderer {
 				})
 			},
 			PanelState::Slide(_panel_state) => {
-				#[time(create_uniforms)]
 				let geometry_uniforms = geometry_uniforms
 					.slide(wgpu, &shared.slide.geometry_uniforms_bind_group_layout)
 					.await;
@@ -529,7 +524,6 @@ impl PanelsRenderer {
 				render_pass.draw_indexed(0..6, 0, 0..1);
 
 				metrics::RenderPanelGeometryFrameTime::Slide(metrics::RenderPanelGeometrySlideFrameTime {
-					create_uniforms,
 					write_uniforms,
 					draw,
 				})
