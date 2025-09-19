@@ -17,6 +17,7 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderFrameTi
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[derive(strum::EnumIter)]
 enum DurationIdx {
+	WaitNextFrame,
 	PaintEgui,
 	RenderStart,
 	RenderPanels,
@@ -28,6 +29,7 @@ enum DurationIdx {
 impl super::DurationIdx<RenderFrameTime> for DurationIdx {
 	fn name(&self) -> String {
 		match self {
+			Self::WaitNextFrame => "Wait next frame".to_owned(),
 			Self::PaintEgui => "Paint egui".to_owned(),
 			Self::RenderStart => "Render start".to_owned(),
 			Self::RenderPanels => "Render panels".to_owned(),
@@ -39,6 +41,7 @@ impl super::DurationIdx<RenderFrameTime> for DurationIdx {
 
 	fn duration_of(&self, frame_time: &RenderFrameTime) -> Option<Duration> {
 		let duration = match self {
+			Self::WaitNextFrame => frame_time.wait_next_frame,
 			Self::PaintEgui => frame_time.paint_egui,
 			Self::RenderStart => frame_time.render_start,
 			Self::RenderPanels => frame_time.render_panels,

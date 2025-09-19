@@ -133,12 +133,13 @@ impl<T> Default for FrameTimes<T> {
 /// Render frame time.
 #[derive(Clone, Copy, Debug)]
 pub struct RenderFrameTime {
-	pub paint_egui:    Duration,
-	pub render_start:  Duration,
-	pub render_panels: Duration,
-	pub render_egui:   Duration,
-	pub render_finish: Duration,
-	pub handle_events: Duration,
+	pub wait_next_frame: Duration,
+	pub paint_egui:      Duration,
+	pub render_start:    Duration,
+	pub render_panels:   Duration,
+	pub render_egui:     Duration,
+	pub render_finish:   Duration,
+	pub handle_events:   Duration,
 }
 
 /// Render panels frame time.

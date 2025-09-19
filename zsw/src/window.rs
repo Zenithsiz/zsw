@@ -21,6 +21,9 @@ pub struct AppWindow {
 	/// Monitor geometry
 	pub monitor_geometry: Rect<i32, u32>,
 
+	/// Monitor refresh rate (in mHz)
+	pub monitor_refresh_rate_mhz: u32,
+
 	/// Window
 	pub window: Window,
 }
@@ -34,6 +37,10 @@ pub fn create(event_loop: &ActiveEventLoop, transparent_windows: bool) -> Result
 			let monitor_name = monitor
 				.name()
 				.unwrap_or_else(|| format!("Monitor #{}", monitor_idx + 1));
+
+			let monitor_refresh_rate_mhz = monitor
+				.refresh_rate_millihertz()
+				.context("Unable to get monitor refresh rate")?;
 
 			let monitor_geometry = self::monitor_geometry(&monitor);
 			tracing::debug!("Found monitor {monitor_name:?} geometry: {monitor_geometry}");
@@ -58,6 +65,7 @@ pub fn create(event_loop: &ActiveEventLoop, transparent_windows: bool) -> Result
 			Ok(AppWindow {
 				monitor_name,
 				monitor_geometry,
+				monitor_refresh_rate_mhz,
 				window,
 			})
 		})

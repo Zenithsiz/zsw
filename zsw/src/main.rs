@@ -56,9 +56,13 @@ use {
 	cgmath::Point2,
 	chrono::TimeDelta,
 	clap::Parser,
+	core::time::Duration,
 	directories::ProjectDirs,
-	std::{collections::HashMap, fs, sync::Arc, time::Instant},
-	tokio::sync::{Mutex, mpsc},
+	std::{collections::HashMap, fs, sync::Arc},
+	tokio::{
+		sync::{Mutex, mpsc},
+		time::Instant,
+	},
 	winit::{
 		application::ApplicationHandler,
 		dpi::{PhysicalPosition, PhysicalSize},
@@ -266,6 +270,7 @@ impl WinitApp {
 				window,
 				monitor_name: app_window.monitor_name,
 				monitor_geometry: Mutex::new(app_window.monitor_geometry),
+				monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
 			});
 
 			let (renderer_event_tx, renderer_event_rx) = mpsc::unbounded_channel();
@@ -318,6 +323,7 @@ enum RendererEvent {
 }
 
 /// Renderer task
+#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 async fn renderer(
 	shared: &Shared,
 	shared_window: &SharedWindow,
@@ -328,7 +334,40 @@ async fn renderer(
 	egui_painter: EguiPainter,
 	mut menu: Menu,
 ) -> Result<(), AppError> {
+	let frame_duration = Duration::from_secs_f64(1000.0) / shared_window.monitor_refresh_rate_mhz;
+	tracing::info!(
+		"Window {:?} refresh rate: {:.2} Hz",
+		shared_window.monitor_name,
+		f64::from(shared_window.monitor_refresh_rate_mhz) / 1000.0,
+	);
+	tracing::info!(
+		"Window {:?} frame duration: {frame_duration:.2?}",
+		shared_window.monitor_name
+	);
+
+	let mut next_frame = Instant::now();
 	loop {
+		let prev_frame_end = Instant::now();
+		let cur_frame_start = next_frame;
+		next_frame += frame_duration;
+
+		// Wait until the start of the next frame.
+		// Note: We manually sleep instead of letting wgpu block for us
+		//       when retrieving the texture to ensure that `tokio` isn't
+		//       blocked, since those are non-async, while this sleep is.
+		#[time(wait_next_frame)]
+		tokio::time::sleep_until(cur_frame_start).await;
+
+		// If we were too late, we need to skip some frames
+		if let Some(late) = prev_frame_end.checked_duration_since(cur_frame_start) &&
+			late > frame_duration
+		{
+			#[expect(clippy::cast_sign_loss, reason = "Durations are always positive")]
+			let frames = late.div_duration_f64(frame_duration).floor() as u32;
+			tracing::debug!("Frame rendered late {late:.2?}, skipping {frames} frames");
+			next_frame += frame_duration * frames;
+		}
+
 		let window_geometry = *shared_window.monitor_geometry.lock().await;
 
 		// Paint egui
@@ -418,10 +457,11 @@ async fn renderer(
 			.render_frame_times(shared_window.window.id())
 			.await
 			.add(metrics::RenderFrameTime {
-				paint_egui:    frame_paint_egui,
-				render_start:  frame_render_start,
+				wait_next_frame,
+				paint_egui: frame_paint_egui,
+				render_start: frame_render_start,
 				render_panels: frame_render_panels,
-				render_egui:   frame_render_egui,
+				render_egui: frame_render_egui,
 				render_finish: frame_render_finish,
 				handle_events: frame_handle_events,
 			});
