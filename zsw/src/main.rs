@@ -364,7 +364,7 @@ async fn renderer(
 		{
 			#[expect(clippy::cast_sign_loss, reason = "Durations are always positive")]
 			let frames = late.div_duration_f64(frame_duration).floor() as u32;
-			tracing::debug!("Frame rendered late {late:.2?}, skipping {frames} frames");
+			tracing::trace!("Frame rendered late {late:.2?}, skipping {frames} frames");
 			next_frame += frame_duration * frames;
 		}
 
