@@ -7,8 +7,8 @@ pub mod render_panels;
 // Imports
 use {
 	crate::{menu, metrics::FrameTimes},
-	core::time::Duration,
-	egui::{Widget, style},
+	core::{hash::Hash, time::Duration},
+	egui::{Widget, epaint, style},
 	std::collections::{HashMap, HashSet},
 };
 
@@ -219,11 +219,19 @@ where
 		},
 	};
 
-	egui_plot::BarChart::new(duration_idx.name(), bars)
+	// Note: This auto-color algorithm is based on egui's auto color, but using
+	//       a stable value. This also makes the colors the same between runs.
+	let color = {
+		let duration_hash = egui::util::hash(duration_idx) as u16;
+		let h = f32::from(duration_hash) / f32::from(u16::MAX);
+		epaint::Hsva::new(h, 0.85, 0.5, 1.0)
+	};
+
+	egui_plot::BarChart::new(duration_idx.name(), bars).color(color)
 }
 
 /// Duration index
-pub trait DurationIdx<T> {
+pub trait DurationIdx<T>: Hash {
 	/// Returns the name of this index
 	fn name(&self) -> String;
 

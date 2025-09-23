@@ -14,7 +14,7 @@ pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderFrameTi
 	super::draw_plot(ui, render_frame_times, &display, DurationIdx::iter());
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 #[derive(strum::EnumIter)]
 enum DurationIdx {
 	WaitNextFrame,

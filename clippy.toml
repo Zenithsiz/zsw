@@ -8,4 +8,7 @@ absolute-paths-allowed-crates = [
 
 	# Crate consists of only nondescript modules
 	"naga_oil",
+
+	# Some modules are named generically, so we can't import them (e.g. `egui::util`)
+	"egui",
 ]
