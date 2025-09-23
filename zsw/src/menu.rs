@@ -21,7 +21,7 @@ use {
 		profile::Profiles,
 		shared::SharedWindow,
 	},
-	core::{ops::RangeInclusive, str::FromStr, time::Duration},
+	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
 	std::{
 		collections::HashMap,
@@ -30,7 +30,7 @@ use {
 	},
 	strum::IntoEnumIterator,
 	winit::{event_loop::EventLoopProxy, window::WindowId},
-	zsw_util::{AppError, DurationDisplay, Rect},
+	zsw_util::{AppError, Rect},
 	zsw_wgpu::Wgpu,
 };
 
@@ -147,9 +147,19 @@ fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusi
 	let start = range.start().as_secs_f32();
 	let end = range.end().as_secs_f32();
 	egui::Slider::new(&mut secs, start..=end)
-		.custom_formatter(|secs, _| DurationDisplay(Duration::from_secs_f64(secs)).to_string())
-		.custom_parser(|s| DurationDisplay::from_str(s).ok().map(|d| d.0.as_secs_f64()))
-		.clamping(egui::SliderClamping::Edits)
+		.custom_formatter(|secs, _| {
+			// Note: We round any durations to the nearest millisecond to avoid displaying
+			//       numbers that are too big
+			let duration = Duration::from_secs_f64(secs);
+			let nanos_per_ms = Duration::from_millis(1).subsec_nanos();
+			let duration = Duration::new(
+				duration.as_secs(),
+				duration.subsec_nanos().next_multiple_of(nanos_per_ms),
+			);
+			humantime::format_duration(duration).to_string()
+		})
+		.custom_parser(|s| humantime::parse_duration(s).ok().map(|d| d.as_secs_f64()))
+		.clamping(egui::SliderClamping::Never)
 		.ui(ui);
 	*duration = Duration::from_secs_f32(secs);
 }

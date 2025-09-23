@@ -8,7 +8,7 @@ use {
 	crate::{display::DisplayName, playlist::PlaylistName},
 	core::time::Duration,
 	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::{DurationDisplay, ResourceManager, resource_manager},
+	zsw_util::{ResourceManager, resource_manager},
 };
 
 /// Profiles
@@ -90,8 +90,8 @@ impl resource_manager::FromSerialized<ProfileName, ser::Profile> for Profile {
 						}),
 						ser::ProfilePanelShader::Fade(shader) => ProfilePanelShader::Fade(ProfilePanelFadeShader {
 							playlists:     shader.playlists.into_iter().map(PlaylistName::from).collect(),
-							duration:      shader.duration.0,
-							fade_duration: shader.fade_duration.0,
+							duration:      shader.duration,
+							fade_duration: shader.fade_duration,
 							inner:         match shader.inner {
 								ser::ProfilePanelFadeShaderInner::Basic => ProfilePanelFadeShaderInner::Basic,
 								ser::ProfilePanelFadeShaderInner::White { strength } =>
@@ -130,8 +130,8 @@ impl resource_manager::ToSerialized<ProfileName, ser::Profile> for Profile {
 						ProfilePanelShader::Fade(shader) =>
 							ser::ProfilePanelShader::Fade(ser::ProfilePanelFadeShader {
 								playlists:     shader.playlists.iter().map(PlaylistName::to_string).collect(),
-								duration:      DurationDisplay(shader.duration),
-								fade_duration: DurationDisplay(shader.fade_duration),
+								duration:      shader.duration,
+								fade_duration: shader.fade_duration,
 								inner:         match shader.inner {
 									ProfilePanelFadeShaderInner::Basic => ser::ProfilePanelFadeShaderInner::Basic,
 									ProfilePanelFadeShaderInner::White { strength } =>

@@ -1,7 +1,6 @@
 //! Serialized profile
 
-// Imports
-use zsw_util::DurationDisplay;
+use core::time::Duration;
 
 /// Profile
 #[derive(Debug)]
@@ -46,8 +45,10 @@ pub struct ProfilePanelNoneShader {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanelFadeShader {
 	pub playlists:     Vec<String>,
-	pub duration:      DurationDisplay,
-	pub fade_duration: DurationDisplay,
+	#[serde(with = "humantime_serde")]
+	pub duration:      Duration,
+	#[serde(with = "humantime_serde")]
+	pub fade_duration: Duration,
 
 	/// Inner
 	#[serde(flatten)]

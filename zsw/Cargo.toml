@@ -21,6 +21,8 @@ directories        = { workspace = true }
 egui               = { features = ["default_fonts"], workspace = true }
 egui_plot          = { workspace = true }
 futures            = { workspace = true }
+humantime          = { workspace = true }
+humantime-serde    = { workspace = true }
 image              = { workspace = true }
 itertools          = { workspace = true }
 naga               = { features = ["deserialize"], workspace = true }

@@ -29,7 +29,6 @@
 )]
 
 // Modules
-pub mod duration_display;
 pub mod loadable;
 mod rect;
 pub mod resource_manager;
@@ -39,7 +38,6 @@ pub mod walk_dir;
 
 // Exports
 pub use {
-	duration_display::DurationDisplay,
 	loadable::Loadable,
 	rect::Rect,
 	resource_manager::ResourceManager,
