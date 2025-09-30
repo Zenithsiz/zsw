@@ -4827,14 +4827,13 @@ dependencies = [
  "tokio",
  "toml 0.9.5",
  "tracing",
- "tracing-log",
- "tracing-subscriber",
  "wgpu",
  "winit",
  "zsw-egui",
  "zsw-util",
  "zsw-wgpu",
  "zutil-cloned",
+ "zutil-logger",
 ]
 
 [[package]]
@@ -4912,8 +4911,20 @@ dependencies = [
 [[package]]
 name = "zutil-cloned"
 version = "0.1.0"
-source = "git+https://github.com/Zenithsiz/zutil?rev=21b9b994e5d29aab5597a96e4e5970183942a8cb#21b9b994e5d29aab5597a96e4e5970183942a8cb"
+source = "git+https://github.com/Zenithsiz/zutil?rev=2913756373a37f36e50c2ffc90090b2ff1a7ce49#2913756373a37f36e50c2ffc90090b2ff1a7ce49"
 dependencies = [
  "quote",
  "syn",
+]
+
+[[package]]
+name = "zutil-logger"
+version = "0.1.0"
+source = "git+https://github.com/Zenithsiz/zutil?rev=2913756373a37f36e50c2ffc90090b2ff1a7ce49#2913756373a37f36e50c2ffc90090b2ff1a7ce49"
+dependencies = [
+ "duplicate",
+ "itertools 0.14.0",
+ "tracing",
+ "tracing-subscriber",
+ "zutil-cloned",
 ]

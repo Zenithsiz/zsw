@@ -1,7 +1,7 @@
 //! Serialized display
 
 // Imports
-use {serde_with::serde_as, zsw_util::Rect};
+use zsw_util::Rect;
 
 /// Serialized display
 #[derive(Debug)]

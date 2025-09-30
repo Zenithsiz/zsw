@@ -58,7 +58,7 @@ use {
 	clap::Parser,
 	core::time::Duration,
 	directories::ProjectDirs,
-	std::{collections::HashMap, fs, sync::Arc},
+	std::{collections::HashMap, fs, io, sync::Arc},
 	tokio::{
 		sync::{Mutex, mpsc},
 		time::Instant,
@@ -75,12 +75,29 @@ use {
 	zsw_util::{AppError, Rect, TokioTaskBlockOn},
 	zsw_wgpu::{Wgpu, WgpuRenderer},
 	zutil_cloned::cloned,
+	zutil_logger::Logger,
 };
 
 
 fn main() -> Result<(), AppError> {
-	// Initialize stderr-only logging
-	let logger = init::Logger::init_temp();
+	// Initialize the logger
+	let logger = {
+		let default_filters = |default| {
+			[
+				(None, default),
+				(Some("wgpu"), "warn"),
+				(Some("naga"), "warn"),
+				(Some("winit"), "warn"),
+				(Some("mio"), "warn"),
+			]
+		};
+		Logger::new(
+			io::stderr,
+			(console_subscriber::spawn(),),
+			default_filters("info"),
+			default_filters("debug"),
+		)
+	};
 
 	// Get arguments
 	let args = Args::parse();
@@ -101,8 +118,8 @@ fn main() -> Result<(), AppError> {
 	let dirs = Arc::new(dirs);
 	tracing::debug!("Loaded config: {config:?}");
 
-	// Initialize the logger properly now
-	logger.init_global(args.log_file.as_deref().or(config.log_file.as_deref()));
+	// Set the logger file
+	logger.set_file(args.log_file.as_deref().or(config.log_file.as_deref()));
 
 	// Initialize the tokio runtime
 	let tokio_runtime =

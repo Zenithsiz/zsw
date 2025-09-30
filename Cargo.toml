@@ -55,7 +55,8 @@ tracing-log         = "0.2.0"
 tracing-subscriber  = "0.3.20"
 wgpu                = "26.0.1"
 winit               = "0.30.12"
-zutil-cloned        = { git = "https://github.com/Zenithsiz/zutil", rev = "21b9b994e5d29aab5597a96e4e5970183942a8cb" }
+zutil-cloned        = { git = "https://github.com/Zenithsiz/zutil", rev = "2913756373a37f36e50c2ffc90090b2ff1a7ce49" }
+zutil-logger        = { git = "https://github.com/Zenithsiz/zutil", rev = "2913756373a37f36e50c2ffc90090b2ff1a7ce49" }
 
 
 # Compile all dependencies with optimizations in debug builds, since otherwise
