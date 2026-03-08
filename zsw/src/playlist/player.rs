@@ -44,6 +44,9 @@ impl PlaylistPlayer {
 	/// Inserts an item in this player
 	pub fn insert(&mut self, item: Arc<Path>) {
 		_ = self.all_items.insert(item);
+
+		// Remove any queued items so we can get a better pool
+		_ = self.cur_items.drain(self.cur_pos..);
 	}
 
 	/// Returns the previous position in the playlist
