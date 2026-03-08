@@ -238,7 +238,7 @@ async fn load_playlist(
 						})
 						.recurse_symlink(true)
 						.build(dir_path.to_path_buf())
-						.map(|entry| async {
+						.map(async |entry| {
 							let entry = match entry {
 								Ok(entry) => entry,
 								Err(err) => {
@@ -270,8 +270,7 @@ async fn load_playlist(
 								},
 							}
 						})
-						.collect::<FuturesUnordered<_>>()
-						.await
+						.buffer_unordered(usize::MAX)
 						.collect::<()>()
 						.await,
 
