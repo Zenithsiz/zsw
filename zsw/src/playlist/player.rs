@@ -135,7 +135,6 @@ impl PlaylistPlayer {
 		// Shuffle in all the new items
 		let mut new_items = self.all_items.iter().map(Arc::clone).collect::<Vec<_>>();
 		new_items.shuffle(&mut self.rng);
-		self.cur_pos = self.cur_items.len();
 		self.cur_items.extend(new_items);
 
 		// And drop any old items from the back
