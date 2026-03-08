@@ -29,6 +29,7 @@ use {
 	},
 	app_error::Context,
 	cgmath::Vector2,
+	core::cmp,
 	futures::{StreamExt, stream::FuturesUnordered},
 	std::{
 		borrow::Cow,
@@ -479,19 +480,29 @@ impl PanelsRenderer {
 				false => progress,
 			};
 
-			let alpha_prev = 0.5 * f32::clamp(1.0 - p / f, 0.0, 1.0);
-			let alpha_next = 0.5 * f32::clamp(1.0 - (1.0 - p) / f, 0.0, 1.0);
-			let alpha_cur = 1.0 - f32::max(alpha_prev, alpha_next);
-			let alpha = match panel_image_slot {
-				PanelFadeImageSlot::Prev => alpha_prev,
-				PanelFadeImageSlot::Cur => alpha_cur,
-				PanelFadeImageSlot::Next => alpha_next,
+			let p_stage = self::cmp_interval(p, f, 1.0 - f);
+			let (alpha, fade_progress) = match p_stage {
+				cmp::Ordering::Less => {
+					let a = 0.5 + p / (2.0 * f);
+					match panel_image_slot {
+						PanelFadeImageSlot::Prev => (1.0, 1.0 - a),
+						PanelFadeImageSlot::Cur => (a, a),
+						PanelFadeImageSlot::Next => continue,
+					}
+				},
+				cmp::Ordering::Equal => match panel_image_slot {
+					PanelFadeImageSlot::Prev | PanelFadeImageSlot::Next => continue,
+					PanelFadeImageSlot::Cur => (1.0, 1.0),
+				},
+				cmp::Ordering::Greater => {
+					let a = (p - (1.0 - f)) / (2.0 * f);
+					match panel_image_slot {
+						PanelFadeImageSlot::Prev => continue,
+						PanelFadeImageSlot::Cur => (1.0, 1.0 - a),
+						PanelFadeImageSlot::Next => (a, a),
+					}
+				},
 			};
-
-			// If the alpha is 0, we can skip this image
-			if alpha == 0.0 {
-				continue;
-			}
 
 			// Calculate the position matrix for the panel
 			let image_size = panel_image.texture_view.texture().size();
@@ -512,7 +523,12 @@ impl PanelsRenderer {
 						image_ratio: uniform::Vec2(image_ratio.into()),
 						progress,
 						alpha,
-						mix_strength: strength * 4.0 * f32::max(alpha_cur * alpha_prev, alpha_cur * alpha_next),
+						mix_strength: strength *
+							match p_stage {
+								cmp::Ordering::Less => 1.0 - (p / f) * (p / f),
+								cmp::Ordering::Equal => 0.0,
+								cmp::Ordering::Greater => 1.0 - ((1.0 - p) / f) * ((1.0 - p) / f),
+							},
 						_unused: [0; _],
 					}),
 				PanelFadeShader::Out { strength } =>
@@ -522,6 +538,7 @@ impl PanelsRenderer {
 						progress,
 						alpha,
 						strength,
+						fade_progress,
 						_unused: [0; _],
 					}),
 				PanelFadeShader::In { strength } =>
@@ -531,6 +548,7 @@ impl PanelsRenderer {
 						progress,
 						alpha,
 						strength,
+						fade_progress,
 						_unused: [0; _],
 					}),
 			};
@@ -864,4 +882,16 @@ impl PanelSlideShader {
 			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/slide.json")),
 		}
 	}
+}
+
+/// Compares `value` to the interval `lhs..rhs`
+pub fn cmp_interval(value: f32, lhs: f32, rhs: f32) -> cmp::Ordering {
+	if value < lhs {
+		return cmp::Ordering::Less;
+	}
+	if value > rhs {
+		return cmp::Ordering::Greater;
+	}
+
+	cmp::Ordering::Equal
 }

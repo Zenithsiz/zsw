@@ -11,8 +11,10 @@ struct Uniforms {
 		mix_strength: f32,
 	#else ifdef FADE_OUT
 		strength: f32,
+		fade_progress: f32,
 	#else ifdef FADE_IN
 		strength: f32,
+		fade_progress: f32,
 	#endif
 };
 
@@ -52,10 +54,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	#ifdef FADE_OUT
 		let mid = uniforms.image_ratio / 2.0 + uvs_offset;
-		uvs = mid + (uvs - mid) * pow(uniforms.alpha, uniforms.strength);
+		uvs = mid + (uvs - mid) * pow(uniforms.fade_progress, uniforms.strength);
 	#else ifdef FADE_IN
 		let mid = uniforms.image_ratio / 2.0 + uvs_offset;
-		uvs = mid + (uvs - mid) / pow(uniforms.alpha, uniforms.strength);
+		uvs = mid + (uvs - mid) / pow(uniforms.fade_progress, uniforms.strength);
 	#endif
 
 	// If we'd sample outside the image, discard this pixel instead

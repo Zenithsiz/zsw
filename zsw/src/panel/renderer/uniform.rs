@@ -60,13 +60,14 @@ pub struct FadeWhite {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeOut {
-	pub pos_matrix:  Matrix4x4,
-	pub image_ratio: Vec2,
-	pub progress:    f32,
-	pub alpha:       f32,
-	pub strength:    f32,
+	pub pos_matrix:    Matrix4x4,
+	pub image_ratio:   Vec2,
+	pub progress:      f32,
+	pub alpha:         f32,
+	pub strength:      f32,
+	pub fade_progress: f32,
 
-	pub _unused: [u32; 3],
+	pub _unused: [u32; 2],
 }
 
 /// Fade-in
@@ -74,13 +75,14 @@ pub struct FadeOut {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct FadeIn {
-	pub pos_matrix:  Matrix4x4,
-	pub image_ratio: Vec2,
-	pub progress:    f32,
-	pub alpha:       f32,
-	pub strength:    f32,
+	pub pos_matrix:    Matrix4x4,
+	pub image_ratio:   Vec2,
+	pub progress:      f32,
+	pub alpha:         f32,
+	pub strength:      f32,
+	pub fade_progress: f32,
 
-	pub _unused: [u32; 3],
+	pub _unused: [u32; 2],
 }
 
 /// Slide
