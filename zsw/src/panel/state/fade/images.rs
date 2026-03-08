@@ -460,7 +460,7 @@ fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
 		address_mode_w: wgpu::AddressMode::ClampToEdge,
 		mag_filter: wgpu::FilterMode::Linear,
 		min_filter: wgpu::FilterMode::Linear,
-		mipmap_filter: wgpu::FilterMode::Linear,
+		mipmap_filter: wgpu::MipmapFilterMode::Linear,
 		..wgpu::SamplerDescriptor::default()
 	};
 	wgpu.device.create_sampler(&descriptor)

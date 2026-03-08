@@ -138,11 +138,12 @@ impl Wgpu {
 async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), AppError> {
 	// Request the device without any features
 	let device_descriptor = wgpu::DeviceDescriptor {
-		label:             Some("zsw-device"),
-		required_features: wgpu::Features::default(),
-		required_limits:   wgpu::Limits::default(),
-		memory_hints:      wgpu::MemoryHints::default(),
-		trace:             wgpu::Trace::Off,
+		label:                 Some("zsw-device"),
+		required_features:     wgpu::Features::default(),
+		required_limits:       wgpu::Limits::default(),
+		memory_hints:          wgpu::MemoryHints::default(),
+		trace:                 wgpu::Trace::Off,
+		experimental_features: wgpu::ExperimentalFeatures::default(),
 	};
 	tracing::debug!(?device_descriptor, "Requesting wgpu device");
 	let (device, queue) = adapter

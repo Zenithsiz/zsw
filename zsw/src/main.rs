@@ -58,7 +58,7 @@ use {
 	clap::Parser,
 	core::time::Duration,
 	directories::ProjectDirs,
-	std::{collections::HashMap, fs, io, sync::Arc},
+	std::{collections::HashMap, fs, sync::Arc},
 	tokio::{
 		sync::{Mutex, mpsc},
 		time::Instant,
@@ -81,23 +81,12 @@ use {
 
 fn main() -> Result<(), AppError> {
 	// Initialize the logger
-	let logger = {
-		let default_filters = |default| {
-			[
-				(None, default),
-				(Some("wgpu"), "warn"),
-				(Some("naga"), "warn"),
-				(Some("winit"), "warn"),
-				(Some("mio"), "warn"),
-			]
-		};
-		Logger::new(
-			io::stderr,
-			(console_subscriber::spawn(),),
-			default_filters("info"),
-			default_filters("debug"),
-		)
-	};
+	let logger = Logger::builder()
+		.filter("wgpu", "warn")
+		.filter("naga", "warn")
+		.filter("winit", "warn")
+		.filter("mio", "warn")
+		.build();
 
 	// Get arguments
 	let args = Args::parse();
@@ -600,9 +589,7 @@ enum AppEvent {
 	Shutdown,
 }
 
-// TODO: Not configure this out on ra once it accepts `attr` macros.
 // TODO: Allow usage on `if cond { ... }`.
-#[cfg(not(rust_analyzer))]
 macro time {
 	attr($name:ident) ($s:stmt) => {
 		let start = Instant::now();

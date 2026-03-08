@@ -179,6 +179,7 @@ impl PanelsRenderer {
 			depth_stencil_attachment: None,
 			timestamp_writes:         None,
 			occlusion_query_set:      None,
+			multiview_mask:           None,
 		};
 		#[time(create_render_pass)]
 		let mut render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
@@ -699,7 +700,7 @@ fn create_render_pipeline(
 			"zsw-panel-render-pipeline[name={render_pipeline_name:?}]-layout"
 		)),
 		bind_group_layouts,
-		push_constant_ranges: &[],
+		immediate_size: 0,
 	};
 	let render_pipeline_layout = wgpu.device.create_pipeline_layout(&render_pipeline_layout_descriptor);
 
@@ -712,13 +713,13 @@ fn create_render_pipeline(
 		label:  Some(&format!("zsw-panel-render-pipeline[name={render_pipeline_name:?}]")),
 		layout: Some(&render_pipeline_layout),
 
-		vertex:        wgpu::VertexState {
+		vertex:         wgpu::VertexState {
 			module:              &shader,
 			entry_point:         Some("vs_main"),
 			buffers:             &[PanelVertex::buffer_layout()],
 			compilation_options: wgpu::PipelineCompilationOptions::default(),
 		},
-		primitive:     wgpu::PrimitiveState {
+		primitive:      wgpu::PrimitiveState {
 			topology:           wgpu::PrimitiveTopology::TriangleList,
 			strip_index_format: None,
 			front_face:         wgpu::FrontFace::Ccw,
@@ -727,20 +728,20 @@ fn create_render_pipeline(
 			polygon_mode:       wgpu::PolygonMode::Fill,
 			conservative:       false,
 		},
-		depth_stencil: None,
-		multisample:   wgpu::MultisampleState {
+		depth_stencil:  None,
+		multisample:    wgpu::MultisampleState {
 			count: msaa_samples,
 			mask: u64::MAX,
 			alpha_to_coverage_enabled: false,
 		},
-		fragment:      Some(wgpu::FragmentState {
+		fragment:       Some(wgpu::FragmentState {
 			module:              &shader,
 			entry_point:         Some("fs_main"),
 			targets:             &color_targets,
 			compilation_options: wgpu::PipelineCompilationOptions::default(),
 		}),
-		multiview:     None,
-		cache:         None,
+		multiview_mask: None,
+		cache:          None,
 	};
 
 	Ok(wgpu.device.create_render_pipeline(&render_pipeline_descriptor))

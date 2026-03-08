@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
+	rand::{rngs::StdRng, seq::SliceRandom},
 	std::{
 		collections::{HashSet, VecDeque},
 		path::Path,
@@ -37,7 +37,7 @@ impl PlaylistPlayer {
 			cur_items:     VecDeque::new(),
 			max_old_items: 100,
 			cur_pos:       0,
-			rng:           StdRng::from_os_rng(),
+			rng:           rand::make_rng(),
 		}
 	}
 
