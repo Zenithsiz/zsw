@@ -63,7 +63,7 @@ pub impl<T, E> Result<T, E> {
 
 #[cfg(test)]
 mod test {
-	use std::assert_matches::assert_matches;
+	use std::assert_matches;
 
 	use super::*;
 

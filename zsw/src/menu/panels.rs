@@ -201,7 +201,7 @@ fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
 				}),
 				("Fade", matches!(state, PanelState::Fade(_)), || {
 					PanelState::Fade(PanelFadeState::new(
-						Duration::from_secs(60),
+						Duration::from_mins(1),
 						Duration::from_secs(5),
 						PanelFadeShader::Out { strength: 1.5 },
 					))

@@ -12,7 +12,6 @@
 	must_not_suspend,
 	impl_trait_in_assoc_type,
 	try_trait_v2,
-	assert_matches,
 	yeet_expr,
 	const_trait_impl,
 	nonpoison_mutex,

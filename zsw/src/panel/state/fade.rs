@@ -112,7 +112,7 @@ impl PanelFadeState {
 			(_, true) => self.duration,
 
 			// Otherwise, if we have a current, but no next, we can go until the fade begins
-			(true, false) => self.duration - self.fade_duration,
+			(true, false) => self.duration.saturating_sub(self.fade_duration),
 
 			// Finally, if we don't have any, we should stay at the beginning
 			(false, false) => self.min_progress(),

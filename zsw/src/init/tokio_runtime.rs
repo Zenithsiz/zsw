@@ -15,7 +15,7 @@ use {
 pub fn create(worker_threads: Option<NonZeroUsize>) -> Result<tokio::runtime::Runtime, AppError> {
 	let worker_threads = match worker_threads {
 		Some(worker_threads) => worker_threads.get(),
-		None => thread::available_parallelism().map(NonZeroUsize::get).unwrap_or(1),
+		None => thread::available_parallelism().map_or(1, NonZeroUsize::get),
 	};
 
 	tokio::runtime::Builder::new_multi_thread()
