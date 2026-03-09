@@ -24,8 +24,11 @@
 	proc_macro_hygiene,
 	stmt_expr_attributes,
 	return_type_notation,
-	fn_traits
+	fn_traits,
+	core_intrinsics
 )]
+// Lints
+#![expect(internal_features, reason = "There's no other way to check if a type is inhabited")]
 
 // Modules
 pub mod dummy;
@@ -54,7 +57,7 @@ use {
 	core::ptr,
 	image::DynamicImage,
 	serde::de::DeserializeOwned,
-	std::{fs, future::Future, path::Path},
+	std::{fs, future::Future, intrinsics, path::Path},
 	zutil_cloned::cloned,
 };
 
@@ -187,7 +190,8 @@ pub macro iter_chain {
 #[must_use]
 pub const fn zst_ref_mut<'a, T>() -> &'a mut T {
 	const { assert!(size_of::<T>() == 0, "Cannot call this function with non-zero `T`") };
+	const { intrinsics::assert_inhabited::<T>() };
 
-	// SAFETY: `T` is a ZST, so this is valid
+	// SAFETY: `T` is a ZST and is inhabited, so this is valid
 	unsafe { &mut *ptr::dangling_mut() }
 }
