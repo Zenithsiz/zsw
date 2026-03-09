@@ -24,8 +24,8 @@ directories         = "6.0.0"
 duplicate           = "2.0.1"
 egui                = "0.33.3"
 egui_plot           = "0.34.1"
-egui_wgpu_backend   = "0.35.0"
-egui_winit_platform = "0.27.0"
+egui_wgpu_backend   = "0.36.0"
+egui_winit_platform = "0.28.0"
 extend              = "1.2.0"
 futures             = "0.3.32"
 humantime           = "2.3.0"
@@ -56,10 +56,6 @@ wgpu                = "28.0.0"
 winit               = "0.30.13"
 zutil-cloned        = "0.1.0"
 zutil-logger        = "0.1.0"
-
-[patch.crates-io]
-egui_wgpu_backend   = { git = "https://github.com/Zenithsiz/egui_wgpu_backend", rev = "e230e246c3d8dab02e8856d4d3efc0ac4c38f896" }
-egui_winit_platform = { git = "https://github.com/Zenithsiz/egui_winit_platform", rev = "a105a7c9147af0c0ae527bf53440bdff21df6e76" }
 
 # Compile all dependencies with optimizations in debug builds, since otherwise
 # the image loading is far too slow for us to debug other things.
