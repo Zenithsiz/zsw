@@ -19,7 +19,8 @@
 	async_fn_traits,
 	unwrap_infallible,
 	macro_attr,
-	default_field_values
+	default_field_values,
+	cfg_select
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -590,6 +591,7 @@ enum AppEvent {
 }
 
 // TODO: Allow usage on `if cond { ... }`.
+#[cfg(feature = "metrics")]
 macro time {
 	attr($name:ident) ($s:stmt) => {
 		let start = Instant::now();
@@ -601,5 +603,18 @@ macro time {
 		let start = Instant::now();
 		let $binding = $e;
 		let $name = start.elapsed();
+	},
+}
+
+#[cfg(not(feature = "metrics"))]
+macro time {
+	attr($name:ident) ($s:stmt) => {
+		$s;
+		let $name = ();
+	},
+
+	attr($name:ident) (let $binding:pat = $e:expr;) => {
+		let $binding = $e;
+		let $name = ();
 	},
 }

@@ -5,6 +5,7 @@
 
 // Modules
 mod displays;
+#[cfg(feature = "metrics")]
 mod metrics;
 mod panels;
 mod playlists;
@@ -68,6 +69,9 @@ impl Menu {
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		window_geometry: Rect<i32, u32>,
 	) {
+		#[cfg(not(feature = "metrics"))]
+		let _ = (metrics, shared_windows);
+
 		// Create the window
 		let mut egui_window = egui::Window::new("Menu");
 
@@ -94,6 +98,7 @@ impl Menu {
 				Tab::Displays => displays::draw_displays_tab(ui, displays),
 				Tab::Playlists => playlists::draw_playlists_tab(ui, playlists),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, displays, playlists, profiles, panels),
+				#[cfg(feature = "metrics")]
 				Tab::Metrics => metrics::draw_metrics_tab(ui, metrics, shared_windows),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
@@ -181,6 +186,7 @@ enum Tab {
 	#[display("Profiles")]
 	Profiles,
 
+	#[cfg(feature = "metrics")]
 	#[display("Metrics")]
 	Metrics,
 

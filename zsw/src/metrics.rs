@@ -1,14 +1,30 @@
 //! Metrics
 
+// Lints
+#![cfg_attr(not(feature = "metrics"), expect(dead_code))]
+
 // Imports
-use {
-	crate::panel::state::fade::PanelFadeImageSlot,
-	core::{ops::DerefMut, time::Duration},
-	std::collections::HashMap,
-	tokio::sync::{Mutex, MutexGuard},
-	winit::window::WindowId,
-	zsw_util::FrameTimes,
-};
+use {crate::panel::state::fade::PanelFadeImageSlot, core::ops::DerefMut, winit::window::WindowId};
+
+cfg_select! {
+	feature = "metrics" => {
+		pub use {
+			core::time::Duration,
+			std::collections::HashMap,
+			tokio::sync::{Mutex, MutexGuard},
+			zsw_util::FrameTimes,
+		};
+	}
+	_ => {
+		pub type Duration = ();
+		pub use zsw_util::dummy::{
+			FrameTimes,
+			HashMap,
+			async_mutex::{Mutex, MutexGuard}
+		};
+	}
+}
+
 
 /// Window metrics
 #[derive(Default, Debug)]

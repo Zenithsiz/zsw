@@ -197,7 +197,7 @@ impl PanelsRenderer {
 			.enumerate()
 			.map(|(panel_idx, panel)| async move { (panel_idx, panel.lock().await) })
 			.collect::<FuturesUnordered<_>>();
-		let mut panels_metrics = HashMap::new();
+		let mut panels_metrics = metrics::HashMap::new();
 		while let Some((panel_idx, mut panel)) = panels.next().await {
 			self.render_panel(
 				wgpu,
@@ -238,7 +238,7 @@ impl PanelsRenderer {
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel_idx: usize,
 		panel: &mut Panel,
-		panels_metrics: &mut HashMap<usize, metrics::RenderPanelFrameTime>,
+		panels_metrics: &mut metrics::HashMap<usize, metrics::RenderPanelFrameTime>,
 	) -> Result<(), app_error::AppError> {
 		// Update the panel before drawing it
 		#[time(update_panel)]
@@ -308,7 +308,7 @@ impl PanelsRenderer {
 			.or_insert_with(|| metrics::RenderPanelFrameTime {
 				update_panel,
 				create_render_pipeline,
-				geometries: HashMap::new(),
+				geometries: metrics::HashMap::new(),
 			});
 
 		// Then render the panel
@@ -464,7 +464,7 @@ impl PanelsRenderer {
 		// Full duration an image is on screen (including the fades)
 		let d = 1.0 + 2.0 * f;
 
-		let mut image_metrics = HashMap::new();
+		let mut image_metrics = metrics::HashMap::new();
 		for (panel_image_slot, panel_image) in state.images().iter() {
 			let geometry_uniforms = panel_image
 				.geometry_uniforms(wgpu, &shared.images, window_id, geometry_idx)

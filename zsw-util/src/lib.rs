@@ -28,6 +28,7 @@
 )]
 
 // Modules
+pub mod dummy;
 pub mod frame_times;
 pub mod loadable;
 mod rect;
@@ -50,6 +51,7 @@ pub use {
 // Imports
 use {
 	app_error::Context,
+	core::ptr,
 	image::DynamicImage,
 	serde::de::DeserializeOwned,
 	std::{fs, future::Future, path::Path},
@@ -179,4 +181,13 @@ pub macro iter_chain {
 	($first:expr, $($rest:expr),* $(,)?) => {
 		std::iter::chain($first, $crate::iter_chain!($($rest,)*))
 	},
+}
+
+/// Creates a mutable reference to a ZST
+#[must_use]
+pub const fn zst_ref_mut<'a, T>() -> &'a mut T {
+	const { assert!(size_of::<T>() == 0, "Cannot call this function with non-zero `T`") };
+
+	// SAFETY: `T` is a ZST, so this is valid
+	unsafe { &mut *ptr::dangling_mut() }
 }
