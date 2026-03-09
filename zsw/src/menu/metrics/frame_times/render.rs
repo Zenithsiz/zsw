@@ -1,11 +1,7 @@
 //! Render frame time metrics
 
 // Imports
-use {
-	crate::metrics::{FrameTimes, RenderFrameTime},
-	std::time::Duration,
-	strum::IntoEnumIterator,
-};
+use {crate::metrics::RenderFrameTime, std::time::Duration, strum::IntoEnumIterator, zsw_util::FrameTimes};
 
 /// Draws the render frame times
 pub fn draw(ui: &mut egui::Ui, render_frame_times: &mut FrameTimes<RenderFrameTime>) {

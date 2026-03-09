@@ -4,7 +4,6 @@
 use {
 	crate::{
 		metrics::{
-			FrameTimes,
 			RenderPanelFrameTime,
 			RenderPanelGeometryFadeImageFrameTime,
 			RenderPanelGeometryFrameTime,
@@ -17,7 +16,7 @@ use {
 	core::{iter, time::Duration},
 	itertools::Itertools,
 	std::collections::{HashMap, HashSet},
-	zsw_util::iter_chain,
+	zsw_util::{FrameTimes, iter_chain},
 };
 
 /// Draws the render panel frame times

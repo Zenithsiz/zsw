@@ -6,10 +6,11 @@ pub mod render_panels;
 
 // Imports
 use {
-	crate::{menu, metrics::FrameTimes},
+	crate::menu,
 	core::{hash::Hash, time::Duration},
 	egui::{Widget, epaint, style},
 	std::collections::{HashMap, HashSet},
+	zsw_util::FrameTimes,
 };
 
 /// Draws a frame time's plot
