@@ -1,9 +1,0 @@
-[[panels]]
-display = "cross-screen"
-
-[panels.shader]
-type          = "fade"
-playlists     = ["example1"]
-duration      = "5s"
-fade_duration = "1s"
-fade          = "basic"
