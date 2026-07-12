@@ -9,8 +9,6 @@
 	stmt_expr_attributes,
 	nonpoison_mutex,
 	sync_nonpoison,
-	try_trait_v2,
-	unwrap_infallible,
 	macro_attr
 )]
 #![cfg_attr(feature = "metrics", feature(duration_millis_float, default_field_values))]
@@ -62,7 +60,7 @@ use {
 		event::WindowEvent,
 		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy, OwnedDisplayHandle},
 		platform::{run_on_demand::EventLoopExtRunOnDemand, x11::EventLoopBuilderExtX11},
-		window::{Window, WindowId},
+		window::WindowId,
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
 	zsw_util::{AppError, Rect, TokioTaskBlockOn},
@@ -178,7 +176,7 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 					_ => (),
 				}
 
-				window.egui_event_handler.handle_event(&event).block_on();
+				let _consumed = window.egui_event_handler.handle_event(&event);
 			},
 			None => tracing::warn!("Received window event for unknown window {window_id:?}: {event:?}"),
 		}
@@ -266,8 +264,9 @@ impl WinitApp {
 			let msaa_samples = 4;
 			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, &self.shared.wgpu, msaa_samples)
 				.context("Unable to create panels renderer")?;
-			let egui_event_handler = EguiEventHandler::new(&window);
-			let egui_painter = EguiPainter::new(&egui_event_handler);
+			let egui_ctx = egui::Context::default();
+			let egui_event_handler = EguiEventHandler::new(&self.shared.wgpu, Arc::clone(&window), egui_ctx.clone());
+			let egui_painter = EguiPainter::new(&egui_event_handler, egui_ctx.clone());
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
 			let menu = Menu::new();
 
@@ -379,7 +378,7 @@ async fn renderer(
 		// TODO: Have `egui_renderer` do this for us on render?
 		#[time(frame_paint_egui)]
 		let (egui_paint_jobs, egui_textures_delta) =
-			match self::paint_egui(shared, &shared_window.window, &egui_painter, &mut menu, window_geometry).await {
+			match tokio::task::block_in_place(|| self::paint_egui(shared, &egui_painter, &mut menu, window_geometry)) {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {}", err.pretty());
@@ -417,7 +416,7 @@ async fn renderer(
 				&shared_window.window,
 				&shared.wgpu,
 				&egui_paint_jobs,
-				egui_textures_delta,
+				egui_textures_delta.as_ref(),
 			)
 			.context("Unable to render egui")?;
 
@@ -474,29 +473,26 @@ async fn renderer(
 }
 
 /// Paints egui
-async fn paint_egui(
+fn paint_egui(
 	shared: &Shared,
-	window: &Window,
 	egui_painter: &EguiPainter,
 	menu: &mut Menu,
 	window_geometry: Rect<i32, u32>,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
-	let full_output_fut = egui_painter.draw(window, async |ctx| {
+	let full_output = egui_painter.draw(|ctx| {
 		// Draw the menu
-		tokio::task::block_in_place(|| {
-			menu.draw(
-				ctx,
-				&shared.wgpu,
-				&shared.displays,
-				&shared.playlists,
-				&shared.profiles,
-				&shared.panels,
-				&shared.metrics,
-				&shared.windows.lock().block_on(),
-				&shared.event_loop_proxy,
-				window_geometry,
-			)
-		});
+		menu.draw(
+			ctx,
+			&shared.wgpu,
+			&shared.displays,
+			&shared.playlists,
+			&shared.profiles,
+			&shared.panels,
+			&shared.metrics,
+			&shared.windows.lock().block_on(),
+			&shared.event_loop_proxy,
+			window_geometry,
+		);
 
 
 		// Then go through all panels checking for interactions with their geometries
@@ -505,82 +501,71 @@ async fn paint_egui(
 			return Ok(());
 		};
 		let pointer_pos = Point2::new(pointer_pos.x as i32, pointer_pos.y as i32);
-		shared
-			.panels
-			.for_each(async |panel| {
-				let panel = &mut *panel.lock().await;
-				let display = panel.display.read().await;
+		for panel in shared.panels.get_all().block_on() {
+			let panel = &mut *panel.lock().block_on();
+			let display = panel.display.read().block_on();
 
-				// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
-				// TODO: Use `is_pointer_over_egui` once it is fixed
-				let is_over_egui_area = match ctx.input(|input| input.pointer.interact_pos()) {
-					Some(pos) => ctx.layer_id_at(pos) != Some(egui::LayerId::background()),
-					None => false,
-				};
-				if is_over_egui_area ||
-					!display
-						.geometries
-						.iter()
-						.any(|&geometry| geometry.on_window(window_geometry).contains(pointer_pos))
-				{
-					return;
+			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
+			if ctx.is_pointer_over_egui() ||
+				!display
+					.geometries
+					.iter()
+					.any(|&geometry| geometry.on_window(window_geometry).contains(pointer_pos))
+			{
+				continue;
+			}
+
+			// Pause any double-clicked panels
+			if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+				match &mut panel.state {
+					panel::PanelState::None(_) => (),
+					panel::PanelState::Fade(state) => state.toggle_paused(),
+					panel::PanelState::Slide(_) => (),
 				}
+			}
 
-				// Pause any double-clicked panels
-				if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
-					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-					match &mut panel.state {
-						panel::PanelState::None(_) => (),
-						panel::PanelState::Fade(state) => state.toggle_paused(),
-						panel::PanelState::Slide(_) => (),
-					}
+			// Skip any ctrl-clicked/middle clicked panels
+			if ctx.input(|input| {
+				(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
+					input.pointer.button_clicked(egui::PointerButton::Middle)
+			}) {
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+				match &mut panel.state {
+					panel::PanelState::None(_) => (),
+					panel::PanelState::Fade(state) => state.skip(&shared.wgpu).block_on(),
+					panel::PanelState::Slide(_) => (),
 				}
+			}
 
-				// Skip any ctrl-clicked/middle clicked panels
-				if ctx.input(|input| {
-					(input.pointer.button_clicked(egui::PointerButton::Primary) && input.modifiers.ctrl) ||
-						input.pointer.button_clicked(egui::PointerButton::Middle)
-				}) {
-					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-					match &mut panel.state {
-						panel::PanelState::None(_) => (),
-						panel::PanelState::Fade(state) => state.skip(&shared.wgpu).await,
-						panel::PanelState::Slide(_) => (),
-					}
+			// Scroll panels
+			let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
+			if scroll_delta != 0.0 {
+				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
+				match &mut panel.state {
+					panel::PanelState::None(_) => (),
+					panel::PanelState::Fade(state) => {
+						// TODO: Make this "speed" configurable
+						// TODO: Perform the conversion better without going through nanos
+						let speed = 1.0 / 1000.0;
+						let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
+						let time_delta_abs =
+							TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
+						let time_delta = match scroll_delta.is_sign_positive() {
+							true => -time_delta_abs,
+							false => time_delta_abs,
+						};
+
+						state.step(&shared.wgpu, time_delta).block_on();
+					},
+					panel::PanelState::Slide(_) => (),
 				}
-
-				// Scroll panels
-				let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
-				if scroll_delta != 0.0 {
-					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-					match &mut panel.state {
-						panel::PanelState::None(_) => (),
-						panel::PanelState::Fade(state) => {
-							// TODO: Make this "speed" configurable
-							// TODO: Perform the conversion better without going through nanos
-							let speed = 1.0 / 1000.0;
-							let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
-							let time_delta_abs =
-								TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
-							let time_delta = match scroll_delta.is_sign_positive() {
-								true => -time_delta_abs,
-								false => time_delta_abs,
-							};
-
-							state.step(&shared.wgpu, time_delta).await;
-						},
-						panel::PanelState::Slide(_) => (),
-					}
-				}
-			})
-			.await;
+			}
+		}
 
 		Ok::<_, !>(())
-	});
-	let full_output = full_output_fut.await?;
-	let paint_jobs = egui_painter
-		.tessellate_shapes(full_output.shapes, full_output.pixels_per_point)
-		.await;
+	})?;
+	let paint_jobs = egui_painter.tessellate_shapes(full_output.shapes, full_output.pixels_per_point);
 	let textures_delta = full_output.textures_delta;
 
 	Ok((paint_jobs, textures_delta))

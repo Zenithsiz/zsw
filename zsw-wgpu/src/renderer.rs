@@ -174,7 +174,7 @@ impl FrameRender {
 		// Note: Although not supposed to, `submit` calls can block, so we wrap it
 		//       in a tokio block-in-place
 		let _ = tokio::task::block_in_place(|| wgpu.queue.submit([self.encoder.finish()]));
-		wgpu.queue.present(self.surface_texture);
+		self.surface_texture.present();
 
 		self.suboptimal
 	}

@@ -1,14 +1,15 @@
 //! Egui wrapper
 
 // Features
-#![feature(must_not_suspend)]
+#![feature(must_not_suspend, nonpoison_mutex, sync_nonpoison)]
 
 // Imports
 use {
-	app_error::Context,
 	egui::epaint,
-	std::{fmt, sync::Arc},
-	tokio::sync::Mutex,
+	std::{
+		fmt,
+		sync::{Arc, nonpoison::Mutex},
+	},
 	tracing as _,
 	winit::{event::WindowEvent, window::Window},
 	zsw_util::AppError,
@@ -17,8 +18,8 @@ use {
 
 /// Egui Renderer
 pub struct EguiRenderer {
-	/// Render pass
-	render_pass: egui_wgpu_backend::RenderPass,
+	/// Renderer
+	renderer: egui_wgpu::Renderer,
 }
 
 impl fmt::Debug for EguiRenderer {
@@ -31,10 +32,14 @@ impl EguiRenderer {
 	/// Creates a new egui renderer
 	#[must_use]
 	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu: &Wgpu) -> Self {
-		// Create the egui render pass
-		let render_pass = egui_wgpu_backend::RenderPass::new(&wgpu.device, wgpu_renderer.surface_config().format, 1);
+		// Create the egui renderer
+		let renderer = egui_wgpu::Renderer::new(
+			&wgpu.device,
+			wgpu_renderer.surface_config().format,
+			egui_wgpu::RendererOptions::default(),
+		);
 
-		Self { render_pass }
+		Self { renderer }
 	}
 
 	/// Renders egui
@@ -44,44 +49,56 @@ impl EguiRenderer {
 		window: &Window,
 		wgpu: &Wgpu,
 		paint_jobs: &[egui::ClippedPrimitive],
-		textures_delta: Option<egui::TexturesDelta>,
+		textures_delta: Option<&egui::TexturesDelta>,
 	) -> Result<(), AppError> {
 		// Update textures
 		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
-		let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-			physical_width:  frame.surface_size.width,
-			physical_height: frame.surface_size.height,
-			scale_factor:    window.scale_factor() as f32,
+		let screen_descriptor = egui_wgpu::ScreenDescriptor {
+			size_in_pixels:   [frame.surface_size.width, frame.surface_size.height],
+			pixels_per_point: window.scale_factor() as f32,
 		};
 
 		// If we have any textures delta, update them
 		if let Some(textures_delta) = textures_delta.as_ref() {
-			self.render_pass
-				.add_textures(&wgpu.device, &wgpu.queue, textures_delta)
-				.context("Unable to update textures")?;
+			for &(id, ref delta) in &textures_delta.set {
+				self.renderer.update_texture(&wgpu.device, &wgpu.queue, id, delta);
+			}
+			for id in &textures_delta.free {
+				self.renderer.free_texture(id);
+			}
 		}
 
 		// Update buffers
-		self.render_pass
-			.update_buffers(&wgpu.device, &wgpu.queue, paint_jobs, &screen_descriptor);
+		let buffers = self.renderer.update_buffers(
+			&wgpu.device,
+			&wgpu.queue,
+			&mut frame.encoder,
+			paint_jobs,
+			&screen_descriptor,
+		);
+		let _: wgpu::SubmissionIndex = wgpu.queue.submit(buffers);
 
 		// Record all render passes.
-		self.render_pass
-			.execute(
-				&mut frame.encoder,
-				&frame.surface_view,
-				paint_jobs,
-				&screen_descriptor,
-				None,
-			)
-			.context("Unable to render egui")?;
-
-		// Then remove any unneeded textures at the end, if we have any
-		if let Some(textures_delta) = textures_delta {
-			self.render_pass
-				.remove_textures(textures_delta)
-				.context("Unable to update textures")?;
-		}
+		let render_pass_color_attachment = wgpu::RenderPassColorAttachment {
+			view:           &frame.surface_view,
+			depth_slice:    None,
+			resolve_target: None,
+			ops:            wgpu::Operations {
+				load:  wgpu::LoadOp::Load,
+				store: wgpu::StoreOp::Store,
+			},
+		};
+		let render_pass_descriptor = wgpu::RenderPassDescriptor {
+			label:                    Some("zsw-egui-render-pass"),
+			color_attachments:        &[Some(render_pass_color_attachment)],
+			depth_stencil_attachment: None,
+			timestamp_writes:         None,
+			occlusion_query_set:      None,
+			multiview_mask:           None,
+		};
+		let render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
+		let mut render_pass = render_pass.forget_lifetime();
+		self.renderer.render(&mut render_pass, paint_jobs, &screen_descriptor);
 
 		Ok(())
 	}
@@ -89,8 +106,14 @@ impl EguiRenderer {
 
 /// Egui drawer
 pub struct EguiPainter {
-	/// Platform
-	platform: Arc<Mutex<egui_winit_platform::Platform>>,
+	/// Window
+	window: Arc<Window>,
+
+	/// Context
+	ctx: egui::Context,
+
+	/// State
+	state: Arc<Mutex<egui_winit::State>>,
 }
 
 impl fmt::Debug for EguiPainter {
@@ -101,46 +124,47 @@ impl fmt::Debug for EguiPainter {
 
 impl EguiPainter {
 	#[must_use]
-	pub fn new(event_handler: &EguiEventHandler) -> Self {
+	pub fn new(event_handler: &EguiEventHandler, ctx: egui::Context) -> Self {
 		Self {
-			platform: Arc::clone(&event_handler.platform),
+			window: Arc::clone(&event_handler.window),
+			ctx,
+			state: Arc::clone(&event_handler.state),
 		}
 	}
 
 	/// Draws egui
-	pub async fn draw<E>(
-		&self,
-		window: &Window,
-		f: impl AsyncFnOnce(&egui::Context) -> Result<(), E>,
-	) -> Result<egui::FullOutput, E> {
-		let mut platform = self.platform.lock().await;
+	pub fn draw<E>(&self, mut f: impl FnMut(&egui::Context) -> Result<(), E>) -> Result<egui::FullOutput, E> {
+		let input = self.state.lock().take_egui_input(&self.window);
 
-		// Draw the frame
-		platform.begin_pass();
-		let res = f(&platform.context()).await;
-		let output = platform.end_pass(Some(window));
+		let mut res = Ok(());
+		let full_output = self.ctx.run_ui(input, |ctx| {
+			if let Err(err) = f(ctx) {
+				res = Err(err);
+			}
+		});
+		res?;
 
-		res.map(|()| output)
+		Ok(full_output)
 	}
 
 	/// Tessellate the output shapes
-	pub async fn tessellate_shapes(
+	#[must_use]
+	pub fn tessellate_shapes(
 		&self,
 		shapes: Vec<epaint::ClippedShape>,
 		pixels_per_point: f32,
 	) -> Vec<egui::ClippedPrimitive> {
-		self.platform
-			.lock()
-			.await
-			.context()
-			.tessellate(shapes, pixels_per_point)
+		self.ctx.tessellate(shapes, pixels_per_point)
 	}
 }
 
 /// Egui Event handler
 pub struct EguiEventHandler {
-	/// Platform
-	platform: Arc<Mutex<egui_winit_platform::Platform>>,
+	/// Window
+	window: Arc<Window>,
+
+	/// State
+	state: Arc<Mutex<egui_winit::State>>,
 }
 
 impl fmt::Debug for EguiEventHandler {
@@ -151,22 +175,29 @@ impl fmt::Debug for EguiEventHandler {
 
 impl EguiEventHandler {
 	#[must_use]
-	pub fn new(window: &Window) -> Self {
+	pub fn new(wgpu: &Wgpu, window: Arc<Window>, ctx: egui::Context) -> Self {
 		// Create the egui platform
-		let platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
-			physical_width:   window.inner_size().width,
-			physical_height:  window.inner_size().height,
-			scale_factor:     window.scale_factor(),
-			font_definitions: egui::FontDefinitions::default(),
-			style:            egui::Style::default(),
-		});
-		let platform = Arc::new(Mutex::new(platform));
+		let viewport_id = egui::ViewportId::from_hash_of(window.id());
 
-		Self { platform }
+		let state = egui_winit::State::new(
+			ctx,
+			viewport_id,
+			&window,
+			None,
+			None,
+			Some(wgpu.device.limits().max_texture_dimension_2d as usize),
+		);
+		let state = Arc::new(Mutex::new(state));
+
+		Self { window, state }
 	}
 
-	/// Handles an event
-	pub async fn handle_event(&self, event: &WindowEvent) {
-		self.platform.lock().await.handle_event(event);
+	/// Handles an event.
+	///
+	/// Returns if egui wants exclusive use of the event
+	#[must_use]
+	pub fn handle_event(&self, event: &WindowEvent) -> bool {
+		let response = self.state.lock().on_window_event(&self.window, event);
+		response.consumed
 	}
 }
