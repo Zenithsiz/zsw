@@ -457,14 +457,14 @@ impl PanelsRenderer {
 			let image_ratio = display_geometry.image_ratio(image_size);
 
 			match state.shader() {
-				PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeBasic {
+				PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Basic {
 					pos_matrix,
 					image_ratio: uniform::Vec2(image_ratio.into()),
 					progress,
 					alpha,
 				}),
 				PanelFadeShader::White { strength } =>
-					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeWhite {
+					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::White {
 						pos_matrix,
 						image_ratio: uniform::Vec2(image_ratio.into()),
 						progress,
@@ -478,7 +478,7 @@ impl PanelsRenderer {
 						_unused: [0; _],
 					}),
 				PanelFadeShader::Out { strength } =>
-					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeOut {
+					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Out {
 						pos_matrix,
 						image_ratio: uniform::Vec2(image_ratio.into()),
 						progress,
@@ -488,7 +488,7 @@ impl PanelsRenderer {
 						_unused: [0; _],
 					}),
 				PanelFadeShader::In { strength } =>
-					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::FadeIn {
+					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::In {
 						pos_matrix,
 						image_ratio: uniform::Vec2(image_ratio.into()),
 						progress,

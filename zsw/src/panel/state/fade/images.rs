@@ -425,10 +425,10 @@ fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -
 		usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 		size:               u64::try_from(
 			zsw_util::array_max(&[
-				size_of::<uniform::FadeBasic>(),
-				size_of::<uniform::FadeWhite>(),
-				size_of::<uniform::FadeOut>(),
-				size_of::<uniform::FadeIn>(),
+				size_of::<uniform::fade::Basic>(),
+				size_of::<uniform::fade::White>(),
+				size_of::<uniform::fade::Out>(),
+				size_of::<uniform::fade::In>(),
 			])
 			.expect("No max uniform size"),
 		)
