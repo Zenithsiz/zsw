@@ -3,15 +3,12 @@
 // Features
 #![feature(
 	never_type,
-	decl_macro,
 	must_not_suspend,
 	proc_macro_hygiene,
 	stmt_expr_attributes,
 	nonpoison_mutex,
-	sync_nonpoison,
-	macro_attr
+	sync_nonpoison
 )]
-#![cfg_attr(feature = "metrics", feature(duration_millis_float, default_field_values))]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 
@@ -22,7 +19,6 @@ mod dirs;
 mod display;
 mod init;
 mod menu;
-mod metrics;
 mod panel;
 mod playlist;
 mod profile;
@@ -36,7 +32,6 @@ use {
 		dirs::Dirs,
 		display::Displays,
 		menu::Menu,
-		metrics::Metrics,
 		panel::{Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
@@ -227,7 +222,6 @@ impl WinitApp {
 			playlists,
 			profiles,
 			panels: Arc::new(Panels::new()),
-			metrics: Metrics::new(),
 			windows: Mutex::new(HashMap::new()),
 		};
 		let shared = Arc::new(shared);
@@ -327,7 +321,6 @@ enum RendererEvent {
 }
 
 /// Renderer task
-#[expect(clippy::too_many_lines, reason = "TODO: Split it up")]
 async fn renderer(
 	shared: &Shared,
 	shared_window: &SharedWindow,
@@ -359,7 +352,6 @@ async fn renderer(
 		// Note: We manually sleep instead of letting wgpu block for us
 		//       when retrieving the texture to ensure that `tokio` isn't
 		//       blocked, since those are non-async, while this sleep is.
-		#[time(wait_next_frame)]
 		tokio::time::sleep_until(cur_frame_start).await;
 
 		// If we were too late, we need to skip some frames
@@ -376,7 +368,6 @@ async fn renderer(
 
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
-		#[time(frame_paint_egui)]
 		let (egui_paint_jobs, egui_textures_delta) =
 			match tokio::task::block_in_place(|| self::paint_egui(shared, &egui_painter, &mut menu, window_geometry)) {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
@@ -387,13 +378,11 @@ async fn renderer(
 			};
 
 		// Start rendering
-		#[time(frame_render_start)]
 		let mut frame = wgpu_renderer
 			.start_render(&shared.wgpu)
 			.context("Unable to start frame")?;
 
 		// Render panels
-		#[time(frame_render_panels)]
 		panels_renderer
 			.render(
 				&mut frame,
@@ -401,7 +390,6 @@ async fn renderer(
 				&shared.wgpu,
 				&shared.panels_renderer_shared,
 				&shared.panels,
-				&shared.metrics,
 				&shared_window.window,
 				window_geometry,
 			)
@@ -409,7 +397,6 @@ async fn renderer(
 			.context("Unable to render panels")?;
 
 		// Render egui
-		#[time(frame_render_egui)]
 		egui_renderer
 			.render_egui(
 				&mut frame,
@@ -421,54 +408,36 @@ async fn renderer(
 			.context("Unable to render egui")?;
 
 		// Finish the frame
-		#[time(frame_render_finish)]
-		let () = if frame.finish(&shared.wgpu) {
+		if frame.finish(&shared.wgpu) {
 			wgpu_renderer
 				.reconfigure(&shared.wgpu)
 				.context("Unable to reconfigure wgpu")?;
-		};
+		}
 
 		// Handle events
-		#[time(frame_handle_events)]
-		let () = {
-			let mut resize = None;
-			let mut move_pos = None;
+		let mut resize = None;
+		let mut move_pos = None;
 
-			while let Ok(event) = renderer_event_rx.try_recv() {
-				tracing::trace!("Received renderer event: {event:?}");
-				match event {
-					// Note: We don't handle the resize right now since it's likely
-					//       we might have received quite a few and we only care to
-					//       resize to the latest.
-					RendererEvent::Resize { size } => resize = Some(size),
-					RendererEvent::Move { pos } => move_pos = Some(pos),
-				}
+		while let Ok(event) = renderer_event_rx.try_recv() {
+			tracing::trace!("Received renderer event: {event:?}");
+			match event {
+				// Note: We don't handle the resize right now since it's likely
+				//       we might have received quite a few and we only care to
+				//       resize to the latest.
+				RendererEvent::Resize { size } => resize = Some(size),
+				RendererEvent::Move { pos } => move_pos = Some(pos),
 			}
+		}
 
-			if let Some(size) = resize {
-				wgpu_renderer
-					.resize(&shared.wgpu, size)
-					.context("Unable to resize wgpu")?;
-				panels_renderer.resize(&wgpu_renderer, &shared.wgpu, size)
-			}
-			if let Some(pos) = move_pos {
-				shared_window.monitor_geometry.lock().await.pos = cgmath::point2(pos.x, pos.y);
-			}
-		};
-
-		shared
-			.metrics
-			.render_frame_times(shared_window.window.id())
-			.await
-			.add(metrics::RenderFrameTime {
-				wait_next_frame,
-				paint_egui: frame_paint_egui,
-				render_start: frame_render_start,
-				render_panels: frame_render_panels,
-				render_egui: frame_render_egui,
-				render_finish: frame_render_finish,
-				handle_events: frame_handle_events,
-			});
+		if let Some(size) = resize {
+			wgpu_renderer
+				.resize(&shared.wgpu, size)
+				.context("Unable to resize wgpu")?;
+			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, size)
+		}
+		if let Some(pos) = move_pos {
+			shared_window.monitor_geometry.lock().await.pos = cgmath::point2(pos.x, pos.y);
+		}
 	}
 }
 
@@ -488,8 +457,6 @@ fn paint_egui(
 			&shared.playlists,
 			&shared.profiles,
 			&shared.panels,
-			&shared.metrics,
-			&shared.windows.lock().block_on(),
 			&shared.event_loop_proxy,
 			window_geometry,
 		);
@@ -576,33 +543,4 @@ fn paint_egui(
 enum AppEvent {
 	/// Shutdown
 	Shutdown,
-}
-
-// TODO: Allow usage on `if cond { ... }`.
-#[cfg(feature = "metrics")]
-macro time {
-	attr($name:ident) ($s:stmt) => {
-		let start = Instant::now();
-		$s;
-		let $name = start.elapsed();
-	},
-
-	attr($name:ident) (let $binding:pat = $e:expr;) => {
-		let start = Instant::now();
-		let $binding = $e;
-		let $name = start.elapsed();
-	},
-}
-
-#[cfg(not(feature = "metrics"))]
-macro time {
-	attr($name:ident) ($s:stmt) => {
-		$s;
-		let $name = ();
-	},
-
-	attr($name:ident) (let $binding:pat = $e:expr;) => {
-		let $binding = $e;
-		let $name = ();
-	},
 }

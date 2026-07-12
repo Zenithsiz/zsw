@@ -5,7 +5,6 @@ use {
 	crate::{
 		AppEvent,
 		display::Displays,
-		metrics::Metrics,
 		panel::{Panels, PanelsRendererShared},
 		playlist::Playlists,
 		profile::Profiles,
@@ -33,8 +32,6 @@ pub struct Shared {
 	pub profiles:  Arc<Profiles>,
 
 	pub panels: Arc<Panels>,
-
-	pub metrics: Metrics,
 
 	pub windows: Mutex<HashMap<WindowId, Arc<SharedWindow>>>,
 }

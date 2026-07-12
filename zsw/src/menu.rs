@@ -5,32 +5,21 @@
 
 // Modules
 mod displays;
-#[cfg(feature = "metrics")]
-mod metrics;
 mod panels;
 mod playlists;
 mod profiles;
 
 // Imports
 use {
-	crate::{
-		AppEvent,
-		display::Displays,
-		metrics::Metrics,
-		panel::Panels,
-		playlist::Playlists,
-		profile::Profiles,
-		shared::SharedWindow,
-	},
+	crate::{AppEvent, display::Displays, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
 	std::{
-		collections::HashMap,
 		path::Path,
 		sync::{Arc, nonpoison::Mutex},
 	},
 	strum::IntoEnumIterator,
-	winit::{event_loop::EventLoopProxy, window::WindowId},
+	winit::event_loop::EventLoopProxy,
 	zsw_util::{AppError, Rect},
 	zsw_wgpu::Wgpu,
 };
@@ -63,15 +52,9 @@ impl Menu {
 		playlists: &Arc<Playlists>,
 		profiles: &Arc<Profiles>,
 		panels: &Arc<Panels>,
-		metrics: &Metrics,
-		// TODO: Not pass in the shared window type here
-		shared_windows: &HashMap<WindowId, Arc<SharedWindow>>,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		window_geometry: Rect<i32, u32>,
 	) {
-		#[cfg(not(feature = "metrics"))]
-		let _ = (metrics, shared_windows);
-
 		// Create the window
 		let mut egui_window = egui::Window::new("Menu");
 
@@ -98,8 +81,6 @@ impl Menu {
 				Tab::Displays => displays::draw_displays_tab(ui, displays),
 				Tab::Playlists => playlists::draw_playlists_tab(ui, playlists),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, displays, playlists, profiles, panels),
-				#[cfg(feature = "metrics")]
-				Tab::Metrics => metrics::draw_metrics_tab(ui, metrics, shared_windows),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
 		});
@@ -185,10 +166,6 @@ enum Tab {
 
 	#[display("Profiles")]
 	Profiles,
-
-	#[cfg(feature = "metrics")]
-	#[display("Metrics")]
-	Metrics,
 
 	#[display("Settings")]
 	Settings,

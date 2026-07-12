@@ -18,8 +18,6 @@
 #![expect(internal_features, reason = "There's no other way to check if a type is inhabited")]
 
 // Modules
-pub mod dummy;
-pub mod frame_times;
 pub mod loadable;
 mod rect;
 pub mod resource_manager;
@@ -29,7 +27,6 @@ pub mod walk_dir;
 
 // Exports
 pub use {
-	frame_times::FrameTimes,
 	loadable::Loadable,
 	rect::Rect,
 	resource_manager::ResourceManager,
