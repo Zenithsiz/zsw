@@ -3,7 +3,7 @@
 // Imports
 use {
 	super::Wgpu,
-	app_error::Context,
+	app_error::{Context, bail},
 	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_util::AppError,
@@ -75,22 +75,25 @@ impl WgpuRenderer {
 		// Note: If the application goes to sleep, this can fail spuriously due to a timeout,
 		//       so we keep retrying.
 		// TODO: Use an exponential timeout, with a max duration?
-		let surface_texture = tokio::task::block_in_place(|| {
-			loop {
-				match self.surface.get_current_texture() {
-					Ok(surface_texture) => break surface_texture,
-					Err(err) => {
-						let err = AppError::new(&err);
-						tracing::warn!("Unable to retrieve current texture, retrying: {}", err.pretty());
-					},
-				}
-			}
-		});
+		let surface_texture = tokio::task::block_in_place(|| self.surface.get_current_texture());
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
 			label: Some("zsw-frame-surface-texture-view"),
 			..wgpu::TextureViewDescriptor::default()
 		};
-		let surface_texture_view = surface_texture.texture.create_view(&surface_view_descriptor);
+		let suboptimal = matches!(surface_texture, wgpu::CurrentSurfaceTexture::Suboptimal(_));
+		let (surface_texture, surface_texture_view) = match surface_texture {
+			wgpu::CurrentSurfaceTexture::Success(surface_texture) |
+			wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
+				let surface_view = surface_texture.texture.create_view(&surface_view_descriptor);
+				(surface_texture, surface_view)
+			},
+
+			err @ (wgpu::CurrentSurfaceTexture::Timeout |
+			wgpu::CurrentSurfaceTexture::Occluded |
+			wgpu::CurrentSurfaceTexture::Outdated |
+			wgpu::CurrentSurfaceTexture::Lost |
+			wgpu::CurrentSurfaceTexture::Validation) => bail!("Unable to get surface texture: {err:?}"),
+		};
 
 		// Then create an encoder for our frame
 		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
@@ -103,6 +106,7 @@ impl WgpuRenderer {
 			surface_texture,
 			surface_view: surface_texture_view,
 			surface_size: self.surface_size,
+			suboptimal,
 		})
 	}
 
@@ -155,6 +159,9 @@ pub struct FrameRender {
 
 	/// Surface size
 	pub surface_size: PhysicalSize<u32>,
+
+	/// Whether the surface was sub-optimal
+	pub suboptimal: bool,
 }
 
 impl FrameRender {
@@ -167,10 +174,9 @@ impl FrameRender {
 		// Note: Although not supposed to, `submit` calls can block, so we wrap it
 		//       in a tokio block-in-place
 		let _ = tokio::task::block_in_place(|| wgpu.queue.submit([self.encoder.finish()]));
-		let reconfigure = self.surface_texture.suboptimal;
-		self.surface_texture.present();
+		wgpu.queue.present(self.surface_texture);
 
-		reconfigure
+		self.suboptimal
 	}
 }
 

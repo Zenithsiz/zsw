@@ -76,11 +76,12 @@ impl Menu {
 		let mut egui_window = egui::Window::new("Menu");
 
 		// Open it at the mouse if pressed
-		if !ctx.is_pointer_over_area() &&
-			ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Secondary)) &&
+		// TODO: Use `is_pointer_over_egui` once it is fixed
+		if !ctx.egui_wants_pointer_input() &&
+			ctx.input(|input| input.pointer.secondary_pressed()) &&
 			let Some(pointer_pos) = ctx.input(|input| input.pointer.latest_pos())
 		{
-			egui_window = egui_window.current_pos(pointer_pos);
+			egui_window = egui_window.fixed_pos(pointer_pos);
 			self.open = true;
 		}
 

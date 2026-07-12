@@ -14,7 +14,8 @@ use {
 	app_error::Context,
 	core::sync::atomic::{self, AtomicBool},
 	image::DynamicImage,
-	wgpu::{util as wgpu_util, util::DeviceExt},
+	wgpu::util::{self as wgpu_util, DeviceExt},
+	winit::event_loop::OwnedDisplayHandle,
 	zsw_util::AppError,
 };
 
@@ -47,14 +48,14 @@ impl Wgpu {
 	///
 	/// # Panics
 	/// Panics if called twice.
-	pub async fn new() -> Result<Self, AppError> {
+	pub async fn new(display: OwnedDisplayHandle) -> Result<Self, AppError> {
 		static ALREADY_CREATED: AtomicBool = AtomicBool::new(false);
 		assert!(
 			!ALREADY_CREATED.swap(true, atomic::Ordering::AcqRel),
 			"Cannot create a second wgpu instance"
 		);
 
-		let instance = self::create_instance().context("Unable to create instance")?;
+		let instance = self::create_instance(display).context("Unable to create instance")?;
 		let adapter = self::create_adapter(&instance)
 			.await
 			.context("Unable to create adaptor")?;
@@ -155,10 +156,10 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 }
 
 /// Creates the instance
-fn create_instance() -> Result<wgpu::Instance, AppError> {
-	let instance_desc = wgpu::InstanceDescriptor::from_env_or_default();
+fn create_instance(display: OwnedDisplayHandle) -> Result<wgpu::Instance, AppError> {
+	let instance_desc = wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display));
 	tracing::debug!(?instance_desc, "Requesting wgpu instance");
-	let instance = wgpu::Instance::new(&instance_desc);
+	let instance = wgpu::Instance::new(instance_desc);
 	tracing::debug!(?instance, "Created wgpu instance");
 
 	Ok(instance)
@@ -173,6 +174,7 @@ async fn create_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, AppE
 		// TODO: Is this fine? Should we at least try to create this
 		//       only after the first surface?
 		compatible_surface:     None,
+		apply_limit_buckets:    false,
 	};
 	tracing::debug!(?adapter_options, "Requesting wgpu adapter");
 	let adapter = instance

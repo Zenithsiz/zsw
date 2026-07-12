@@ -14,7 +14,11 @@ impl<T> Mutex<T> {
 		Self(PhantomData)
 	}
 
-	#[expect(clippy::unused_async, reason = "It's necessary for the type signature")]
+	#[expect(
+		clippy::unused_async,
+		clippy::unused_async_trait_impl,
+		reason = "It's necessary for the type signature"
+	)]
 	pub async fn lock(&self) -> MutexGuard<'_, T> {
 		MutexGuard(PhantomData)
 	}

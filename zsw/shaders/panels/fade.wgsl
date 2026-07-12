@@ -62,7 +62,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	// If we'd sample outside the image, discard this pixel instead
 	// TODO: Set alpha to 0 instead of discarding?
-	if any(uvs < vec2(0.0, 0.0) | uvs > vec2(1.0, 1.0)) {
+	if uvs.x < 0.0 || uvs.y < 0.0 || uvs.x > 1.0 || uvs.y > 1.0 {
 		discard;
 	}
 

@@ -3,28 +3,15 @@
 // Features
 #![feature(
 	decl_macro,
-	coroutine_trait,
-	coroutines,
 	never_type,
 	type_alias_impl_trait,
-	if_let_guard,
-	extend_one,
 	must_not_suspend,
-	impl_trait_in_assoc_type,
 	try_trait_v2,
-	yeet_expr,
+	try_trait_v2_residual,
 	const_trait_impl,
-	nonpoison_mutex,
-	sync_nonpoison,
-	async_fn_traits,
-	trait_alias,
 	unboxed_closures,
-	tuple_trait,
-	try_blocks,
 	proc_macro_hygiene,
 	stmt_expr_attributes,
-	return_type_notation,
-	fn_traits,
 	core_intrinsics
 )]
 // Lints

@@ -278,12 +278,12 @@ impl PanelsRenderer {
 			hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
-					PanelState::None(_) => &[&shared.none.geometry_uniforms_bind_group_layout] as &[_],
+					PanelState::None(_) => &[Some(&shared.none.geometry_uniforms_bind_group_layout)] as &[_],
 					PanelState::Fade(_) => &[
-						&shared.fade.images.geometry_uniforms_bind_group_layout,
-						shared.fade.images.image_bind_group_layout(wgpu).await,
+						Some(&shared.fade.images.geometry_uniforms_bind_group_layout),
+						Some(shared.fade.images.image_bind_group_layout(wgpu).await),
 					],
-					PanelState::Slide(_) => &[&shared.slide.geometry_uniforms_bind_group_layout],
+					PanelState::Slide(_) => &[Some(&shared.slide.geometry_uniforms_bind_group_layout)],
 				};
 
 				let render_pipeline = self::create_render_pipeline(
@@ -693,7 +693,7 @@ fn create_render_pipeline(
 	wgpu_renderer: &WgpuRenderer,
 	wgpu: &Wgpu,
 	id: RenderPipelineId,
-	bind_group_layouts: &[&wgpu::BindGroupLayout],
+	bind_group_layouts: &[Option<&wgpu::BindGroupLayout>],
 	shader: PanelShader,
 	msaa_samples: u32,
 ) -> Result<wgpu::RenderPipeline, AppError> {
@@ -734,7 +734,7 @@ fn create_render_pipeline(
 		vertex:         wgpu::VertexState {
 			module:              &shader,
 			entry_point:         Some("vs_main"),
-			buffers:             &[PanelVertex::buffer_layout()],
+			buffers:             &[Some(PanelVertex::buffer_layout())],
 			compilation_options: wgpu::PipelineCompilationOptions::default(),
 		},
 		primitive:      wgpu::PrimitiveState {

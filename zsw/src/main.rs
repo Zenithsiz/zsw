@@ -4,24 +4,16 @@
 #![feature(
 	never_type,
 	decl_macro,
-	exit_status_error,
 	must_not_suspend,
-	try_blocks,
-	yeet_expr,
-	iter_partition_in_place,
-	type_alias_impl_trait,
 	proc_macro_hygiene,
 	stmt_expr_attributes,
 	nonpoison_mutex,
 	sync_nonpoison,
-	duration_millis_float,
 	try_trait_v2,
-	async_fn_traits,
 	unwrap_infallible,
-	macro_attr,
-	default_field_values,
-	cfg_select
+	macro_attr
 )]
+#![cfg_attr(feature = "metrics", feature(duration_millis_float, default_field_values))]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 
@@ -68,7 +60,7 @@ use {
 		application::ApplicationHandler,
 		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
-		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
+		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy, OwnedDisplayHandle},
 		platform::{run_on_demand::EventLoopExtRunOnDemand, x11::EventLoopBuilderExtX11},
 		window::{Window, WindowId},
 	},
@@ -124,9 +116,14 @@ fn main() -> Result<(), AppError> {
 		.context("Unable to build winit event loop")?;
 
 	// Initialize the app
-	let mut app = WinitApp::new(config, dirs, event_loop.create_proxy())
-		.block_on()
-		.context("Unable to create winit app")?;
+	let mut app = WinitApp::new(
+		config,
+		dirs,
+		event_loop.owned_display_handle(),
+		event_loop.create_proxy(),
+	)
+	.block_on()
+	.context("Unable to create winit app")?;
 
 	// Finally run the app on the event loop
 	tokio::task::block_in_place(|| event_loop.run_app_on_demand(&mut app)).context("Unable to run event loop")?;
@@ -193,9 +190,10 @@ impl WinitApp {
 	pub async fn new(
 		config: Arc<Config>,
 		dirs: Arc<Dirs>,
+		display: OwnedDisplayHandle,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
-		let wgpu = Wgpu::new().await.context("Unable to initialize wgpu")?;
+		let wgpu = Wgpu::new(display).await.context("Unable to initialize wgpu")?;
 		let panels_renderer_shared = PanelsRendererShared::new(&wgpu);
 
 		// Create and stat loading the displays
@@ -514,7 +512,12 @@ async fn paint_egui(
 				let display = panel.display.read().await;
 
 				// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
-				if ctx.is_pointer_over_area() ||
+				// TODO: Use `is_pointer_over_egui` once it is fixed
+				let is_over_egui_area = match ctx.input(|input| input.pointer.interact_pos()) {
+					Some(pos) => ctx.layer_id_at(pos) != Some(egui::LayerId::background()),
+					None => false,
+				};
+				if is_over_egui_area ||
 					!display
 						.geometries
 						.iter()

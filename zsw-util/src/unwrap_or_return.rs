@@ -1,7 +1,10 @@
 //! Unwrap or return
 
 // Imports
-use std::ops::{ControlFlow, FromResidual, Try};
+use {
+	core::ops::Residual,
+	std::ops::{ControlFlow, FromResidual, Try},
+};
 
 /// `Try` implementor for [`UnwrapOrReturnExt::unwrap_or_return`]
 #[derive(Clone, Copy, Debug)]
@@ -36,6 +39,10 @@ impl<T, E> FromResidual<UnwrapOrReturn<!, E>> for UnwrapOrReturn<T, E> {
 			UnwrapOrReturn::Return(ret) => Self::Return(ret),
 		}
 	}
+}
+
+impl<T, E> Residual<T> for UnwrapOrReturn<!, E> {
+	type TryType = UnwrapOrReturn<T, E>;
 }
 
 // TODO: Support `impl<E> FromResidual<UnwrapOrReturn<!, E>> for E`?
