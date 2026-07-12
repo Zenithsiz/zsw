@@ -30,7 +30,7 @@ use {
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
-		sync::Arc,
+		sync::{Arc, OnceLock},
 	},
 	tokio::sync::Mutex,
 	wgpu::util::DeviceExt,
@@ -56,13 +56,13 @@ pub struct PanelsRendererShared {
 	indices: wgpu::Buffer,
 
 	/// None
-	none: PanelNoneShared,
+	none: OnceLock<PanelNoneShared>,
 
 	/// Fade
-	fade: PanelFadeShared,
+	fade: OnceLock<PanelFadeShared>,
 
 	/// Slide
-	slide: PanelSlideShared,
+	slide: OnceLock<PanelSlideShared>,
 }
 
 impl PanelsRendererShared {
@@ -72,18 +72,29 @@ impl PanelsRendererShared {
 		let indices = self::create_indices(wgpu);
 		let vertices = self::create_vertices(wgpu);
 
-		let none = PanelNoneShared::new(wgpu);
-		let fade = PanelFadeShared::new(wgpu);
-		let slide = PanelSlideShared::new(wgpu);
-
 		Self {
 			render_pipelines: Mutex::new(HashMap::new()),
 			vertices,
 			indices,
-			none,
-			fade,
-			slide,
+			none: OnceLock::new(),
+			fade: OnceLock::new(),
+			slide: OnceLock::new(),
 		}
+	}
+
+	/// Gets the shared none data
+	pub fn none(&self, wgpu: &Wgpu) -> &PanelNoneShared {
+		self.none.get_or_init(|| PanelNoneShared::new(wgpu))
+	}
+
+	/// Gets the shared fade data
+	pub fn fade(&self, wgpu: &Wgpu) -> &PanelFadeShared {
+		self.fade.get_or_init(|| PanelFadeShared::new(wgpu))
+	}
+
+	/// Gets the shared slide data
+	pub fn slide(&self, wgpu: &Wgpu) -> &PanelSlideShared {
+		self.slide.get_or_init(|| PanelSlideShared::new(wgpu))
 	}
 }
 
@@ -251,12 +262,21 @@ impl PanelsRenderer {
 			hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
-					PanelState::None(_) => &[Some(&shared.none.geometry_uniforms_bind_group_layout)] as &[_],
-					PanelState::Fade(_) => &[
-						Some(&shared.fade.images.geometry_uniforms_bind_group_layout),
-						Some(shared.fade.images.image_bind_group_layout(wgpu).await),
-					],
-					PanelState::Slide(_) => &[Some(&shared.slide.geometry_uniforms_bind_group_layout)],
+					PanelState::None(_) => {
+						let none = shared.none(wgpu);
+						&[Some(&none.geometry_uniforms_bind_group_layout)] as &[_]
+					},
+					PanelState::Fade(_) => {
+						let fade = shared.fade(wgpu);
+						&[
+							Some(&fade.images.geometry_uniforms_bind_group_layout),
+							Some(fade.images.image_bind_group_layout(wgpu).await),
+						]
+					},
+					PanelState::Slide(_) => {
+						let slide = shared.slide(wgpu);
+						&[Some(&slide.geometry_uniforms_bind_group_layout)]
+					},
 				};
 
 				let render_pipeline = self::create_render_pipeline(
@@ -342,7 +362,7 @@ impl PanelsRenderer {
 					render_pass,
 					window_id,
 					geometry_idx,
-					&shared.none,
+					shared.none(wgpu),
 					pos_matrix,
 					state,
 				)
@@ -353,7 +373,7 @@ impl PanelsRenderer {
 					render_pass,
 					window_id,
 					geometry_idx,
-					&shared.fade,
+					shared.fade(wgpu),
 					display_geometry,
 					pos_matrix,
 					state,
@@ -365,7 +385,7 @@ impl PanelsRenderer {
 					render_pass,
 					window_id,
 					geometry_idx,
-					&shared.slide,
+					shared.slide(wgpu),
 					pos_matrix,
 					state,
 				)
