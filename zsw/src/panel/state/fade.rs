@@ -135,11 +135,6 @@ impl PanelFadeState {
 		self.shader
 	}
 
-	/// Returns the panel shader mutably
-	pub fn shader_mut(&mut self) -> &mut PanelFadeShader {
-		&mut self.shader
-	}
-
 	/// Returns the panel images
 	pub fn images(&self) -> &PanelFadeImages {
 		&self.images

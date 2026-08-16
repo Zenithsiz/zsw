@@ -5,15 +5,12 @@ use {
 	crate::{
 		display::Display,
 		panel::{
-			PanelFadeShader,
-			PanelSlideShader,
 			PanelState,
 			Panels,
-			state::{PanelFadeState, PanelNoneState, PanelSlideState, fade::PanelFadeImage},
+			state::{PanelFadeState, fade::PanelFadeImage},
 		},
 	},
 	core::time::Duration,
-	egui::{Widget, color_picker},
 	std::ptr,
 	zsw_util::{Rect, TokioTaskBlockOn},
 	zsw_wgpu::Wgpu,
@@ -57,10 +54,6 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 						self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &mut display),
 					PanelState::Slide(_) => (),
 				}
-
-				ui.collapsing("Shader", |ui| {
-					self::draw_shader_select(ui, &mut panel.state);
-				});
 			});
 	}
 }
@@ -131,158 +124,32 @@ fn draw_fade_panel_editor(
 	});
 
 	ui.collapsing("Images", |ui| {
-		ui.collapsing("Previous", |ui| {
-			self::draw_fade_panel_image(ui, &mut state.images_mut().prev);
-		});
-		ui.collapsing("Current", |ui| {
-			self::draw_fade_panel_image(ui, &mut state.images_mut().cur);
-		});
-		ui.collapsing("Next", |ui| {
-			self::draw_fade_panel_image(ui, &mut state.images_mut().next);
-		});
-	});
-
-	ui.collapsing("Playlist", |ui| {
-		let playlist_player = state.playlist_player().lock().block_on();
-
-		let row_height = ui.text_style_height(&egui::TextStyle::Body);
-
-		ui.label(format!("Position: {}", playlist_player.cur_pos()));
-
-		ui.label(format!(
-			"Remaining until shuffle: {}",
-			playlist_player.remaining_until_shuffle()
-		));
-
-		ui.collapsing("Items", |ui| {
-			egui::ScrollArea::new([false, true])
-				.auto_shrink([false, true])
-				.stick_to_right(true)
-				.max_height(row_height * 10.0)
-				.show_rows(ui, row_height, playlist_player.all_items().len(), |ui, idx| {
-					for item in playlist_player.all_items().take(idx.end).skip(idx.start) {
-						super::draw_openable_path(ui, item);
-					}
-				});
-		});
+		self::draw_fade_panel_image(ui, "Previous", &mut state.images_mut().prev);
+		self::draw_fade_panel_image(ui, "Current", &mut state.images_mut().cur);
+		self::draw_fade_panel_image(ui, "Next", &mut state.images_mut().next);
 	});
 }
 
 /// Draws a fade panel image
-fn draw_fade_panel_image(ui: &mut egui::Ui, image: &mut Option<PanelFadeImage>) {
-	match image {
-		None => {
-			ui.label("[Unloaded]");
-		},
-		Some(image) => {
-			super::draw_openable_path(ui, &image.path);
+fn draw_fade_panel_image(ui: &mut egui::Ui, name: &str, image: &mut Option<PanelFadeImage>) {
+	ui.horizontal(|ui| {
+		ui.weak(name);
 
-			let texture = image.texture_view.texture();
-			ui.label(format!("Size: {}x{}", texture.width(), texture.height()));
-			ui.checkbox(&mut image.swap_dir, "Swap direction");
-		},
-	}
-}
+		let Some(image) = image else {
+			ui.weak("[Unloaded]");
+			return;
+		};
 
-/// Draws the shader select
-fn draw_shader_select(ui: &mut egui::Ui, state: &mut PanelState) {
-	egui::ComboBox::from_id_salt("Shader selection menu")
-		.selected_text(match state {
-			PanelState::None(_) => "None",
-			PanelState::Fade(_) => "Fade",
-			PanelState::Slide(_) => "Slide",
-		})
-		.show_ui(ui, |ui| {
-			// TODO: Review these defaults?
-			type CreateShader = fn() -> PanelState;
-			let create_shaders: [(_, _, CreateShader); _] = [
-				("None", matches!(state, PanelState::None(_)), || {
-					PanelState::None(PanelNoneState::new([0.0; 4]))
-				}),
-				("Fade", matches!(state, PanelState::Fade(_)), || {
-					PanelState::Fade(PanelFadeState::new(
-						Duration::from_mins(1),
-						Duration::from_secs(5),
-						PanelFadeShader::Out { strength: 1.5 },
-					))
-				}),
-				("Slide", matches!(state, PanelState::Slide(_)), || {
-					PanelState::Slide(PanelSlideState::new(PanelSlideShader::Basic))
-				}),
-			];
+		super::draw_openable_path(ui, &image.path);
+		let texture = image.texture_view.texture();
+		ui.label(format!("{}x{}", texture.width(), texture.height()));
 
-			for (name, checked, create_shader) in create_shaders {
-				if ui.selectable_label(checked, name).clicked() && !checked {
-					*state = create_shader();
-				}
-			}
-		});
-
-	match state {
-		PanelState::None(state) =>
-			_ = ui.horizontal(|ui| {
-				ui.label("Background color");
-				let mut color = egui::Rgba::from_rgba_premultiplied(
-					state.background_color[0],
-					state.background_color[1],
-					state.background_color[2],
-					state.background_color[3],
-				);
-				color_picker::color_edit_button_rgba(ui, &mut color, color_picker::Alpha::OnlyBlend);
-				state.background_color = color.to_array();
-			}),
-		PanelState::Fade(state) => {
-			egui::ComboBox::from_id_salt("Fade shader menu")
-				.selected_text(state.shader().name())
-				.show_ui(ui, |ui| {
-					// TODO: Not have default values here?
-					let shaders = [
-						PanelFadeShader::Basic,
-						PanelFadeShader::White { strength: 1.0 },
-						PanelFadeShader::Out { strength: 0.2 },
-						PanelFadeShader::In { strength: 0.2 },
-					];
-					for shader in shaders {
-						ui.selectable_value(state.shader_mut(), shader, shader.name());
-					}
-				});
-
-			match state.shader_mut() {
-				PanelFadeShader::Basic => (),
-				PanelFadeShader::White { strength } => {
-					ui.horizontal(|ui| {
-						ui.label("Strength");
-						egui::Slider::new(strength, 0.0..=20.0).ui(ui);
-					});
-				},
-				PanelFadeShader::Out { strength } => {
-					ui.horizontal(|ui| {
-						ui.label("Strength");
-						egui::Slider::new(strength, 0.0..=2.0).ui(ui);
-					});
-				},
-				PanelFadeShader::In { strength } => {
-					ui.horizontal(|ui| {
-						ui.label("Strength");
-						egui::Slider::new(strength, 0.0..=2.0).ui(ui);
-					});
-				},
-			}
-		},
-		PanelState::Slide(state) => {
-			egui::ComboBox::from_id_salt("Slide shader menu")
-				.selected_text(state.shader().name())
-				.show_ui(ui, |ui| {
-					// TODO: Not have default values here?
-					let shaders = [PanelSlideShader::Basic];
-					for shader in shaders {
-						ui.selectable_value(state.shader_mut(), shader, shader.name());
-					}
-				});
-
-			match state.shader_mut() {
-				PanelSlideShader::Basic => (),
-			}
-		},
-	}
+		let swap_icon = match image.swap_dir {
+			true => "⏪",
+			false => "⏩",
+		};
+		if ui.button(swap_icon).clicked() {
+			image.swap_dir.toggle();
+		}
+	});
 }

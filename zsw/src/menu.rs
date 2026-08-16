@@ -4,9 +4,7 @@
 #![allow(unused_results)] // Egui produces a lot of results we don't need to use
 
 // Modules
-mod displays;
 mod panels;
-mod playlists;
 mod profiles;
 
 // Imports
@@ -14,10 +12,7 @@ use {
 	crate::{AppEvent, display::Displays, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
-	std::{
-		path::Path,
-		sync::{Arc, nonpoison::Mutex},
-	},
+	std::{path::Path, sync::Arc},
 	strum::IntoEnumIterator,
 	winit::event_loop::EventLoopProxy,
 	zsw_util::{AppError, Rect},
@@ -78,8 +73,6 @@ impl Menu {
 
 			match self.cur_tab {
 				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, window_geometry),
-				Tab::Displays => displays::draw_displays_tab(ui, displays),
-				Tab::Playlists => playlists::draw_playlists_tab(ui, playlists),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, displays, playlists, profiles, panels),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
@@ -100,7 +93,6 @@ fn draw_settings_tab(ui: &mut egui::Ui, event_loop_proxy: &EventLoopProxy<AppEve
 /// Draws an openable path
 fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 	ui.horizontal(|ui| {
-		ui.label("Path: ");
 		// TODO: Not use lossy conversion to display it?
 		if ui.link(path.to_string_lossy()).clicked() &&
 			let Err(err) = opener::open(path)
@@ -127,6 +119,7 @@ fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>) {
 
 /// Draws a duration slider
 // TODO: Allow setting the clamping mode by using a builder instead
+// TODO: This always modifies the value each frame and rounds it.
 fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusive<Duration>) {
 	let mut secs = duration.as_secs_f32();
 
@@ -158,34 +151,9 @@ enum Tab {
 	#[display("Panels")]
 	Panels,
 
-	#[display("Displays")]
-	Displays,
-
-	#[display("Playlists")]
-	Playlists,
-
 	#[display("Profiles")]
 	Profiles,
 
 	#[display("Settings")]
 	Settings,
-}
-
-/// Gets an `Arc<Mutex<T>>` from the egui data with id `id`
-fn get_data<T>(ui: &egui::Ui, id: impl Into<egui::Id>) -> Arc<Mutex<T>>
-where
-	T: Default + Send + 'static,
-{
-	self::get_data_with_default(ui, id, T::default)
-}
-
-/// Gets an `Arc<Mutex<T>>` from the egui data with id `id` with a default value
-fn get_data_with_default<T>(ui: &egui::Ui, id: impl Into<egui::Id>, default: impl FnOnce() -> T) -> Arc<Mutex<T>>
-where
-	T: Send + 'static,
-{
-	ui.data_mut(|map| {
-		let value = map.get_persisted_mut_or_insert_with(id.into(), || Arc::new(Mutex::new(default())));
-		Arc::clone(value)
-	})
 }

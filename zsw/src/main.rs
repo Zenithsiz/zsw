@@ -1,14 +1,7 @@
 //! Zenithsiz's scrolling wallpaper
 
 // Features
-#![feature(
-	never_type,
-	must_not_suspend,
-	proc_macro_hygiene,
-	stmt_expr_attributes,
-	nonpoison_mutex,
-	sync_nonpoison
-)]
+#![feature(never_type, must_not_suspend, proc_macro_hygiene, stmt_expr_attributes, bool_toggle)]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 

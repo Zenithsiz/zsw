@@ -19,20 +19,11 @@ pub fn draw_profiles_tab(
 	for profile in profiles.get_all().block_on() {
 		let profile = profile.read().block_on();
 
-		ui.collapsing(profile.name.to_string(), |ui| {
-			if ui.button("Set active").clicked() {
-				#[cloned(profile_name = profile.name, displays, playlists, profiles, panels;)]
-				zsw_util::spawn_task(format!("Set profile active {profile_name:?}"), async move {
-					panels.set_profile(profile_name, &displays, &playlists, &profiles).await
-				});
-			}
-
-			if ui.button("Save").clicked() {
-				#[cloned(profiles, profile_name = profile.name;)]
-				zsw_util::spawn_task(format!("Save profile {profile_name:?}"), async move {
-					profiles.save(&profile_name).await
-				});
-			}
-		});
+		if ui.button(profile.name.as_ref()).clicked() {
+			#[cloned(profile_name = profile.name, displays, playlists, profiles, panels;)]
+			zsw_util::spawn_task(format!("Set profile active {profile_name:?}"), async move {
+				panels.set_profile(profile_name, &displays, &playlists, &profiles).await
+			});
+		}
 	}
 }

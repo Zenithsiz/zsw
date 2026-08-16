@@ -33,11 +33,6 @@ impl PanelSlideState {
 		self.shader
 	}
 
-	/// Returns the panel shader mutably
-	pub fn shader_mut(&mut self) -> &mut PanelSlideShader {
-		&mut self.shader
-	}
-
 	/// Returns the geometry uniforms
 	pub async fn geometry_uniforms(
 		&self,

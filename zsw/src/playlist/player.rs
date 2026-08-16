@@ -94,11 +94,6 @@ impl PlaylistPlayer {
 		});
 	}
 
-	/// Returns an iterator over all items in the playlist
-	pub fn all_items(&self) -> impl ExactSizeIterator<Item = &Arc<Path>> {
-		self.all_items.iter()
-	}
-
 	/// Steps the player backwards.
 	///
 	/// Returns `Err(())` if there is no previous item.
