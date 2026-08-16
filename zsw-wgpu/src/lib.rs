@@ -174,6 +174,7 @@ async fn create_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, AppE
 		// TODO: Is this fine? Should we at least try to create this
 		//       only after the first surface?
 		compatible_surface:     None,
+		apply_limit_buckets:    false,
 	};
 	tracing::debug!(?adapter_options, "Requesting wgpu adapter");
 	let adapter = instance

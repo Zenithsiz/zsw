@@ -403,7 +403,7 @@ async fn renderer(
 				&shared_window.window,
 				&shared.wgpu,
 				&egui_paint_jobs,
-				egui_textures_delta.as_ref(),
+				egui_textures_delta,
 			)
 			.context("Unable to render egui")?;
 

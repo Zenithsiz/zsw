@@ -688,7 +688,7 @@ fn create_render_pipeline(
 		vertex:         wgpu::VertexState {
 			module:              &shader,
 			entry_point:         Some("vs_main"),
-			buffers:             &[PanelVertex::buffer_layout()],
+			buffers:             &[Some(PanelVertex::buffer_layout())],
 			compilation_options: wgpu::PipelineCompilationOptions::default(),
 		},
 		primitive:      wgpu::PrimitiveState {

@@ -49,7 +49,7 @@ impl EguiRenderer {
 		window: &Window,
 		wgpu: &Wgpu,
 		paint_jobs: &[egui::ClippedPrimitive],
-		textures_delta: Option<&egui::TexturesDelta>,
+		textures_delta: Option<egui::TexturesDelta>,
 	) -> Result<(), AppError> {
 		// Update textures
 		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
@@ -59,13 +59,20 @@ impl EguiRenderer {
 		};
 
 		// If we have any textures delta, update them
-		if let Some(textures_delta) = textures_delta.as_ref() {
-			for &(id, ref delta) in &textures_delta.set {
-				self.renderer.update_texture(&wgpu.device, &wgpu.queue, id, delta);
+		if let Some(mut textures_delta) = textures_delta {
+			#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
+			for (&id, deltas) in &textures_delta.set {
+				for delta in deltas {
+					self.renderer.update_texture(&wgpu.device, &wgpu.queue, id, delta);
+				}
 			}
+
+			#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
 			for id in &textures_delta.free {
 				self.renderer.free_texture(id);
 			}
+
+			textures_delta.clear();
 		}
 
 		// Update buffers
