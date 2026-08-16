@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	cgmath::{Matrix4, Vector2, Vector3},
+	euclid::default::{Transform3D, Vector2D},
 	num_rational::Rational32,
 	winit::dpi::PhysicalSize,
 	zsw_util::Rect,
@@ -38,7 +38,7 @@ impl DisplayGeometry {
 	/// Returns this geometry's rectangle for a certain window
 	pub fn on_window(&self, window_geometry: Rect<i32, u32>) -> Rect<i32, u32> {
 		let mut geometry = self.inner;
-		geometry.pos -= Vector2::new(window_geometry.pos.x, window_geometry.pos.y);
+		geometry.pos -= Vector2D::new(window_geometry.pos.x, window_geometry.pos.y);
 
 		geometry
 	}
@@ -47,36 +47,32 @@ impl DisplayGeometry {
 	// Note: This matrix simply goes from a geometry in physical units
 	//       onto shader coordinates.
 	#[must_use]
-	pub fn pos_matrix(&self, window_geometry: Rect<i32, u32>, surface_size: PhysicalSize<u32>) -> Matrix4<f32> {
+	pub fn pos_matrix(&self, window_geometry: Rect<i32, u32>, surface_size: PhysicalSize<u32>) -> Transform3D<f32> {
 		let geometry = self.on_window(window_geometry);
 
-		let x_scale = geometry.size[0] as f32 / surface_size.width as f32;
-		let y_scale = geometry.size[1] as f32 / surface_size.height as f32;
+		let x_scale = geometry.size.x as f32 / surface_size.width as f32;
+		let y_scale = geometry.size.y as f32 / surface_size.height as f32;
 
-		let x_offset = geometry.pos[0] as f32 / surface_size.width as f32;
-		let y_offset = geometry.pos[1] as f32 / surface_size.height as f32;
+		let x_offset = geometry.pos.x as f32 / surface_size.width as f32;
+		let y_offset = geometry.pos.y as f32 / surface_size.height as f32;
 
-		let translation = Matrix4::from_translation(Vector3::new(
-			-1.0 + x_scale + 2.0 * x_offset,
-			1.0 - y_scale - 2.0 * y_offset,
-			0.0,
-		));
-		let scaling = Matrix4::from_nonuniform_scale(x_scale, -y_scale, 1.0);
-		translation * scaling
+		let translation =
+			Transform3D::translation(-1.0 + x_scale + 2.0 * x_offset, 1.0 - y_scale - 2.0 * y_offset, 0.0);
+		translation.pre_scale(x_scale, -y_scale, 1.0)
 	}
 
 	/// Calculates an image's ratio for this panel geometry
 	///
 	/// This ratio is multiplied by the base uvs to fix the stretching
 	/// that comes from having a square coordinate system [0.0 .. 1.0] x [0.0 .. 1.0]
-	pub fn image_ratio(&self, image_size: Vector2<u32>) -> Vector2<f32> {
-		let image_size = image_size.cast().expect("Image size didn't fit into an `i32`");
-		let panel_size = self.inner.size.cast().expect("Panel size didn't fit into an `i32`");
+	pub fn image_ratio(&self, image_size: Vector2D<u32>) -> Vector2D<f32> {
+		let image_size = image_size.cast();
+		let panel_size = self.inner.size.cast();
 
 		// If either the image or our panel have a side with 0, return a square ratio
 		// TODO: Check if this is the right thing to do
 		if panel_size.x == 0 || panel_size.y == 0 || image_size.x == 0 || image_size.y == 0 {
-			return Vector2::new(0.0, 0.0);
+			return Vector2D::new(0.0, 0.0);
 		}
 
 		// Image and panel ratios
@@ -94,8 +90,8 @@ impl DisplayGeometry {
 		let y_ratio = self::ratio_as_f32(height_ratio / width_ratio);
 
 		match image_ratio >= panel_ratio {
-			true => Vector2::new(x_ratio, 1.0),
-			false => Vector2::new(1.0, y_ratio),
+			true => Vector2D::new(x_ratio, 1.0),
+			false => Vector2D::new(1.0, y_ratio),
 		}
 	}
 }

@@ -5,8 +5,8 @@ version = "0.1.0"
 
 [dependencies]
 app-error    = { workspace = true }
-cgmath       = { features = ["serde"], workspace = true }
 duplicate    = { workspace = true }
+euclid       = { features = ["serde"], workspace = true }
 extend       = { workspace = true }
 futures      = { workspace = true }
 image        = { workspace = true }

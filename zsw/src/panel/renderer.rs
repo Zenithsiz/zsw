@@ -24,8 +24,8 @@ use {
 	},
 	crate::display::DisplayGeometry,
 	app_error::Context,
-	cgmath::Vector2,
 	core::cmp,
+	euclid::default::Vector2D,
 	futures::{StreamExt, stream::FuturesUnordered},
 	std::{
 		borrow::Cow,
@@ -353,7 +353,7 @@ impl PanelsRenderer {
 	) {
 		// Calculate the position matrix for the panel
 		let pos_matrix = display_geometry.pos_matrix(window_geometry, surface_size);
-		let pos_matrix = uniform::Matrix4x4(pos_matrix.into());
+		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 
 		match state {
 			PanelState::None(state) =>
@@ -473,7 +473,7 @@ impl PanelsRenderer {
 
 			// Calculate the position matrix for the panel
 			let image_size = panel_image.texture_view.texture().size();
-			let image_size = Vector2::new(image_size.width, image_size.height);
+			let image_size = Vector2D::new(image_size.width, image_size.height);
 			let image_ratio = display_geometry.image_ratio(image_size);
 
 			match state.shader() {

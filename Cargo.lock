@@ -179,15 +179,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "approx"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f2a05fd1bd10b2527e20a2cd32d8873d115b8b39fe219ee25f42a8aca6ba278"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -522,17 +513,6 @@ name = "cfg_aliases"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
-
-[[package]]
-name = "cgmath"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a98d30140e3296250832bbaaff83b27dcd6fa3cc70fb6f1f3e5c9c0023b5317"
-dependencies = [
- "approx",
- "num-traits",
- "serde",
-]
 
 [[package]]
 name = "chacha20"
@@ -1136,6 +1116,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1a05365e3b1c6d1650318537c7460c6923f1abdd272ad6842baa2b509957a06"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -5164,12 +5145,12 @@ version = "0.1.0"
 dependencies = [
  "app-error",
  "bytemuck",
- "cgmath",
  "chrono",
  "clap",
  "derive_more",
  "directories",
  "egui",
+ "euclid",
  "futures",
  "humantime",
  "humantime-serde",
@@ -5215,8 +5196,8 @@ name = "zsw-util"
 version = "0.1.0"
 dependencies = [
  "app-error",
- "cgmath",
  "duplicate",
+ "euclid",
  "extend",
  "futures",
  "image",

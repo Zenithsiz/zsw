@@ -3,7 +3,7 @@
 // Imports
 use {
 	app_error::Context,
-	cgmath::{Point2, Vector2},
+	euclid::default::{Point2D, Vector2D},
 	winit::{
 		event_loop::ActiveEventLoop,
 		monitor::MonitorHandle,
@@ -78,7 +78,7 @@ fn monitor_geometry(monitor: &MonitorHandle) -> Rect<i32, u32> {
 	let monitor_pos = monitor.position();
 	let monitor_size = monitor.size();
 	Rect {
-		pos:  Point2::new(monitor_pos.x, monitor_pos.y),
-		size: Vector2::new(monitor_size.width, monitor_size.height),
+		pos:  Point2D::new(monitor_pos.x, monitor_pos.y),
+		size: Vector2D::new(monitor_size.width, monitor_size.height),
 	}
 }

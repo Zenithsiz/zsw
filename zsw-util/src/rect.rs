@@ -4,7 +4,7 @@
 use {
 	crate::AppError,
 	app_error::Context,
-	cgmath::{Point2, Vector2},
+	euclid::default::{Point2D, Vector2D},
 	serde::de,
 	std::{borrow::Cow, fmt, str::FromStr},
 };
@@ -13,10 +13,10 @@ use {
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 pub struct Rect<P, S = P> {
 	/// Position
-	pub pos: Point2<P>,
+	pub pos: Point2D<P>,
 
 	/// Size
-	pub size: Vector2<S>,
+	pub size: Vector2D<S>,
 }
 
 impl Rect<i32, u32> {
@@ -24,8 +24,8 @@ impl Rect<i32, u32> {
 	#[must_use]
 	pub fn zero() -> Self {
 		Self {
-			pos:  Point2::new(0, 0),
-			size: Vector2::new(0, 0),
+			pos:  Point2D::new(0, 0),
+			size: Vector2D::new(0, 0),
 		}
 	}
 
@@ -41,8 +41,8 @@ impl Rect<i32, u32> {
 		let rhs_max = rhs.max();
 
 		// Clamp them to enclose them all
-		let merged_min = Point2::new(lhs_min.x.min(rhs_min.x), lhs_min.y.min(rhs_min.y));
-		let merged_max = Point2::new(lhs_max.x.max(rhs_max.x), lhs_max.y.max(rhs_max.y));
+		let merged_min = Point2D::new(lhs_min.x.min(rhs_min.x), lhs_min.y.min(rhs_min.y));
+		let merged_max = Point2D::new(lhs_max.x.max(rhs_max.x), lhs_max.y.max(rhs_max.y));
 
 		// Then reconstruct
 		Self::from_min_max(merged_min, merged_max)
@@ -53,16 +53,16 @@ impl Rect<i32, u32> {
 	/// # Panics
 	/// Panics if any component of `max` is less than any corresponding component of `min`
 	#[must_use]
-	pub fn from_min_max(min: Point2<i32>, max: Point2<i32>) -> Self {
+	pub fn from_min_max(min: Point2D<i32>, max: Point2D<i32>) -> Self {
 		Self {
 			pos:  min,
-			size: (max - min).cast().expect("Unable to cast"),
+			size: (max - min).cast(),
 		}
 	}
 
 	/// Returns the min position of this rectangle
 	#[must_use]
-	pub fn min(self) -> Point2<i32> {
+	pub fn min(self) -> Point2D<i32> {
 		self.pos
 	}
 
@@ -71,8 +71,8 @@ impl Rect<i32, u32> {
 	/// # Panics
 	/// Panics if the max point would overflow a `i32::MAX`
 	#[must_use]
-	pub fn max(self) -> Point2<i32> {
-		Point2::new(
+	pub fn max(self) -> Point2D<i32> {
+		Point2D::new(
 			self.pos.x.checked_add_unsigned(self.size.x).expect("Overflow"),
 			self.pos.y.checked_add_unsigned(self.size.y).expect("Overflow"),
 		)
@@ -83,8 +83,8 @@ impl Rect<i32, u32> {
 	/// # Panics
 	/// Panics if the middle point would overflow a `i32::MAX`
 	#[must_use]
-	pub fn center(self) -> Point2<i32> {
-		Point2::new(
+	pub fn center(self) -> Point2D<i32> {
+		Point2D::new(
 			self.pos.x.checked_add_unsigned(self.size.x / 2).expect("Overflow"),
 			self.pos.y.checked_add_unsigned(self.size.y / 2).expect("Overflow"),
 		)
@@ -95,7 +95,7 @@ impl Rect<i32, u32> {
 	/// # Panics
 	/// Panics if the max point would overflow a `i32::MAX`
 	#[must_use]
-	pub fn contains(self, point: Point2<i32>) -> bool {
+	pub fn contains(self, point: Point2D<i32>) -> bool {
 		point.x >= self.pos.x &&
 			point.x <= self.pos.x.checked_add_unsigned(self.size.x).expect("Overflow") &&
 			point.y >= self.pos.y &&
@@ -111,8 +111,8 @@ impl Rect<i32, u32> {
 		let lhs_max = self.max();
 		let rhs_max = other.max();
 
-		let min = Point2::new(lhs_min.x.max(rhs_min.x), lhs_min.y.max(rhs_min.y));
-		let max = Point2::new(lhs_max.x.min(rhs_max.x), lhs_max.y.min(rhs_max.y));
+		let min = Point2D::new(lhs_min.x.max(rhs_min.x), lhs_min.y.max(rhs_min.y));
+		let max = Point2D::new(lhs_max.x.min(rhs_max.x), lhs_max.y.min(rhs_max.y));
 
 		(min.x < max.x && min.y < max.y).then(|| Self::from_min_max(min, max))
 	}
@@ -142,7 +142,7 @@ impl FromStr for Rect<i32, u32> {
 		// Split at the first `x` to get the width and height
 		let (width, height) = size.split_once('x').context("Unable to find `x` in size")?;
 
-		let size = Vector2::new(
+		let size = Vector2D::new(
 			width.parse::<u32>().context("Unable to parse width")?,
 			height.parse::<u32>().context("Unable to parse height")?,
 		);
@@ -151,12 +151,12 @@ impl FromStr for Rect<i32, u32> {
 		let pos = match pos {
 			Some(s) => {
 				let (x, y) = s.split_once('+').context("Unable to find `+` in position")?;
-				Point2::new(
+				Point2D::new(
 					x.parse::<i32>().context("Unable to parse x")?,
 					y.parse::<i32>().context("Unable to parse y")?,
 				)
 			},
-			None => Point2::new(0, 0),
+			None => Point2D::new(0, 0),
 		};
 
 		Ok(Self { pos, size })

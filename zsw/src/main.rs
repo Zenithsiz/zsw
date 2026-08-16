@@ -39,11 +39,11 @@ use {
 	},
 	app_error::Context,
 	args::Args,
-	cgmath::Point2,
 	chrono::TimeDelta,
 	clap::Parser,
 	core::time::Duration,
 	directories::ProjectDirs,
+	euclid::default::Point2D,
 	std::{collections::HashMap, fs, sync::Arc},
 	tokio::{
 		sync::{Mutex, mpsc},
@@ -436,7 +436,7 @@ async fn renderer(
 			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, size)
 		}
 		if let Some(pos) = move_pos {
-			shared_window.monitor_geometry.lock().await.pos = cgmath::point2(pos.x, pos.y);
+			shared_window.monitor_geometry.lock().await.pos = euclid::point2(pos.x, pos.y);
 		}
 	}
 }
@@ -467,7 +467,7 @@ fn paint_egui(
 		let Some(pointer_pos) = ctx.input(|input| input.pointer.latest_pos()) else {
 			return Ok(());
 		};
-		let pointer_pos = Point2::new(pointer_pos.x as i32, pointer_pos.y as i32);
+		let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
 		for panel in shared.panels.get_all().block_on() {
 			let panel = &mut *panel.lock().block_on();
 			let display = panel.display.read().block_on();
