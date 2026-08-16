@@ -5,7 +5,6 @@ use {
 	app_error::Context,
 	std::{
 		fs,
-		num::NonZeroUsize,
 		path::{Path, PathBuf},
 	},
 	zsw_util::AppError,
@@ -15,10 +14,6 @@ use {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Config {
-	/// Tokio worker threads
-	#[serde(default)]
-	pub tokio_worker_threads: Option<NonZeroUsize>,
-
 	/// Default config file.
 	///
 	/// Will be overridden by command-line arguments
@@ -80,10 +75,9 @@ impl Config {
 impl Default for Config {
 	fn default() -> Self {
 		Self {
-			tokio_worker_threads: None,
-			log_file:             None,
-			transparent_windows:  false,
-			default:              ConfigDefault::default(),
+			log_file:            None,
+			transparent_windows: false,
+			default:             ConfigDefault::default(),
 		}
 	}
 }

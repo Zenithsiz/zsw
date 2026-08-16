@@ -17,7 +17,6 @@ mod args;
 mod config;
 mod dirs;
 mod display;
-mod init;
 mod menu;
 mod panel;
 mod playlist;
@@ -44,7 +43,7 @@ use {
 	core::time::Duration,
 	directories::ProjectDirs,
 	euclid::default::Point2D,
-	std::{collections::HashMap, fs, sync::Arc},
+	std::{collections::HashMap, fs, process::ExitCode, sync::Arc},
 	tokio::{
 		sync::{Mutex, mpsc},
 		time::Instant,
@@ -54,7 +53,7 @@ use {
 		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
 		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy, OwnedDisplayHandle},
-		platform::{run_on_demand::EventLoopExtRunOnDemand, x11::EventLoopBuilderExtX11},
+		platform::x11::EventLoopBuilderExtX11,
 		window::WindowId,
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
@@ -64,8 +63,21 @@ use {
 	zutil_logger::Logger,
 };
 
+fn main() -> ExitCode {
+	match self::run() {
+		Ok(()) => {
+			tracing::info!("Successfully exited");
+			ExitCode::SUCCESS
+		},
+		Err(err) => {
+			tracing::error!("Fatal error: {err:?}");
+			ExitCode::FAILURE
+		},
+	}
+}
 
-fn main() -> Result<(), AppError> {
+#[tokio::main]
+async fn run() -> Result<(), AppError> {
 	// Initialize the logger
 	let logger = Logger::builder()
 		.filter("wgpu", "warn")
@@ -96,14 +108,9 @@ fn main() -> Result<(), AppError> {
 	// Set the logger file
 	logger.set_file(args.log_file.as_deref().or(config.log_file.as_deref()));
 
-	// Initialize the tokio runtime
-	let tokio_runtime =
-		init::tokio_runtime::create(config.tokio_worker_threads).context("Unable to create tokio runtime")?;
-	let _runtime_enter = tokio_runtime.enter();
-
 	// Create the event loop
 	// TODO: Not force x11 once we can get wayland to lower our window on startup
-	let mut event_loop = EventLoop::with_user_event()
+	let event_loop = EventLoop::with_user_event()
 		.with_x11()
 		.build()
 		.context("Unable to build winit event loop")?;
@@ -115,13 +122,12 @@ fn main() -> Result<(), AppError> {
 		event_loop.owned_display_handle(),
 		event_loop.create_proxy(),
 	)
-	.block_on()
+	.await
 	.context("Unable to create winit app")?;
 
 	// Finally run the app on the event loop
-	tokio::task::block_in_place(|| event_loop.run_app_on_demand(&mut app)).context("Unable to run event loop")?;
+	tokio::task::block_in_place(|| event_loop.run_app(&mut app)).context("Unable to run event loop")?;
 
-	tracing::info!("Successfully shutting down");
 	Ok(())
 }
 
