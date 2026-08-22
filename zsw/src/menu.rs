@@ -103,18 +103,12 @@ fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 	});
 }
 
-
 /// Draws a geometry rectangle
-fn draw_rect(ui: &mut egui::Ui, geometry: &mut Rect<i32, u32>) {
-	ui.horizontal(|ui| {
-		egui::DragValue::new(&mut geometry.size.x).speed(10).ui(ui);
-		ui.label("x");
-		egui::DragValue::new(&mut geometry.size.y).speed(10).ui(ui);
-		ui.label("+");
-		egui::DragValue::new(&mut geometry.pos.x).speed(10).ui(ui);
-		ui.label("+");
-		egui::DragValue::new(&mut geometry.pos.y).speed(10).ui(ui);
-	});
+fn draw_rect(ui: &mut egui::Ui, geometry: Rect<i32, u32>) {
+	ui.label(format!(
+		"{}x{}+{}+{}",
+		geometry.size.x, geometry.size.y, geometry.pos.x, geometry.pos.y
+	));
 }
 
 /// Draws a duration slider

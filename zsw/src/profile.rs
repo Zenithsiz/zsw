@@ -12,7 +12,7 @@ use {
 };
 
 /// Profiles
-pub type Profiles = Resources<ProfileName, Profile, ser::Profile>;
+pub type Profiles = Resources<ProfileName, Arc<Profile>, ser::Profile>;
 
 /// Profile
 #[derive(Debug)]
@@ -107,47 +107,6 @@ impl resources::FromSerialized<ProfileName, ser::Profile> for Profile {
 								ser::ProfilePanelSlideShaderInner::Basic => ProfilePanelSlideShaderInner::Basic,
 							},
 						}),
-					},
-				})
-				.collect(),
-		}
-	}
-}
-
-impl resources::ToSerialized<ProfileName, ser::Profile> for Profile {
-	fn to_serialized(&self, _name: &ProfileName) -> ser::Profile {
-		ser::Profile {
-			panels: self
-				.panels
-				.iter()
-				.map(|panel| ser::ProfilePanel {
-					display: panel.display.to_string(),
-					shader:  match &panel.shader {
-						ProfilePanelShader::None(shader) =>
-							ser::ProfilePanelShader::None(ser::ProfilePanelNoneShader {
-								background_color: shader.background_color,
-							}),
-						ProfilePanelShader::Fade(shader) =>
-							ser::ProfilePanelShader::Fade(ser::ProfilePanelFadeShader {
-								playlists:     shader.playlists.iter().map(PlaylistName::to_string).collect(),
-								duration:      shader.duration,
-								fade_duration: shader.fade_duration,
-								inner:         match shader.inner {
-									ProfilePanelFadeShaderInner::Basic => ser::ProfilePanelFadeShaderInner::Basic,
-									ProfilePanelFadeShaderInner::White { strength } =>
-										ser::ProfilePanelFadeShaderInner::White { strength },
-									ProfilePanelFadeShaderInner::Out { strength } =>
-										ser::ProfilePanelFadeShaderInner::Out { strength },
-									ProfilePanelFadeShaderInner::In { strength } =>
-										ser::ProfilePanelFadeShaderInner::In { strength },
-								},
-							}),
-						ProfilePanelShader::Slide(shader) =>
-							ser::ProfilePanelShader::Slide(ser::ProfilePanelSlideShader {
-								inner: match shader.inner {
-									ProfilePanelSlideShaderInner::Basic => ser::ProfilePanelSlideShaderInner::Basic,
-								},
-							}),
 					},
 				})
 				.collect(),

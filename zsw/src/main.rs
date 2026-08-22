@@ -9,7 +9,6 @@
 	bool_toggle,
 	sync_nonpoison,
 	nonpoison_mutex,
-	nonpoison_rwlock,
 	thread_sleep_until,
 	oneshot_channel,
 	str_as_str
@@ -207,19 +206,16 @@ impl WinitApp {
 		//       toml files, and it'll simplify other things if we can make it mostly immutable.
 
 		// Create and stat loading the displays
-		let displays = Displays::new(dirs.displays().to_path_buf()).context("Unable to create displays")?;
+		let displays = Displays::new(dirs.displays()).context("Unable to create displays")?;
 		let displays = Arc::new(displays);
-		displays.load_all()?;
 
 		// Create and stat loading the playlists
-		let playlists = Playlists::new(dirs.playlists().to_path_buf()).context("Unable to create playlists")?;
+		let playlists = Playlists::new(dirs.playlists()).context("Unable to create playlists")?;
 		let playlists = Arc::new(playlists);
-		playlists.load_all()?;
 
 		// Create and stat loading the profiles
-		let profiles = Profiles::new(dirs.profiles().to_path_buf()).context("Unable to create profiles")?;
+		let profiles = Profiles::new(dirs.profiles()).context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);
-		profiles.load_all()?;
 
 		// Shared state
 		let shared = Shared {
@@ -474,11 +470,10 @@ fn paint_egui(
 		let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
 		for panel in shared.panels.get_all() {
 			let panel = &mut *panel.lock();
-			let display = panel.display.read();
-
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_egui() ||
-				!display
+				!panel
+					.display
 					.geometries
 					.iter()
 					.any(|&geometry| geometry.on_window(window_geometry).contains(pointer_pos))

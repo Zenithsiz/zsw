@@ -14,7 +14,7 @@ use {
 };
 
 /// Displays
-pub type Displays = Resources<DisplayName, Display, ser::Display>;
+pub type Displays = Resources<DisplayName, Arc<Display>, ser::Display>;
 
 /// Display
 #[derive(Debug)]
@@ -34,20 +34,6 @@ impl resources::FromSerialized<DisplayName, ser::Display> for Display {
 				.geometries
 				.into_iter()
 				.map(|geometry| DisplayGeometry::new(geometry.geometry))
-				.collect(),
-		}
-	}
-}
-
-impl resources::ToSerialized<DisplayName, ser::Display> for Display {
-	fn to_serialized(&self, _name: &DisplayName) -> ser::Display {
-		ser::Display {
-			geometries: self
-				.geometries
-				.iter()
-				.map(|&geometry| ser::DisplayGeometry {
-					geometry: geometry.into_inner(),
-				})
 				.collect(),
 		}
 	}

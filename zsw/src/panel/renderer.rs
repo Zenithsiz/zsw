@@ -309,12 +309,8 @@ impl PanelsRenderer {
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &Panel,
 	) {
-		// The display might have changed asynchronously from the panel geometries,
-		// so resize it to ensure we have a panel geometry for each display geometry.
-		let display = panel.display.read();
-
 		// Go through all geometries of the panel display and render each one
-		for (geometry_idx, display_geometry) in display.geometries.iter().enumerate() {
+		for (geometry_idx, display_geometry) in panel.display.geometries.iter().enumerate() {
 			// If this geometry is outside our window, we can safely ignore it
 			if !display_geometry.intersects_window(window_geometry) {
 				continue;

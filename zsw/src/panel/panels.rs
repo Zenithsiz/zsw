@@ -24,10 +24,7 @@ use {
 	app_error::Context,
 	std::{
 		fs,
-		sync::{
-			Arc,
-			nonpoison::{Mutex, RwLock},
-		},
+		sync::{Arc, nonpoison::Mutex},
 	},
 	zsw_util::{AppError, WalkDir},
 	zutil_cloned::cloned,
@@ -37,7 +34,7 @@ use {
 #[derive(Debug)]
 struct Inner {
 	/// Profile
-	profile: Option<Arc<RwLock<Profile>>>,
+	profile: Option<Arc<Profile>>,
 
 	/// Panels
 	panels: Vec<Arc<Mutex<Panel>>>,
@@ -77,25 +74,24 @@ impl Panels {
 		profiles: &Profiles,
 	) -> Result<(), AppError> {
 		// Get the new profile
-		let profile = profiles.load(profile_name.clone()).context("Unable to load profile")?;
+		let profile = profiles.get(profile_name).context("Unable to load profile")?;
 
 		// If we have a previous loaded profile, clear all panels before proceeding
 		{
 			let mut inner = self.inner.lock();
 			if let Some(old_profile) = &inner.profile {
-				tracing::info!("Dropping previous profile: {:?}", old_profile.read().name);
+				tracing::info!("Dropping previous profile: {:?}", old_profile.name);
 				inner.panels.clear();
 			}
-			inner.profile = Some(Arc::clone(&profile));
+			inner.profile = Some(Arc::clone(profile));
 			tracing::info!("Setting current profile: {profile_name:?}");
 		}
 
 		// Then load it's panels
-		for profile_panel in &profile.read().panels {
+		for profile_panel in &profile.panels {
 			let display = displays
-				.load(profile_panel.display.clone())
+				.get(&profile_panel.display)
 				.with_context(|| format!("Unable to load display {:?}", profile_panel.display))?;
-
 
 			let state = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
@@ -128,7 +124,7 @@ impl Panels {
 				},
 			};
 
-			let panel = Panel::new(display, state);
+			let panel = Panel::new(Arc::clone(display), state);
 			self.inner.lock().panels.push(Arc::new(Mutex::new(panel)));
 		}
 
@@ -142,10 +138,7 @@ fn load_playlist(
 	playlist_name: &PlaylistName,
 	playlists: &Playlists,
 ) -> Result<(), AppError> {
-	let playlist = playlists
-		.load(playlist_name.clone())
-		.context("Unable to load playlist")?;
-	let playlist = playlist.read();
+	let playlist = playlists.get(playlist_name).context("Unable to load playlist")?;
 
 	for item in &playlist.items {
 		// If not enabled, skip it

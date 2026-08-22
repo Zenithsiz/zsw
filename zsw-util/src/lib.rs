@@ -9,11 +9,6 @@
 	proc_macro_hygiene,
 	stmt_expr_attributes,
 	core_intrinsics,
-	sync_nonpoison,
-	nonpoison_mutex,
-	nonpoison_rwlock,
-	once_lock_new_init,
-	once_cell_try,
 	current_thread_id,
 	oneshot_channel
 )]

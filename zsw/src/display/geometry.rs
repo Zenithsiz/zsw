@@ -20,14 +20,9 @@ impl DisplayGeometry {
 		Self { inner }
 	}
 
-	/// Unwraps this geometry into the inner rect
-	pub(super) fn into_inner(self) -> Rect<i32, u32> {
+	/// Gets the inner rectangle
+	pub fn rect(&self) -> Rect<i32, u32> {
 		self.inner
-	}
-
-	/// Gets the inner rectangle mutably
-	pub fn as_rect_mut(&mut self) -> &mut Rect<i32, u32> {
-		&mut self.inner
 	}
 
 	/// Returns if this geometry intersects a window

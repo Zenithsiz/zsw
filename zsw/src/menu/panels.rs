@@ -33,10 +33,9 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 
 	for panel in panels {
 		let panel = &mut *panel.lock();
-		let mut display = panel.display.write();
-
-		let mut name = egui::WidgetText::from(display.name.to_string());
-		if display
+		let mut name = egui::WidgetText::from(panel.display.name.to_string());
+		if panel
+			.display
 			.geometries
 			.iter()
 			.all(|&geometry| !geometry.intersects_window(window_geometry))
@@ -51,7 +50,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 				match &mut panel.state {
 					PanelState::None(_) => (),
 					PanelState::Fade(state) =>
-						self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &mut display),
+						self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &panel.display),
 					PanelState::Slide(_) => (),
 				}
 			});
@@ -64,7 +63,7 @@ fn draw_fade_panel_editor(
 	wgpu: &Wgpu,
 	window_geometry: Rect<i32, u32>,
 	state: &mut PanelFadeState,
-	display: &mut Display,
+	display: &Display,
 ) {
 	{
 		let mut is_paused = state.is_paused();
@@ -73,7 +72,7 @@ fn draw_fade_panel_editor(
 	}
 
 	ui.collapsing("Geometries", |ui| {
-		for (geometry_idx, geometry) in display.geometries.iter_mut().enumerate() {
+		for (geometry_idx, geometry) in display.geometries.iter().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
 				if !geometry.intersects_window(window_geometry) {
@@ -81,7 +80,7 @@ fn draw_fade_panel_editor(
 				}
 
 				ui.label(name);
-				super::draw_rect(ui, geometry.as_rect_mut());
+				super::draw_rect(ui, geometry.rect());
 			});
 		}
 	});

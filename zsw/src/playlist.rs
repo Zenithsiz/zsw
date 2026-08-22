@@ -77,34 +77,6 @@ impl resources::FromSerialized<PlaylistName, ser::Playlist> for Playlist {
 	}
 }
 
-impl resources::ToSerialized<PlaylistName, ser::Playlist> for Playlist {
-	fn to_serialized(&self, _name: &PlaylistName) -> ser::Playlist {
-		ser::Playlist {
-			items: self
-				.items
-				.iter()
-				.map(|item| ser::PlaylistItem {
-					enabled: item.enabled,
-					kind:    match item.kind {
-						PlaylistItemKind::Directory {
-							ref path,
-							follow_symlinks,
-							recursive,
-						} => ser::PlaylistItemKind::Directory {
-							path: path.to_path_buf(),
-							follow_symlinks,
-							recursive,
-						},
-						PlaylistItemKind::File { ref path } => ser::PlaylistItemKind::File {
-							path: path.to_path_buf(),
-						},
-					},
-				})
-				.collect(),
-		}
-	}
-}
-
 /// Playlist name
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct PlaylistName(Arc<str>);

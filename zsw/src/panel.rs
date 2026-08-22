@@ -13,16 +13,13 @@ pub use self::{
 };
 
 // Imports
-use {
-	crate::display::Display,
-	std::sync::{Arc, nonpoison::RwLock},
-};
+use {crate::display::Display, std::sync::Arc};
 
 /// Panel
 #[derive(Debug)]
 pub struct Panel {
 	/// Display
-	pub display: Arc<RwLock<Display>>,
+	pub display: Arc<Display>,
 
 	/// State
 	pub state: PanelState,
@@ -30,7 +27,7 @@ pub struct Panel {
 
 impl Panel {
 	/// Creates a new panel
-	pub fn new(display: Arc<RwLock<Display>>, state: PanelState) -> Self {
+	pub fn new(display: Arc<Display>, state: PanelState) -> Self {
 		Self { display, state }
 	}
 }
