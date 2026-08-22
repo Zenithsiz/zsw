@@ -157,12 +157,15 @@ fn load_playlist(
 		match item.kind {
 			PlaylistItemKind::Directory {
 				path: ref dir_path,
+				follow_symlinks,
 				recursive,
 			} => {
-				let builder = WalkDir::builder().recurse_symlink(true).max_depth(match recursive {
-					true => None,
-					false => Some(1),
-				});
+				let builder = WalkDir::builder()
+					.recurse_symlink(follow_symlinks)
+					.max_depth(match recursive {
+						true => None,
+						false => Some(1),
+					});
 
 				for entry in builder.build(dir_path.as_path()) {
 					let entry = match entry {
@@ -174,27 +177,17 @@ fn load_playlist(
 						},
 					};
 
-					// TODO: Simplify this to just call `entry.file_type().is_dir()` and don't canonicalize.
-					let path = entry.path();
-					match fs::metadata(&path) {
-						// If it's a directory, skip it
-						Ok(entry) =>
-							if entry.is_dir() {
-								continue;
-							},
+					let file_type = match entry.file_type() {
+						Ok(file_type) => file_type,
 						Err(err) => {
 							let err = AppError::new(&err);
-							tracing::warn!("Unable to get playlist entry {path:?} metadata: {}", err.pretty());
+							tracing::warn!("Unable to read directory entry file: {}", err.pretty());
 							continue;
 						},
-					}
+					};
 
-					match fs::canonicalize(&path) {
-						Ok(entry) => playlist_player.lock().insert(entry.into()),
-						Err(err) => {
-							let err = AppError::new(&err);
-							tracing::warn!("Unable to read playlist entry {path:?}: {}", err.pretty());
-						},
+					if !file_type.is_dir() {
+						playlist_player.lock().insert(entry.path().into());
 					}
 				}
 			},

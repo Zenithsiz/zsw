@@ -38,6 +38,9 @@ pub enum PlaylistItemKind {
 	Directory {
 		path: PathBuf,
 
+		#[serde(default = "PlaylistItemKind::default_follow_symlinks")]
+		follow_symlinks: bool,
+
 		#[serde(default = "PlaylistItemKind::default_directory_recursive")]
 		recursive: bool,
 	},
@@ -47,6 +50,10 @@ pub enum PlaylistItemKind {
 }
 
 impl PlaylistItemKind {
+	fn default_follow_symlinks() -> bool {
+		true
+	}
+
 	fn default_directory_recursive() -> bool {
 		true
 	}

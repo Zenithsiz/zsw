@@ -41,9 +41,9 @@ pub struct PlaylistItem {
 pub enum PlaylistItemKind {
 	/// Directory
 	Directory {
-		path: Arc<Path>,
-
-		recursive: bool,
+		path:            Arc<Path>,
+		follow_symlinks: bool,
+		recursive:       bool,
 	},
 
 	/// File
@@ -60,8 +60,13 @@ impl resources::FromSerialized<PlaylistName, ser::Playlist> for Playlist {
 				.map(|item| PlaylistItem {
 					enabled: item.enabled,
 					kind:    match item.kind {
-						ser::PlaylistItemKind::Directory { path, recursive } => PlaylistItemKind::Directory {
+						ser::PlaylistItemKind::Directory {
+							path,
+							follow_symlinks,
+							recursive,
+						} => PlaylistItemKind::Directory {
 							path: path.into(),
+							follow_symlinks,
 							recursive,
 						},
 						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path: path.into() },
@@ -81,8 +86,13 @@ impl resources::ToSerialized<PlaylistName, ser::Playlist> for Playlist {
 				.map(|item| ser::PlaylistItem {
 					enabled: item.enabled,
 					kind:    match item.kind {
-						PlaylistItemKind::Directory { ref path, recursive } => ser::PlaylistItemKind::Directory {
+						PlaylistItemKind::Directory {
+							ref path,
+							follow_symlinks,
+							recursive,
+						} => ser::PlaylistItemKind::Directory {
 							path: path.to_path_buf(),
+							follow_symlinks,
 							recursive,
 						},
 						PlaylistItemKind::File { ref path } => ser::PlaylistItemKind::File {
