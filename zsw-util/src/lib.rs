@@ -3,16 +3,19 @@
 // Features
 #![feature(
 	decl_macro,
-	never_type,
-	type_alias_impl_trait,
 	must_not_suspend,
-	try_trait_v2,
-	try_trait_v2_residual,
 	const_trait_impl,
 	unboxed_closures,
 	proc_macro_hygiene,
 	stmt_expr_attributes,
-	core_intrinsics
+	core_intrinsics,
+	sync_nonpoison,
+	nonpoison_mutex,
+	nonpoison_rwlock,
+	once_lock_new_init,
+	once_cell_try,
+	current_thread_id,
+	oneshot_channel
 )]
 // Lints
 #![expect(internal_features, reason = "There's no other way to check if a type is inhabited")]
@@ -22,8 +25,7 @@ pub mod loadable;
 mod rect;
 pub mod resources;
 mod tuple_collect_res;
-pub mod unwrap_or_return;
-pub mod walk_dir;
+mod walk_dir;
 
 // Exports
 pub use {
@@ -31,7 +33,6 @@ pub use {
 	rect::Rect,
 	resources::Resources,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
-	unwrap_or_return::{UnwrapOrReturn, UnwrapOrReturnExt},
 	walk_dir::WalkDir,
 };
 
@@ -41,7 +42,7 @@ use {
 	core::ptr,
 	image::DynamicImage,
 	serde::de::DeserializeOwned,
-	std::{fs, future::Future, intrinsics, path::Path},
+	std::{fs, intrinsics, path::Path, thread},
 	zutil_cloned::cloned,
 };
 
@@ -89,17 +90,6 @@ pub macro where_assert($cond:expr) {
 	[(); ($cond as usize) - 1]
 }
 
-/// Blocks on a future inside a tokio task
-#[extend::ext(name = TokioTaskBlockOn)]
-pub impl<F: Future> F {
-	/// Bocks on this future within a tokio task
-	#[track_caller]
-	fn block_on(self) -> F::Output {
-		let handle = tokio::runtime::Handle::current();
-		handle.block_on(self)
-	}
-}
-
 /// Logs an error and panics with the error message
 pub macro log_error_panic( $($rest:tt)* ) {{
 	::tracing::warn!( $($rest)* );
@@ -138,22 +128,23 @@ const fn usize_max(lhs: usize, rhs: usize) -> usize {
 
 /// Spawns a task
 #[track_caller]
-pub fn spawn_task<Fut>(name: impl Into<String>, fut: Fut)
+pub fn spawn_task<F>(name: impl Into<String>, f: F)
 where
-	Fut: Future<Output = Result<(), AppError>> + Send + 'static,
+	F: FnOnce() -> Result<(), AppError> + Send + 'static,
 {
 	let name = name.into();
 
 	#[cloned(name)]
-	let fut = async move {
-		let id = tokio::task::id();
+	let f = move || {
+		let id = thread::current_id();
 		tracing::debug!("Spawning task {name:?} ({id:?})");
-		fut.await
-			.inspect(|()| tracing::debug!("Task {name:?} ({id:?}) finished"))
-			.inspect_err(|err| tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()))
+		match f() {
+			Ok(()) => tracing::debug!("Task {name:?} ({id:?}) finished"),
+			Err(err) => tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()),
+		}
 	};
 
-	if let Err(err) = tokio::task::Builder::new().name(&name.clone()).spawn(fut) {
+	if let Err(err) = thread::Builder::new().name(name.clone()).spawn(f) {
 		let err = AppError::new(&err);
 		tracing::warn!("Unable to spawn task {name:?}: {}", err.pretty());
 	}

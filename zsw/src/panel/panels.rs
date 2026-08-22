@@ -22,13 +22,14 @@ use {
 		},
 	},
 	app_error::Context,
-	futures::{StreamExt, TryStreamExt, stream::FuturesUnordered},
-	std::sync::Arc,
-	tokio::{
+	std::{
 		fs,
-		sync::{Mutex, RwLock},
+		sync::{
+			Arc,
+			nonpoison::{Mutex, RwLock},
+		},
 	},
-	zsw_util::{AppError, UnwrapOrReturnExt, WalkDir},
+	zsw_util::{AppError, WalkDir},
 	zutil_cloned::cloned,
 };
 
@@ -61,184 +62,151 @@ impl Panels {
 	}
 
 	/// Gets all of the panels
-	pub async fn get_all(&self) -> Vec<Arc<Mutex<Panel>>> {
-		self.inner.lock().await.panels.clone()
+	pub fn get_all(&self) -> Vec<Arc<Mutex<Panel>>> {
+		self.inner.lock().panels.clone()
 	}
 
 	/// Sets the current profile.
 	///
 	/// If a profile already exists, unloads it's panels first
-	pub async fn set_profile(
+	pub fn set_profile(
 		&self,
-		profile_name: ProfileName,
+		profile_name: &ProfileName,
 		displays: &Displays,
 		playlists: &Arc<Playlists>,
 		profiles: &Profiles,
 	) -> Result<(), AppError> {
 		// Get the new profile
-		let profile = profiles
-			.load(profile_name.clone())
-			.await
-			.context("Unable to load profile")?;
+		let profile = profiles.load(profile_name.clone()).context("Unable to load profile")?;
 
 		// If we have a previous loaded profile, clear all panels before proceeding
 		{
-			let mut inner = self.inner.lock().await;
+			let mut inner = self.inner.lock();
 			if let Some(old_profile) = &inner.profile {
-				tracing::info!("Dropping previous profile: {:?}", old_profile.read().await.name);
+				tracing::info!("Dropping previous profile: {:?}", old_profile.read().name);
 				inner.panels.clear();
 			}
 			inner.profile = Some(Arc::clone(&profile));
 			tracing::info!("Setting current profile: {profile_name:?}");
 		}
 
-
 		// Then load it's panels
-		profile
-			.read()
-			.await
-			.panels
-			.iter()
-			.map(async |profile_panel| {
-				let display = displays
-					.load(profile_panel.display.clone())
-					.await
-					.with_context(|| format!("Unable to load display {:?}", profile_panel.display))?;
+		for profile_panel in &profile.read().panels {
+			let display = displays
+				.load(profile_panel.display.clone())
+				.with_context(|| format!("Unable to load display {:?}", profile_panel.display))?;
 
 
-				let state = match &profile_panel.shader {
-					ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
-					ProfilePanelShader::Fade(shader) => {
-						let state = PanelFadeState::new(shader.duration, shader.fade_duration, match shader.inner {
-							ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
-							ProfilePanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
-							ProfilePanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
-							ProfilePanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
-						});
+			let state = match &profile_panel.shader {
+				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
+				ProfilePanelShader::Fade(shader) => {
+					let state = PanelFadeState::new(shader.duration, shader.fade_duration, match shader.inner {
+						ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
+						ProfilePanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
+						ProfilePanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
+						ProfilePanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
+					});
 
-						#[cloned(playlists, panel_playlists = shader.playlists, playlist_player = state.playlist_player())]
-						zsw_util::spawn_task(
-							format!("Load panel {:?} playlists", profile_panel.display),
-							async move {
-								panel_playlists
-									.into_iter()
-									.map(async |playlist_name| {
-										self::load_playlist(&playlist_player, &playlist_name, &playlists)
-											.await
-											.with_context(|| format!("Unable to load playlist {playlist_name:?}"))
-									})
-									.collect::<FuturesUnordered<_>>()
-									.try_collect::<()>()
-									.await
-							},
-						);
+					#[cloned(playlists, panel_playlists = shader.playlists, playlist_player = state.playlist_player())]
+					zsw_util::spawn_task(format!("Load panel {:?} playlists", profile_panel.display), move || {
+						for playlist_name in panel_playlists {
+							self::load_playlist(&playlist_player, &playlist_name, &playlists)
+								.with_context(|| format!("Unable to load playlist {playlist_name:?}"))?;
+						}
 
-						PanelState::Fade(state)
-					},
-					ProfilePanelShader::Slide(shader) => {
-						let state = PanelSlideState::new(match shader.inner {
-							ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
-						});
+						Ok(())
+					});
 
-						PanelState::Slide(state)
-					},
-				};
+					PanelState::Fade(state)
+				},
+				ProfilePanelShader::Slide(shader) => {
+					let state = PanelSlideState::new(match shader.inner {
+						ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
+					});
 
-				let panel = Panel::new(display, state);
-				self.inner.lock().await.panels.push(Arc::new(Mutex::new(panel)));
+					PanelState::Slide(state)
+				},
+			};
 
-				Ok::<_, AppError>(())
-			})
-			.collect::<FuturesUnordered<_>>()
-			.try_collect::<()>()
-			.await?;
+			let panel = Panel::new(display, state);
+			self.inner.lock().panels.push(Arc::new(Mutex::new(panel)));
+		}
 
 		Ok(())
 	}
 }
 
 /// Loads a panel's playlist
-async fn load_playlist(
+fn load_playlist(
 	playlist_player: &Mutex<PlaylistPlayer>,
 	playlist_name: &PlaylistName,
 	playlists: &Playlists,
 ) -> Result<(), AppError> {
-	playlists
+	let playlist = playlists
 		.load(playlist_name.clone())
-		.await
-		.context("Unable to load playlist")?
-		.read()
-		.await
-		.items
-		.iter()
-		.map(async |item| {
-			// If not enabled, skip it
-			if !item.enabled {
-				return;
-			}
+		.context("Unable to load playlist")?;
+	let playlist = playlist.read();
 
-			// Else check the kind of item
-			match item.kind {
-				PlaylistItemKind::Directory {
-					path: ref dir_path,
-					recursive,
-				} =>
-					WalkDir::builder()
-						.max_depth(match recursive {
-							true => None,
-							false => Some(0),
-						})
-						.recurse_symlink(true)
-						.build(dir_path.to_path_buf())
-						.map(async |entry| {
-							let entry = match entry {
-								Ok(entry) => entry,
-								Err(err) => {
-									let err = AppError::new(&err);
-									tracing::warn!("Unable to read directory entry: {}", err.pretty());
-									return;
-								},
-							};
+	for item in &playlist.items {
+		// If not enabled, skip it
+		if !item.enabled {
+			continue;
+		}
 
-							let path = entry.path();
-							if fs::metadata(&path)
-								.await
-								.map_err(|err| {
-									let err = AppError::new(&err);
-									tracing::warn!("Unable to get playlist entry {path:?} metadata: {}", err.pretty());
-								})
-								.unwrap_or_return()?
-								.is_dir()
-							{
-								// If it's a directory, skip it
-								return;
-							}
+		// Else check the kind of item
+		match item.kind {
+			PlaylistItemKind::Directory {
+				path: ref dir_path,
+				recursive,
+			} => {
+				let builder = WalkDir::builder().recurse_symlink(true).max_depth(match recursive {
+					true => None,
+					false => Some(1),
+				});
 
-							match tokio::fs::canonicalize(&path).await {
-								Ok(entry) => playlist_player.lock().await.insert(entry.into()),
-								Err(err) => {
-									let err = AppError::new(&err);
-									tracing::warn!("Unable to read playlist entry {path:?}: {}", err.pretty());
-								},
-							}
-						})
-						.buffer_unordered(usize::MAX)
-						.collect::<()>()
-						.await,
+				for entry in builder.build(dir_path.as_path()) {
+					let entry = match entry {
+						Ok(entry) => entry,
+						Err(err) => {
+							let err = AppError::new(&err);
+							tracing::warn!("Unable to read directory entry: {}", err.pretty());
+							continue;
+						},
+					};
 
-				PlaylistItemKind::File { ref path } => match tokio::fs::canonicalize(path).await {
-					Ok(path) => playlist_player.lock().await.insert(path.into()),
-					Err(err) => {
-						let err = AppError::new(&err);
-						tracing::warn!("Unable to canonicalize playlist entry {path:?}: {}", err.pretty());
-					},
+					// TODO: Simplify this to just call `entry.file_type().is_dir()` and don't canonicalize.
+					let path = entry.path();
+					match fs::metadata(&path) {
+						// If it's a directory, skip it
+						Ok(entry) =>
+							if entry.is_dir() {
+								continue;
+							},
+						Err(err) => {
+							let err = AppError::new(&err);
+							tracing::warn!("Unable to get playlist entry {path:?} metadata: {}", err.pretty());
+							continue;
+						},
+					}
+
+					match fs::canonicalize(&path) {
+						Ok(entry) => playlist_player.lock().insert(entry.into()),
+						Err(err) => {
+							let err = AppError::new(&err);
+							tracing::warn!("Unable to read playlist entry {path:?}: {}", err.pretty());
+						},
+					}
+				}
+			},
+			PlaylistItemKind::File { ref path } => match fs::canonicalize(path) {
+				Ok(path) => playlist_player.lock().insert(path.into()),
+				Err(err) => {
+					let err = AppError::new(&err);
+					tracing::warn!("Unable to canonicalize playlist entry {path:?}: {}", err.pretty());
 				},
-			}
-		})
-		.collect::<FuturesUnordered<_>>()
-		.collect::<()>()
-		.await;
-
+			},
+		}
+	}
 
 	Ok(())
 }

@@ -4,7 +4,6 @@
 use {
 	crate::{display::Displays, panel::Panels, playlist::Playlists, profile::Profiles},
 	std::sync::Arc,
-	zsw_util::TokioTaskBlockOn,
 	zutil_cloned::cloned,
 };
 
@@ -16,13 +15,13 @@ pub fn draw_profiles_tab(
 	profiles: &Arc<Profiles>,
 	panels: &Arc<Panels>,
 ) {
-	for profile in profiles.get_all().block_on() {
-		let profile = profile.read().block_on();
+	for profile in profiles.get_all() {
+		let profile = profile.read();
 
 		if ui.button(profile.name.as_ref()).clicked() {
 			#[cloned(profile_name = profile.name, displays, playlists, profiles, panels;)]
-			zsw_util::spawn_task(format!("Set profile active {profile_name:?}"), async move {
-				panels.set_profile(profile_name, &displays, &playlists, &profiles).await
+			zsw_util::spawn_task(format!("Set profile active {profile_name:?}"), move || {
+				panels.set_profile(&profile_name, &displays, &playlists, &profiles)
 			});
 		}
 	}

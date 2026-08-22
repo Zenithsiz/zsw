@@ -5,8 +5,13 @@ use {
 	crate::{panel::renderer::uniform, playlist::PlaylistPlayer},
 	app_error::Context,
 	image::{DynamicImage, imageops},
-	std::{self, collections::HashMap, mem, path::Path, sync::Arc},
-	tokio::sync::{Mutex, OnceCell},
+	std::{
+		self,
+		collections::HashMap,
+		mem,
+		path::Path,
+		sync::{Arc, OnceLock, nonpoison::Mutex},
+	},
 	winit::window::WindowId,
 	zsw_util::{AppError, Loadable},
 	zsw_wgpu::Wgpu,
@@ -20,7 +25,7 @@ pub struct PanelFadeImagesShared {
 	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
 
 	/// Image bind group layout
-	pub image_bind_group_layout: OnceCell<wgpu::BindGroupLayout>,
+	pub image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 }
 
 impl PanelFadeImagesShared {
@@ -30,15 +35,14 @@ impl PanelFadeImagesShared {
 
 		Self {
 			geometry_uniforms_bind_group_layout,
-			image_bind_group_layout: OnceCell::new(),
+			image_bind_group_layout: OnceLock::new(),
 		}
 	}
 
 	/// Gets the image bind group layout, or initializes it, if uninitialized
-	pub async fn image_bind_group_layout(&self, wgpu: &Wgpu) -> &wgpu::BindGroupLayout {
+	pub fn image_bind_group_layout(&self, wgpu: &Wgpu) -> &wgpu::BindGroupLayout {
 		self.image_bind_group_layout
-			.get_or_init(async || self::create_bind_group_layout(wgpu))
-			.await
+			.get_or_init(|| self::create_bind_group_layout(wgpu))
 	}
 }
 
@@ -55,7 +59,7 @@ pub struct PanelFadeImages {
 	pub next: Option<PanelFadeImage>,
 
 	/// Image sampler
-	pub image_sampler: OnceCell<wgpu::Sampler>,
+	pub image_sampler: OnceLock<wgpu::Sampler>,
 
 	/// Next image
 	pub next_image: Loadable<ImageLoadRes>,
@@ -68,7 +72,7 @@ pub struct PanelFadeImage {
 	pub texture_view: wgpu::TextureView,
 
 	/// Bind group
-	pub bind_group: OnceCell<wgpu::BindGroup>,
+	pub bind_group: OnceLock<wgpu::BindGroup>,
 
 	/// Geometry uniforms
 	pub geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelFadeImageGeometryUniforms>>>,
@@ -82,29 +86,22 @@ pub struct PanelFadeImage {
 
 impl PanelFadeImage {
 	/// Gets the bind group, or initializes it, if uninitialized
-	pub async fn bind_group(
-		&self,
-		wgpu: &Wgpu,
-		sampler: &wgpu::Sampler,
-		shared: &PanelFadeImagesShared,
-	) -> &wgpu::BindGroup {
-		self.bind_group
-			.get_or_init(async || {
-				let layout = shared.image_bind_group_layout(wgpu).await;
-				self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
-			})
-			.await
+	pub fn bind_group(&self, wgpu: &Wgpu, sampler: &wgpu::Sampler, shared: &PanelFadeImagesShared) -> &wgpu::BindGroup {
+		self.bind_group.get_or_init(|| {
+			let layout = shared.image_bind_group_layout(wgpu);
+			self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
+		})
 	}
 
 	/// Returns the geometry uniforms
-	pub async fn geometry_uniforms(
+	pub fn geometry_uniforms(
 		&self,
 		wgpu: &Wgpu,
 		shared: &PanelFadeImagesShared,
 		window_id: WindowId,
 		geometry_idx: usize,
 	) -> Arc<PanelFadeImageGeometryUniforms> {
-		let mut geometry_uniforms = self.geometry_uniforms.lock().await;
+		let mut geometry_uniforms = self.geometry_uniforms.lock();
 		let geometry_uniforms = geometry_uniforms
 			.entry((window_id, geometry_idx))
 			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)));
@@ -120,7 +117,7 @@ impl PanelFadeImages {
 			prev:          None,
 			cur:           None,
 			next:          None,
-			image_sampler: OnceCell::new(),
+			image_sampler: OnceLock::new(),
 			next_image:    Loadable::new(),
 		}
 	}
@@ -171,10 +168,8 @@ impl PanelFadeImages {
 	}
 
 	/// Gets the image sampler, or initializes it, if uninitialized
-	pub async fn image_sampler(&self, wgpu: &Wgpu) -> &wgpu::Sampler {
-		self.image_sampler
-			.get_or_init(async || self::create_image_sampler(wgpu))
-			.await
+	pub fn image_sampler(&self, wgpu: &Wgpu) -> &wgpu::Sampler {
+		self.image_sampler.get_or_init(|| self::create_image_sampler(wgpu))
 	}
 
 	/// Loads any missing images, prioritizing the current, then next, then previous.
@@ -234,7 +229,7 @@ impl PanelFadeImages {
 
 			let image = PanelFadeImage {
 				texture_view,
-				bind_group: OnceCell::new(),
+				bind_group: OnceLock::new(),
 				geometry_uniforms: Mutex::new(HashMap::new()),
 				swap_dir: rand::random(),
 				path: res.path,
@@ -278,18 +273,17 @@ impl PanelFadeImages {
 
 		let max_image_size = wgpu.device.limits().max_texture_dimension_2d;
 
-		self.next_image.try_load(|| {
-			tokio::task::Builder::new()
-				.name(&format!("Load image {path:?}"))
-				.spawn_blocking(move || {
-					let image_res = self::load(&path, max_image_size);
-					ImageLoadRes {
-						path,
-						playlist_pos,
-						image_res,
-					}
-				})
-				.context("Unable to spawn task")
+		self.next_image.try_load(|tx| {
+			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
+				let image_res = self::load(&path, max_image_size);
+				_ = tx.send(ImageLoadRes {
+					path,
+					playlist_pos,
+					image_res,
+				});
+
+				Ok(())
+			});
 		})
 	}
 

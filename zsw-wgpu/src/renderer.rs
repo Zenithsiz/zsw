@@ -71,11 +71,7 @@ impl WgpuRenderer {
 	// TODO: Ensure it's not called more than once?
 	pub fn start_render(&self, wgpu: &Wgpu) -> Result<FrameRender, AppError> {
 		// And then get the surface texture
-		// Note: This can block, so we run it under tokio's block-in-place
-		// Note: If the application goes to sleep, this can fail spuriously due to a timeout,
-		//       so we keep retrying.
-		// TODO: Use an exponential timeout, with a max duration?
-		let surface_texture = tokio::task::block_in_place(|| self.surface.get_current_texture());
+		let surface_texture = self.surface.get_current_texture();
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
 			label: Some("zsw-frame-surface-texture-view"),
 			..wgpu::TextureViewDescriptor::default()
@@ -171,9 +167,7 @@ impl FrameRender {
 	#[must_use]
 	pub fn finish(self, wgpu: &Wgpu) -> bool {
 		// Submit everything to the queue and present the surface's texture
-		// Note: Although not supposed to, `submit` calls can block, so we wrap it
-		//       in a tokio block-in-place
-		let _ = tokio::task::block_in_place(|| wgpu.queue.submit([self.encoder.finish()]));
+		_ = wgpu.queue.submit([self.encoder.finish()]);
 		wgpu.queue.present(self.surface_texture);
 
 		self.suboptimal

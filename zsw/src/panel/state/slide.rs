@@ -4,7 +4,7 @@
 use {
 	crate::panel::{PanelSlideShader, renderer::uniform},
 	std::{collections::HashMap, sync::Arc},
-	tokio::sync::Mutex,
+	std::sync::nonpoison::Mutex,
 	winit::window::WindowId,
 	zsw_wgpu::Wgpu,
 };
@@ -34,14 +34,14 @@ impl PanelSlideState {
 	}
 
 	/// Returns the geometry uniforms
-	pub async fn geometry_uniforms(
+	pub fn geometry_uniforms(
 		&self,
 		wgpu: &Wgpu,
 		shared: &PanelSlideShared,
 		window_id: WindowId,
 		geometry_idx: usize,
 	) -> Arc<PanelSlideGeometryUniforms> {
-		let mut geometry_uniforms = self.geometry_uniforms.lock().await;
+		let mut geometry_uniforms = self.geometry_uniforms.lock();
 		let geometry_uniforms = geometry_uniforms
 			.entry((window_id, geometry_idx))
 			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)));

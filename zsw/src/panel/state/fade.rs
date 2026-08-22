@@ -11,8 +11,10 @@ use {
 	crate::{panel::PanelFadeShader, playlist::PlaylistPlayer},
 	chrono::TimeDelta,
 	core::time::Duration,
-	std::{sync::Arc, time::Instant},
-	tokio::sync::Mutex,
+	std::{
+		sync::{Arc, nonpoison::Mutex},
+		time::Instant,
+	},
 	zsw_wgpu::Wgpu,
 };
 
@@ -173,8 +175,8 @@ impl PanelFadeState {
 	}
 
 	/// Skips to the next image.
-	pub async fn skip(&mut self, wgpu: &Wgpu) {
-		let mut playlist_player = self.playlist_player.lock().await;
+	pub fn skip(&mut self, wgpu: &Wgpu) {
+		let mut playlist_player = self.playlist_player.lock();
 		self.progress = match self.images.step_next(&mut playlist_player, wgpu) {
 			Ok(()) => self.fade_duration,
 			Err(()) => self.max_progress(),
@@ -182,8 +184,8 @@ impl PanelFadeState {
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
-	pub async fn step(&mut self, wgpu: &Wgpu, delta: TimeDelta) {
-		let mut playlist_player = self.playlist_player.lock().await;
+	pub fn step(&mut self, wgpu: &Wgpu, delta: TimeDelta) {
+		let mut playlist_player = self.playlist_player.lock();
 
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
@@ -235,10 +237,10 @@ impl PanelFadeState {
 	}
 
 	/// Updates this panel's state using the current time as a delta
-	pub async fn update(&mut self, wgpu: &Wgpu) {
+	pub fn update(&mut self, wgpu: &Wgpu) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
-		self.images.load_missing(&mut *self.playlist_player.lock().await, wgpu);
+		self.images.load_missing(&mut self.playlist_player.lock(), wgpu);
 
 		// If we're paused, don't update anything
 		if self.paused {
@@ -257,7 +259,7 @@ impl PanelFadeState {
 		}
 		self.last_update = now;
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
-		self.step(wgpu, delta).await;
+		self.step(wgpu, delta);
 	}
 }
 

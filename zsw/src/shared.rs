@@ -9,8 +9,10 @@ use {
 		playlist::Playlists,
 		profile::Profiles,
 	},
-	std::{collections::HashMap, sync::Arc},
-	tokio::sync::Mutex,
+	std::{
+		collections::HashMap,
+		sync::{Arc, nonpoison::Mutex},
+	},
 	winit::{
 		event_loop::EventLoopProxy,
 		window::{Window, WindowId},

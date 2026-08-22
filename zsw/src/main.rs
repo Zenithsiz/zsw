@@ -1,7 +1,19 @@
 //! Zenithsiz's scrolling wallpaper
 
 // Features
-#![feature(never_type, must_not_suspend, proc_macro_hygiene, stmt_expr_attributes, bool_toggle)]
+#![feature(
+	never_type,
+	must_not_suspend,
+	proc_macro_hygiene,
+	stmt_expr_attributes,
+	bool_toggle,
+	sync_nonpoison,
+	nonpoison_mutex,
+	nonpoison_rwlock,
+	thread_sleep_until,
+	oneshot_channel,
+	str_as_str
+)]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 
@@ -36,9 +48,12 @@ use {
 	core::time::Duration,
 	directories::ProjectDirs,
 	euclid::default::Point2D,
-	std::{collections::HashMap, fs, process::ExitCode, sync::Arc},
-	tokio::{
-		sync::{Mutex, mpsc},
+	std::{
+		collections::HashMap,
+		fs,
+		process::ExitCode,
+		sync::{Arc, mpsc, nonpoison::Mutex},
+		thread,
 		time::Instant,
 	},
 	winit::{
@@ -50,7 +65,7 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
-	zsw_util::{AppError, Rect, TokioTaskBlockOn},
+	zsw_util::{AppError, Rect},
 	zsw_wgpu::{Wgpu, WgpuRenderer},
 	zutil_cloned::cloned,
 	zutil_logger::Logger,
@@ -69,7 +84,7 @@ fn main() -> ExitCode {
 	}
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn run() -> Result<(), AppError> {
 	// Initialize the logger
 	let logger = Logger::builder()
@@ -119,7 +134,7 @@ async fn run() -> Result<(), AppError> {
 	.context("Unable to create winit app")?;
 
 	// Finally run the app on the event loop
-	tokio::task::block_in_place(|| event_loop.run_app(&mut app)).context("Unable to run event loop")?;
+	event_loop.run_app(&mut app).context("Unable to run event loop")?;
 
 	Ok(())
 }
@@ -137,12 +152,12 @@ struct WinitAppWindow {
 	egui_event_handler: EguiEventHandler,
 
 	/// Renderer event sender
-	renderer_event_tx: mpsc::UnboundedSender<RendererEvent>,
+	renderer_event_tx: mpsc::Sender<RendererEvent>,
 }
 
 impl ApplicationHandler<AppEvent> for WinitApp {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-		if let Err(err) = self.init_window(event_loop).block_on() {
+		if let Err(err) = self.init_window(event_loop) {
 			tracing::warn!("Unable to initialize window: {}", err.pretty());
 			event_loop.exit();
 		}
@@ -192,28 +207,19 @@ impl WinitApp {
 		//       toml files, and it'll simplify other things if we can make it mostly immutable.
 
 		// Create and stat loading the displays
-		let displays = Displays::new(dirs.displays().to_path_buf())
-			.await
-			.context("Unable to create displays")?;
+		let displays = Displays::new(dirs.displays().to_path_buf()).context("Unable to create displays")?;
 		let displays = Arc::new(displays);
-		#[cloned(displays)]
-		zsw_util::spawn_task("Load displays", async move { displays.load_all().await });
+		displays.load_all()?;
 
 		// Create and stat loading the playlists
-		let playlists = Playlists::new(dirs.playlists().to_path_buf())
-			.await
-			.context("Unable to create playlists")?;
+		let playlists = Playlists::new(dirs.playlists().to_path_buf()).context("Unable to create playlists")?;
 		let playlists = Arc::new(playlists);
-		#[cloned(playlists)]
-		zsw_util::spawn_task("Load playlists", async move { playlists.load_all().await });
+		playlists.load_all()?;
 
 		// Create and stat loading the profiles
-		let profiles = Profiles::new(dirs.profiles().to_path_buf())
-			.await
-			.context("Unable to create profiles")?;
+		let profiles = Profiles::new(dirs.profiles().to_path_buf()).context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);
-		#[cloned(profiles)]
-		zsw_util::spawn_task("Load profiles", async move { profiles.load_all().await });
+		profiles.load_all()?;
 
 		// Shared state
 		let shared = Shared {
@@ -232,11 +238,10 @@ impl WinitApp {
 			let profile_name = ProfileName::from(profile.clone());
 
 			#[cloned(shared)]
-			zsw_util::spawn_task("Load default profile", async move {
+			zsw_util::spawn_task("Load default profile", move || {
 				shared
 					.panels
-					.set_profile(profile_name, &shared.displays, &shared.playlists, &shared.profiles)
-					.await
+					.set_profile(&profile_name, &shared.displays, &shared.playlists, &shared.profiles)
 					.context("Unable to set profile")
 			});
 		}
@@ -249,7 +254,7 @@ impl WinitApp {
 	}
 
 	/// Initializes the window related things
-	pub async fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
+	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let windows = window::create(event_loop, self.config.transparent_windows)
 			.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
@@ -273,20 +278,19 @@ impl WinitApp {
 				monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
 			});
 
-			let (renderer_event_tx, renderer_event_rx) = mpsc::unbounded_channel();
+			let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
 			#[cloned(shared = self.shared, shared_window)]
-			zsw_util::spawn_task("Renderer", async move {
+			zsw_util::spawn_task("Renderer", move || {
 				self::renderer(
 					&shared,
 					&shared_window,
-					renderer_event_rx,
+					&renderer_event_rx,
 					wgpu_renderer,
 					panels_renderer,
 					egui_renderer,
-					egui_painter,
+					&egui_painter,
 					menu,
 				)
-				.await
 			});
 
 			_ = self.windows.insert(shared_window.window.id(), WinitAppWindow {
@@ -297,7 +301,6 @@ impl WinitApp {
 				.shared
 				.windows
 				.lock()
-				.await
 				.insert(shared_window.window.id(), shared_window);
 		}
 
@@ -323,14 +326,14 @@ enum RendererEvent {
 }
 
 /// Renderer task
-async fn renderer(
+fn renderer(
 	shared: &Shared,
 	shared_window: &SharedWindow,
-	mut renderer_event_rx: mpsc::UnboundedReceiver<RendererEvent>,
+	renderer_event_rx: &mpsc::Receiver<RendererEvent>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
-	egui_painter: EguiPainter,
+	egui_painter: &EguiPainter,
 	mut menu: Menu,
 ) -> Result<(), AppError> {
 	let frame_duration = Duration::from_secs_f64(1000.0) / shared_window.monitor_refresh_rate_mhz;
@@ -354,7 +357,7 @@ async fn renderer(
 		// Note: We manually sleep instead of letting wgpu block for us
 		//       when retrieving the texture to ensure that `tokio` isn't
 		//       blocked, since those are non-async, while this sleep is.
-		tokio::time::sleep_until(cur_frame_start).await;
+		thread::sleep_until(cur_frame_start);
 
 		// If we were too late, we need to skip some frames
 		if let Some(late) = prev_frame_end.checked_duration_since(cur_frame_start) &&
@@ -366,12 +369,12 @@ async fn renderer(
 			next_frame += frame_duration * frames;
 		}
 
-		let window_geometry = *shared_window.monitor_geometry.lock().await;
+		let window_geometry = *shared_window.monitor_geometry.lock();
 
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
 		let (egui_paint_jobs, egui_textures_delta) =
-			match tokio::task::block_in_place(|| self::paint_egui(shared, &egui_painter, &mut menu, window_geometry)) {
+			match self::paint_egui(shared, egui_painter, &mut menu, window_geometry) {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {}", err.pretty());
@@ -395,7 +398,6 @@ async fn renderer(
 				&shared_window.window,
 				window_geometry,
 			)
-			.await
 			.context("Unable to render panels")?;
 
 		// Render egui
@@ -438,7 +440,7 @@ async fn renderer(
 			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, size)
 		}
 		if let Some(pos) = move_pos {
-			shared_window.monitor_geometry.lock().await.pos = euclid::point2(pos.x, pos.y);
+			shared_window.monitor_geometry.lock().pos = euclid::point2(pos.x, pos.y);
 		}
 	}
 }
@@ -470,9 +472,9 @@ fn paint_egui(
 			return Ok(());
 		};
 		let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
-		for panel in shared.panels.get_all().block_on() {
-			let panel = &mut *panel.lock().block_on();
-			let display = panel.display.read().block_on();
+		for panel in shared.panels.get_all() {
+			let panel = &mut *panel.lock();
+			let display = panel.display.read();
 
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_egui() ||
@@ -502,7 +504,7 @@ fn paint_egui(
 				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 				match &mut panel.state {
 					panel::PanelState::None(_) => (),
-					panel::PanelState::Fade(state) => state.skip(&shared.wgpu).block_on(),
+					panel::PanelState::Fade(state) => state.skip(&shared.wgpu),
 					panel::PanelState::Slide(_) => (),
 				}
 			}
@@ -525,7 +527,7 @@ fn paint_egui(
 							false => time_delta_abs,
 						};
 
-						state.step(&shared.wgpu, time_delta).block_on();
+						state.step(&shared.wgpu, time_delta);
 					},
 					panel::PanelState::Slide(_) => (),
 				}

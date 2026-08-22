@@ -26,13 +26,11 @@ use {
 	app_error::Context,
 	core::cmp,
 	euclid::default::Vector2D,
-	futures::{StreamExt, stream::FuturesUnordered},
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
-		sync::{Arc, OnceLock},
+		sync::{Arc, OnceLock, nonpoison::Mutex},
 	},
-	tokio::sync::Mutex,
 	wgpu::util::DeviceExt,
 	winit::{
 		dpi::PhysicalSize,
@@ -139,7 +137,7 @@ impl PanelsRenderer {
 	}
 
 	/// Renders a panel
-	pub async fn render(
+	pub fn render(
 		&self,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
@@ -195,9 +193,9 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, shared.vertices.slice(..));
 
 		// Then render all panels simultaneously
-		let panels = panels.get_all().await;
-		let mut panels = panels.iter().map(|panel| panel.lock()).collect::<FuturesUnordered<_>>();
-		while let Some(mut panel) = panels.next().await {
+		let panels = panels.get_all();
+		for panel in panels {
+			let mut panel = panel.lock();
 			self.render_panel(
 				wgpu,
 				shared,
@@ -207,15 +205,14 @@ impl PanelsRenderer {
 				window_geometry,
 				&mut render_pass,
 				&mut panel,
-			)
-			.await?;
+			)?;
 		}
 
 		Ok(())
 	}
 
 	/// Renders a panel
-	async fn render_panel(
+	fn render_panel(
 		&self,
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
@@ -229,7 +226,7 @@ impl PanelsRenderer {
 		// Update the panel before drawing it
 		match &mut panel.state {
 			PanelState::None(_) => (),
-			PanelState::Fade(state) => state.update(wgpu).await,
+			PanelState::Fade(state) => state.update(wgpu),
 			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 			PanelState::Slide(_) => (),
 		}
@@ -258,7 +255,7 @@ impl PanelsRenderer {
 			}),
 		};
 
-		let render_pipeline = match shared.render_pipelines.lock().await.entry(render_pipeline_id) {
+		let render_pipeline = match shared.render_pipelines.lock().entry(render_pipeline_id) {
 			hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
@@ -270,7 +267,7 @@ impl PanelsRenderer {
 						let fade = shared.fade(wgpu);
 						&[
 							Some(&fade.images.geometry_uniforms_bind_group_layout),
-							Some(fade.images.image_bind_group_layout(wgpu).await),
+							Some(fade.images.image_bind_group_layout(wgpu)),
 						]
 					},
 					PanelState::Slide(_) => {
@@ -297,13 +294,13 @@ impl PanelsRenderer {
 		render_pass.set_pipeline(&render_pipeline);
 
 		// Then render the panel
-		Self::render_panel_geometries(wgpu, shared, surface_size, window, window_geometry, render_pass, panel).await;
+		Self::render_panel_geometries(wgpu, shared, surface_size, window, window_geometry, render_pass, panel);
 
 		Ok(())
 	}
 
 	/// Renders a panel's geometries
-	async fn render_panel_geometries(
+	fn render_panel_geometries(
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
 		surface_size: PhysicalSize<u32>,
@@ -314,7 +311,7 @@ impl PanelsRenderer {
 	) {
 		// The display might have changed asynchronously from the panel geometries,
 		// so resize it to ensure we have a panel geometry for each display geometry.
-		let display = panel.display.read().await;
+		let display = panel.display.read();
 
 		// Go through all geometries of the panel display and render each one
 		for (geometry_idx, display_geometry) in display.geometries.iter().enumerate() {
@@ -334,13 +331,12 @@ impl PanelsRenderer {
 				window_geometry,
 				display_geometry,
 				render_pass,
-			)
-			.await;
+			);
 		}
 	}
 
 	/// Renders a panel's geometry
-	pub async fn render_panel_geometry(
+	pub fn render_panel_geometry(
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
 		window_id: WindowId,
@@ -356,45 +352,39 @@ impl PanelsRenderer {
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 
 		match state {
-			PanelState::None(state) =>
-				Self::render_panel_none_geometry(
-					wgpu,
-					render_pass,
-					window_id,
-					geometry_idx,
-					shared.none(wgpu),
-					pos_matrix,
-					state,
-				)
-				.await,
-			PanelState::Fade(state) =>
-				Self::render_panel_fade_geometry(
-					wgpu,
-					render_pass,
-					window_id,
-					geometry_idx,
-					shared.fade(wgpu),
-					display_geometry,
-					pos_matrix,
-					state,
-				)
-				.await,
-			PanelState::Slide(state) =>
-				Self::render_panel_slide_geometry(
-					wgpu,
-					render_pass,
-					window_id,
-					geometry_idx,
-					shared.slide(wgpu),
-					pos_matrix,
-					state,
-				)
-				.await,
+			PanelState::None(state) => Self::render_panel_none_geometry(
+				wgpu,
+				render_pass,
+				window_id,
+				geometry_idx,
+				shared.none(wgpu),
+				pos_matrix,
+				state,
+			),
+			PanelState::Fade(state) => Self::render_panel_fade_geometry(
+				wgpu,
+				render_pass,
+				window_id,
+				geometry_idx,
+				shared.fade(wgpu),
+				display_geometry,
+				pos_matrix,
+				state,
+			),
+			PanelState::Slide(state) => Self::render_panel_slide_geometry(
+				wgpu,
+				render_pass,
+				window_id,
+				geometry_idx,
+				shared.slide(wgpu),
+				pos_matrix,
+				state,
+			),
 		}
 	}
 
 	/// Renders a panel none's geometry
-	async fn render_panel_none_geometry(
+	fn render_panel_none_geometry(
 		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		window_id: WindowId,
@@ -403,7 +393,7 @@ impl PanelsRenderer {
 		pos_matrix: uniform::Matrix4x4,
 		state: &PanelNoneState,
 	) {
-		let geometry_uniforms = state.geometry_uniforms(wgpu, shared, window_id, geometry_idx).await;
+		let geometry_uniforms = state.geometry_uniforms(wgpu, shared, window_id, geometry_idx);
 
 		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
 			pos_matrix,
@@ -416,7 +406,7 @@ impl PanelsRenderer {
 		render_pass.draw_indexed(0..6, 0, 0..1);
 	}
 
-	async fn render_panel_fade_geometry(
+	fn render_panel_fade_geometry(
 		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		window_id: WindowId,
@@ -433,9 +423,7 @@ impl PanelsRenderer {
 		let d = 1.0 + 2.0 * f;
 
 		for (panel_image_slot, panel_image) in state.images().iter() {
-			let geometry_uniforms = panel_image
-				.geometry_uniforms(wgpu, &shared.images, window_id, geometry_idx)
-				.await;
+			let geometry_uniforms = panel_image.geometry_uniforms(wgpu, &shared.images, window_id, geometry_idx);
 
 			let progress = match panel_image_slot {
 				PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
@@ -523,15 +511,15 @@ impl PanelsRenderer {
 			render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 
 			// Bind the image uniforms
-			let sampler = state.images().image_sampler(wgpu).await;
-			render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.images).await, &[]);
+			let sampler = state.images().image_sampler(wgpu);
+			render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.images), &[]);
 
 			render_pass.draw_indexed(0..6, 0, 0..1);
 		}
 	}
 
 	/// Renders a panel slide's geometry
-	async fn render_panel_slide_geometry(
+	fn render_panel_slide_geometry(
 		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		window_id: WindowId,
@@ -540,7 +528,7 @@ impl PanelsRenderer {
 		pos_matrix: uniform::Matrix4x4,
 		state: &PanelSlideState,
 	) {
-		let geometry_uniforms = state.geometry_uniforms(wgpu, shared, window_id, geometry_idx).await;
+		let geometry_uniforms = state.geometry_uniforms(wgpu, shared, window_id, geometry_idx);
 
 		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
 

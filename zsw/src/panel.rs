@@ -13,7 +13,10 @@ pub use self::{
 };
 
 // Imports
-use {crate::display::Display, std::sync::Arc, tokio::sync::RwLock};
+use {
+	crate::display::Display,
+	std::sync::{Arc, nonpoison::RwLock},
+};
 
 /// Panel
 #[derive(Debug)]

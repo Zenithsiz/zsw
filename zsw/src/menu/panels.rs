@@ -12,7 +12,7 @@ use {
 	},
 	core::time::Duration,
 	std::ptr,
-	zsw_util::{Rect, TokioTaskBlockOn},
+	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
 
@@ -25,15 +25,15 @@ pub fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_g
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
 fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_geometry: Rect<i32, u32>) {
-	let panels = panels.get_all().block_on();
+	let panels = panels.get_all();
 	if panels.is_empty() {
 		ui.label("None loaded");
 		return;
 	}
 
 	for panel in panels {
-		let panel = &mut *panel.lock().block_on();
-		let mut display = panel.display.write().block_on();
+		let panel = &mut *panel.lock();
+		let mut display = panel.display.write();
 
 		let mut name = egui::WidgetText::from(display.name.to_string());
 		if display
@@ -119,7 +119,7 @@ fn draw_fade_panel_editor(
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			state.skip(wgpu).block_on();
+			state.skip(wgpu);
 		}
 	});
 

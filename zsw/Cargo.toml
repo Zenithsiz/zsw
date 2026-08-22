@@ -18,7 +18,6 @@ derive_more     = { features = ["full"], workspace = true }
 directories     = { workspace = true }
 egui            = { features = ["default_fonts"], workspace = true }
 euclid          = { workspace = true }
-futures         = { workspace = true }
 humantime       = { workspace = true }
 humantime-serde = { workspace = true }
 image           = { workspace = true }

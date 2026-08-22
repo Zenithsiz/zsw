@@ -1,7 +1,7 @@
 //! Loadable
 
 // Imports
-use {crate::AppError, core::task::Poll, futures::FutureExt, std::task};
+use std::sync::oneshot;
 
 /// Loadable value
 #[derive(Debug)]
@@ -9,8 +9,8 @@ pub struct Loadable<T> {
 	/// Current value, if any
 	value: Option<T>,
 
-	/// Loading task
-	task: Option<tokio::task::JoinHandle<T>>,
+	/// Receiver
+	rx: Option<oneshot::Receiver<T>>,
 }
 
 impl<T> Loadable<T> {
@@ -19,7 +19,7 @@ impl<T> Loadable<T> {
 	pub fn new() -> Self {
 		Self {
 			value: None,
-			task:  None,
+			rx:    None,
 		}
 	}
 
@@ -51,7 +51,7 @@ impl<T> Loadable<T> {
 	pub fn try_load<F>(&mut self, spawn_task: F) -> Option<&mut T>
 	where
 		T: Send + 'static,
-		F: FnOnce() -> Result<tokio::task::JoinHandle<T>, AppError>,
+		F: FnOnce(oneshot::Sender<T>),
 	{
 		// If the value is loaded, we're done
 		// Note: We can't use if-let due to a borrow-checker limitation
@@ -60,33 +60,22 @@ impl<T> Loadable<T> {
 		}
 
 		// Otherwise, create or continue the playlist task
-		match &mut self.task {
-			Some(task) => {
-				// Otherwise, try to get the value
-				let mut cx = task::Context::from_waker(task::Waker::noop());
-				let Poll::Ready(res) = task.poll_unpin(&mut cx) else {
-					return None;
-				};
-				self.task = None;
-
-				match res {
-					Ok(value) => {
-						let value = self.value.insert(value);
-						Some(value)
-					},
-					Err(err) => {
-						let err = AppError::new(&err);
-						tracing::warn!("Task returned an unexpected error: {}", err.pretty());
-
-						None
-					},
-				}
+		match self.rx.take() {
+			Some(rx) => match rx.try_recv() {
+				Ok(value) => Some(self.value.insert(value)),
+				Err(oneshot::TryRecvError::Empty(rx)) => {
+					self.rx = Some(rx);
+					None
+				},
+				Err(oneshot::TryRecvError::Disconnected) => {
+					tracing::warn!("Task exited without returning a value");
+					None
+				},
 			},
 			None => {
-				match spawn_task() {
-					Ok(task) => self.task = Some(task),
-					Err(err) => tracing::warn!("Unable to spawn task: {}", err.pretty()),
-				}
+				let (tx, rx) = oneshot::channel();
+				self.rx = Some(rx);
+				spawn_task(tx);
 
 				None
 			},
