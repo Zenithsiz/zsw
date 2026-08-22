@@ -4,7 +4,6 @@
 use {
 	super::Panel,
 	crate::{
-		display::Displays,
 		panel::{
 			PanelFadeShader,
 			PanelSlideShader,
@@ -13,7 +12,6 @@ use {
 		},
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
 		profile::{
-			Profile,
 			ProfileName,
 			ProfilePanelFadeShaderInner,
 			ProfilePanelShader,
@@ -33,8 +31,8 @@ use {
 /// Inner
 #[derive(Debug)]
 struct Inner {
-	/// Profile
-	profile: Option<Arc<Profile>>,
+	/// Profile name
+	profile_name: Option<ProfileName>,
 
 	/// Panels
 	panels: Vec<Arc<Mutex<Panel>>>,
@@ -52,8 +50,8 @@ impl Panels {
 	pub fn new() -> Self {
 		Self {
 			inner: Mutex::new(Inner {
-				profile: None,
-				panels:  vec![],
+				profile_name: None,
+				panels:       vec![],
 			}),
 		}
 	}
@@ -69,7 +67,6 @@ impl Panels {
 	pub fn set_profile(
 		&self,
 		profile_name: &ProfileName,
-		displays: &Displays,
 		playlists: &Arc<Playlists>,
 		profiles: &Profiles,
 	) -> Result<(), AppError> {
@@ -79,20 +76,16 @@ impl Panels {
 		// If we have a previous loaded profile, clear all panels before proceeding
 		{
 			let mut inner = self.inner.lock();
-			if let Some(old_profile) = &inner.profile {
-				tracing::info!("Dropping previous profile: {:?}", old_profile.name);
+			if let Some(old_profile) = &inner.profile_name {
+				tracing::info!("Dropping previous profile: {:?}", old_profile);
 				inner.panels.clear();
 			}
-			inner.profile = Some(Arc::clone(profile));
+			inner.profile_name = Some(profile_name.clone());
 			tracing::info!("Setting current profile: {profile_name:?}");
 		}
 
 		// Then load it's panels
 		for profile_panel in &profile.panels {
-			let display = displays
-				.get(&profile_panel.display)
-				.with_context(|| format!("Unable to load display {:?}", profile_panel.display))?;
-
 			let state = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
 				ProfilePanelShader::Fade(shader) => {
@@ -104,14 +97,17 @@ impl Panels {
 					});
 
 					#[cloned(playlists, panel_playlists = shader.playlists, playlist_player = state.playlist_player())]
-					zsw_util::spawn_task(format!("Load panel {:?} playlists", profile_panel.display), move || {
-						for playlist_name in panel_playlists {
-							self::load_playlist(&playlist_player, &playlist_name, &playlists)
-								.with_context(|| format!("Unable to load playlist {playlist_name:?}"))?;
-						}
+					zsw_util::spawn_task(
+						format!("Load panel {:?} playlists", profile_panel.display_name),
+						move || {
+							for playlist_name in panel_playlists {
+								self::load_playlist(&playlist_player, &playlist_name, &playlists)
+									.with_context(|| format!("Unable to load playlist {playlist_name:?}"))?;
+							}
 
-						Ok(())
-					});
+							Ok(())
+						},
+					);
 
 					PanelState::Fade(state)
 				},
@@ -124,7 +120,7 @@ impl Panels {
 				},
 			};
 
-			let panel = Panel::new(Arc::clone(display), state);
+			let panel = Panel::new(profile_panel.display_name.clone(), state);
 			self.inner.lock().panels.push(Arc::new(Mutex::new(panel)));
 		}
 

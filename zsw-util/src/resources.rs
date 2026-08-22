@@ -4,7 +4,7 @@
 use {
 	crate::AppError,
 	app_error::{Context, app_error},
-	core::marker::PhantomData,
+	core::{marker::PhantomData, ops},
 	serde::de::DeserializeOwned,
 	std::{collections::HashMap, ffi::OsStr, fs, hash::Hash, path::Path, sync::Arc},
 };
@@ -56,7 +56,7 @@ impl<N, V, S> Resources<N, V, S> {
 
 			// And parse it
 			let value = toml::from_str::<S>(&toml).with_context(|| format!("Unable to parse file {entry_path:?}"))?;
-			let value = V::from_serialized(name.clone(), value);
+			let value = V::from_serialized(value);
 
 			_ = values.insert(name, value);
 		}
@@ -86,17 +86,29 @@ impl<N, V, S> Resources<N, V, S> {
 	}
 }
 
+
+impl<N, V, S> ops::Index<&N> for Resources<N, V, S>
+where
+	N: Eq + Hash,
+{
+	type Output = V;
+
+	fn index(&self, idx: &N) -> &Self::Output {
+		&self.values[idx]
+	}
+}
+
 /// Types which may be converted from their serialized variant
 pub trait FromSerialized<N, S> {
 	/// Converts this type from it's serialized form
-	fn from_serialized(name: N, value: S) -> Self;
+	fn from_serialized(value: S) -> Self;
 }
 
 impl<N, S, T> FromSerialized<N, S> for Arc<T>
 where
 	T: FromSerialized<N, S>,
 {
-	fn from_serialized(name: N, value: S) -> Self {
-		Self::new(T::from_serialized(name, value))
+	fn from_serialized(value: S) -> Self {
+		Self::new(T::from_serialized(value))
 	}
 }

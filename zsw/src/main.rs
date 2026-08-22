@@ -237,7 +237,7 @@ impl WinitApp {
 			zsw_util::spawn_task("Load default profile", move || {
 				shared
 					.panels
-					.set_profile(&profile_name, &shared.displays, &shared.playlists, &shared.profiles)
+					.set_profile(&profile_name, &shared.playlists, &shared.profiles)
 					.context("Unable to set profile")
 			});
 		}
@@ -386,9 +386,9 @@ fn renderer(
 		// Render panels
 		panels_renderer
 			.render(
+				shared,
 				&mut frame,
 				&wgpu_renderer,
-				&shared.wgpu,
 				&shared.panels_renderer_shared,
 				&shared.panels,
 				&shared_window.window,
@@ -472,8 +472,7 @@ fn paint_egui(
 			let panel = &mut *panel.lock();
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_egui() ||
-				!panel
-					.display
+				!shared.displays[&panel.display_name]
 					.geometries
 					.iter()
 					.any(|&geometry| geometry.on_window(window_geometry).contains(pointer_pos))

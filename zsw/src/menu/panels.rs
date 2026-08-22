@@ -3,7 +3,7 @@
 // Imports
 use {
 	crate::{
-		display::Display,
+		display::{Display, Displays},
 		panel::{
 			PanelState,
 			Panels,
@@ -17,14 +17,26 @@ use {
 };
 
 /// Draws the panels tab
-pub fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_geometry: Rect<i32, u32>) {
-	self::draw_panels_editor(ui, wgpu, panels, window_geometry);
+pub fn draw_panels_tab(
+	ui: &mut egui::Ui,
+	wgpu: &Wgpu,
+	displays: &Displays,
+	panels: &Panels,
+	window_geometry: Rect<i32, u32>,
+) {
+	self::draw_panels_editor(ui, wgpu, displays, panels, window_geometry);
 	ui.separator();
 }
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_geometry: Rect<i32, u32>) {
+fn draw_panels_editor(
+	ui: &mut egui::Ui,
+	wgpu: &Wgpu,
+	displays: &Displays,
+	panels: &Panels,
+	window_geometry: Rect<i32, u32>,
+) {
 	let panels = panels.get_all();
 	if panels.is_empty() {
 		ui.label("None loaded");
@@ -33,9 +45,8 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 
 	for panel in panels {
 		let panel = &mut *panel.lock();
-		let mut name = egui::WidgetText::from(panel.display.name.to_string());
-		if panel
-			.display
+		let mut name = egui::WidgetText::from(panel.display_name.to_string());
+		if displays[&panel.display_name]
 			.geometries
 			.iter()
 			.all(|&geometry| !geometry.intersects_window(window_geometry))
@@ -50,7 +61,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Panels, window_ge
 				match &mut panel.state {
 					PanelState::None(_) => (),
 					PanelState::Fade(state) =>
-						self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &panel.display),
+						self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &displays[&panel.display_name]),
 					PanelState::Slide(_) => (),
 				}
 			});

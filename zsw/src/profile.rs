@@ -17,9 +17,6 @@ pub type Profiles = Resources<ProfileName, Arc<Profile>, ser::Profile>;
 /// Profile
 #[derive(Debug)]
 pub struct Profile {
-	/// Name
-	pub name: ProfileName,
-
 	/// Panels
 	pub panels: Vec<ProfilePanel>,
 }
@@ -27,8 +24,8 @@ pub struct Profile {
 /// Profile panel
 #[derive(Debug)]
 pub struct ProfilePanel {
-	pub display: DisplayName,
-	pub shader:  ProfilePanelShader,
+	pub display_name: DisplayName,
+	pub shader:       ProfilePanelShader,
 }
 
 /// Profile panel shader
@@ -76,15 +73,14 @@ pub enum ProfilePanelSlideShaderInner {
 }
 
 impl resources::FromSerialized<ProfileName, ser::Profile> for Profile {
-	fn from_serialized(name: ProfileName, profile: ser::Profile) -> Self {
+	fn from_serialized(profile: ser::Profile) -> Self {
 		Self {
-			name,
 			panels: profile
 				.panels
 				.into_iter()
 				.map(|panel| ProfilePanel {
-					display: DisplayName::from(panel.display),
-					shader:  match panel.shader {
+					display_name: DisplayName::from(panel.display),
+					shader:       match panel.shader {
 						ser::ProfilePanelShader::None(shader) => ProfilePanelShader::None(ProfilePanelNoneShader {
 							background_color: shader.background_color,
 						}),

@@ -19,17 +19,13 @@ pub type Displays = Resources<DisplayName, Arc<Display>, ser::Display>;
 /// Display
 #[derive(Debug)]
 pub struct Display {
-	/// Name
-	pub name: DisplayName,
-
 	/// Geometries
 	pub geometries: Vec<DisplayGeometry>,
 }
 
 impl resources::FromSerialized<DisplayName, ser::Display> for Display {
-	fn from_serialized(name: DisplayName, display: ser::Display) -> Self {
+	fn from_serialized(display: ser::Display) -> Self {
 		Self {
-			name,
 			geometries: display
 				.geometries
 				.into_iter()

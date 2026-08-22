@@ -22,7 +22,7 @@ use {
 			slide::PanelSlideShared,
 		},
 	},
-	crate::display::DisplayGeometry,
+	crate::{display::DisplayGeometry, shared::Shared},
 	app_error::Context,
 	core::cmp,
 	euclid::default::Vector2D,
@@ -139,10 +139,10 @@ impl PanelsRenderer {
 	/// Renders a panel
 	pub fn render(
 		&self,
+		shared: &Shared,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
-		wgpu: &Wgpu,
-		shared: &PanelsRendererShared,
+		panels_shared: &PanelsRendererShared,
 		panels: &Panels,
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
@@ -189,16 +189,16 @@ impl PanelsRenderer {
 		let mut render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
 
 		// Set our shared indices and vertices
-		render_pass.set_index_buffer(shared.indices.slice(..), wgpu::IndexFormat::Uint32);
-		render_pass.set_vertex_buffer(0, shared.vertices.slice(..));
+		render_pass.set_index_buffer(panels_shared.indices.slice(..), wgpu::IndexFormat::Uint32);
+		render_pass.set_vertex_buffer(0, panels_shared.vertices.slice(..));
 
 		// Then render all panels simultaneously
 		let panels = panels.get_all();
 		for panel in panels {
 			let mut panel = panel.lock();
 			self.render_panel(
-				wgpu,
 				shared,
+				panels_shared,
 				wgpu_renderer,
 				frame.surface_size,
 				window,
@@ -214,8 +214,8 @@ impl PanelsRenderer {
 	/// Renders a panel
 	fn render_panel(
 		&self,
-		wgpu: &Wgpu,
-		shared: &PanelsRendererShared,
+		shared: &Shared,
+		panels_shared: &PanelsRendererShared,
 		wgpu_renderer: &WgpuRenderer,
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
@@ -226,7 +226,7 @@ impl PanelsRenderer {
 		// Update the panel before drawing it
 		match &mut panel.state {
 			PanelState::None(_) => (),
-			PanelState::Fade(state) => state.update(wgpu),
+			PanelState::Fade(state) => state.update(&shared.wgpu),
 			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 			PanelState::Slide(_) => (),
 		}
@@ -255,30 +255,30 @@ impl PanelsRenderer {
 			}),
 		};
 
-		let render_pipeline = match shared.render_pipelines.lock().entry(render_pipeline_id) {
+		let render_pipeline = match panels_shared.render_pipelines.lock().entry(render_pipeline_id) {
 			hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
 					PanelState::None(_) => {
-						let none = shared.none(wgpu);
+						let none = panels_shared.none(&shared.wgpu);
 						&[Some(&none.geometry_uniforms_bind_group_layout)] as &[_]
 					},
 					PanelState::Fade(_) => {
-						let fade = shared.fade(wgpu);
+						let fade = panels_shared.fade(&shared.wgpu);
 						&[
 							Some(&fade.images.geometry_uniforms_bind_group_layout),
-							Some(fade.images.image_bind_group_layout(wgpu)),
+							Some(fade.images.image_bind_group_layout(&shared.wgpu)),
 						]
 					},
 					PanelState::Slide(_) => {
-						let slide = shared.slide(wgpu);
+						let slide = panels_shared.slide(&shared.wgpu);
 						&[Some(&slide.geometry_uniforms_bind_group_layout)]
 					},
 				};
 
 				let render_pipeline = self::create_render_pipeline(
 					wgpu_renderer,
-					wgpu,
+					&shared.wgpu,
 					render_pipeline_id,
 					bind_group_layouts,
 					panel.state.shader(),
@@ -294,15 +294,23 @@ impl PanelsRenderer {
 		render_pass.set_pipeline(&render_pipeline);
 
 		// Then render the panel
-		Self::render_panel_geometries(wgpu, shared, surface_size, window, window_geometry, render_pass, panel);
+		Self::render_panel_geometries(
+			shared,
+			panels_shared,
+			surface_size,
+			window,
+			window_geometry,
+			render_pass,
+			panel,
+		);
 
 		Ok(())
 	}
 
 	/// Renders a panel's geometries
 	fn render_panel_geometries(
-		wgpu: &Wgpu,
-		shared: &PanelsRendererShared,
+		shared: &Shared,
+		panels_shared: &PanelsRendererShared,
 		surface_size: PhysicalSize<u32>,
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
@@ -310,7 +318,7 @@ impl PanelsRenderer {
 		panel: &Panel,
 	) {
 		// Go through all geometries of the panel display and render each one
-		for (geometry_idx, display_geometry) in panel.display.geometries.iter().enumerate() {
+		for (geometry_idx, display_geometry) in shared.displays[&panel.display_name].geometries.iter().enumerate() {
 			// If this geometry is outside our window, we can safely ignore it
 			if !display_geometry.intersects_window(window_geometry) {
 				continue;
@@ -318,8 +326,8 @@ impl PanelsRenderer {
 
 			// Render the panel geometry
 			Self::render_panel_geometry(
-				wgpu,
-				shared,
+				&shared.wgpu,
+				panels_shared,
 				window.id(),
 				geometry_idx,
 				surface_size,
