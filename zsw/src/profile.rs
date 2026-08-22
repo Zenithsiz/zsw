@@ -8,11 +8,11 @@ use {
 	crate::{display::DisplayName, playlist::PlaylistName},
 	core::time::Duration,
 	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::{ResourceManager, resource_manager},
+	zsw_util::{Resources, resources},
 };
 
 /// Profiles
-pub type Profiles = ResourceManager<ProfileName, Profile, ser::Profile>;
+pub type Profiles = Resources<ProfileName, Profile, ser::Profile>;
 
 /// Profile
 #[derive(Debug)]
@@ -75,7 +75,7 @@ pub enum ProfilePanelSlideShaderInner {
 	Basic,
 }
 
-impl resource_manager::FromSerialized<ProfileName, ser::Profile> for Profile {
+impl resources::FromSerialized<ProfileName, ser::Profile> for Profile {
 	fn from_serialized(name: ProfileName, profile: ser::Profile) -> Self {
 		Self {
 			name,
@@ -114,7 +114,7 @@ impl resource_manager::FromSerialized<ProfileName, ser::Profile> for Profile {
 	}
 }
 
-impl resource_manager::ToSerialized<ProfileName, ser::Profile> for Profile {
+impl resources::ToSerialized<ProfileName, ser::Profile> for Profile {
 	fn to_serialized(&self, _name: &ProfileName) -> ser::Profile {
 		ser::Profile {
 			panels: self

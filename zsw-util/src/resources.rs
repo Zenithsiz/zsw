@@ -1,4 +1,4 @@
-//! Resource manager
+//! Resources
 
 // Imports
 use {
@@ -16,9 +16,9 @@ use {
 /// Resource storage
 type ResourceStorage<V> = Arc<OnceCell<Arc<RwLock<V>>>>;
 
-/// Resource manager
+/// Resources
 #[derive(Debug)]
-pub struct ResourceManager<N, V, S> {
+pub struct Resources<N, V, S> {
 	/// Profiles directory
 	root: PathBuf,
 
@@ -30,8 +30,8 @@ pub struct ResourceManager<N, V, S> {
 	_phantom: PhantomData<fn() -> S>,
 }
 
-impl<N, V, S> ResourceManager<N, V, S> {
-	/// Creates a new resource manager over a root directory
+impl<N, V, S> Resources<N, V, S> {
+	/// Loads resources from a directory.
 	pub async fn new(root: PathBuf) -> Result<Self, AppError> {
 		tokio::fs::create_dir_all(&root)
 			.await
@@ -44,7 +44,7 @@ impl<N, V, S> ResourceManager<N, V, S> {
 		})
 	}
 
-	/// Loads all playlists from the root directory
+	/// Loads all resources from the root directory
 	pub async fn load_all(self: &Arc<Self>) -> Result<(), AppError>
 	where
 		N: Eq + Hash + Clone + From<String> + AsRef<str> + Send + 'static,
@@ -54,7 +54,7 @@ impl<N, V, S> ResourceManager<N, V, S> {
 		tokio::fs::read_dir(&self.root)
 			.await
 			.map(ReadDirStream::new)
-			.context("Unable to read playlists directory")?
+			.context("Unable to read directory")?
 			.then(|entry| async {
 				// Ignore directories and non `.toml` files
 				let entry = entry.context("Unable to get entry")?;
@@ -68,8 +68,8 @@ impl<N, V, S> ResourceManager<N, V, S> {
 					return Ok(());
 				}
 
-				// Then get the playlist name from the file
-				let playlist_name = entry_path
+				// Then get the name from the file
+				let name = entry_path
 					.file_stem()
 					.context("Entry path had no file stem")?
 					.to_os_string()
@@ -79,7 +79,7 @@ impl<N, V, S> ResourceManager<N, V, S> {
 
 				#[cloned(this = self)]
 				crate::spawn_task(format!("Load resource {entry_path:?}"), async move {
-					this.load(playlist_name)
+					this.load(name)
 						.await
 						.map(|_| ())
 						.with_context(|| format!("Unable to load file {entry_path:?}"))

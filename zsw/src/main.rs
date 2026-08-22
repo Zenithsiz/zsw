@@ -188,6 +188,9 @@ impl WinitApp {
 		let wgpu = Wgpu::new(display).await.context("Unable to initialize wgpu")?;
 		let panels_renderer_shared = PanelsRendererShared::new(&wgpu);
 
+		// TODO: Reading of the these should be synchronous, it shouldn't take long to read some
+		//       toml files, and it'll simplify other things if we can make it mostly immutable.
+
 		// Create and stat loading the displays
 		let displays = Displays::new(dirs.displays().to_path_buf())
 			.await

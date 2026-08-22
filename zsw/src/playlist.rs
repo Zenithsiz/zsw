@@ -10,11 +10,11 @@ pub use self::player::PlaylistPlayer;
 // Imports
 use {
 	std::{borrow::Borrow, fmt, path::Path, sync::Arc},
-	zsw_util::{ResourceManager, resource_manager},
+	zsw_util::{Resources, resources},
 };
 
 /// Playlists
-pub type Playlists = ResourceManager<PlaylistName, Playlist, ser::Playlist>;
+pub type Playlists = Resources<PlaylistName, Playlist, ser::Playlist>;
 
 /// Playlist
 #[derive(Debug)]
@@ -50,7 +50,7 @@ pub enum PlaylistItemKind {
 	File { path: Arc<Path> },
 }
 
-impl resource_manager::FromSerialized<PlaylistName, ser::Playlist> for Playlist {
+impl resources::FromSerialized<PlaylistName, ser::Playlist> for Playlist {
 	fn from_serialized(name: PlaylistName, playlist: ser::Playlist) -> Self {
 		Self {
 			_name: name,
@@ -72,7 +72,7 @@ impl resource_manager::FromSerialized<PlaylistName, ser::Playlist> for Playlist 
 	}
 }
 
-impl resource_manager::ToSerialized<PlaylistName, ser::Playlist> for Playlist {
+impl resources::ToSerialized<PlaylistName, ser::Playlist> for Playlist {
 	fn to_serialized(&self, _name: &PlaylistName) -> ser::Playlist {
 		ser::Playlist {
 			items: self

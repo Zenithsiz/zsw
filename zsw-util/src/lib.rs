@@ -20,7 +20,7 @@
 // Modules
 pub mod loadable;
 mod rect;
-pub mod resource_manager;
+pub mod resources;
 mod tuple_collect_res;
 pub mod unwrap_or_return;
 pub mod walk_dir;
@@ -29,7 +29,7 @@ pub mod walk_dir;
 pub use {
 	loadable::Loadable,
 	rect::Rect,
-	resource_manager::ResourceManager,
+	resources::Resources,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
 	unwrap_or_return::{UnwrapOrReturn, UnwrapOrReturnExt},
 	walk_dir::WalkDir,
