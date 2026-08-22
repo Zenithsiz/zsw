@@ -156,7 +156,16 @@ fn load_playlist(
 						false => Some(1),
 					});
 
-				for entry in builder.build(dir_path.as_path()) {
+				let dir = match builder.build(dir_path.as_path()) {
+					Ok(dir) => dir,
+					Err(err) => {
+						let err = AppError::new(&err);
+						tracing::warn!("Unable to read directory {dir_path:?}: {}", err.pretty());
+						continue;
+					},
+				};
+
+				for entry in dir {
 					let entry = match entry {
 						Ok(entry) => entry,
 						Err(err) => {

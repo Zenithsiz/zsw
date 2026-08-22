@@ -1,6 +1,6 @@
 //! Directory walker
 
-use std::{fs, io, path::PathBuf};
+use std::{fs, io, path::Path};
 
 /// Directory walker builder
 #[derive(Debug)]
@@ -33,24 +33,22 @@ impl WalkDirBuilder {
 	}
 
 	/// Builders the directory walker
-	#[must_use]
-	pub fn build(self, root: impl Into<PathBuf>) -> WalkDir {
-		WalkDir {
-			root:            root.into(),
-			stack:           vec![],
+	///
+	/// This will read the root directory so you can
+	/// catch errors earlier
+	pub fn build(self, root: impl AsRef<Path>) -> Result<WalkDir, io::Error> {
+		let root = fs::read_dir(root)?;
+		Ok(WalkDir {
+			stack:           vec![root],
 			max_depth:       self.max_depth,
 			recurse_symlink: self.recurse_symlink,
-			is_finished:     false,
-		}
+		})
 	}
 }
 
 /// Directory walker
 #[derive(Debug)]
 pub struct WalkDir {
-	/// Root
-	root: PathBuf,
-
 	/// Stack
 	stack: Vec<fs::ReadDir>,
 
@@ -59,13 +57,10 @@ pub struct WalkDir {
 
 	/// Recurse on symlinks
 	recurse_symlink: bool,
-
-	/// Finished
-	is_finished: bool,
 }
 
 impl WalkDir {
-	/// Creates a new builder
+	/// Creates a new builder.
 	#[must_use]
 	pub fn builder() -> WalkDirBuilder {
 		WalkDirBuilder {
@@ -80,19 +75,9 @@ impl Iterator for WalkDir {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		loop {
-			// If we're finished, return `None`
-			if self.is_finished {
-				return None;
-			}
-
-			// Get the bottom-most directory, or create it from root.
-			let cur_dir = match self.stack.last_mut() {
-				Some(cur_dir) => cur_dir,
-				_ => match fs::read_dir(self.root.clone()) {
-					Ok(dir) => self.stack.push_mut(dir),
-					Err(err) => return Some(Err(err)),
-				},
-			};
+			// Get the bottom-most directory.
+			// Note: If we've already popped it, then we're done
+			let cur_dir = self.stack.last_mut()?;
 
 			// Then read the next entry
 			let entry = match cur_dir.next() {
@@ -101,10 +86,6 @@ impl Iterator for WalkDir {
 				None => {
 					// If we're done with self directory, pop it
 					assert!(self.stack.pop().is_some(), "Stack should not be empty");
-
-					// If we just popped the last directory, we're done
-					self.is_finished |= self.stack.is_empty();
-
 					continue;
 				},
 			};
