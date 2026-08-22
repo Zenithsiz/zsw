@@ -8,14 +8,16 @@ use {
 	crate::{display::DisplayName, playlist::PlaylistName},
 	core::time::Duration,
 	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::{Resources, resources},
+	zsw_util::Resources,
 };
 
 /// Profiles
-pub type Profiles = Resources<ProfileName, Arc<Profile>, ser::Profile>;
+pub type Profiles = Resources<ProfileName, Arc<Profile>>;
 
 /// Profile
 #[derive(Debug)]
+#[derive(serde::Deserialize)]
+#[serde(from = "ser::Profile")]
 pub struct Profile {
 	/// Panels
 	pub panels: Vec<ProfilePanel>,
@@ -72,8 +74,8 @@ pub enum ProfilePanelSlideShaderInner {
 	Basic,
 }
 
-impl resources::FromSerialized<ProfileName, ser::Profile> for Profile {
-	fn from_serialized(profile: ser::Profile) -> Self {
+impl From<ser::Profile> for Profile {
+	fn from(profile: ser::Profile) -> Self {
 		Self {
 			panels: profile
 				.panels

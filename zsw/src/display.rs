@@ -10,21 +10,23 @@ pub use self::geometry::DisplayGeometry;
 // Imports
 use {
 	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::{Resources, resources},
+	zsw_util::Resources,
 };
 
 /// Displays
-pub type Displays = Resources<DisplayName, Arc<Display>, ser::Display>;
+pub type Displays = Resources<DisplayName, Arc<Display>>;
 
 /// Display
 #[derive(Debug)]
+#[derive(serde::Deserialize)]
+#[serde(from = "ser::Display")]
 pub struct Display {
 	/// Geometries
 	pub geometries: Vec<DisplayGeometry>,
 }
 
-impl resources::FromSerialized<DisplayName, ser::Display> for Display {
-	fn from_serialized(display: ser::Display) -> Self {
+impl From<ser::Display> for Display {
+	fn from(display: ser::Display) -> Self {
 		Self {
 			geometries: display
 				.geometries

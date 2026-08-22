@@ -4,28 +4,24 @@
 use {
 	crate::AppError,
 	app_error::{Context, app_error},
-	core::{marker::PhantomData, ops},
+	core::ops,
 	serde::de::DeserializeOwned,
-	std::{collections::HashMap, ffi::OsStr, fs, hash::Hash, path::Path, sync::Arc},
+	std::{collections::HashMap, ffi::OsStr, fs, hash::Hash, path::Path},
 };
 
 /// Resources
 #[derive(Debug)]
-pub struct Resources<N, V, S> {
+pub struct Resources<N, V> {
 	/// Loaded values
 	values: HashMap<N, V>,
-
-	/// Phantom for the serialized type
-	_phantom: PhantomData<fn() -> S>,
 }
 
-impl<N, V, S> Resources<N, V, S> {
+impl<N, V> Resources<N, V> {
 	/// Loads resources from a directory.
 	pub fn new(root: &Path) -> Result<Self, AppError>
 	where
 		N: Eq + Hash + Clone + From<String> + Send + 'static,
-		V: FromSerialized<N, S> + Send + Sync + 'static,
-		S: DeserializeOwned + 'static,
+		V: DeserializeOwned + Send + Sync + 'static,
 	{
 		fs::create_dir_all(root).context("Unable to create root directory")?;
 		let dir = fs::read_dir(root).context("Unable to read directory")?;
@@ -55,16 +51,12 @@ impl<N, V, S> Resources<N, V, S> {
 				fs::read_to_string(&entry_path).with_context(|| format!("Unable to read file {entry_path:?}"))?;
 
 			// And parse it
-			let value = toml::from_str::<S>(&toml).with_context(|| format!("Unable to parse file {entry_path:?}"))?;
-			let value = V::from_serialized(value);
+			let value = toml::from_str(&toml).with_context(|| format!("Unable to parse file {entry_path:?}"))?;
 
 			_ = values.insert(name, value);
 		}
 
-		Ok(Self {
-			values,
-			_phantom: PhantomData,
-		})
+		Ok(Self { values })
 	}
 
 	/// Gets a value by name
@@ -87,7 +79,7 @@ impl<N, V, S> Resources<N, V, S> {
 }
 
 
-impl<N, V, S> ops::Index<&N> for Resources<N, V, S>
+impl<N, V> ops::Index<&N> for Resources<N, V>
 where
 	N: Eq + Hash,
 {
@@ -95,20 +87,5 @@ where
 
 	fn index(&self, idx: &N) -> &Self::Output {
 		&self.values[idx]
-	}
-}
-
-/// Types which may be converted from their serialized variant
-pub trait FromSerialized<N, S> {
-	/// Converts this type from it's serialized form
-	fn from_serialized(value: S) -> Self;
-}
-
-impl<N, S, T> FromSerialized<N, S> for Arc<T>
-where
-	T: FromSerialized<N, S>,
-{
-	fn from_serialized(value: S) -> Self {
-		Self::new(T::from_serialized(value))
 	}
 }

@@ -10,14 +10,16 @@ pub use self::player::PlaylistPlayer;
 // Imports
 use {
 	std::{borrow::Borrow, fmt, path::Path, sync::Arc},
-	zsw_util::{Resources, resources},
+	zsw_util::Resources,
 };
 
 /// Playlists
-pub type Playlists = Resources<PlaylistName, Playlist, ser::Playlist>;
+pub type Playlists = Resources<PlaylistName, Playlist>;
 
 /// Playlist
 #[derive(Debug)]
+#[derive(serde::Deserialize)]
+#[serde(from = "ser::Playlist")]
 pub struct Playlist {
 	/// All items
 	pub items: Vec<PlaylistItem>,
@@ -47,8 +49,8 @@ pub enum PlaylistItemKind {
 	File { path: Arc<Path> },
 }
 
-impl resources::FromSerialized<PlaylistName, ser::Playlist> for Playlist {
-	fn from_serialized(playlist: ser::Playlist) -> Self {
+impl From<ser::Playlist> for Playlist {
+	fn from(playlist: ser::Playlist) -> Self {
 		Self {
 			items: playlist
 				.items
