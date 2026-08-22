@@ -9,12 +9,12 @@ pub use self::player::PlaylistPlayer;
 
 // Imports
 use {
-	std::{borrow::Borrow, fmt, path::Path, sync::Arc},
-	zsw_util::Resources,
+	core::str::FromStr,
+	std::{borrow::Borrow, collections::BTreeMap, fmt, path::Path, sync::Arc},
 };
 
 /// Playlists
-pub type Playlists = Resources<PlaylistName, Playlist>;
+pub type Playlists = BTreeMap<PlaylistName, Playlist>;
 
 /// Playlist
 #[derive(Debug)]
@@ -79,9 +79,11 @@ impl From<ser::Playlist> for Playlist {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct PlaylistName(Arc<str>);
 
-impl From<String> for PlaylistName {
-	fn from(s: String) -> Self {
-		Self(s.into())
+impl FromStr for PlaylistName {
+	type Err = !;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		Ok(Self(Arc::from(s)))
 	}
 }
 

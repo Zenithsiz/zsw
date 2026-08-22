@@ -6,13 +6,12 @@ mod ser;
 // Imports
 use {
 	crate::{display::DisplayName, playlist::PlaylistName},
-	core::time::Duration,
-	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::Resources,
+	core::{str::FromStr, time::Duration},
+	std::{borrow::Borrow, collections::BTreeMap, fmt, sync::Arc},
 };
 
 /// Profiles
-pub type Profiles = Resources<ProfileName, Arc<Profile>>;
+pub type Profiles = BTreeMap<ProfileName, Arc<Profile>>;
 
 /// Profile
 #[derive(Debug)]
@@ -81,13 +80,17 @@ impl From<ser::Profile> for Profile {
 				.panels
 				.into_iter()
 				.map(|panel| ProfilePanel {
-					display_name: DisplayName::from(panel.display),
+					display_name: DisplayName::from_str(&panel.display).into_ok(),
 					shader:       match panel.shader {
 						ser::ProfilePanelShader::None(shader) => ProfilePanelShader::None(ProfilePanelNoneShader {
 							background_color: shader.background_color,
 						}),
 						ser::ProfilePanelShader::Fade(shader) => ProfilePanelShader::Fade(ProfilePanelFadeShader {
-							playlists:     shader.playlists.into_iter().map(PlaylistName::from).collect(),
+							playlists:     shader
+								.playlists
+								.iter()
+								.map(|name| PlaylistName::from_str(name).into_ok())
+								.collect(),
 							duration:      shader.duration,
 							fade_duration: shader.fade_duration,
 							inner:         match shader.inner {
@@ -116,9 +119,11 @@ impl From<ser::Profile> for Profile {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct ProfileName(Arc<str>);
 
-impl From<String> for ProfileName {
-	fn from(s: String) -> Self {
-		Self(s.into())
+impl FromStr for ProfileName {
+	type Err = !;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		Ok(Self(Arc::from(s)))
 	}
 }
 

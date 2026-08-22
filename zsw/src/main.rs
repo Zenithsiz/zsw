@@ -11,7 +11,8 @@
 	nonpoison_mutex,
 	thread_sleep_until,
 	oneshot_channel,
-	str_as_str
+	str_as_str,
+	unwrap_infallible
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -33,18 +34,16 @@ use {
 	self::{
 		config::Config,
 		dirs::Dirs,
-		display::Displays,
 		menu::Menu,
 		panel::{Panels, PanelsRenderer, PanelsRendererShared},
-		playlist::Playlists,
-		profile::{ProfileName, Profiles},
+		profile::ProfileName,
 		shared::{Shared, SharedWindow},
 	},
 	app_error::Context,
 	args::Args,
 	chrono::TimeDelta,
 	clap::Parser,
-	core::time::Duration,
+	core::{str::FromStr, time::Duration},
 	directories::ProjectDirs,
 	euclid::default::Point2D,
 	std::{
@@ -206,15 +205,15 @@ impl WinitApp {
 		//       toml files, and it'll simplify other things if we can make it mostly immutable.
 
 		// Create and stat loading the displays
-		let displays = Displays::new(dirs.displays()).context("Unable to create displays")?;
+		let displays = zsw_util::read_dir_all_toml(dirs.displays()).context("Unable to create displays")?;
 		let displays = Arc::new(displays);
 
 		// Create and stat loading the playlists
-		let playlists = Playlists::new(dirs.playlists()).context("Unable to create playlists")?;
+		let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
 		let playlists = Arc::new(playlists);
 
 		// Create and stat loading the profiles
-		let profiles = Profiles::new(dirs.profiles()).context("Unable to create profiles")?;
+		let profiles = zsw_util::read_dir_all_toml(dirs.profiles()).context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);
 
 		// Shared state
@@ -231,7 +230,7 @@ impl WinitApp {
 		let shared = Arc::new(shared);
 
 		if let Some(profile) = &config.default.profile {
-			let profile_name = ProfileName::from(profile.clone());
+			let profile_name = ProfileName::from_str(profile).into_ok();
 
 			#[cloned(shared)]
 			zsw_util::spawn_task("Load default profile", move || {

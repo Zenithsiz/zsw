@@ -14,7 +14,7 @@ pub fn draw_profiles_tab(
 	profiles: &Arc<Profiles>,
 	panels: &Arc<Panels>,
 ) {
-	for profile_name in profiles.names() {
+	for profile_name in profiles.keys() {
 		if ui.button(profile_name.as_ref()).clicked() {
 			#[cloned(profile_name, playlists, profiles, panels;)]
 			zsw_util::spawn_task(format!("Set profile active {profile_name:?}"), move || {

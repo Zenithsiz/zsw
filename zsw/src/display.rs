@@ -9,12 +9,12 @@ pub use self::geometry::DisplayGeometry;
 
 // Imports
 use {
-	std::{borrow::Borrow, fmt, sync::Arc},
-	zsw_util::Resources,
+	core::str::FromStr,
+	std::{borrow::Borrow, collections::BTreeMap, fmt, sync::Arc},
 };
 
 /// Displays
-pub type Displays = Resources<DisplayName, Arc<Display>>;
+pub type Displays = BTreeMap<DisplayName, Arc<Display>>;
 
 /// Display
 #[derive(Debug)]
@@ -41,9 +41,11 @@ impl From<ser::Display> for Display {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct DisplayName(Arc<str>);
 
-impl From<String> for DisplayName {
-	fn from(s: String) -> Self {
-		Self(s.into())
+impl FromStr for DisplayName {
+	type Err = !;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		Ok(Self(Arc::from(s)))
 	}
 }
 

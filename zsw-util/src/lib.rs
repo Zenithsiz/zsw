@@ -10,7 +10,8 @@
 	stmt_expr_attributes,
 	core_intrinsics,
 	current_thread_id,
-	oneshot_channel
+	oneshot_channel,
+	extend_one
 )]
 // Lints
 #![expect(internal_features, reason = "There's no other way to check if a type is inhabited")]
@@ -18,7 +19,6 @@
 // Modules
 pub mod loadable;
 mod rect;
-pub mod resources;
 mod tuple_collect_res;
 mod walk_dir;
 
@@ -26,7 +26,6 @@ mod walk_dir;
 pub use {
 	loadable::Loadable,
 	rect::Rect,
-	resources::Resources,
 	tuple_collect_res::{TupleCollectRes1, TupleCollectRes2, TupleCollectRes3, TupleCollectRes4, TupleCollectRes5},
 	walk_dir::WalkDir,
 };
@@ -34,10 +33,10 @@ pub use {
 // Imports
 use {
 	app_error::Context,
-	core::ptr,
+	core::{ptr, str::FromStr},
 	image::DynamicImage,
 	serde::de::DeserializeOwned,
-	std::{fs, intrinsics, path::Path, thread},
+	std::{ffi::OsStr, fs, intrinsics, path::Path, thread},
 	zutil_cloned::cloned,
 };
 
@@ -164,4 +163,50 @@ pub const fn zst_ref_mut<'a, T>() -> &'a mut T {
 
 	// SAFETY: `T` is a ZST and is inhabited, so this is valid
 	unsafe { &mut *ptr::dangling_mut() }
+}
+
+/// Reads all toml files in a directory as values.
+///
+/// The key will be their name, excluding the `.toml` extension.
+pub fn read_dir_all_toml<K, V, R>(dir: &Path) -> Result<R, AppError>
+where
+	K: FromStr + Send + 'static,
+	V: DeserializeOwned + Send + Sync + 'static,
+	R: Default + Extend<(K, V)>,
+	// TODO: This bound is ugly, can we make it better?
+	Result<K, K::Err>: Context<(), Output = Result<K, AppError>>,
+{
+	fs::create_dir_all(dir).context("Unable to create root directory")?;
+	let dir = fs::read_dir(dir).context("Unable to read directory")?;
+
+	let mut values = R::default();
+	for entry in dir {
+		// Ignore directories and non `.toml` files
+		let entry = entry.context("Unable to get entry")?;
+		let entry_path = entry.path();
+		if entry.file_type().context("Unable to get entry metadata")?.is_dir() ||
+			entry_path.extension().and_then(OsStr::to_str) != Some("toml")
+		{
+			continue;
+		}
+
+		// Then get the name from the file
+		let name = entry_path.file_stem().context("Entry path had no file stem")?;
+		let name = name
+			.to_str()
+			.with_context(|| format!("Entry name was non-utf8: {name:?}"))?;
+		let name = name
+			.parse::<K>()
+			.with_context(|| format!("Entry name was invalid {name:?}"))?;
+
+		// Try to read the file
+		let toml = fs::read_to_string(&entry_path).with_context(|| format!("Unable to read file {entry_path:?}"))?;
+
+		// And parse it
+		let value = toml::from_str(&toml).with_context(|| format!("Unable to parse file {entry_path:?}"))?;
+
+		values.extend_one((name, value));
+	}
+
+	Ok(values)
 }
