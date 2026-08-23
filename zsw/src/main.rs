@@ -36,18 +36,18 @@ use {
 		dirs::Dirs,
 		menu::Menu,
 		panel::{Panels, PanelsRenderer, PanelsRendererShared},
-		profile::ProfileName,
+		profile::{Profile, ProfileName},
 		shared::{Shared, SharedWindow},
 	},
 	app_error::Context,
 	args::Args,
 	chrono::TimeDelta,
 	clap::Parser,
-	core::{str::FromStr, time::Duration},
+	core::time::Duration,
 	directories::ProjectDirs,
 	euclid::default::Point2D,
 	std::{
-		collections::HashMap,
+		collections::{BTreeMap, HashMap},
 		fs,
 		process::ExitCode,
 		sync::{Arc, mpsc, nonpoison::Mutex},
@@ -213,7 +213,8 @@ impl WinitApp {
 		let playlists = Arc::new(playlists);
 
 		// Create and stat loading the profiles
-		let profiles = zsw_util::read_dir_all_toml(dirs.profiles()).context("Unable to create profiles")?;
+		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
+			.context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);
 
 		// Shared state
@@ -229,16 +230,16 @@ impl WinitApp {
 		};
 		let shared = Arc::new(shared);
 
-		if let Some(profile) = &config.default.profile {
-			let profile_name = ProfileName::from_str(profile).into_ok();
-
-			#[cloned(shared)]
-			zsw_util::spawn_task("Load default profile", move || {
-				shared
-					.panels
-					.set_profile(&profile_name, &shared.playlists, &shared.profiles)
-					.context("Unable to set profile")
-			});
+		if let Some(default_profile_name) = &config.default.profile {
+			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
+			let default_profile = shared
+				.profiles
+				.get(&default_profile_name)
+				.with_context(|| format!("Unknown profile {:?}", config.default.profile))?;
+			shared
+				.panels
+				.set_profile(default_profile_name, default_profile, &shared.playlists)
+				.context("Unable to set profile")?;
 		}
 
 		Ok(Self {

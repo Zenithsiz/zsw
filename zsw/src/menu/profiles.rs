@@ -4,7 +4,6 @@
 use {
 	crate::{panel::Panels, playlist::Playlists, profile::Profiles},
 	std::sync::Arc,
-	zutil_cloned::cloned,
 };
 
 /// Draws the profiles tab
@@ -14,12 +13,11 @@ pub fn draw_profiles_tab(
 	profiles: &Arc<Profiles>,
 	panels: &Arc<Panels>,
 ) {
-	for profile_name in profiles.keys() {
-		if ui.button(profile_name.as_ref()).clicked() {
-			#[cloned(profile_name, playlists, profiles, panels;)]
-			zsw_util::spawn_task(format!("Set profile active {profile_name:?}"), move || {
-				panels.set_profile(&profile_name, &playlists, &profiles)
-			});
+	for (profile_name, profile) in &**profiles {
+		if ui.button(profile_name.as_ref()).clicked() &&
+			let Err(err) = panels.set_profile(profile_name.clone(), profile, playlists)
+		{
+			tracing::warn!("Unable to set profile {profile_name}: {err:?}");
 		}
 	}
 }

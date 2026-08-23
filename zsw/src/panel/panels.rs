@@ -12,11 +12,11 @@ use {
 		},
 		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
 		profile::{
+			Profile,
 			ProfileName,
 			ProfilePanelFadeShaderInner,
 			ProfilePanelShader,
 			ProfilePanelSlideShaderInner,
-			Profiles,
 		},
 	},
 	app_error::Context,
@@ -63,25 +63,13 @@ impl Panels {
 	/// If a profile already exists, unloads it's panels first
 	pub fn set_profile(
 		&self,
-		profile_name: &ProfileName,
+		profile_name: ProfileName,
+		profile: &Profile,
 		playlists: &Arc<Playlists>,
-		profiles: &Profiles,
 	) -> Result<(), AppError> {
-		// Get the new profile
-		let profile = profiles.get(profile_name).context("Unable to load profile")?;
-
-		// If we have a previous loaded profile, clear all panels before proceeding
-		{
-			let mut inner = self.inner.lock();
-			if let Some(old_profile) = &inner.profile_name {
-				tracing::info!("Dropping previous profile: {:?}", old_profile);
-				inner.panels.clear();
-			}
-			inner.profile_name = Some(profile_name.clone());
-			tracing::info!("Setting current profile: {profile_name:?}");
-		}
-
-		// Then load it's panels
+		let mut inner = self.inner.lock();
+		inner.profile_name = Some(profile_name);
+		inner.panels.clear();
 		for profile_panel in &profile.panels {
 			let state = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
@@ -118,7 +106,7 @@ impl Panels {
 			};
 
 			let panel = Panel::new(profile_panel.display_name.clone(), state);
-			self.inner.lock().panels.push(Arc::new(Mutex::new(panel)));
+			inner.panels.push(Arc::new(Mutex::new(panel)));
 		}
 
 		Ok(())
