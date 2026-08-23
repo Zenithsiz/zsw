@@ -1,0 +1,30 @@
+# Maintainer: Filipe Rodrigues <filipejacintorodrigues1@gmail.com>
+pkgname=zsw
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zenithsiz's scrolling wallpaper"
+arch=('x86_64')
+url="https://github.com/zenithsiz/zsw"
+depends=('gcc-libs')
+makedepends=('cargo-nightly')
+source=()
+sha512sums=()
+
+pkgver() {
+	cd ".."
+	git describe --long --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+	:
+}
+
+build() {
+	:
+}
+
+package() {
+	cd "../.."
+	install -Dm0755 -t "$pkgdir/usr/bin/" "target/release/$pkgname"
+	install -Dm0644 -t "$pkgdir/usr/share/applications/" "install/zsw.desktop"
+}
