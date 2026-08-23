@@ -237,7 +237,6 @@ impl WinitApp {
 			playlists,
 			profiles,
 			panels: Mutex::new(panels),
-			windows: Mutex::new(HashMap::new()),
 		};
 		let shared = Arc::new(shared);
 
@@ -292,11 +291,6 @@ impl WinitApp {
 				egui_event_handler,
 				renderer_event_tx,
 			});
-			_ = self
-				.shared
-				.windows
-				.lock()
-				.insert(shared_window.window.id(), shared_window);
 		}
 
 		Ok(())

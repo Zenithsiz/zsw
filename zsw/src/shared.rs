@@ -9,14 +9,8 @@ use {
 		playlist::Playlists,
 		profile::Profiles,
 	},
-	std::{
-		collections::HashMap,
-		sync::{Arc, nonpoison::Mutex},
-	},
-	winit::{
-		event_loop::EventLoopProxy,
-		window::{Window, WindowId},
-	},
+	std::sync::{Arc, nonpoison::Mutex},
+	winit::{event_loop::EventLoopProxy, window::Window},
 	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
@@ -34,8 +28,6 @@ pub struct Shared {
 	pub profiles:  Arc<Profiles>,
 
 	pub panels: Mutex<Panels>,
-
-	pub windows: Mutex<HashMap<WindowId, Arc<SharedWindow>>>,
 }
 
 /// Shared window data
