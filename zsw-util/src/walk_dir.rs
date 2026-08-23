@@ -1,6 +1,6 @@
 //! Directory walker
 
-use std::{fs, io, path::Path};
+use std::{fs, io, path::PathBuf};
 
 /// Directory walker builder
 #[derive(Debug)]
@@ -36,10 +36,11 @@ impl WalkDirBuilder {
 	///
 	/// This will read the root directory so you can
 	/// catch errors earlier
-	pub fn build(self, root: impl AsRef<Path>) -> Result<WalkDir, io::Error> {
-		let root = fs::read_dir(root)?;
+	pub fn build(self, root_path: impl Into<PathBuf>) -> Result<WalkDir, io::Error> {
+		let root_path = root_path.into();
+		let root = fs::read_dir(&root_path)?;
 		Ok(WalkDir {
-			stack:           vec![root],
+			stack:           vec![(root_path, root)],
 			max_depth:       self.max_depth,
 			recurse_symlink: self.recurse_symlink,
 		})
@@ -50,7 +51,7 @@ impl WalkDirBuilder {
 #[derive(Debug)]
 pub struct WalkDir {
 	/// Stack
-	stack: Vec<fs::ReadDir>,
+	stack: Vec<(PathBuf, fs::ReadDir)>,
 
 	/// Max depth
 	max_depth: Option<usize>,
@@ -71,18 +72,22 @@ impl WalkDir {
 }
 
 impl Iterator for WalkDir {
-	type Item = Result<fs::DirEntry, io::Error>;
+	type Item = Result<fs::DirEntry, WalkDirError>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		loop {
 			// Get the bottom-most directory.
 			// Note: If we've already popped it, then we're done
-			let cur_dir = self.stack.last_mut()?;
+			let (cur_dir_path, cur_dir) = self.stack.last_mut()?;
 
 			// Then read the next entry
 			let entry = match cur_dir.next() {
 				Some(Ok(entry)) => entry,
-				Some(Err(err)) => return Some(Err(err)),
+				Some(Err(err)) =>
+					return Some(Err(WalkDirError::ReadDirEntry {
+						dir_path: cur_dir_path.clone(),
+						err,
+					})),
 				None => {
 					// If we're done with self directory, pop it
 					assert!(self.stack.pop().is_some(), "Stack should not be empty");
@@ -98,17 +103,22 @@ impl Iterator for WalkDir {
 						true => true,
 						false => self.recurse_symlink && file_type.is_symlink(),
 					},
-					Err(err) => return Some(Err(err)),
+					Err(err) =>
+						return Some(Err(WalkDirError::FileTypeEntry {
+							path: entry.path(),
+							err,
+						})),
 				};
 
 				if is_maybe_dir {
-					match fs::read_dir(entry.path()) {
-						Ok(dir) => self.stack.push(dir),
+					let path = entry.path();
+					match fs::read_dir(&path) {
+						Ok(dir) => self.stack.push((path, dir)),
 						// Note: At this point we could have been following a symlink, so if it
 						//       turns out it wasn't a directory, that's fine, we don't need to return an error.
 						Err(err) =>
 							if err.kind() != io::ErrorKind::NotADirectory {
-								return Some(Err(err));
+								return Some(Err(WalkDirError::ReadDir { path, err }));
 							},
 					}
 				}
@@ -117,4 +127,32 @@ impl Iterator for WalkDir {
 			return Some(Ok(entry));
 		}
 	}
+}
+
+/// Error for [`WalkDir`]
+#[derive(Debug, thiserror::Error)]
+pub enum WalkDirError {
+	#[error("Unable to read directory entry in {}", dir_path.display())]
+	ReadDirEntry {
+		dir_path: PathBuf,
+
+		#[source]
+		err: io::Error,
+	},
+
+	#[error("Unable to get file type of {}", path.display())]
+	FileTypeEntry {
+		path: PathBuf,
+
+		#[source]
+		err: io::Error,
+	},
+
+	#[error("Unable to read directory {}", path.display())]
+	ReadDir {
+		path: PathBuf,
+
+		#[source]
+		err: io::Error,
+	},
 }
