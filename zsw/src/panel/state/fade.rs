@@ -44,7 +44,12 @@ pub struct PanelFadeState {
 }
 
 impl PanelFadeState {
-	pub fn new(duration: Duration, fade_duration: Duration, shader: PanelFadeShader) -> Self {
+	pub fn new(
+		duration: Duration,
+		fade_duration: Duration,
+		playlist_player: PlaylistPlayer,
+		shader: PanelFadeShader,
+	) -> Self {
 		Self {
 			paused: false,
 			shader,
@@ -53,7 +58,7 @@ impl PanelFadeState {
 			duration,
 			fade_duration,
 			images: PanelFadeImages::new(),
-			playlist_player: PlaylistPlayer::new(),
+			playlist_player,
 		}
 	}
 
@@ -140,11 +145,6 @@ impl PanelFadeState {
 	/// Returns the panel images mutably
 	pub fn images_mut(&mut self) -> &mut PanelFadeImages {
 		&mut self.images
-	}
-
-	/// Returns the panel playlist player
-	pub fn playlist_player_mut(&mut self) -> &mut PlaylistPlayer {
-		&mut self.playlist_player
 	}
 
 	/// Returns if paused
