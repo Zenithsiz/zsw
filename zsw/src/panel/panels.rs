@@ -76,13 +76,7 @@ impl Panels {
 			let state = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
 				ProfilePanelShader::Fade(shader) => {
-					let mut playlist_player = PlaylistPlayer::new();
-
-					// TODO: This is called for each panel, which might load the same playlist
-					//       multiple times, we should instead load and cache the playlist itself
-					let playlist = &playlists[&shader.playlist];
-					playlist_player
-						.load(playlist)
+					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
 						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
 					let state = PanelFadeState::new(

@@ -33,84 +33,16 @@ pub struct PlaylistPlayer {
 
 impl PlaylistPlayer {
 	/// Creates a new, empty, player
-	pub fn new() -> Self {
-		Self {
-			all_items:     HashSet::new(),
-			cur_items:     VecDeque::new(),
+	pub fn new(playlist: &Playlist) -> Result<Self, AppError> {
+		let all_items = self::load_playlist_items(playlist)?;
+
+		Ok(Self {
+			all_items,
+			cur_items: VecDeque::new(),
 			max_old_items: 100,
-			cur_pos:       0,
-			rng:           rand::make_rng(),
-		}
-	}
-
-	/// Loads a playlist into this player
-	pub fn load(&mut self, playlist: &Playlist) -> Result<(), AppError> {
-		for item in &playlist.items {
-			// If not enabled, skip it
-			if !item.enabled {
-				continue;
-			}
-
-			// Else check the kind of item
-			match item.kind {
-				PlaylistItemKind::Directory {
-					path: ref dir_path,
-					follow_symlinks,
-					recursive,
-				} => {
-					let builder = WalkDir::builder()
-						.recurse_symlink(follow_symlinks)
-						.max_depth(match recursive {
-							true => None,
-							false => Some(1),
-						});
-
-					let dir = match builder.build(dir_path.as_path()) {
-						Ok(dir) => dir,
-						Err(err) => {
-							let err = AppError::new(&err);
-							tracing::warn!("Unable to read directory {dir_path:?}: {err:?}");
-							continue;
-						},
-					};
-
-					for entry in dir {
-						let entry = match entry {
-							Ok(entry) => entry,
-							Err(err) => {
-								let err = AppError::new(&err);
-								tracing::warn!("Unable to read directory entry: {err:?}");
-								continue;
-							},
-						};
-
-						let file_type = match entry.file_type() {
-							Ok(file_type) => file_type,
-							Err(err) => {
-								let err = AppError::new(&err);
-								tracing::warn!("Unable to read directory entry file: {err:?}");
-								continue;
-							},
-						};
-
-						if !file_type.is_dir() {
-							self.insert(entry.path().into());
-						}
-					}
-				},
-				PlaylistItemKind::File { ref path } => self.insert(Arc::clone(path)),
-			}
-		}
-
-		Ok(())
-	}
-
-	/// Inserts an item in this player
-	pub fn insert(&mut self, item: Arc<Path>) {
-		_ = self.all_items.insert(item);
-
-		// Remove any queued items so we can get a better pool
-		_ = self.cur_items.drain(self.cur_pos..);
+			cur_pos: 0,
+			rng: rand::make_rng(),
+		})
 	}
 
 	/// Returns the previous position in the playlist
@@ -247,4 +179,68 @@ impl PlaylistPlayer {
 
 		Some(item)
 	}
+}
+
+/// Loads all entries in a playlist
+// TODO: Cache this in the playlist itself
+fn load_playlist_items(playlist: &Playlist) -> Result<HashSet<Arc<Path>>, AppError> {
+	let mut items = HashSet::new();
+	for item in &playlist.items {
+		// If not enabled, skip it
+		if !item.enabled {
+			continue;
+		}
+
+		// Else check the kind of item
+		match item.kind {
+			PlaylistItemKind::Directory {
+				path: ref dir_path,
+				follow_symlinks,
+				recursive,
+			} => {
+				let builder = WalkDir::builder()
+					.recurse_symlink(follow_symlinks)
+					.max_depth(match recursive {
+						true => None,
+						false => Some(1),
+					});
+
+				let dir = match builder.build(dir_path.as_path()) {
+					Ok(dir) => dir,
+					Err(err) => {
+						let err = AppError::new(&err);
+						tracing::warn!("Unable to read directory {dir_path:?}: {err:?}");
+						continue;
+					},
+				};
+
+				for entry in dir {
+					let entry = match entry {
+						Ok(entry) => entry,
+						Err(err) => {
+							let err = AppError::new(&err);
+							tracing::warn!("Unable to read directory entry: {err:?}");
+							continue;
+						},
+					};
+
+					let file_type = match entry.file_type() {
+						Ok(file_type) => file_type,
+						Err(err) => {
+							let err = AppError::new(&err);
+							tracing::warn!("Unable to read directory entry file: {err:?}");
+							continue;
+						},
+					};
+
+					if !file_type.is_dir() {
+						_ = items.insert(entry.path().into());
+					}
+				}
+			},
+			PlaylistItemKind::File { ref path } => _ = items.insert(Arc::clone(path)),
+		}
+	}
+
+	Ok(items)
 }
