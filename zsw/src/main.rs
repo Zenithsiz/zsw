@@ -349,9 +349,7 @@ fn renderer(
 		next_frame += frame_duration;
 
 		// Wait until the start of the next frame.
-		// Note: We manually sleep instead of letting wgpu block for us
-		//       when retrieving the texture to ensure that `tokio` isn't
-		//       blocked, since those are non-async, while this sleep is.
+		// TODO: Remove this and just let wgpu sleep for us?
 		thread::sleep_until(cur_frame_start);
 
 		// If we were too late, we need to skip some frames

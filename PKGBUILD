@@ -20,20 +20,14 @@ prepare() {
 build() {
 	cd "$pkgname-$pkgver"
 
-	# TODO: Remove adding `tokio_unstable` to `RUSTFLAGS` once
-	#       we can get `cargo` to read `.cargo/config.toml` here
 	export RUSTUP_TOOLCHAIN=nightly
-	export RUSTFLAGS+=" --cfg tokio_unstable"
 	cargo build --frozen --release
 }
 
 check() {
 	cd "$pkgname-$pkgver"
 
-	# TODO: Remove adding `tokio_unstable` to `RUSTFLAGS` once
-	#       we can get `cargo` to read `.cargo/config.toml` here
 	export RUSTUP_TOOLCHAIN=nightly
-	export RUSTFLAGS+=" --cfg tokio_unstable"
 	cargo test --frozen
 }
 
