@@ -37,14 +37,13 @@ fn draw_panels_editor(
 	panels: &Panels,
 	window_geometry: Rect<i32, u32>,
 ) {
-	let panels = panels.get_all();
+	let mut panels = panels.get_all();
 	if panels.is_empty() {
 		ui.label("None loaded");
 		return;
 	}
 
-	for panel in panels {
-		let panel = &mut *panel.lock();
+	for panel in &mut *panels {
 		let mut name = egui::WidgetText::from(panel.display_name.to_string());
 		if displays[&panel.display_name]
 			.geometries

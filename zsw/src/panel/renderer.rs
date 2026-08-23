@@ -193,9 +193,8 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, panels_shared.vertices.slice(..));
 
 		// Then render all panels simultaneously
-		let panels = panels.get_all();
-		for panel in panels {
-			let mut panel = panel.lock();
+		let mut panels = panels.get_all();
+		for panel in &mut *panels {
 			self.render_panel(
 				shared,
 				panels_shared,
@@ -204,7 +203,7 @@ impl PanelsRenderer {
 				window,
 				window_geometry,
 				&mut render_pass,
-				&mut panel,
+				panel,
 			)?;
 		}
 

@@ -20,7 +20,10 @@ use {
 		},
 	},
 	app_error::Context,
-	std::sync::{Arc, nonpoison::Mutex},
+	std::sync::{
+		Arc,
+		nonpoison::{MappedMutexGuard, Mutex, MutexGuard},
+	},
 	zsw_util::{AppError, WalkDir},
 	zutil_cloned::cloned,
 };
@@ -32,7 +35,7 @@ struct Inner {
 	profile_name: Option<ProfileName>,
 
 	/// Panels
-	panels: Vec<Arc<Mutex<Panel>>>,
+	panels: Vec<Panel>,
 }
 
 /// Panels
@@ -53,9 +56,9 @@ impl Panels {
 		}
 	}
 
-	/// Gets all of the panels
-	pub fn get_all(&self) -> Vec<Arc<Mutex<Panel>>> {
-		self.inner.lock().panels.clone()
+	/// Gets the panels
+	pub fn get_all(&self) -> MappedMutexGuard<'_, [Panel]> {
+		MutexGuard::map(self.inner.lock(), |inner| inner.panels.as_mut_slice())
 	}
 
 	/// Sets the current profile.
@@ -106,7 +109,7 @@ impl Panels {
 			};
 
 			let panel = Panel::new(profile_panel.display_name.clone(), state);
-			inner.panels.push(Arc::new(Mutex::new(panel)));
+			inner.panels.push(panel);
 		}
 
 		Ok(())

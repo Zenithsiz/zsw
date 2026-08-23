@@ -12,7 +12,8 @@
 	thread_sleep_until,
 	oneshot_channel,
 	str_as_str,
-	unwrap_infallible
+	unwrap_infallible,
+	mapped_lock_guards
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -468,8 +469,8 @@ fn paint_egui(
 			return Ok(());
 		};
 		let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
-		for panel in shared.panels.get_all() {
-			let panel = &mut *panel.lock();
+		let mut panels = shared.panels.get_all();
+		for panel in &mut *panels {
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_egui() ||
 				!shared.displays[&panel.display_name]
