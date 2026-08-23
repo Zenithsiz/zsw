@@ -44,7 +44,7 @@ pub struct ProfilePanelNoneShader {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanelFadeShader {
-	pub playlists:     Vec<String>,
+	pub playlist:      String,
 	#[serde(with = "humantime_serde")]
 	pub duration:      Duration,
 	#[serde(with = "humantime_serde")]

@@ -80,12 +80,10 @@ impl Panels {
 
 					// TODO: This is called for each panel, which might load the same playlist
 					//       multiple times, we should instead load and cache the playlist itself
-					for playlist_name in &shader.playlists {
-						let playlist = &playlists[playlist_name];
-						playlist_player
-							.load(playlist)
-							.with_context(|| format!("Unable to load playlist {playlist_name:?}"))?;
-					}
+					let playlist = &playlists[&shader.playlist];
+					playlist_player
+						.load(playlist)
+						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
 					let state = PanelFadeState::new(
 						shader.duration,

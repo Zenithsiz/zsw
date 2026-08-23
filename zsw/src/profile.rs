@@ -46,7 +46,7 @@ pub struct ProfilePanelNoneShader {
 /// Profile panel fade shader
 #[derive(Debug)]
 pub struct ProfilePanelFadeShader {
-	pub playlists:     Vec<PlaylistName>,
+	pub playlist:      PlaylistName,
 	pub duration:      Duration,
 	pub fade_duration: Duration,
 	pub inner:         ProfilePanelFadeShaderInner,
@@ -86,11 +86,7 @@ impl From<ser::Profile> for Profile {
 							background_color: shader.background_color,
 						}),
 						ser::ProfilePanelShader::Fade(shader) => ProfilePanelShader::Fade(ProfilePanelFadeShader {
-							playlists:     shader
-								.playlists
-								.iter()
-								.map(|name| PlaylistName::from_str(name).into_ok())
-								.collect(),
+							playlist:      PlaylistName::from_str(&shader.playlist).into_ok(),
 							duration:      shader.duration,
 							fade_duration: shader.fade_duration,
 							inner:         match shader.inner {
