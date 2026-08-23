@@ -188,11 +188,7 @@ impl PanelFadeImages {
 
 			// Else, log an error, remove the image and re-schedule it
 			Err(err) => {
-				tracing::warn!(
-					"Unable to load image {:?}, removing it from player: {}",
-					res.path,
-					err.pretty()
-				);
+				tracing::warn!("Unable to load image {:?}, removing it from player: {err:?}", res.path);
 				playlist_player.remove(&res.path);
 
 				_ = self.schedule_load_image(playlist_player, wgpu);
@@ -222,7 +218,7 @@ impl PanelFadeImages {
 			let texture_view = match wgpu.create_texture_from_image(&texture_label, image) {
 				Ok((_, texture_view)) => texture_view,
 				Err(err) => {
-					tracing::warn!("Unable to create texture for image {:?}: {}", res.path, err.pretty());
+					tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
 					return;
 				},
 			};

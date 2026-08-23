@@ -157,7 +157,7 @@ fn load_playlist(
 					Ok(dir) => dir,
 					Err(err) => {
 						let err = AppError::new(&err);
-						tracing::warn!("Unable to read directory {dir_path:?}: {}", err.pretty());
+						tracing::warn!("Unable to read directory {dir_path:?}: {err:?}");
 						continue;
 					},
 				};
@@ -167,7 +167,7 @@ fn load_playlist(
 						Ok(entry) => entry,
 						Err(err) => {
 							let err = AppError::new(&err);
-							tracing::warn!("Unable to read directory entry: {}", err.pretty());
+							tracing::warn!("Unable to read directory entry: {err:?}");
 							continue;
 						},
 					};
@@ -176,7 +176,7 @@ fn load_playlist(
 						Ok(file_type) => file_type,
 						Err(err) => {
 							let err = AppError::new(&err);
-							tracing::warn!("Unable to read directory entry file: {}", err.pretty());
+							tracing::warn!("Unable to read directory entry file: {err:?}");
 							continue;
 						},
 					};

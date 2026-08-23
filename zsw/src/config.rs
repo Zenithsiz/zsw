@@ -37,7 +37,7 @@ impl Config {
 		match Self::load(path) {
 			Ok(config) => config,
 			Err(err) => {
-				tracing::warn!("Unable to load config from {path:?}, using default: {}", err.pretty());
+				tracing::warn!("Unable to load config from {path:?}, using default: {err:?}");
 				let config = Self::default();
 
 				// If the config file doesn't exist, write the default
@@ -45,7 +45,7 @@ impl Config {
 				if !fs::exists(path).unwrap_or(true) &&
 					let Err(err) = config.write(path)
 				{
-					tracing::warn!("Unable to write default config to {path:?}: {}", err.pretty());
+					tracing::warn!("Unable to write default config to {path:?}: {err:?}");
 				}
 
 				config

@@ -134,13 +134,13 @@ where
 		tracing::debug!("Spawning task {name:?} ({id:?})");
 		match f() {
 			Ok(()) => tracing::debug!("Task {name:?} ({id:?}) finished"),
-			Err(err) => tracing::warn!("Task {name:?} ({id:?}) returned error: {}", err.pretty()),
+			Err(err) => tracing::warn!("Task {name:?} ({id:?}) returned error: {err:?}"),
 		}
 	};
 
 	if let Err(err) = thread::Builder::new().name(name.clone()).spawn(f) {
 		let err = AppError::new(&err);
-		tracing::warn!("Unable to spawn task {name:?}: {}", err.pretty());
+		tracing::warn!("Unable to spawn task {name:?}: {err:?}");
 	}
 }
 

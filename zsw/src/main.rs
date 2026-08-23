@@ -156,14 +156,14 @@ struct WinitAppWindow {
 impl ApplicationHandler<AppEvent> for WinitApp {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
 		if let Err(err) = self.init_window(event_loop) {
-			tracing::warn!("Unable to initialize window: {}", err.pretty());
+			tracing::warn!("Unable to initialize window: {err:?}");
 			event_loop.exit();
 		}
 	}
 
 	fn suspended(&mut self, event_loop: &ActiveEventLoop) {
 		if let Err(err) = self.destroy_window() {
-			tracing::warn!("Unable to destroy window: {}", err.pretty());
+			tracing::warn!("Unable to destroy window: {err:?}");
 			event_loop.exit();
 		}
 	}
@@ -372,7 +372,7 @@ fn renderer(
 			match self::paint_egui(shared, egui_painter, &mut menu, window_geometry) {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
-					tracing::warn!("Unable to draw egui: {}", err.pretty());
+					tracing::warn!("Unable to draw egui: {err:?}");
 					(vec![], None)
 				},
 			};

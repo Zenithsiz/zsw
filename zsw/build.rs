@@ -40,10 +40,7 @@ fn main() {
 			_ = thread::Builder::new()
 				.spawn_scoped(s, move || {
 					if let Err(err) = self::process(shader, &shader_src_path, &shader_out_path) {
-						panic!(
-							"Unable to process shader module {shader_src_path:?} ({shader:?}): {}",
-							err.pretty()
-						)
+						panic!("Unable to process shader module {shader_src_path:?} ({shader:?}): {err:?}");
 					}
 				})
 				.expect("Unable to spawn thread to parse shader");

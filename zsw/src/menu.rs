@@ -98,7 +98,7 @@ fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 			let Err(err) = opener::open(path)
 		{
 			let err = AppError::new(&err);
-			tracing::warn!("Unable to open file {path:?}: {}", err.pretty());
+			tracing::warn!("Unable to open file {path:?}: {err:?}");
 		}
 	});
 }
