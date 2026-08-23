@@ -7,12 +7,7 @@ struct Uniforms {
 	progress: f32,
 	alpha: f32,
 
-	#ifdef FADE_WHITE
-		mix_strength: f32,
-	#else ifdef FADE_OUT
-		strength: f32,
-		fade_progress: f32,
-	#else ifdef FADE_IN
+	#ifdef FADE_OUT
 		strength: f32,
 		fade_progress: f32,
 	#endif
@@ -55,9 +50,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 	#ifdef FADE_OUT
 		let mid = uniforms.image_ratio / 2.0 + uvs_offset;
 		uvs = mid + (uvs - mid) * pow(uniforms.fade_progress, uniforms.strength);
-	#else ifdef FADE_IN
-		let mid = uniforms.image_ratio / 2.0 + uvs_offset;
-		uvs = mid + (uvs - mid) / pow(uniforms.fade_progress, uniforms.strength);
 	#endif
 
 	// If we'd sample outside the image, discard this pixel instead
@@ -68,12 +60,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	// Otherwise, we'll sample and return the color
 	var color = textureSample(image, image_sampler, uvs);
-	#ifdef FADE_WHITE
-		color = mix(
-			color,
-			vec4(1.0, 1.0, 1.0, 1.0),
-			uniforms.mix_strength,
-		);
-	#endif
 	return vec4(color.rgb, uniforms.alpha);
 }

@@ -72,9 +72,7 @@ impl Panels {
 						playlist_player,
 						match shader.inner {
 							ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
-							ProfilePanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
 							ProfilePanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
-							ProfilePanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
 						},
 					);
 

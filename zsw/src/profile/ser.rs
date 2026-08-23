@@ -63,14 +63,8 @@ pub enum ProfilePanelFadeShaderInner {
 	#[serde(rename = "basic")]
 	Basic,
 
-	#[serde(rename = "white")]
-	White { strength: f32 },
-
 	#[serde(rename = "out")]
 	Out { strength: f32 },
-
-	#[serde(rename = "in")]
-	In { strength: f32 },
 }
 
 /// Panel slide shader

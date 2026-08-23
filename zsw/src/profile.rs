@@ -56,9 +56,7 @@ pub struct ProfilePanelFadeShader {
 #[derive(Debug)]
 pub enum ProfilePanelFadeShaderInner {
 	Basic,
-	White { strength: f32 },
 	Out { strength: f32 },
-	In { strength: f32 },
 }
 
 /// Profile slide panel shader
@@ -91,12 +89,8 @@ impl From<ser::Profile> for Profile {
 							fade_duration: shader.fade_duration,
 							inner:         match shader.inner {
 								ser::ProfilePanelFadeShaderInner::Basic => ProfilePanelFadeShaderInner::Basic,
-								ser::ProfilePanelFadeShaderInner::White { strength } =>
-									ProfilePanelFadeShaderInner::White { strength },
 								ser::ProfilePanelFadeShaderInner::Out { strength } =>
 									ProfilePanelFadeShaderInner::Out { strength },
-								ser::ProfilePanelFadeShaderInner::In { strength } =>
-									ProfilePanelFadeShaderInner::In { strength },
 							},
 						}),
 						ser::ProfilePanelShader::Slide(shader) => ProfilePanelShader::Slide(ProfilePanelSlideShader {

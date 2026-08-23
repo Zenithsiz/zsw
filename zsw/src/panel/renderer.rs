@@ -243,9 +243,7 @@ impl PanelsRenderer {
 			PanelState::None(_) => RenderPipelineId::None,
 			PanelState::Fade(state) => RenderPipelineId::Fade(match state.shader() {
 				PanelFadeShader::Basic => RenderPipelineFadeId::Basic,
-				PanelFadeShader::White { .. } => RenderPipelineFadeId::White,
 				PanelFadeShader::Out { .. } => RenderPipelineFadeId::Out,
-				PanelFadeShader::In { .. } => RenderPipelineFadeId::In,
 			}),
 			PanelState::Slide(state) => RenderPipelineId::Slide(match state.shader() {
 				PanelSlideShader::Basic => RenderPipelineSlideId::Basic,
@@ -472,32 +470,8 @@ impl PanelsRenderer {
 					progress,
 					alpha,
 				}),
-				PanelFadeShader::White { strength } =>
-					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::White {
-						pos_matrix,
-						image_ratio: uniform::Vec2(image_ratio.into()),
-						progress,
-						alpha,
-						mix_strength: strength *
-							match p_stage {
-								cmp::Ordering::Less => 1.0 - (p / f) * (p / f),
-								cmp::Ordering::Equal => 0.0,
-								cmp::Ordering::Greater => 1.0 - ((1.0 - p) / f) * ((1.0 - p) / f),
-							},
-						_unused: [0; _],
-					}),
 				PanelFadeShader::Out { strength } =>
 					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Out {
-						pos_matrix,
-						image_ratio: uniform::Vec2(image_ratio.into()),
-						progress,
-						alpha,
-						strength,
-						fade_progress,
-						_unused: [0; _],
-					}),
-				PanelFadeShader::In { strength } =>
-					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::In {
 						pos_matrix,
 						image_ratio: uniform::Vec2(image_ratio.into()),
 						progress,
@@ -599,9 +573,7 @@ impl RenderPipelineId {
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 pub enum RenderPipelineFadeId {
 	Basic,
-	White,
 	Out,
-	In,
 }
 
 impl RenderPipelineFadeId {
@@ -609,9 +581,7 @@ impl RenderPipelineFadeId {
 	pub fn name(self) -> &'static str {
 		match self {
 			Self::Basic => "fade-basic",
-			Self::White => "fade-white",
 			Self::Out => "fade-out",
-			Self::In => "fade-in",
 		}
 	}
 }
@@ -778,9 +748,7 @@ impl PanelShader {
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum PanelFadeShader {
 	Basic,
-	White { strength: f32 },
 	Out { strength: f32 },
-	In { strength: f32 },
 }
 
 impl PanelFadeShader {
@@ -788,9 +756,7 @@ impl PanelFadeShader {
 	pub fn name(self) -> &'static str {
 		match self {
 			Self::Basic => "Fade",
-			Self::White { .. } => "Fade white",
 			Self::Out { .. } => "Fade out",
-			Self::In { .. } => "Fade in",
 		}
 	}
 
@@ -798,9 +764,7 @@ impl PanelFadeShader {
 	pub fn module_json(self) -> &'static str {
 		match self {
 			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade.json")),
-			Self::White { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-white.json")),
 			Self::Out { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-out.json")),
-			Self::In { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-in.json")),
 		}
 	}
 }
