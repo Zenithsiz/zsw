@@ -11,10 +11,7 @@ use {
 	crate::{panel::PanelFadeShader, playlist::PlaylistPlayer},
 	chrono::TimeDelta,
 	core::time::Duration,
-	std::{
-		sync::{Arc, nonpoison::Mutex},
-		time::Instant,
-	},
+	std::time::Instant,
 	zsw_wgpu::Wgpu,
 };
 
@@ -43,13 +40,11 @@ pub struct PanelFadeState {
 	images: PanelFadeImages,
 
 	/// Playlist player
-	playlist_player: Arc<Mutex<PlaylistPlayer>>,
+	playlist_player: PlaylistPlayer,
 }
 
 impl PanelFadeState {
 	pub fn new(duration: Duration, fade_duration: Duration, shader: PanelFadeShader) -> Self {
-		let playlist_player = Arc::new(Mutex::new(PlaylistPlayer::new()));
-
 		Self {
 			paused: false,
 			shader,
@@ -58,7 +53,7 @@ impl PanelFadeState {
 			duration,
 			fade_duration,
 			images: PanelFadeImages::new(),
-			playlist_player,
+			playlist_player: PlaylistPlayer::new(),
 		}
 	}
 
@@ -148,8 +143,8 @@ impl PanelFadeState {
 	}
 
 	/// Returns the panel playlist player
-	pub fn playlist_player(&self) -> &Arc<Mutex<PlaylistPlayer>> {
-		&self.playlist_player
+	pub fn playlist_player_mut(&mut self) -> &mut PlaylistPlayer {
+		&mut self.playlist_player
 	}
 
 	/// Returns if paused
@@ -176,8 +171,7 @@ impl PanelFadeState {
 
 	/// Skips to the next image.
 	pub fn skip(&mut self, wgpu: &Wgpu) {
-		let mut playlist_player = self.playlist_player.lock();
-		self.progress = match self.images.step_next(&mut playlist_player, wgpu) {
+		self.progress = match self.images.step_next(&mut self.playlist_player, wgpu) {
 			Ok(()) => self.fade_duration,
 			Err(()) => self.max_progress(),
 		}
@@ -185,8 +179,6 @@ impl PanelFadeState {
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
 	pub fn step(&mut self, wgpu: &Wgpu, delta: TimeDelta) {
-		let mut playlist_player = self.playlist_player.lock();
-
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
 			true => Some(self.progress.saturating_add(delta_abs)),
@@ -199,7 +191,7 @@ impl PanelFadeState {
 			Some(next_progress) => match next_progress.checked_sub(self.duration) {
 				// If we did, `next_progress` is our progress at the next image, so try
 				// to step to it.
-				Some(next_progress) => match self.images.step_next(&mut playlist_player, wgpu) {
+				Some(next_progress) => match self.images.step_next(&mut self.playlist_player, wgpu) {
 					// If we successfully stepped to the next image, start at the next progress
 					// Note: If delta was big enough to overflow 2 durations, then cap it at the
 					//       max duration of the next image.
@@ -215,7 +207,7 @@ impl PanelFadeState {
 			},
 
 			// Otherwise, we underflowed, so try to step back
-			None => match self.images.step_prev(&mut playlist_player, wgpu) {
+			None => match self.images.step_prev(&mut self.playlist_player, wgpu) {
 				// If we successfully stepped backwards, start at where we're supposed to:
 				Ok(()) => {
 					// Note: This branch is only taken when `delta` is negative, so we can always
@@ -240,7 +232,7 @@ impl PanelFadeState {
 	pub fn update(&mut self, wgpu: &Wgpu) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
-		self.images.load_missing(&mut self.playlist_player.lock(), wgpu);
+		self.images.load_missing(&mut self.playlist_player, wgpu);
 
 		// If we're paused, don't update anything
 		if self.paused {

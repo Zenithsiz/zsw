@@ -10,7 +10,7 @@ use {
 			PanelState,
 			state::{PanelFadeState, PanelNoneState, PanelSlideState},
 		},
-		playlist::{PlaylistItemKind, PlaylistName, PlaylistPlayer, Playlists},
+		playlist::{Playlist, PlaylistItemKind, PlaylistPlayer, Playlists},
 		profile::{
 			Profile,
 			ProfileName,
@@ -25,7 +25,6 @@ use {
 		nonpoison::{MappedMutexGuard, Mutex, MutexGuard},
 	},
 	zsw_util::{AppError, WalkDir},
-	zutil_cloned::cloned,
 };
 
 /// Inner
@@ -77,25 +76,20 @@ impl Panels {
 			let state = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
 				ProfilePanelShader::Fade(shader) => {
-					let state = PanelFadeState::new(shader.duration, shader.fade_duration, match shader.inner {
+					let mut state = PanelFadeState::new(shader.duration, shader.fade_duration, match shader.inner {
 						ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
 						ProfilePanelFadeShaderInner::White { strength } => PanelFadeShader::White { strength },
 						ProfilePanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
 						ProfilePanelFadeShaderInner::In { strength } => PanelFadeShader::In { strength },
 					});
 
-					#[cloned(playlists, panel_playlists = shader.playlists, playlist_player = state.playlist_player())]
-					zsw_util::spawn_task(
-						format!("Load panel {:?} playlists", profile_panel.display_name),
-						move || {
-							for playlist_name in panel_playlists {
-								self::load_playlist(&playlist_player, &playlist_name, &playlists)
-									.with_context(|| format!("Unable to load playlist {playlist_name:?}"))?;
-							}
-
-							Ok(())
-						},
-					);
+					// TODO: This is called for each panel, which might load the same playlist
+					//       multiple times, we should instead load and cache the playlist itself
+					for playlist_name in &shader.playlists {
+						let playlist = &playlists[playlist_name];
+						self::load_playlist(state.playlist_player_mut(), playlist)
+							.with_context(|| format!("Unable to load playlist {playlist_name:?}"))?;
+					}
 
 					PanelState::Fade(state)
 				},
@@ -117,13 +111,7 @@ impl Panels {
 }
 
 /// Loads a panel's playlist
-fn load_playlist(
-	playlist_player: &Mutex<PlaylistPlayer>,
-	playlist_name: &PlaylistName,
-	playlists: &Playlists,
-) -> Result<(), AppError> {
-	let playlist = playlists.get(playlist_name).context("Unable to load playlist")?;
-
+fn load_playlist(player: &mut PlaylistPlayer, playlist: &Playlist) -> Result<(), AppError> {
 	for item in &playlist.items {
 		// If not enabled, skip it
 		if !item.enabled {
@@ -173,11 +161,11 @@ fn load_playlist(
 					};
 
 					if !file_type.is_dir() {
-						playlist_player.lock().insert(entry.path().into());
+						player.insert(entry.path().into());
 					}
 				}
 			},
-			PlaylistItemKind::File { ref path } => playlist_player.lock().insert(Arc::clone(path)),
+			PlaylistItemKind::File { ref path } => player.insert(Arc::clone(path)),
 		}
 	}
 
