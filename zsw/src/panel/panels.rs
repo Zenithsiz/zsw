@@ -20,10 +20,7 @@ use {
 		},
 	},
 	app_error::Context,
-	std::{
-		fs,
-		sync::{Arc, nonpoison::Mutex},
-	},
+	std::sync::{Arc, nonpoison::Mutex},
 	zsw_util::{AppError, WalkDir},
 	zutil_cloned::cloned,
 };
@@ -189,13 +186,7 @@ fn load_playlist(
 					}
 				}
 			},
-			PlaylistItemKind::File { ref path } => match fs::canonicalize(path) {
-				Ok(path) => playlist_player.lock().insert(path.into()),
-				Err(err) => {
-					let err = AppError::new(&err);
-					tracing::warn!("Unable to canonicalize playlist entry {path:?}: {}", err.pretty());
-				},
-			},
+			PlaylistItemKind::File { ref path } => playlist_player.lock().insert(Arc::clone(path)),
 		}
 	}
 
