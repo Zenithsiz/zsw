@@ -187,7 +187,9 @@ fn configure_window_surface(
 	tracing::debug!(?config, "Found surface configuration");
 
 	// Set some options
-	config.present_mode = wgpu::PresentMode::AutoVsync;
+	// Note: Since we manually sleep every frame to achieve
+	//       our desired frame-rate, we don't need vsync.
+	config.present_mode = wgpu::PresentMode::Mailbox;
 	tracing::debug!(?config, "Updated surface configuration");
 
 	// Then configure it

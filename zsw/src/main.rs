@@ -349,7 +349,12 @@ fn renderer(
 		next_frame += frame_duration;
 
 		// Wait until the start of the next frame.
-		// TODO: Remove this and just let wgpu sleep for us?
+		// Note: We do this instead of letting wgpu sleep because all vsync
+		//       modes that sleep for us do so with a 3 frame buffer, which
+		//       means that the user is always 3 frames behind, and thus can
+		//       notice pretty heavy lag (at 60Hz, about 50 ms).
+		//       We also set the present mode to mailbox, which means that we
+		//       don't get any tearing, but have minimal lag.
 		thread::sleep_until(cur_frame_start);
 
 		// If we were too late, we need to skip some frames
