@@ -12,7 +12,6 @@ use {
 	super::{
 		Panel,
 		PanelState,
-		Panels,
 		state::{
 			PanelFadeState,
 			PanelNoneState,
@@ -143,7 +142,6 @@ impl PanelsRenderer {
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		panels_shared: &PanelsRendererShared,
-		panels: &Panels,
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
 	) -> Result<(), AppError> {
@@ -193,8 +191,8 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, panels_shared.vertices.slice(..));
 
 		// Then render all panels simultaneously
-		let mut panels = panels.get_all();
-		for panel in &mut *panels {
+		let mut panels = shared.panels.lock();
+		for panel in panels.get_all() {
 			self.render_panel(
 				shared,
 				panels_shared,

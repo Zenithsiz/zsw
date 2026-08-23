@@ -20,16 +20,13 @@ use {
 		},
 	},
 	app_error::Context,
-	std::sync::{
-		Arc,
-		nonpoison::{MappedMutexGuard, Mutex, MutexGuard},
-	},
+	std::sync::Arc,
 	zsw_util::AppError,
 };
 
-/// Inner
+/// Panels
 #[derive(Debug)]
-struct Inner {
+pub struct Panels {
 	/// Profile name
 	profile_name: Option<ProfileName>,
 
@@ -37,41 +34,31 @@ struct Inner {
 	panels: Vec<Panel>,
 }
 
-/// Panels
-#[derive(Debug)]
-pub struct Panels {
-	/// Inner
-	inner: Mutex<Inner>,
-}
-
 impl Panels {
 	/// Creates the panels with no current profile
 	pub fn new() -> Self {
 		Self {
-			inner: Mutex::new(Inner {
-				profile_name: None,
-				panels:       vec![],
-			}),
+			profile_name: None,
+			panels:       vec![],
 		}
 	}
 
 	/// Gets the panels
-	pub fn get_all(&self) -> MappedMutexGuard<'_, [Panel]> {
-		MutexGuard::map(self.inner.lock(), |inner| inner.panels.as_mut_slice())
+	pub fn get_all(&mut self) -> &mut [Panel] {
+		&mut self.panels
 	}
 
 	/// Sets the current profile.
 	///
 	/// If a profile already exists, unloads it's panels first
 	pub fn set_profile(
-		&self,
+		&mut self,
 		profile_name: ProfileName,
 		profile: &Profile,
 		playlists: &Arc<Playlists>,
 	) -> Result<(), AppError> {
-		let mut inner = self.inner.lock();
-		inner.profile_name = Some(profile_name);
-		inner.panels.clear();
+		self.profile_name = Some(profile_name);
+		self.panels.clear();
 		for profile_panel in &profile.panels {
 			let state = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
@@ -103,7 +90,7 @@ impl Panels {
 			};
 
 			let panel = Panel::new(profile_panel.display_name.clone(), state);
-			inner.panels.push(panel);
+			self.panels.push(panel);
 		}
 
 		Ok(())

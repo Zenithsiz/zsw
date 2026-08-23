@@ -12,8 +12,7 @@
 	thread_sleep_until,
 	oneshot_channel,
 	str_as_str,
-	unwrap_infallible,
-	mapped_lock_guards
+	unwrap_infallible
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -218,6 +217,17 @@ impl WinitApp {
 			.context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);
 
+		let mut panels = Panels::new();
+		if let Some(default_profile_name) = &config.default.profile {
+			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
+			let default_profile = profiles
+				.get(&default_profile_name)
+				.with_context(|| format!("Unknown profile {:?}", config.default.profile))?;
+			panels
+				.set_profile(default_profile_name, default_profile, &playlists)
+				.context("Unable to set profile")?;
+		}
+
 		// Shared state
 		let shared = Shared {
 			event_loop_proxy,
@@ -226,22 +236,10 @@ impl WinitApp {
 			displays,
 			playlists,
 			profiles,
-			panels: Arc::new(Panels::new()),
+			panels: Mutex::new(panels),
 			windows: Mutex::new(HashMap::new()),
 		};
 		let shared = Arc::new(shared);
-
-		if let Some(default_profile_name) = &config.default.profile {
-			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
-			let default_profile = shared
-				.profiles
-				.get(&default_profile_name)
-				.with_context(|| format!("Unknown profile {:?}", config.default.profile))?;
-			shared
-				.panels
-				.set_profile(default_profile_name, default_profile, &shared.playlists)
-				.context("Unable to set profile")?;
-		}
 
 		Ok(Self {
 			windows: HashMap::new(),
@@ -391,7 +389,6 @@ fn renderer(
 				&mut frame,
 				&wgpu_renderer,
 				&shared.panels_renderer_shared,
-				&shared.panels,
 				&shared_window.window,
 				window_geometry,
 			)
@@ -469,8 +466,8 @@ fn paint_egui(
 			return Ok(());
 		};
 		let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
-		let mut panels = shared.panels.get_all();
-		for panel in &mut *panels {
+		let mut panels = shared.panels.lock();
+		for panel in panels.get_all() {
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_egui() ||
 				!shared.displays[&panel.display_name]

@@ -12,7 +12,10 @@ use {
 	crate::{AppEvent, display::Displays, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
-	std::{path::Path, sync::Arc},
+	std::{
+		path::Path,
+		sync::{Arc, nonpoison::Mutex},
+	},
 	strum::IntoEnumIterator,
 	winit::event_loop::EventLoopProxy,
 	zsw_util::{AppError, Rect},
@@ -46,7 +49,7 @@ impl Menu {
 		displays: &Arc<Displays>,
 		playlists: &Arc<Playlists>,
 		profiles: &Arc<Profiles>,
-		panels: &Arc<Panels>,
+		panels: &Mutex<Panels>,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		window_geometry: Rect<i32, u32>,
 	) {

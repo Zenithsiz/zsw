@@ -33,7 +33,7 @@ pub struct Shared {
 	pub playlists: Arc<Playlists>,
 	pub profiles:  Arc<Profiles>,
 
-	pub panels: Arc<Panels>,
+	pub panels: Mutex<Panels>,
 
 	pub windows: Mutex<HashMap<WindowId, Arc<SharedWindow>>>,
 }

@@ -11,7 +11,7 @@ use {
 		},
 	},
 	core::time::Duration,
-	std::ptr,
+	std::{ptr, sync::nonpoison::Mutex},
 	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
@@ -21,7 +21,7 @@ pub fn draw_panels_tab(
 	ui: &mut egui::Ui,
 	wgpu: &Wgpu,
 	displays: &Displays,
-	panels: &Panels,
+	panels: &Mutex<Panels>,
 	window_geometry: Rect<i32, u32>,
 ) {
 	self::draw_panels_editor(ui, wgpu, displays, panels, window_geometry);
@@ -34,16 +34,17 @@ fn draw_panels_editor(
 	ui: &mut egui::Ui,
 	wgpu: &Wgpu,
 	displays: &Displays,
-	panels: &Panels,
+	panels: &Mutex<Panels>,
 	window_geometry: Rect<i32, u32>,
 ) {
-	let mut panels = panels.get_all();
+	let mut panels = panels.lock();
+	let panels = panels.get_all();
 	if panels.is_empty() {
 		ui.label("None loaded");
 		return;
 	}
 
-	for panel in &mut *panels {
+	for panel in panels {
 		let mut name = egui::WidgetText::from(panel.display_name.to_string());
 		if displays[&panel.display_name]
 			.geometries
