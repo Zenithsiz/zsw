@@ -47,19 +47,9 @@ impl PlaylistPlayer {
 		})
 	}
 
-	/// Returns the previous position in the playlist
-	pub fn prev_pos(&self) -> Option<usize> {
-		self.cur_pos.checked_sub(1)
-	}
-
 	/// Returns the current position in the playlist
 	pub fn cur_pos(&self) -> usize {
 		self.cur_pos
-	}
-
-	/// Returns the next position in the playlist
-	pub fn next_pos(&self) -> usize {
-		self.cur_pos.checked_add(1).expect("Playlist position overflowed")
 	}
 
 	/// Returns the number of items until a shuffle is necessary
@@ -101,9 +91,7 @@ impl PlaylistPlayer {
 			return Err(());
 		}
 
-		// Otherwise, just go back
 		self.cur_pos -= 1;
-
 		Ok(())
 	}
 
@@ -114,7 +102,6 @@ impl PlaylistPlayer {
 			self.refill();
 		}
 
-		// Otherwise, just go to the next item
 		self.cur_pos += 1;
 	}
 
@@ -140,43 +127,25 @@ impl PlaylistPlayer {
 		}
 	}
 
-	/// Returns the previous image to load.
+	/// Gets an item in this player by index.
 	///
-	/// Returns `None` if we're at the start of the playlist
-	pub fn prev(&self) -> Option<Arc<Path>> {
-		let item = self.cur_items.get(self.prev_pos()?)?;
-
-		Some(item.share())
-	}
-
-	/// Returns the current image to load.
+	/// Returns it's absolute index.
 	///
-	/// Returns `None` when the playlist is empty,
-	/// otherwise gets the current image
-	pub fn cur(&mut self) -> Option<Arc<Path>> {
-		// If we don't have a current image, refill
-		if self.remaining_until_shuffle() == 0 {
+	/// The index `0` is the current item, with negative indices
+	/// corresponding to past items, and positive indices to future
+	/// items.
+	pub fn get(&mut self, rel_idx: isize) -> Option<(usize, Arc<Path>)> {
+		// If the index being asked for is positive and doesn't exist yet, try to refill
+		if let Ok(rel_idx) = usize::try_from(rel_idx) &&
+			self.remaining_until_shuffle() <= rel_idx
+		{
 			self.refill();
 		}
 
-		let item = self.cur_items.get(self.cur_pos())?;
+		let idx = self.cur_pos.checked_add_signed(rel_idx)?;
+		let item = self.cur_items.get(idx)?;
 
-		Some(item.share())
-	}
-
-	/// Returns the next image to load
-	///
-	/// Returns `None` when the playlist is empty,
-	/// otherwise gets the next image
-	pub fn next(&mut self) -> Option<Arc<Path>> {
-		// If we don't have a next image, refill
-		if self.remaining_until_shuffle() <= 1 {
-			self.refill();
-		}
-
-		let item = self.cur_items.get(self.next_pos())?;
-
-		Some(item.share())
+		Some((idx, item.share()))
 	}
 }
 

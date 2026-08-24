@@ -199,10 +199,11 @@ impl PanelFadeImages {
 
 		// Get which slot to load the image into
 		let slot = {
+			let playlist_pos = playlist_player.cur_pos();
 			match res.playlist_pos {
-				pos if Some(pos) == playlist_player.prev_pos() => Some(PanelFadeImageSlot::Prev),
-				pos if pos == playlist_player.cur_pos() => Some(PanelFadeImageSlot::Cur),
-				pos if pos == playlist_player.next_pos() => Some(PanelFadeImageSlot::Next),
+				pos if pos + 1 == playlist_pos => Some(PanelFadeImageSlot::Prev),
+				pos if pos == playlist_pos => Some(PanelFadeImageSlot::Cur),
+				pos if pos == playlist_pos + 1 => Some(PanelFadeImageSlot::Next),
 				pos => {
 					tracing::warn!(
 						pos,
@@ -262,9 +263,9 @@ impl PanelFadeImages {
 
 		// Get the playlist position and path to load
 		let (playlist_pos, path) = match () {
-			() if self.cur.is_none() => (playlist_player.cur_pos(), playlist_player.cur()?),
-			() if self.next.is_none() => (playlist_player.next_pos(), playlist_player.next()?),
-			() if self.prev.is_none() => (playlist_player.prev_pos()?, playlist_player.prev()?),
+			() if self.cur.is_none() => playlist_player.get(0)?,
+			() if self.next.is_none() => playlist_player.get(1)?,
+			() if self.prev.is_none() => playlist_player.get(-1)?,
 			() => return None,
 		};
 
