@@ -3,8 +3,11 @@
 // Imports
 use {
 	crate::panel::renderer::uniform,
-	std::{collections::HashMap, sync::Arc},
-	std::sync::nonpoison::Mutex,
+	core::clone::Share,
+	std::{
+		collections::HashMap,
+		sync::{Arc, nonpoison::Mutex},
+	},
 	winit::window::WindowId,
 	zsw_wgpu::Wgpu,
 };
@@ -37,10 +40,10 @@ impl PanelNoneState {
 		geometry_idx: usize,
 	) -> Arc<PanelNoneGeometryUniforms> {
 		let mut geometry_uniforms = self.geometry_uniforms.lock();
-		let geometry_uniforms = geometry_uniforms
+		geometry_uniforms
 			.entry((window_id, geometry_idx))
-			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)));
-		Arc::clone(geometry_uniforms)
+			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)))
+			.share()
 	}
 }
 

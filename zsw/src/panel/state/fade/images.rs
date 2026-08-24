@@ -4,6 +4,7 @@
 use {
 	crate::{panel::renderer::uniform, playlist::PlaylistPlayer},
 	app_error::Context,
+	core::clone::Share,
 	image::{DynamicImage, imageops},
 	std::{
 		self,
@@ -102,10 +103,10 @@ impl PanelFadeImage {
 		geometry_idx: usize,
 	) -> Arc<PanelFadeImageGeometryUniforms> {
 		let mut geometry_uniforms = self.geometry_uniforms.lock();
-		let geometry_uniforms = geometry_uniforms
+		geometry_uniforms
 			.entry((window_id, geometry_idx))
-			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)));
-		Arc::clone(geometry_uniforms)
+			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)))
+			.share()
 	}
 }
 

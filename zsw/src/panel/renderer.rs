@@ -23,7 +23,7 @@ use {
 	},
 	crate::{display::DisplayGeometry, shared::Shared},
 	app_error::Context,
-	core::cmp,
+	core::{clone::Share, cmp},
 	euclid::default::Vector2D,
 	std::{
 		borrow::Cow,
@@ -251,7 +251,7 @@ impl PanelsRenderer {
 		};
 
 		let render_pipeline = match panels_shared.render_pipelines.lock().entry(render_pipeline_id) {
-			hash_map::Entry::Occupied(entry) => Arc::clone(entry.get()),
+			hash_map::Entry::Occupied(entry) => entry.get().share(),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
 					PanelState::None(_) => {
@@ -281,7 +281,7 @@ impl PanelsRenderer {
 				)
 				.context("Unable to create render pipeline")?;
 
-				Arc::clone(entry.insert(Arc::new(render_pipeline)))
+				entry.insert(Arc::new(render_pipeline)).share()
 			},
 		};
 

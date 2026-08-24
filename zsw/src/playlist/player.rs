@@ -3,6 +3,7 @@
 // Imports
 use {
 	super::Playlist,
+	core::clone::Share,
 	rand::{rngs::StdRng, seq::SliceRandom},
 	std::{
 		collections::{HashSet, VecDeque},
@@ -128,7 +129,7 @@ impl PlaylistPlayer {
 		}
 
 		// Shuffle in all the new items
-		let mut new_items = self.all_items.iter().map(Arc::clone).collect::<Vec<_>>();
+		let mut new_items = self.all_items.iter().map(Share::share).collect::<Vec<_>>();
 		new_items.shuffle(&mut self.rng);
 		self.cur_items.extend(new_items);
 
@@ -144,9 +145,8 @@ impl PlaylistPlayer {
 	/// Returns `None` if we're at the start of the playlist
 	pub fn prev(&self) -> Option<Arc<Path>> {
 		let item = self.cur_items.get(self.prev_pos()?)?;
-		let item = Arc::clone(item);
 
-		Some(item)
+		Some(item.share())
 	}
 
 	/// Returns the current image to load.
@@ -160,9 +160,8 @@ impl PlaylistPlayer {
 		}
 
 		let item = self.cur_items.get(self.cur_pos())?;
-		let item = Arc::clone(item);
 
-		Some(item)
+		Some(item.share())
 	}
 
 	/// Returns the next image to load
@@ -176,9 +175,8 @@ impl PlaylistPlayer {
 		}
 
 		let item = self.cur_items.get(self.next_pos())?;
-		let item = Arc::clone(item);
 
-		Some(item)
+		Some(item.share())
 	}
 }
 
@@ -198,7 +196,7 @@ fn load_playlist_items(playlist: &Playlist) -> Result<HashSet<Arc<Path>>, AppErr
 			Ok(dir) => dir,
 			// If it wasn't a directory, just add it
 			Err(err) if err.kind() == io::ErrorKind::NotADirectory => {
-				_ = items.insert(Arc::clone(&item.path));
+				_ = items.insert(item.path.share());
 				continue;
 			},
 			// Otherwise, this is a fatal error

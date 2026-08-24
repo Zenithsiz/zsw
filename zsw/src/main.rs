@@ -12,7 +12,8 @@
 	thread_sleep_until,
 	oneshot_channel,
 	str_as_str,
-	unwrap_infallible
+	unwrap_infallible,
+	share_trait
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -43,7 +44,7 @@ use {
 	args::Args,
 	chrono::TimeDelta,
 	clap::Parser,
-	core::time::Duration,
+	core::{clone::Share, time::Duration},
 	directories::ProjectDirs,
 	euclid::default::Point2D,
 	std::{
@@ -254,13 +255,13 @@ impl WinitApp {
 		for app_window in windows {
 			let window = Arc::new(app_window.window);
 			let wgpu_renderer =
-				WgpuRenderer::new(Arc::clone(&window), &self.shared.wgpu).context("Unable to create wgpu renderer")?;
+				WgpuRenderer::new(window.share(), &self.shared.wgpu).context("Unable to create wgpu renderer")?;
 
 			let msaa_samples = 4;
 			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, &self.shared.wgpu, msaa_samples)
 				.context("Unable to create panels renderer")?;
 			let egui_ctx = egui::Context::default();
-			let egui_event_handler = EguiEventHandler::new(&self.shared.wgpu, Arc::clone(&window), egui_ctx.clone());
+			let egui_event_handler = EguiEventHandler::new(&self.shared.wgpu, window.share(), egui_ctx.clone());
 			let egui_painter = EguiPainter::new(&egui_event_handler, egui_ctx.clone());
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
 			let menu = Menu::new();

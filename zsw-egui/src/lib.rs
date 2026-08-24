@@ -1,10 +1,11 @@
 //! Egui wrapper
 
 // Features
-#![feature(must_not_suspend, nonpoison_mutex, sync_nonpoison)]
+#![feature(must_not_suspend, nonpoison_mutex, sync_nonpoison, share_trait)]
 
 // Imports
 use {
+	core::clone::Share,
 	egui::epaint,
 	std::{
 		fmt,
@@ -133,9 +134,9 @@ impl EguiPainter {
 	#[must_use]
 	pub fn new(event_handler: &EguiEventHandler, ctx: egui::Context) -> Self {
 		Self {
-			window: Arc::clone(&event_handler.window),
+			window: event_handler.window.share(),
 			ctx,
-			state: Arc::clone(&event_handler.state),
+			state: event_handler.state.share(),
 		}
 	}
 
