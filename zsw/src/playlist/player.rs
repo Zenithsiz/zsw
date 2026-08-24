@@ -2,10 +2,11 @@
 
 // Imports
 use {
-	super::{Playlist, PlaylistItemKind},
+	super::Playlist,
 	rand::{rngs::StdRng, seq::SliceRandom},
 	std::{
 		collections::{HashSet, VecDeque},
+		io,
 		path::Path,
 		sync::Arc,
 	},
@@ -191,54 +192,50 @@ fn load_playlist_items(playlist: &Playlist) -> Result<HashSet<Arc<Path>>, AppErr
 			continue;
 		}
 
-		// Else check the kind of item
-		match item.kind {
-			PlaylistItemKind::Directory {
-				path: ref dir_path,
-				follow_symlinks,
-				recursive,
-			} => {
-				let builder = WalkDir::builder()
-					.recurse_symlink(follow_symlinks)
-					.max_depth(match recursive {
-						true => None,
-						false => Some(1),
-					});
+		let builder = WalkDir::builder()
+			.recurse_symlink(item.follow_symlinks)
+			.max_depth(match item.recursive {
+				true => None,
+				false => Some(1),
+			});
 
-				let dir = match builder.build(dir_path.as_path()) {
-					Ok(dir) => dir,
-					Err(err) => {
-						let err = AppError::new(&err);
-						tracing::warn!("Unable to read directory {dir_path:?}: {err:?}");
-						continue;
-					},
-				};
-
-				for entry in dir {
-					let entry = match entry {
-						Ok(entry) => entry,
-						Err(err) => {
-							let err = AppError::new(&err);
-							tracing::warn!("Unable to read directory entry: {err:?}");
-							continue;
-						},
-					};
-
-					let file_type = match entry.file_type() {
-						Ok(file_type) => file_type,
-						Err(err) => {
-							let err = AppError::new(&err);
-							tracing::warn!("Unable to read directory entry file: {err:?}");
-							continue;
-						},
-					};
-
-					if !file_type.is_dir() {
-						_ = items.insert(entry.path().into());
-					}
-				}
+		let dir = match builder.build(item.path.as_path()) {
+			Ok(dir) => dir,
+			// If it wasn't a directory, just add it
+			Err(err) if err.kind() == io::ErrorKind::NotADirectory => {
+				_ = items.insert(Arc::clone(&item.path));
+				continue;
 			},
-			PlaylistItemKind::File { ref path } => _ = items.insert(Arc::clone(path)),
+			// Otherwise, this is a fatal error
+			Err(err) => {
+				let err = AppError::new(&err);
+				tracing::warn!("Unable to read directory {:?}: {err:?}", item.path);
+				continue;
+			},
+		};
+
+		for entry in dir {
+			let entry = match entry {
+				Ok(entry) => entry,
+				Err(err) => {
+					let err = AppError::new(&err);
+					tracing::warn!("Unable to read directory entry: {err:?}");
+					continue;
+				},
+			};
+
+			let file_type = match entry.file_type() {
+				Ok(file_type) => file_type,
+				Err(err) => {
+					let err = AppError::new(&err);
+					tracing::warn!("Unable to read directory entry file: {err:?}");
+					continue;
+				},
+			};
+
+			if !file_type.is_dir() {
+				_ = items.insert(entry.path().into());
+			}
 		}
 	}
 

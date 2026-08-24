@@ -14,42 +14,24 @@ pub struct Playlist {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct PlaylistItem {
-	/// Enabled
+	pub path: PathBuf,
+
+	// TODO: Remove this
 	#[serde(default = "PlaylistItem::default_enabled")]
 	pub enabled: bool,
 
-	/// Kind
-	#[serde(flatten)]
-	pub kind: PlaylistItemKind,
+	#[serde(default = "PlaylistItem::default_follow_symlinks")]
+	pub follow_symlinks: bool,
+
+	#[serde(default = "PlaylistItem::default_directory_recursive")]
+	pub recursive: bool,
 }
 
 impl PlaylistItem {
 	fn default_enabled() -> bool {
 		true
 	}
-}
 
-/// Playlist item kind
-#[derive(Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
-pub enum PlaylistItemKind {
-	/// Directory
-	Directory {
-		path: PathBuf,
-
-		#[serde(default = "PlaylistItemKind::default_follow_symlinks")]
-		follow_symlinks: bool,
-
-		#[serde(default = "PlaylistItemKind::default_directory_recursive")]
-		recursive: bool,
-	},
-
-	/// File
-	File { path: PathBuf },
-}
-
-impl PlaylistItemKind {
 	fn default_follow_symlinks() -> bool {
 		true
 	}

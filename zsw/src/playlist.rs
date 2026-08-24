@@ -28,25 +28,10 @@ pub struct Playlist {
 /// Playlist item
 #[derive(Clone, Debug)]
 pub struct PlaylistItem {
-	/// Enabled
-	pub enabled: bool,
-
-	/// Kind
-	pub kind: PlaylistItemKind,
-}
-
-/// Playlist item kind
-#[derive(Clone, Debug)]
-pub enum PlaylistItemKind {
-	/// Directory
-	Directory {
-		path:            Arc<Path>,
-		follow_symlinks: bool,
-		recursive:       bool,
-	},
-
-	/// File
-	File { path: Arc<Path> },
+	pub path:            Arc<Path>,
+	pub enabled:         bool,
+	pub follow_symlinks: bool,
+	pub recursive:       bool,
 }
 
 impl From<ser::Playlist> for Playlist {
@@ -56,19 +41,10 @@ impl From<ser::Playlist> for Playlist {
 				.items
 				.into_iter()
 				.map(|item| PlaylistItem {
-					enabled: item.enabled,
-					kind:    match item.kind {
-						ser::PlaylistItemKind::Directory {
-							path,
-							follow_symlinks,
-							recursive,
-						} => PlaylistItemKind::Directory {
-							path: path.into(),
-							follow_symlinks,
-							recursive,
-						},
-						ser::PlaylistItemKind::File { path } => PlaylistItemKind::File { path: path.into() },
-					},
+					enabled:         item.enabled,
+					path:            item.path.into(),
+					follow_symlinks: item.follow_symlinks,
+					recursive:       item.recursive,
 				})
 				.collect(),
 		}
