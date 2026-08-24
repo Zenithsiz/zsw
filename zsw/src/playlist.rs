@@ -29,7 +29,6 @@ pub struct Playlist {
 #[derive(Clone, Debug)]
 pub struct PlaylistItem {
 	pub path:            Arc<Path>,
-	pub enabled:         bool,
 	pub follow_symlinks: bool,
 	pub recursive:       bool,
 }
@@ -41,7 +40,6 @@ impl From<ser::Playlist> for Playlist {
 				.items
 				.into_iter()
 				.map(|item| PlaylistItem {
-					enabled:         item.enabled,
 					path:            item.path.into(),
 					follow_symlinks: item.follow_symlinks,
 					recursive:       item.recursive,

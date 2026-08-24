@@ -16,10 +16,6 @@ pub struct Playlist {
 pub struct PlaylistItem {
 	pub path: PathBuf,
 
-	// TODO: Remove this
-	#[serde(default = "PlaylistItem::default_enabled")]
-	pub enabled: bool,
-
 	#[serde(default = "PlaylistItem::default_follow_symlinks")]
 	pub follow_symlinks: bool,
 
@@ -28,10 +24,6 @@ pub struct PlaylistItem {
 }
 
 impl PlaylistItem {
-	fn default_enabled() -> bool {
-		true
-	}
-
 	fn default_follow_symlinks() -> bool {
 		true
 	}

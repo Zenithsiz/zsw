@@ -187,11 +187,6 @@ impl PlaylistPlayer {
 fn load_playlist_items(playlist: &Playlist) -> Result<HashSet<Arc<Path>>, AppError> {
 	let mut items = HashSet::new();
 	for item in &playlist.items {
-		// If not enabled, skip it
-		if !item.enabled {
-			continue;
-		}
-
 		let builder = WalkDir::builder()
 			.recurse_symlink(item.follow_symlinks)
 			.max_depth(match item.recursive {
