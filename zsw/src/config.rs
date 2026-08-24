@@ -24,6 +24,12 @@ pub struct Config {
 	#[serde(default)]
 	pub transparent_windows: bool,
 
+	/// Monitors to use
+	// TODO: Could we make this be per-profile instead of
+	//       global without complicating everything too much?
+	#[serde(default)]
+	pub monitors: Option<Vec<String>>,
+
 	/// Default
 	#[serde(default)]
 	pub default: ConfigDefault,
@@ -77,6 +83,7 @@ impl Default for Config {
 		Self {
 			log_file:            None,
 			transparent_windows: false,
+			monitors:            None,
 			default:             ConfigDefault::default(),
 		}
 	}

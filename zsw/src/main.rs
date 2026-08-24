@@ -250,8 +250,12 @@ impl WinitApp {
 
 	/// Initializes the window related things
 	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
-		let windows = window::create(event_loop, self.config.transparent_windows)
-			.context("Unable to create winit event loop and window")?;
+		let windows = window::create(
+			event_loop,
+			self.config.transparent_windows,
+			self.config.monitors.as_deref(),
+		)
+		.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
 			let window = Arc::new(app_window.window);
 			let wgpu_renderer =

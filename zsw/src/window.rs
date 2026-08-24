@@ -29,7 +29,11 @@ pub struct AppWindow {
 }
 
 /// Creates the windows for each monitor, as well as the associated event loop
-pub fn create(event_loop: &ActiveEventLoop, transparent_windows: bool) -> Result<Vec<AppWindow>, AppError> {
+pub fn create(
+	event_loop: &ActiveEventLoop,
+	transparent_windows: bool,
+	filter_monitors: Option<&[String]>,
+) -> Result<Vec<AppWindow>, AppError> {
 	event_loop
 		.available_monitors()
 		.enumerate()
@@ -38,6 +42,18 @@ pub fn create(event_loop: &ActiveEventLoop, transparent_windows: bool) -> Result
 				.name()
 				.unwrap_or_else(|| format!("Monitor #{}", monitor_idx + 1));
 
+			(monitor_name, monitor)
+		})
+		.filter(|(monitor_name, _)| {
+			let keep = filter_monitors.is_none_or(|filter_monitors| filter_monitors.contains(monitor_name));
+
+			if !keep {
+				tracing::info!(?monitor_name, "Ignoring monitor not in filter list");
+			}
+
+			keep
+		})
+		.map(|(monitor_name, monitor)| {
 			let monitor_refresh_rate_mhz = monitor
 				.refresh_rate_millihertz()
 				.context("Unable to get monitor refresh rate")?;
