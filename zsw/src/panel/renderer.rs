@@ -16,7 +16,7 @@ use {
 			PanelFadeState,
 			PanelNoneState,
 			PanelSlideState,
-			fade::{PanelFadeImageSlot, PanelFadeShared},
+			fade::{PanelFadeImage, PanelFadeImageSlot, PanelFadeShared},
 			none::PanelNoneShared,
 			slide::PanelSlideShared,
 		},
@@ -421,76 +421,94 @@ impl PanelsRenderer {
 		// Full duration an image is on screen (including the fades)
 		let d = 1.0 + 2.0 * f;
 
-		for (panel_image_slot, panel_image) in state.images().iter() {
-			let geometry_uniforms = panel_image.geometry_uniforms(wgpu, &shared.images, window_id, geometry_idx);
+		let geometry_uniforms = state
+			.images()
+			.geometry_uniforms(wgpu, &shared.images, window_id, geometry_idx);
 
-			let progress = match panel_image_slot {
+		let image_uniforms = |image: Option<&PanelFadeImage>, image_slot| -> uniform::fade::Image {
+			let Some(image) = image else {
+				return uniform::fade::Image {
+					image_ratio: uniform::Vec2([1.0, 1.0]),
+					progress:    0.0,
+					alpha:       0.0,
+				};
+			};
+
+			let progress = match image_slot {
 				PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
 				PanelFadeImageSlot::Cur => (p + f) / d,
 				PanelFadeImageSlot::Next => f32::max((p - 1.0 + f) / d, 0.0),
 			};
-			let progress = match panel_image.swap_dir {
+			let progress = match image.swap_dir {
 				true => 1.0 - progress,
 				false => progress,
 			};
 
 			let p_stage = self::cmp_interval(p, f, 1.0 - f);
-			let (alpha, fade_progress) = match p_stage {
+			let alpha = match p_stage {
 				cmp::Ordering::Less => {
 					let a = 0.5 + p / (2.0 * f);
-					match panel_image_slot {
-						PanelFadeImageSlot::Prev => (1.0, 1.0 - a),
-						PanelFadeImageSlot::Cur => (a, a),
-						PanelFadeImageSlot::Next => continue,
+					match image_slot {
+						PanelFadeImageSlot::Prev => 1.0 - a,
+						PanelFadeImageSlot::Cur => a,
+						PanelFadeImageSlot::Next => 0.0,
 					}
 				},
-				cmp::Ordering::Equal => match panel_image_slot {
-					PanelFadeImageSlot::Prev | PanelFadeImageSlot::Next => continue,
-					PanelFadeImageSlot::Cur => (1.0, 1.0),
+				cmp::Ordering::Equal => match image_slot {
+					PanelFadeImageSlot::Prev | PanelFadeImageSlot::Next => 0.0,
+					PanelFadeImageSlot::Cur => 1.0,
 				},
 				cmp::Ordering::Greater => {
 					let a = (p - (1.0 - f)) / (2.0 * f);
-					match panel_image_slot {
-						PanelFadeImageSlot::Prev => continue,
-						PanelFadeImageSlot::Cur => (1.0, 1.0 - a),
-						PanelFadeImageSlot::Next => (a, a),
+					match image_slot {
+						PanelFadeImageSlot::Prev => 0.0,
+						PanelFadeImageSlot::Cur => 1.0 - a,
+						PanelFadeImageSlot::Next => a,
 					}
 				},
 			};
 
 			// Calculate the position matrix for the panel
-			let image_size = panel_image.texture_view.texture().size();
+			let image_size = image.texture_view.texture().size();
 			let image_size = Vector2D::new(image_size.width, image_size.height);
 			let image_ratio = display_geometry.image_ratio(image_size);
 
-			match state.shader() {
-				PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Basic {
-					pos_matrix,
-					image_ratio: uniform::Vec2(image_ratio.into()),
-					progress,
-					alpha,
-				}),
-				PanelFadeShader::Out { strength } =>
-					Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Out {
-						pos_matrix,
-						image_ratio: uniform::Vec2(image_ratio.into()),
-						progress,
-						alpha,
-						strength,
-						fade_progress,
-						_unused: [0; _],
-					}),
+			uniform::fade::Image {
+				image_ratio: uniform::Vec2(image_ratio.into()),
+				progress,
+				alpha,
 			}
+		};
 
-			// Bind the geometry uniforms
-			render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+		let images = uniform::fade::Images {
+			prev: image_uniforms(state.images().prev.as_ref(), PanelFadeImageSlot::Prev),
+			cur:  image_uniforms(state.images().cur.as_ref(), PanelFadeImageSlot::Cur),
+			next: image_uniforms(state.images().next.as_ref(), PanelFadeImageSlot::Next),
+		};
 
-			// Bind the image uniforms
-			let sampler = state.images().image_sampler(wgpu);
-			render_pass.set_bind_group(1, panel_image.bind_group(wgpu, sampler, &shared.images), &[]);
-
-			render_pass.draw_indexed(0..6, 0, 0..1);
+		match state.shader() {
+			PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Basic {
+				pos_matrix,
+				images,
+				_unused: [0; _],
+			}),
+			PanelFadeShader::Out { strength } =>
+				Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Out {
+					pos_matrix,
+					images,
+					strength,
+					_unused: [0; _],
+				}),
 		}
+
+		// Bind the geometry uniforms
+		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+		// Bind the image uniforms
+		let sampler = state.images().image_sampler(wgpu);
+		render_pass.set_bind_group(1, state.images().bind_group(wgpu, sampler, &shared.images), &[]);
+
+		render_pass.draw_indexed(0..6, 0, 0..1);
 	}
 
 	/// Renders a panel slide's geometry

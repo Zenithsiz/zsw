@@ -62,6 +62,12 @@ pub struct PanelFadeImages {
 	/// Image sampler
 	pub image_sampler: OnceLock<wgpu::Sampler>,
 
+	/// Bind group
+	pub bind_group: OnceLock<wgpu::BindGroup>,
+
+	/// Geometry uniforms
+	pub geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelFadeImageGeometryUniforms>>>,
+
 	/// Next image
 	pub next_image: Loadable<ImageLoadRes>,
 }
@@ -72,12 +78,6 @@ pub struct PanelFadeImage {
 	/// Texture view
 	pub texture_view: wgpu::TextureView,
 
-	/// Bind group
-	pub bind_group: OnceLock<wgpu::BindGroup>,
-
-	/// Geometry uniforms
-	pub geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelFadeImageGeometryUniforms>>>,
-
 	/// Swap direction
 	pub swap_dir: bool,
 
@@ -85,53 +85,19 @@ pub struct PanelFadeImage {
 	pub path: Arc<Path>,
 }
 
-impl PanelFadeImage {
-	/// Gets the bind group, or initializes it, if uninitialized
-	pub fn bind_group(&self, wgpu: &Wgpu, sampler: &wgpu::Sampler, shared: &PanelFadeImagesShared) -> &wgpu::BindGroup {
-		self.bind_group.get_or_init(|| {
-			let layout = shared.image_bind_group_layout(wgpu);
-			self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
-		})
-	}
-
-	/// Returns the geometry uniforms
-	pub fn geometry_uniforms(
-		&self,
-		wgpu: &Wgpu,
-		shared: &PanelFadeImagesShared,
-		window_id: WindowId,
-		geometry_idx: usize,
-	) -> Arc<PanelFadeImageGeometryUniforms> {
-		let mut geometry_uniforms = self.geometry_uniforms.lock();
-		geometry_uniforms
-			.entry((window_id, geometry_idx))
-			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)))
-			.share()
-	}
-}
-
 impl PanelFadeImages {
 	/// Creates a new panel
 	#[must_use]
 	pub fn new() -> Self {
 		Self {
-			prev:          None,
-			cur:           None,
-			next:          None,
-			image_sampler: OnceLock::new(),
-			next_image:    Loadable::new(),
+			prev:              None,
+			cur:               None,
+			next:              None,
+			image_sampler:     OnceLock::new(),
+			bind_group:        OnceLock::new(),
+			geometry_uniforms: Mutex::new(HashMap::new()),
+			next_image:        Loadable::new(),
 		}
-	}
-
-	/// Returns an iterator over all images
-	pub fn iter(&self) -> impl Iterator<Item = (PanelFadeImageSlot, &PanelFadeImage)> {
-		[
-			(PanelFadeImageSlot::Prev, &self.prev),
-			(PanelFadeImageSlot::Cur, &self.cur),
-			(PanelFadeImageSlot::Next, &self.next),
-		]
-		.into_iter()
-		.filter_map(|(slot, img)| img.as_ref().map(|img| (slot, img)))
 	}
 
 	/// Steps to the previous image, if any
@@ -144,6 +110,7 @@ impl PanelFadeImages {
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = None;
+		self.bind_group = OnceLock::new();
 		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
@@ -163,6 +130,7 @@ impl PanelFadeImages {
 		mem::swap(&mut self.prev, &mut self.cur);
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = None;
+		self.bind_group = OnceLock::new();
 		self.load_missing(playlist_player, wgpu);
 
 		Ok(())
@@ -171,6 +139,32 @@ impl PanelFadeImages {
 	/// Gets the image sampler, or initializes it, if uninitialized
 	pub fn image_sampler(&self, wgpu: &Wgpu) -> &wgpu::Sampler {
 		self.image_sampler.get_or_init(|| self::create_image_sampler(wgpu))
+	}
+
+	/// Gets the bind group, or initializes it, if uninitialized
+	pub fn bind_group(&self, wgpu: &Wgpu, sampler: &wgpu::Sampler, shared: &PanelFadeImagesShared) -> &wgpu::BindGroup {
+		self.bind_group.get_or_init(|| {
+			let [prev, cur, next] = [&self.prev, &self.cur, &self.next]
+				.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
+
+			let layout = shared.image_bind_group_layout(wgpu);
+			self::create_image_bind_group(wgpu, layout, prev, cur, next, sampler)
+		})
+	}
+
+	/// Returns the geometry uniforms
+	pub fn geometry_uniforms(
+		&self,
+		wgpu: &Wgpu,
+		shared: &PanelFadeImagesShared,
+		window_id: WindowId,
+		geometry_idx: usize,
+	) -> Arc<PanelFadeImageGeometryUniforms> {
+		let mut geometry_uniforms = self.geometry_uniforms.lock();
+		geometry_uniforms
+			.entry((window_id, geometry_idx))
+			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)))
+			.share()
 	}
 
 	/// Loads any missing images, prioritizing the current, then next, then previous.
@@ -227,8 +221,6 @@ impl PanelFadeImages {
 
 			let image = PanelFadeImage {
 				texture_view,
-				bind_group: OnceLock::new(),
-				geometry_uniforms: Mutex::new(HashMap::new()),
 				swap_dir: rand::random(),
 				path: res.path,
 			};
@@ -238,6 +230,7 @@ impl PanelFadeImages {
 				PanelFadeImageSlot::Cur => self.cur = Some(image),
 				PanelFadeImageSlot::Next => self.next = Some(image),
 			}
+			self.bind_group = OnceLock::new();
 		}
 	}
 
@@ -331,21 +324,25 @@ pub fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppEr
 
 /// Creates the fade image bind group layout
 fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+	let entry = wgpu::BindGroupLayoutEntry {
+		binding:    0,
+		visibility: wgpu::ShaderStages::FRAGMENT,
+		ty:         wgpu::BindingType::Texture {
+			multisampled:   false,
+			view_dimension: wgpu::TextureViewDimension::D2,
+			sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+		},
+		count:      None,
+	};
+
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("zsw-panel-fade-image-bind-group-layout"),
 		entries: &[
+			wgpu::BindGroupLayoutEntry { binding: 0, ..entry },
+			wgpu::BindGroupLayoutEntry { binding: 1, ..entry },
+			wgpu::BindGroupLayoutEntry { binding: 2, ..entry },
 			wgpu::BindGroupLayoutEntry {
-				binding:    0,
-				visibility: wgpu::ShaderStages::FRAGMENT,
-				ty:         wgpu::BindingType::Texture {
-					multisampled:   false,
-					view_dimension: wgpu::TextureViewDimension::D2,
-					sample_type:    wgpu::TextureSampleType::Float { filterable: true },
-				},
-				count:      None,
-			},
-			wgpu::BindGroupLayoutEntry {
-				binding:    1,
+				binding:    3,
 				visibility: wgpu::ShaderStages::FRAGMENT,
 				ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
 				count:      None,
@@ -360,7 +357,9 @@ fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 fn create_image_bind_group(
 	wgpu: &Wgpu,
 	bind_group_layout: &wgpu::BindGroupLayout,
-	view: &wgpu::TextureView,
+	prev_view: &wgpu::TextureView,
+	cur_view: &wgpu::TextureView,
+	next_view: &wgpu::TextureView,
 	sampler: &wgpu::Sampler,
 ) -> wgpu::BindGroup {
 	let descriptor = wgpu::BindGroupDescriptor {
@@ -369,10 +368,18 @@ fn create_image_bind_group(
 		entries: &[
 			wgpu::BindGroupEntry {
 				binding:  0,
-				resource: wgpu::BindingResource::TextureView(view),
+				resource: wgpu::BindingResource::TextureView(prev_view),
 			},
 			wgpu::BindGroupEntry {
 				binding:  1,
+				resource: wgpu::BindingResource::TextureView(cur_view),
+			},
+			wgpu::BindGroupEntry {
+				binding:  2,
+				resource: wgpu::BindingResource::TextureView(next_view),
+			},
+			wgpu::BindGroupEntry {
+				binding:  3,
 				resource: wgpu::BindingResource::Sampler(sampler),
 			},
 		],
