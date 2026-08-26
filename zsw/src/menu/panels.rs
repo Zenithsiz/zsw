@@ -9,21 +9,20 @@ use {
 		state::{PanelFadeState, fade::PanelFadeImage},
 	},
 	core::time::Duration,
-	std::{ptr, sync::nonpoison::Mutex},
+	std::ptr,
 	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
 
 /// Draws the panels tab
-pub fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Mutex<Panels>, window_geometry: Rect<i32, u32>) {
+pub fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut Panels, window_geometry: Rect<i32, u32>) {
 	self::draw_panels_editor(ui, wgpu, panels, window_geometry);
 	ui.separator();
 }
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Mutex<Panels>, window_geometry: Rect<i32, u32>) {
-	let mut panels = panels.lock();
+fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut Panels, window_geometry: Rect<i32, u32>) {
 	let panels = panels.get_all();
 	if panels.is_empty() {
 		ui.label("None loaded");

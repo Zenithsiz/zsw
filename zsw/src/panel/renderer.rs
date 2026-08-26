@@ -22,7 +22,7 @@ use {
 			slide::PanelSlideShared,
 		},
 	},
-	crate::shared::Shared,
+	crate::shared::{Shared, SharedWindow},
 	app_error::Context,
 	core::{clone::Share, cmp},
 	euclid::default::Vector2D,
@@ -140,11 +140,10 @@ impl PanelsRenderer {
 	pub fn render(
 		&self,
 		shared: &Shared,
+		shared_window: &mut SharedWindow,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		panels_shared: &PanelsRendererShared,
-		window: &Window,
-		window_geometry: Rect<i32, u32>,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match self.msaa_samples {
@@ -192,15 +191,14 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, panels_shared.vertices.slice(..));
 
 		// Then render all panels simultaneously
-		let mut panels = shared.panels.lock();
-		for panel in panels.get_all() {
+		for panel in shared_window.panels.get_all() {
 			self.render_panel(
 				shared,
 				panels_shared,
 				wgpu_renderer,
 				frame.surface_size,
-				window,
-				window_geometry,
+				&shared_window.window,
+				shared_window.monitor_geometry,
 				&mut render_pass,
 				panel,
 			)?;

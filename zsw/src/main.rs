@@ -50,7 +50,7 @@ use {
 		collections::{BTreeMap, HashMap},
 		fs,
 		process::ExitCode,
-		sync::{Arc, mpsc, nonpoison::Mutex},
+		sync::{Arc, mpsc},
 		thread,
 		time::Instant,
 	},
@@ -63,7 +63,7 @@ use {
 		window::WindowId,
 	},
 	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
-	zsw_util::{AppError, Rect},
+	zsw_util::AppError,
 	zsw_wgpu::{Wgpu, WgpuRenderer},
 	zutil_cloned::cloned,
 	zutil_logger::Logger,
@@ -101,7 +101,6 @@ async fn run() -> Result<(), AppError> {
 	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.toml"));
 	let config = Config::get_or_create_default(&config_path);
-	let config = Arc::new(config);
 	let dirs = Dirs::new(
 		config_path
 			.parent()
@@ -141,7 +140,6 @@ async fn run() -> Result<(), AppError> {
 struct WinitApp {
 	windows: HashMap<WindowId, WinitAppWindow>,
 	shared:  Arc<Shared>,
-	config:  Arc<Config>,
 }
 
 #[derive(Debug)]
@@ -193,7 +191,7 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 impl WinitApp {
 	/// Creates a new app
 	pub async fn new(
-		config: Arc<Config>,
+		config: Config,
 		dirs: Arc<Dirs>,
 		display: OwnedDisplayHandle,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
@@ -213,32 +211,20 @@ impl WinitApp {
 			.context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);
 
-		let mut panels = Panels::new();
-		if let Some(default_profile_name) = &config.default.profile {
-			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
-			let default_profile = profiles
-				.get(&default_profile_name)
-				.with_context(|| format!("Unknown profile {:?}", config.default.profile))?;
-			panels
-				.set_profile(default_profile_name, default_profile, &playlists)
-				.context("Unable to set profile")?;
-		}
-
 		// Shared state
 		let shared = Shared {
 			event_loop_proxy,
+			config,
 			wgpu,
 			panels_renderer_shared,
 			playlists,
 			profiles,
-			panels: Mutex::new(panels),
 		};
 		let shared = Arc::new(shared);
 
 		Ok(Self {
 			windows: HashMap::new(),
 			shared,
-			config,
 		})
 	}
 
@@ -246,8 +232,8 @@ impl WinitApp {
 	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let windows = window::create(
 			event_loop,
-			self.config.transparent_windows,
-			self.config.monitors.as_deref(),
+			self.shared.config.transparent_windows,
+			self.shared.config.monitors.as_deref(),
 		)
 		.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
@@ -264,12 +250,26 @@ impl WinitApp {
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
 			let menu = Menu::new();
 
+			let mut panels = Panels::new();
+			if let Some(default_profile_name) = &self.shared.config.default.profile {
+				let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
+				let default_profile = self
+					.shared
+					.profiles
+					.get(&default_profile_name)
+					.with_context(|| format!("Unknown profile {:?}", self.shared.config.default.profile))?;
+				panels
+					.set_profile(default_profile_name, default_profile, &self.shared.playlists)
+					.context("Unable to set profile")?;
+			}
+
 			let window_id = window.id();
 			let shared_window = SharedWindow {
 				window,
 				monitor_name: app_window.monitor_name,
 				monitor_geometry: app_window.monitor_geometry,
 				monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
+				panels,
 			};
 
 			let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
@@ -364,7 +364,7 @@ fn renderer(
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
 		let (egui_paint_jobs, egui_textures_delta) =
-			match self::paint_egui(shared, egui_painter, &mut menu, shared_window.monitor_geometry) {
+			match self::paint_egui(shared, &mut shared_window, egui_painter, &mut menu) {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {err:?}");
@@ -381,11 +381,10 @@ fn renderer(
 		panels_renderer
 			.render(
 				shared,
+				&mut shared_window,
 				&mut frame,
 				&wgpu_renderer,
 				&shared.panels_renderer_shared,
-				&shared_window.window,
-				shared_window.monitor_geometry,
 			)
 			.context("Unable to render panels")?;
 
@@ -437,9 +436,9 @@ fn renderer(
 /// Paints egui
 fn paint_egui(
 	shared: &Shared,
+	shared_window: &mut SharedWindow,
 	egui_painter: &EguiPainter,
 	menu: &mut Menu,
-	window_geometry: Rect<i32, u32>,
 ) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
 	let full_output = egui_painter.draw(|ctx| {
 		// Draw the menu
@@ -448,9 +447,9 @@ fn paint_egui(
 			&shared.wgpu,
 			&shared.playlists,
 			&shared.profiles,
-			&shared.panels,
+			&mut shared_window.panels,
 			&shared.event_loop_proxy,
-			window_geometry,
+			shared_window.monitor_geometry,
 		);
 
 
@@ -460,14 +459,13 @@ fn paint_egui(
 			return Ok(());
 		};
 		let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
-		let mut panels = shared.panels.lock();
-		for panel in panels.get_all() {
+		for panel in shared_window.panels.get_all() {
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_egui() ||
 				!panel
 					.geometries
 					.iter()
-					.any(|geometry| geometry.on_window(window_geometry).contains(pointer_pos))
+					.any(|geometry| geometry.on_window(shared_window.monitor_geometry).contains(pointer_pos))
 			{
 				continue;
 			}
