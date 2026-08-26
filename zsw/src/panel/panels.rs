@@ -91,9 +91,7 @@ impl Panels {
 				geometries: profile_panel
 					.geometries
 					.iter()
-					.map(|geometry| PanelGeometry {
-						geometry: geometry.geometry,
-					})
+					.map(|geometry| PanelGeometry::new(geometry.geometry))
 					.collect(),
 				state,
 			});

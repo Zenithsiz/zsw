@@ -9,7 +9,10 @@ pub mod slide;
 pub use self::{fade::PanelFadeState, none::PanelNoneState, slide::PanelSlideState};
 
 // Imports
-use super::PanelShader;
+use {
+	self::{fade::PanelFadeGeometryShared, none::PanelNoneGeometryShared, slide::PanelSlideGeometryShared},
+	super::PanelShader,
+};
 
 
 /// Panel state
@@ -36,5 +39,57 @@ impl PanelState {
 			Self::Fade(state) => PanelShader::Fade(state.shader()),
 			Self::Slide(state) => PanelShader::Slide(state.shader()),
 		}
+	}
+}
+
+/// Panel geometry
+#[derive(Default, Debug)]
+pub enum PanelGeometryShared {
+	#[default]
+	Empty,
+
+	/// None shader
+	None(PanelNoneGeometryShared),
+
+	/// Fade shader
+	Fade(PanelFadeGeometryShared),
+
+	/// Slide shader
+	Slide(PanelSlideGeometryShared),
+}
+
+// TODO: Reduce repetition of this?
+impl PanelGeometryShared {
+	/// Gets the none shader of this geometry
+	pub fn none(&mut self) -> &mut PanelNoneGeometryShared {
+		if let Self::None(shared) = self {
+			return shared;
+		}
+
+		*self = Self::None(PanelNoneGeometryShared::default());
+		let Self::None(shared) = self else { unreachable!() };
+		shared
+	}
+
+	/// Gets the fade shader of this geometry
+	pub fn fade(&mut self) -> &mut PanelFadeGeometryShared {
+		if let Self::Fade(shared) = self {
+			return shared;
+		}
+
+		*self = Self::Fade(PanelFadeGeometryShared::default());
+		let Self::Fade(shared) = self else { unreachable!() };
+		shared
+	}
+
+	/// Gets the slide shader of this geometry
+	pub fn slide(&mut self) -> &mut PanelSlideGeometryShared {
+		if let Self::Slide(shared) = self {
+			return shared;
+		}
+
+		*self = Self::Slide(PanelSlideGeometryShared::default());
+		let Self::Slide(shared) = self else { unreachable!() };
+		shared
 	}
 }

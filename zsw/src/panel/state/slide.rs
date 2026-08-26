@@ -17,36 +17,38 @@ use {
 pub struct PanelSlideState {
 	/// Shader
 	shader: PanelSlideShader,
-
-	/// Geometry uniforms
-	geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelSlideGeometryUniforms>>>,
 }
 
 impl PanelSlideState {
 	/// Creates new state
 	pub fn new(shader: PanelSlideShader) -> Self {
-		Self {
-			shader,
-			geometry_uniforms: Mutex::new(HashMap::new()),
-		}
+		Self { shader }
 	}
 
 	/// Returns the panel shader
 	pub fn shader(&self) -> PanelSlideShader {
 		self.shader
 	}
+}
 
-	/// Returns the geometry uniforms
-	pub fn geometry_uniforms(
+/// Panel slide geometry shared
+#[derive(Default, Debug)]
+pub struct PanelSlideGeometryShared {
+	/// uniforms
+	pub uniforms: Mutex<HashMap<WindowId, Arc<PanelSlideGeometryUniforms>>>,
+}
+
+impl PanelSlideGeometryShared {
+	/// Returns this geometry's uniforms
+	pub fn uniforms(
 		&self,
 		wgpu: &Wgpu,
 		shared: &PanelSlideShared,
 		window_id: WindowId,
-		geometry_idx: usize,
 	) -> Arc<PanelSlideGeometryUniforms> {
-		let mut geometry_uniforms = self.geometry_uniforms.lock();
-		geometry_uniforms
-			.entry((window_id, geometry_idx))
+		self.uniforms
+			.lock()
+			.entry(window_id)
 			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)))
 			.share()
 	}

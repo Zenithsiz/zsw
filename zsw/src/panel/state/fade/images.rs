@@ -20,6 +20,29 @@ use {
 };
 
 /// Panel fade images shared
+#[derive(Default, Debug)]
+pub struct PanelFadeImagesGeometryShared {
+	/// Uniforms
+	pub uniforms: Mutex<HashMap<WindowId, Arc<PanelFadeImageGeometryUniforms>>>,
+}
+
+impl PanelFadeImagesGeometryShared {
+	/// Returns the geometry uniforms
+	pub fn uniforms(
+		&self,
+		wgpu: &Wgpu,
+		shared: &PanelFadeImagesShared,
+		window_id: WindowId,
+	) -> Arc<PanelFadeImageGeometryUniforms> {
+		self.uniforms
+			.lock()
+			.entry(window_id)
+			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)))
+			.share()
+	}
+}
+
+/// Panel fade images shared
 #[derive(Debug)]
 pub struct PanelFadeImagesShared {
 	/// Geometry uniforms bind group layout
@@ -65,9 +88,6 @@ pub struct PanelFadeImages {
 	/// Bind group
 	pub bind_group: OnceLock<wgpu::BindGroup>,
 
-	/// Geometry uniforms
-	pub geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelFadeImageGeometryUniforms>>>,
-
 	/// Next image
 	pub next_image: Loadable<ImageLoadRes>,
 }
@@ -90,13 +110,12 @@ impl PanelFadeImages {
 	#[must_use]
 	pub fn new() -> Self {
 		Self {
-			prev:              None,
-			cur:               None,
-			next:              None,
-			image_sampler:     OnceLock::new(),
-			bind_group:        OnceLock::new(),
-			geometry_uniforms: Mutex::new(HashMap::new()),
-			next_image:        Loadable::new(),
+			prev:          None,
+			cur:           None,
+			next:          None,
+			image_sampler: OnceLock::new(),
+			bind_group:    OnceLock::new(),
+			next_image:    Loadable::new(),
 		}
 	}
 
@@ -150,21 +169,6 @@ impl PanelFadeImages {
 			let layout = shared.image_bind_group_layout(wgpu);
 			self::create_image_bind_group(wgpu, layout, prev, cur, next, sampler)
 		})
-	}
-
-	/// Returns the geometry uniforms
-	pub fn geometry_uniforms(
-		&self,
-		wgpu: &Wgpu,
-		shared: &PanelFadeImagesShared,
-		window_id: WindowId,
-		geometry_idx: usize,
-	) -> Arc<PanelFadeImageGeometryUniforms> {
-		let mut geometry_uniforms = self.geometry_uniforms.lock();
-		geometry_uniforms
-			.entry((window_id, geometry_idx))
-			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)))
-			.share()
 	}
 
 	/// Loads any missing images, prioritizing the current, then next, then previous.

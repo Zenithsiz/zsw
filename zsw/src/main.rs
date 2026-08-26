@@ -468,7 +468,7 @@ fn paint_egui(
 				!panel
 					.geometries
 					.iter()
-					.any(|&geometry| geometry.on_window(window_geometry).contains(pointer_pos))
+					.any(|geometry| geometry.on_window(window_geometry).contains(pointer_pos))
 			{
 				continue;
 			}

@@ -17,31 +17,33 @@ use {
 pub struct PanelNoneState {
 	/// Background color
 	pub background_color: [f32; 4],
-
-	/// Geometry uniforms
-	pub geometry_uniforms: Mutex<HashMap<(WindowId, usize), Arc<PanelNoneGeometryUniforms>>>,
 }
 
 impl PanelNoneState {
 	/// Creates new state
 	pub fn new(background_color: [f32; 4]) -> Self {
-		Self {
-			background_color,
-			geometry_uniforms: Mutex::new(HashMap::new()),
-		}
+		Self { background_color }
 	}
+}
 
-	/// Returns the geometry uniforms
-	pub fn geometry_uniforms(
+/// Panel none geometry shared
+#[derive(Default, Debug)]
+pub struct PanelNoneGeometryShared {
+	/// uniforms
+	pub uniforms: Mutex<HashMap<WindowId, Arc<PanelNoneGeometryUniforms>>>,
+}
+
+impl PanelNoneGeometryShared {
+	/// Returns this geometry's uniforms
+	pub fn uniforms(
 		&self,
 		wgpu: &Wgpu,
 		shared: &PanelNoneShared,
 		window_id: WindowId,
-		geometry_idx: usize,
 	) -> Arc<PanelNoneGeometryUniforms> {
-		let mut geometry_uniforms = self.geometry_uniforms.lock();
-		geometry_uniforms
-			.entry((window_id, geometry_idx))
+		self.uniforms
+			.lock()
+			.entry(window_id)
 			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)))
 			.share()
 	}

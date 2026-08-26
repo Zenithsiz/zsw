@@ -8,6 +8,7 @@ pub use self::images::{PanelFadeImage, PanelFadeImageSlot, PanelFadeImages, Pane
 
 // Imports
 use {
+	self::images::PanelFadeImagesGeometryShared,
 	crate::{panel::PanelFadeShader, playlist::PlaylistPlayer},
 	chrono::TimeDelta,
 	core::time::Duration,
@@ -253,6 +254,13 @@ impl PanelFadeState {
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
 		self.step(wgpu, delta);
 	}
+}
+
+/// Panel fade geometry shared
+#[derive(Default, Debug)]
+pub struct PanelFadeGeometryShared {
+	/// Images
+	pub images: PanelFadeImagesGeometryShared,
 }
 
 /// Panel fade shared

@@ -311,10 +311,10 @@ impl PanelsRenderer {
 		window: &Window,
 		window_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		panel: &Panel,
+		panel: &mut Panel,
 	) {
 		// Go through all geometries of the panel and render each one
-		for (geometry_idx, panel_geometry) in panel.geometries.iter().enumerate() {
+		for panel_geometry in &mut panel.geometries {
 			// If this geometry is outside our window, we can safely ignore it
 			if !panel_geometry.intersects_window(window_geometry) {
 				continue;
@@ -325,7 +325,6 @@ impl PanelsRenderer {
 				&shared.wgpu,
 				panels_shared,
 				window.id(),
-				geometry_idx,
 				surface_size,
 				&panel.state,
 				window_geometry,
@@ -340,11 +339,10 @@ impl PanelsRenderer {
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
 		window_id: WindowId,
-		geometry_idx: usize,
 		surface_size: PhysicalSize<u32>,
 		state: &PanelState,
 		window_geometry: Rect<i32, u32>,
-		panel_geometry: &PanelGeometry,
+		panel_geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
 		// Calculate the position matrix for the panel
@@ -356,8 +354,8 @@ impl PanelsRenderer {
 				wgpu,
 				render_pass,
 				window_id,
-				geometry_idx,
 				shared.none(wgpu),
+				panel_geometry,
 				pos_matrix,
 				state,
 			),
@@ -365,7 +363,6 @@ impl PanelsRenderer {
 				wgpu,
 				render_pass,
 				window_id,
-				geometry_idx,
 				shared.fade(wgpu),
 				panel_geometry,
 				pos_matrix,
@@ -375,8 +372,8 @@ impl PanelsRenderer {
 				wgpu,
 				render_pass,
 				window_id,
-				geometry_idx,
 				shared.slide(wgpu),
+				panel_geometry,
 				pos_matrix,
 				state,
 			),
@@ -388,12 +385,12 @@ impl PanelsRenderer {
 		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		window_id: WindowId,
-		geometry_idx: usize,
 		shared: &PanelNoneShared,
+		panel_geometry: &mut PanelGeometry,
 		pos_matrix: uniform::Matrix4x4,
 		state: &PanelNoneState,
 	) {
-		let geometry_uniforms = state.geometry_uniforms(wgpu, shared, window_id, geometry_idx);
+		let geometry_uniforms = panel_geometry.shared.none().uniforms(wgpu, shared, window_id);
 
 		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
 			pos_matrix,
@@ -410,9 +407,8 @@ impl PanelsRenderer {
 		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		window_id: WindowId,
-		geometry_idx: usize,
 		shared: &PanelFadeShared,
-		panel_geometry: &PanelGeometry,
+		panel_geometry: &mut PanelGeometry,
 		pos_matrix: uniform::Matrix4x4,
 		state: &PanelFadeState,
 	) {
@@ -422,9 +418,11 @@ impl PanelsRenderer {
 		// Full duration an image is on screen (including the fades)
 		let d = 1.0 + 2.0 * f;
 
-		let geometry_uniforms = state
-			.images()
-			.geometry_uniforms(wgpu, &shared.images, window_id, geometry_idx);
+		let geometry_uniforms = panel_geometry
+			.shared
+			.fade()
+			.images
+			.uniforms(wgpu, &shared.images, window_id);
 
 		let image_uniforms = |image: Option<&PanelFadeImage>, image_slot| -> uniform::fade::Image {
 			let Some(image) = image else {
@@ -517,12 +515,12 @@ impl PanelsRenderer {
 		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		window_id: WindowId,
-		geometry_idx: usize,
 		shared: &PanelSlideShared,
+		panel_geometry: &mut PanelGeometry,
 		pos_matrix: uniform::Matrix4x4,
-		state: &PanelSlideState,
+		_state: &PanelSlideState,
 	) {
-		let geometry_uniforms = state.geometry_uniforms(wgpu, shared, window_id, geometry_idx);
+		let geometry_uniforms = panel_geometry.shared.slide().uniforms(wgpu, shared, window_id);
 
 		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
 

@@ -35,7 +35,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &Mutex<Panels>, wi
 		if panel
 			.geometries
 			.iter()
-			.all(|&geometry| !geometry.intersects_window(window_geometry))
+			.all(|geometry| !geometry.intersects_window(window_geometry))
 		{
 			name = name.weak();
 		}

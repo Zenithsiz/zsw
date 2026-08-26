@@ -2,19 +2,31 @@
 
 // Imports
 use {
+	super::state::PanelGeometryShared,
 	euclid::default::{Transform3D, Vector2D},
 	num_rational::Rational32,
 	winit::dpi::PhysicalSize,
 	zsw_util::Rect,
 };
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Debug)]
 pub struct PanelGeometry {
 	/// Inner geometry
 	pub geometry: Rect<i32, u32>,
+
+	/// Shared data
+	pub shared: PanelGeometryShared,
 }
 
 impl PanelGeometry {
+	/// Creates a new panel geometry from it's geometry
+	pub fn new(geometry: Rect<i32, u32>) -> Self {
+		Self {
+			geometry,
+			shared: PanelGeometryShared::default(),
+		}
+	}
+
 	/// Returns if this geometry intersects a window
 	pub fn intersects_window(&self, window_geometry: Rect<i32, u32>) -> bool {
 		self.geometry.intersection(window_geometry).is_some()
