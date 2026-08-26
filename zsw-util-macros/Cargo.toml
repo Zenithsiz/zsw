@@ -1,0 +1,17 @@
+[package]
+edition = "2024"
+name    = "zsw-util-macros"
+version = "0.1.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+app-error    = { workspace = true }
+convert_case = { workspace = true }
+proc-macro2  = { workspace = true }
+quote        = { workspace = true }
+syn          = { workspace = true }
+
+[lints]
+workspace = true

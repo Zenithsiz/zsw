@@ -368,7 +368,7 @@ impl PanelsRenderer {
 		pos_matrix: uniform::Matrix4x4,
 		state: &PanelNoneState,
 	) {
-		let geometry_uniforms = panel_geometry.shared.none().uniforms(wgpu, shared);
+		let geometry_uniforms = panel_geometry.shared.none_or_insert_default().uniforms(wgpu, shared);
 
 		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
 			pos_matrix,
@@ -456,7 +456,11 @@ impl PanelsRenderer {
 			next: image_uniforms(state.images().next.as_ref(), PanelFadeImageSlot::Next),
 		};
 
-		let geometry_uniforms = panel_geometry.shared.fade().images.uniforms(wgpu, &shared.images);
+		let geometry_uniforms = panel_geometry
+			.shared
+			.fade_or_insert_default()
+			.images
+			.uniforms(wgpu, &shared.images);
 		match state.shader() {
 			PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Basic {
 				pos_matrix,
@@ -491,7 +495,7 @@ impl PanelsRenderer {
 		pos_matrix: uniform::Matrix4x4,
 		_state: &PanelSlideState,
 	) {
-		let geometry_uniforms = panel_geometry.shared.slide().uniforms(wgpu, shared);
+		let geometry_uniforms = panel_geometry.shared.slide_or_insert_default().uniforms(wgpu, shared);
 
 		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
 

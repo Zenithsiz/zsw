@@ -4,6 +4,8 @@ name    = "zsw-util"
 version = "0.1.0"
 
 [dependencies]
+zsw-util-macros = { workspace = true }
+
 app-error    = { workspace = true }
 duplicate    = { workspace = true }
 euclid       = { features = ["serde"], workspace = true }

@@ -44,52 +44,11 @@ impl PanelState {
 
 /// Panel geometry
 #[derive(Default, Debug)]
+#[derive(zsw_util::GetOrInsert)]
 pub enum PanelGeometryShared {
 	#[default]
 	Empty,
-
-	/// None shader
 	None(PanelNoneGeometryShared),
-
-	/// Fade shader
 	Fade(PanelFadeGeometryShared),
-
-	/// Slide shader
 	Slide(PanelSlideGeometryShared),
-}
-
-// TODO: Reduce repetition of this?
-impl PanelGeometryShared {
-	/// Gets the none shader of this geometry
-	pub fn none(&mut self) -> &mut PanelNoneGeometryShared {
-		if let Self::None(shared) = self {
-			return shared;
-		}
-
-		*self = Self::None(PanelNoneGeometryShared::default());
-		let Self::None(shared) = self else { unreachable!() };
-		shared
-	}
-
-	/// Gets the fade shader of this geometry
-	pub fn fade(&mut self) -> &mut PanelFadeGeometryShared {
-		if let Self::Fade(shared) = self {
-			return shared;
-		}
-
-		*self = Self::Fade(PanelFadeGeometryShared::default());
-		let Self::Fade(shared) = self else { unreachable!() };
-		shared
-	}
-
-	/// Gets the slide shader of this geometry
-	pub fn slide(&mut self) -> &mut PanelSlideGeometryShared {
-		if let Self::Slide(shared) = self {
-			return shared;
-		}
-
-		*self = Self::Slide(PanelSlideGeometryShared::default());
-		let Self::Slide(shared) = self else { unreachable!() };
-		shared
-	}
 }
