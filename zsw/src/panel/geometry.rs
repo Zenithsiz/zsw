@@ -11,28 +11,18 @@ use {
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct PanelGeometry {
 	/// Inner geometry
-	inner: Rect<i32, u32>,
+	pub geometry: Rect<i32, u32>,
 }
 
 impl PanelGeometry {
-	/// Creates a new geometry
-	pub fn new(inner: Rect<i32, u32>) -> Self {
-		Self { inner }
-	}
-
-	/// Gets the inner rectangle
-	pub fn rect(&self) -> Rect<i32, u32> {
-		self.inner
-	}
-
 	/// Returns if this geometry intersects a window
 	pub fn intersects_window(&self, window_geometry: Rect<i32, u32>) -> bool {
-		self.inner.intersection(window_geometry).is_some()
+		self.geometry.intersection(window_geometry).is_some()
 	}
 
 	/// Returns this geometry's rectangle for a certain window
 	pub fn on_window(&self, window_geometry: Rect<i32, u32>) -> Rect<i32, u32> {
-		let mut geometry = self.inner;
+		let mut geometry = self.geometry;
 		geometry.pos -= Vector2D::new(window_geometry.pos.x, window_geometry.pos.y);
 
 		geometry
@@ -62,7 +52,7 @@ impl PanelGeometry {
 	/// that comes from having a square coordinate system [0.0 .. 1.0] x [0.0 .. 1.0]
 	pub fn image_ratio(&self, image_size: Vector2D<u32>) -> Vector2D<f32> {
 		let image_size = image_size.cast();
-		let panel_size = self.inner.size.cast();
+		let panel_size = self.geometry.size.cast();
 
 		// If either the image or our panel have a side with 0, return a square ratio
 		// TODO: Check if this is the right thing to do

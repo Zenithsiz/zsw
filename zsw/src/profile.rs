@@ -83,7 +83,7 @@ impl From<ser::Profile> for Profile {
 						.into_iter()
 						.map(|geometry| match geometry {
 							ser::PanelGeometry::Full { geometry } | ser::PanelGeometry::Short(geometry) =>
-								PanelGeometry::new(geometry),
+								PanelGeometry { geometry },
 						})
 						.collect(),
 					shader:     match panel.shader {
