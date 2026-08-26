@@ -2,7 +2,7 @@
 
 // Imports
 use {
-	super::Panel,
+	super::{Panel, PanelGeometry},
 	crate::{
 		panel::{
 			PanelFadeShader,
@@ -88,7 +88,13 @@ impl Panels {
 			};
 
 			self.panels.push(Panel {
-				geometries: profile_panel.geometries.clone(),
+				geometries: profile_panel
+					.geometries
+					.iter()
+					.map(|geometry| PanelGeometry {
+						geometry: geometry.geometry,
+					})
+					.collect(),
 				state,
 			});
 		}

@@ -1,11 +1,15 @@
 //! Profile
 
 // Modules
+mod geometry;
 mod ser;
+
+// Exports
+pub use self::geometry::ProfilePanelGeometry;
 
 // Imports
 use {
-	crate::{panel::PanelGeometry, playlist::PlaylistName},
+	crate::playlist::PlaylistName,
 	core::{str::FromStr, time::Duration},
 	std::{borrow::Borrow, collections::BTreeMap, fmt, sync::Arc},
 };
@@ -25,7 +29,7 @@ pub struct Profile {
 /// Profile panel
 #[derive(Debug)]
 pub struct ProfilePanel {
-	pub geometries: Vec<PanelGeometry>,
+	pub geometries: Vec<ProfilePanelGeometry>,
 	pub shader:     ProfilePanelShader,
 }
 
@@ -83,7 +87,7 @@ impl From<ser::Profile> for Profile {
 						.into_iter()
 						.map(|geometry| match geometry {
 							ser::PanelGeometry::Full { geometry } | ser::PanelGeometry::Short(geometry) =>
-								PanelGeometry { geometry },
+								ProfilePanelGeometry { geometry },
 						})
 						.collect(),
 					shader:     match panel.shader {
