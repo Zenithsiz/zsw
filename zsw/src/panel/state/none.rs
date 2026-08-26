@@ -1,16 +1,7 @@
 //! Panel none state
 
 // Imports
-use {
-	crate::panel::renderer::uniform,
-	core::clone::Share,
-	std::{
-		collections::HashMap,
-		sync::{Arc, nonpoison::Mutex},
-	},
-	winit::window::WindowId,
-	zsw_wgpu::Wgpu,
-};
+use {crate::panel::renderer::uniform, std::collections::HashMap, winit::window::WindowId, zsw_wgpu::Wgpu};
 
 /// Panel none state
 #[derive(Debug)]
@@ -30,22 +21,20 @@ impl PanelNoneState {
 #[derive(Default, Debug)]
 pub struct PanelNoneGeometryShared {
 	/// uniforms
-	pub uniforms: Mutex<HashMap<WindowId, Arc<PanelNoneGeometryUniforms>>>,
+	pub uniforms: HashMap<WindowId, PanelNoneGeometryUniforms>,
 }
 
 impl PanelNoneGeometryShared {
 	/// Returns this geometry's uniforms
 	pub fn uniforms(
-		&self,
+		&mut self,
 		wgpu: &Wgpu,
 		shared: &PanelNoneShared,
 		window_id: WindowId,
-	) -> Arc<PanelNoneGeometryUniforms> {
+	) -> &mut PanelNoneGeometryUniforms {
 		self.uniforms
-			.lock()
 			.entry(window_id)
-			.or_insert_with(|| Arc::new(self::create_geometry_uniforms(wgpu, shared)))
-			.share()
+			.or_insert_with(|| self::create_geometry_uniforms(wgpu, shared))
 	}
 }
 

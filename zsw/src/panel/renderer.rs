@@ -418,12 +418,6 @@ impl PanelsRenderer {
 		// Full duration an image is on screen (including the fades)
 		let d = 1.0 + 2.0 * f;
 
-		let geometry_uniforms = panel_geometry
-			.shared
-			.fade()
-			.images
-			.uniforms(wgpu, &shared.images, window_id);
-
 		let image_uniforms = |image: Option<&PanelFadeImage>, image_slot| -> uniform::fade::Image {
 			let Some(image) = image else {
 				return uniform::fade::Image {
@@ -485,6 +479,11 @@ impl PanelsRenderer {
 			next: image_uniforms(state.images().next.as_ref(), PanelFadeImageSlot::Next),
 		};
 
+		let geometry_uniforms = panel_geometry
+			.shared
+			.fade()
+			.images
+			.uniforms(wgpu, &shared.images, window_id);
 		match state.shader() {
 			PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Basic {
 				pos_matrix,

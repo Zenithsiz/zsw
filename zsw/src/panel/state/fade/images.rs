@@ -4,14 +4,13 @@
 use {
 	crate::{panel::renderer::uniform, playlist::PlaylistPlayer},
 	app_error::Context,
-	core::clone::Share,
 	image::{DynamicImage, imageops},
 	std::{
 		self,
 		collections::HashMap,
 		mem,
 		path::Path,
-		sync::{Arc, OnceLock, nonpoison::Mutex},
+		sync::{Arc, OnceLock},
 	},
 	winit::window::WindowId,
 	zsw_util::{AppError, Loadable},
@@ -23,22 +22,20 @@ use {
 #[derive(Default, Debug)]
 pub struct PanelFadeImagesGeometryShared {
 	/// Uniforms
-	pub uniforms: Mutex<HashMap<WindowId, Arc<PanelFadeImageGeometryUniforms>>>,
+	pub uniforms: HashMap<WindowId, PanelFadeImageGeometryUniforms>,
 }
 
 impl PanelFadeImagesGeometryShared {
 	/// Returns the geometry uniforms
 	pub fn uniforms(
-		&self,
+		&mut self,
 		wgpu: &Wgpu,
 		shared: &PanelFadeImagesShared,
 		window_id: WindowId,
-	) -> Arc<PanelFadeImageGeometryUniforms> {
+	) -> &mut PanelFadeImageGeometryUniforms {
 		self.uniforms
-			.lock()
 			.entry(window_id)
-			.or_insert_with(|| Arc::new(self::create_image_geometry_uniforms(wgpu, shared)))
-			.share()
+			.or_insert_with(|| self::create_image_geometry_uniforms(wgpu, shared))
 	}
 }
 
