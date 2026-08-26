@@ -20,7 +20,6 @@ use {
 		},
 	},
 	app_error::Context,
-	std::sync::Arc,
 	zsw_util::AppError,
 };
 
@@ -55,7 +54,7 @@ impl Panels {
 		&mut self,
 		profile_name: ProfileName,
 		profile: &Profile,
-		playlists: &Arc<Playlists>,
+		playlists: &Playlists,
 	) -> Result<(), AppError> {
 		self.profile_name = Some(profile_name);
 		self.panels.clear();

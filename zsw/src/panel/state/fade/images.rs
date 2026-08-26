@@ -301,7 +301,7 @@ pub struct ImageLoadRes {
 }
 
 /// Loads an image
-pub fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppError> {
+pub fn load(path: &Path, max_image_size: u32) -> Result<DynamicImage, AppError> {
 	// Load the image
 	tracing::trace!("Loading image {:?}", path);
 	#[cloned(path)]
