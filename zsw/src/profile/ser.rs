@@ -1,6 +1,6 @@
 //! Serialized profile
 
-use core::time::Duration;
+use {core::time::Duration, zsw_util::Rect};
 
 /// Profile
 #[derive(Debug)]
@@ -13,8 +13,17 @@ pub struct Profile {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanel {
-	pub display: String,
-	pub shader:  ProfilePanelShader,
+	pub geometries: Vec<PanelGeometry>,
+	pub shader:     ProfilePanelShader,
+}
+
+/// Panel geometry
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct PanelGeometry {
+	#[serde_as(as = "serde_with::DisplayFromStr")]
+	pub geometry: Rect<i32, u32>,
 }
 
 /// Panel shader

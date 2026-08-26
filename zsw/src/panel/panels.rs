@@ -87,8 +87,10 @@ impl Panels {
 				},
 			};
 
-			let panel = Panel::new(profile_panel.display_name.clone(), state);
-			self.panels.push(panel);
+			self.panels.push(Panel {
+				geometries: profile_panel.geometries.clone(),
+				state,
+			});
 		}
 
 		Ok(())

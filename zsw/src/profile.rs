@@ -5,7 +5,7 @@ mod ser;
 
 // Imports
 use {
-	crate::{display::DisplayName, playlist::PlaylistName},
+	crate::{panel::PanelGeometry, playlist::PlaylistName},
 	core::{str::FromStr, time::Duration},
 	std::{borrow::Borrow, collections::BTreeMap, fmt, sync::Arc},
 };
@@ -25,8 +25,8 @@ pub struct Profile {
 /// Profile panel
 #[derive(Debug)]
 pub struct ProfilePanel {
-	pub display_name: DisplayName,
-	pub shader:       ProfilePanelShader,
+	pub geometries: Vec<PanelGeometry>,
+	pub shader:     ProfilePanelShader,
 }
 
 /// Profile panel shader
@@ -78,8 +78,12 @@ impl From<ser::Profile> for Profile {
 				.panels
 				.into_iter()
 				.map(|panel| ProfilePanel {
-					display_name: DisplayName::from_str(&panel.display).into_ok(),
-					shader:       match panel.shader {
+					geometries: panel
+						.geometries
+						.into_iter()
+						.map(|geometry| PanelGeometry::new(geometry.geometry))
+						.collect(),
+					shader:     match panel.shader {
 						ser::ProfilePanelShader::None(shader) => ProfilePanelShader::None(ProfilePanelNoneShader {
 							background_color: shader.background_color,
 						}),

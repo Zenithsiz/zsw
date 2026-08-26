@@ -4,7 +4,6 @@
 use {
 	crate::{
 		AppEvent,
-		display::Displays,
 		panel::{Panels, PanelsRendererShared},
 		playlist::Playlists,
 		profile::Profiles,
@@ -23,7 +22,6 @@ pub struct Shared {
 	pub wgpu:                   Wgpu,
 	pub panels_renderer_shared: PanelsRendererShared,
 
-	pub displays:  Arc<Displays>,
 	pub playlists: Arc<Playlists>,
 	pub profiles:  Arc<Profiles>,
 

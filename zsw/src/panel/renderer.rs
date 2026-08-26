@@ -11,6 +11,7 @@ pub use self::vertex::PanelVertex;
 use {
 	super::{
 		Panel,
+		PanelGeometry,
 		PanelState,
 		state::{
 			PanelFadeState,
@@ -21,7 +22,7 @@ use {
 			slide::PanelSlideShared,
 		},
 	},
-	crate::{display::DisplayGeometry, shared::Shared},
+	crate::shared::Shared,
 	app_error::Context,
 	core::{clone::Share, cmp},
 	euclid::default::Vector2D,
@@ -313,7 +314,7 @@ impl PanelsRenderer {
 		panel: &Panel,
 	) {
 		// Go through all geometries of the panel display and render each one
-		for (geometry_idx, display_geometry) in shared.displays[&panel.display_name].geometries.iter().enumerate() {
+		for (geometry_idx, display_geometry) in panel.geometries.iter().enumerate() {
 			// If this geometry is outside our window, we can safely ignore it
 			if !display_geometry.intersects_window(window_geometry) {
 				continue;
@@ -343,11 +344,11 @@ impl PanelsRenderer {
 		surface_size: PhysicalSize<u32>,
 		state: &PanelState,
 		window_geometry: Rect<i32, u32>,
-		display_geometry: &DisplayGeometry,
+		panel_geometry: &PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
 		// Calculate the position matrix for the panel
-		let pos_matrix = display_geometry.pos_matrix(window_geometry, surface_size);
+		let pos_matrix = panel_geometry.pos_matrix(window_geometry, surface_size);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 
 		match state {
@@ -366,7 +367,7 @@ impl PanelsRenderer {
 				window_id,
 				geometry_idx,
 				shared.fade(wgpu),
-				display_geometry,
+				panel_geometry,
 				pos_matrix,
 				state,
 			),
@@ -411,7 +412,7 @@ impl PanelsRenderer {
 		window_id: WindowId,
 		geometry_idx: usize,
 		shared: &PanelFadeShared,
-		display_geometry: &DisplayGeometry,
+		panel_geometry: &PanelGeometry,
 		pos_matrix: uniform::Matrix4x4,
 		state: &PanelFadeState,
 	) {
@@ -471,7 +472,7 @@ impl PanelsRenderer {
 			// Calculate the position matrix for the panel
 			let image_size = image.texture_view.texture().size();
 			let image_size = Vector2D::new(image_size.width, image_size.height);
-			let image_ratio = display_geometry.image_ratio(image_size);
+			let image_ratio = panel_geometry.image_ratio(image_size);
 
 			uniform::fade::Image {
 				image_ratio: uniform::Vec2(image_ratio.into()),

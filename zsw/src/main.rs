@@ -22,7 +22,6 @@
 mod args;
 mod config;
 mod dirs;
-mod display;
 mod menu;
 mod panel;
 mod playlist;
@@ -205,15 +204,11 @@ impl WinitApp {
 		// TODO: Reading of the these should be synchronous, it shouldn't take long to read some
 		//       toml files, and it'll simplify other things if we can make it mostly immutable.
 
-		// Create and stat loading the displays
-		let displays = zsw_util::read_dir_all_toml(dirs.displays()).context("Unable to create displays")?;
-		let displays = Arc::new(displays);
-
-		// Create and stat loading the playlists
+		// Create and load the playlists
 		let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
 		let playlists = Arc::new(playlists);
 
-		// Create and stat loading the profiles
+		// Create and load the profiles
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
 		let profiles = Arc::new(profiles);
@@ -234,7 +229,6 @@ impl WinitApp {
 			event_loop_proxy,
 			wgpu,
 			panels_renderer_shared,
-			displays,
 			playlists,
 			profiles,
 			panels: Mutex::new(panels),
@@ -453,7 +447,6 @@ fn paint_egui(
 		menu.draw(
 			ctx,
 			&shared.wgpu,
-			&shared.displays,
 			&shared.playlists,
 			&shared.profiles,
 			&shared.panels,
@@ -472,7 +465,7 @@ fn paint_egui(
 		for panel in panels.get_all() {
 			// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 			if ctx.is_pointer_over_egui() ||
-				!shared.displays[&panel.display_name]
+				!panel
 					.geometries
 					.iter()
 					.any(|&geometry| geometry.on_window(window_geometry).contains(pointer_pos))

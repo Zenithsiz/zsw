@@ -1,4 +1,4 @@
-//! Display geometry
+//! Panel geometry
 
 // Imports
 use {
@@ -9,12 +9,12 @@ use {
 };
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct DisplayGeometry {
+pub struct PanelGeometry {
 	/// Inner geometry
 	inner: Rect<i32, u32>,
 }
 
-impl DisplayGeometry {
+impl PanelGeometry {
 	/// Creates a new geometry
 	pub fn new(inner: Rect<i32, u32>) -> Self {
 		Self { inner }

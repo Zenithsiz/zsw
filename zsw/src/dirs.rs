@@ -12,9 +12,6 @@ pub struct Dirs {
 	/// Root config directory
 	config_dir: PathBuf,
 
-	/// Displays directory
-	displays: OnceLock<PathBuf>,
-
 	/// Playlist directory
 	playlists: OnceLock<PathBuf>,
 
@@ -27,19 +24,9 @@ impl Dirs {
 	pub fn new(config_dir: PathBuf) -> Self {
 		Self {
 			config_dir,
-			displays: OnceLock::new(),
 			playlists: OnceLock::new(),
 			profiles: OnceLock::new(),
 		}
-	}
-
-	/// Returns the displays directory
-	pub fn displays(&self) -> &Path {
-		self.displays.get_or_init(|| {
-			let path = self.config_dir.join("displays");
-			tracing::info!("Panels path: {path:?}");
-			path
-		})
 	}
 
 	/// Returns the playlists directory

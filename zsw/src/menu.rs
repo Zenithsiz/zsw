@@ -9,7 +9,7 @@ mod profiles;
 
 // Imports
 use {
-	crate::{AppEvent, display::Displays, panel::Panels, playlist::Playlists, profile::Profiles},
+	crate::{AppEvent, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
 	std::{
@@ -46,7 +46,6 @@ impl Menu {
 		&mut self,
 		ctx: &egui::Context,
 		wgpu: &Wgpu,
-		displays: &Arc<Displays>,
 		playlists: &Arc<Playlists>,
 		profiles: &Arc<Profiles>,
 		panels: &Mutex<Panels>,
@@ -75,7 +74,7 @@ impl Menu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => panels::draw_panels_tab(ui, wgpu, displays, panels, window_geometry),
+				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, window_geometry),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, playlists, profiles, panels),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
