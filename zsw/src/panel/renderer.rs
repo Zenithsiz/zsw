@@ -313,10 +313,10 @@ impl PanelsRenderer {
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &Panel,
 	) {
-		// Go through all geometries of the panel display and render each one
-		for (geometry_idx, display_geometry) in panel.geometries.iter().enumerate() {
+		// Go through all geometries of the panel and render each one
+		for (geometry_idx, panel_geometry) in panel.geometries.iter().enumerate() {
 			// If this geometry is outside our window, we can safely ignore it
-			if !display_geometry.intersects_window(window_geometry) {
+			if !panel_geometry.intersects_window(window_geometry) {
 				continue;
 			}
 
@@ -329,7 +329,7 @@ impl PanelsRenderer {
 				surface_size,
 				&panel.state,
 				window_geometry,
-				display_geometry,
+				panel_geometry,
 				render_pass,
 			);
 		}
