@@ -21,9 +21,14 @@ pub struct ProfilePanel {
 #[derive(Debug)]
 #[serde_with::serde_as]
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct PanelGeometry {
-	#[serde_as(as = "serde_with::DisplayFromStr")]
-	pub geometry: Rect<i32, u32>,
+#[serde(untagged)]
+pub enum PanelGeometry {
+	Full {
+		#[serde_as(as = "serde_with::DisplayFromStr")]
+		geometry: Rect<i32, u32>,
+	},
+
+	Short(Rect<i32, u32>),
 }
 
 /// Panel shader

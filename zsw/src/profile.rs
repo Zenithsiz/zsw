@@ -81,7 +81,10 @@ impl From<ser::Profile> for Profile {
 					geometries: panel
 						.geometries
 						.into_iter()
-						.map(|geometry| PanelGeometry::new(geometry.geometry))
+						.map(|geometry| match geometry {
+							ser::PanelGeometry::Full { geometry } | ser::PanelGeometry::Short(geometry) =>
+								PanelGeometry::new(geometry),
+						})
 						.collect(),
 					shader:     match panel.shader {
 						ser::ProfilePanelShader::None(shader) => ProfilePanelShader::None(ProfilePanelNoneShader {
