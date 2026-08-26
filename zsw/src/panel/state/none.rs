@@ -1,7 +1,7 @@
 //! Panel none state
 
 // Imports
-use {crate::panel::renderer::uniform, std::collections::HashMap, winit::window::WindowId, zsw_wgpu::Wgpu};
+use {crate::panel::renderer::uniform, zsw_wgpu::Wgpu};
 
 /// Panel none state
 #[derive(Debug)]
@@ -20,21 +20,15 @@ impl PanelNoneState {
 /// Panel none geometry shared
 #[derive(Default, Debug)]
 pub struct PanelNoneGeometryShared {
-	/// uniforms
-	pub uniforms: HashMap<WindowId, PanelNoneGeometryUniforms>,
+	/// Uniforms
+	pub uniforms: Option<PanelNoneGeometryUniforms>,
 }
 
 impl PanelNoneGeometryShared {
 	/// Returns this geometry's uniforms
-	pub fn uniforms(
-		&mut self,
-		wgpu: &Wgpu,
-		shared: &PanelNoneShared,
-		window_id: WindowId,
-	) -> &mut PanelNoneGeometryUniforms {
+	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelNoneShared) -> &mut PanelNoneGeometryUniforms {
 		self.uniforms
-			.entry(window_id)
-			.or_insert_with(|| self::create_geometry_uniforms(wgpu, shared))
+			.get_or_insert_with(|| self::create_geometry_uniforms(wgpu, shared))
 	}
 }
 

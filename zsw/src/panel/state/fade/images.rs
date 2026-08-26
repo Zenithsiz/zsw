@@ -7,12 +7,10 @@ use {
 	image::{DynamicImage, imageops},
 	std::{
 		self,
-		collections::HashMap,
 		mem,
 		path::Path,
 		sync::{Arc, OnceLock},
 	},
-	winit::window::WindowId,
 	zsw_util::{AppError, Loadable},
 	zsw_wgpu::Wgpu,
 	zutil_cloned::cloned,
@@ -22,20 +20,14 @@ use {
 #[derive(Default, Debug)]
 pub struct PanelFadeImagesGeometryShared {
 	/// Uniforms
-	pub uniforms: HashMap<WindowId, PanelFadeImageGeometryUniforms>,
+	pub uniforms: Option<PanelFadeImageGeometryUniforms>,
 }
 
 impl PanelFadeImagesGeometryShared {
 	/// Returns the geometry uniforms
-	pub fn uniforms(
-		&mut self,
-		wgpu: &Wgpu,
-		shared: &PanelFadeImagesShared,
-		window_id: WindowId,
-	) -> &mut PanelFadeImageGeometryUniforms {
+	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> &mut PanelFadeImageGeometryUniforms {
 		self.uniforms
-			.entry(window_id)
-			.or_insert_with(|| self::create_image_geometry_uniforms(wgpu, shared))
+			.get_or_insert_with(|| self::create_image_geometry_uniforms(wgpu, shared))
 	}
 }
 

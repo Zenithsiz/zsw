@@ -3,8 +3,6 @@
 // Imports
 use {
 	crate::panel::{PanelSlideShader, renderer::uniform},
-	std::collections::HashMap,
-	winit::window::WindowId,
 	zsw_wgpu::Wgpu,
 };
 
@@ -30,21 +28,15 @@ impl PanelSlideState {
 /// Panel slide geometry shared
 #[derive(Default, Debug)]
 pub struct PanelSlideGeometryShared {
-	/// uniforms
-	pub uniforms: HashMap<WindowId, PanelSlideGeometryUniforms>,
+	/// Uniforms
+	pub uniforms: Option<PanelSlideGeometryUniforms>,
 }
 
 impl PanelSlideGeometryShared {
 	/// Returns this geometry's uniforms
-	pub fn uniforms(
-		&mut self,
-		wgpu: &Wgpu,
-		shared: &PanelSlideShared,
-		window_id: WindowId,
-	) -> &mut PanelSlideGeometryUniforms {
+	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelSlideShared) -> &mut PanelSlideGeometryUniforms {
 		self.uniforms
-			.entry(window_id)
-			.or_insert_with(|| self::create_geometry_uniforms(wgpu, shared))
+			.get_or_insert_with(|| self::create_geometry_uniforms(wgpu, shared))
 	}
 }
 
