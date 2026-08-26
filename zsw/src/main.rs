@@ -264,19 +264,20 @@ impl WinitApp {
 			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
 			let menu = Menu::new();
 
-			let shared_window = Arc::new(SharedWindow {
+			let window_id = window.id();
+			let shared_window = SharedWindow {
 				window,
 				monitor_name: app_window.monitor_name,
-				monitor_geometry: Mutex::new(app_window.monitor_geometry),
+				monitor_geometry: app_window.monitor_geometry,
 				monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
-			});
+			};
 
 			let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
-			#[cloned(shared = self.shared, shared_window)]
+			#[cloned(shared = self.shared)]
 			zsw_util::spawn_task("Renderer", move || {
 				self::renderer(
 					&shared,
-					&shared_window,
+					shared_window,
 					&renderer_event_rx,
 					wgpu_renderer,
 					panels_renderer,
@@ -286,7 +287,7 @@ impl WinitApp {
 				)
 			});
 
-			_ = self.windows.insert(shared_window.window.id(), WinitAppWindow {
+			_ = self.windows.insert(window_id, WinitAppWindow {
 				egui_event_handler,
 				renderer_event_tx,
 			});
@@ -316,7 +317,7 @@ enum RendererEvent {
 /// Renderer task
 fn renderer(
 	shared: &Shared,
-	shared_window: &SharedWindow,
+	mut shared_window: SharedWindow,
 	renderer_event_rx: &mpsc::Receiver<RendererEvent>,
 	mut wgpu_renderer: WgpuRenderer,
 	mut panels_renderer: PanelsRenderer,
@@ -360,12 +361,10 @@ fn renderer(
 			next_frame += frame_duration * frames;
 		}
 
-		let window_geometry = *shared_window.monitor_geometry.lock();
-
 		// Paint egui
 		// TODO: Have `egui_renderer` do this for us on render?
 		let (egui_paint_jobs, egui_textures_delta) =
-			match self::paint_egui(shared, egui_painter, &mut menu, window_geometry) {
+			match self::paint_egui(shared, egui_painter, &mut menu, shared_window.monitor_geometry) {
 				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 				Err(err) => {
 					tracing::warn!("Unable to draw egui: {err:?}");
@@ -386,7 +385,7 @@ fn renderer(
 				&wgpu_renderer,
 				&shared.panels_renderer_shared,
 				&shared_window.window,
-				window_geometry,
+				shared_window.monitor_geometry,
 			)
 			.context("Unable to render panels")?;
 
@@ -430,7 +429,7 @@ fn renderer(
 			panels_renderer.resize(&wgpu_renderer, &shared.wgpu, size)
 		}
 		if let Some(pos) = move_pos {
-			shared_window.monitor_geometry.lock().pos = euclid::point2(pos.x, pos.y);
+			shared_window.monitor_geometry.pos = euclid::point2(pos.x, pos.y);
 		}
 	}
 }
