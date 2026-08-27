@@ -56,7 +56,6 @@ use {
 	},
 	winit::{
 		application::ApplicationHandler,
-		dpi::{PhysicalPosition, PhysicalSize},
 		event::WindowEvent,
 		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy, OwnedDisplayHandle},
 		platform::x11::EventLoopBuilderExtX11,
@@ -144,9 +143,6 @@ struct WinitApp {
 
 #[derive(Debug)]
 struct WinitAppWindow {
-	/// Egui event handle
-	egui_event_handler: EguiEventHandler,
-
 	/// Renderer event sender
 	renderer_event_tx: mpsc::Sender<RendererEvent>,
 }
@@ -175,13 +171,7 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 	fn window_event(&mut self, _event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
 		match self.windows.get(&window_id) {
 			Some(window) => {
-				match event {
-					WindowEvent::Resized(size) => _ = window.renderer_event_tx.send(RendererEvent::Resize { size }),
-					WindowEvent::Moved(pos) => _ = window.renderer_event_tx.send(RendererEvent::Move { pos }),
-					_ => (),
-				}
-
-				let _consumed = window.egui_event_handler.handle_event(&event);
+				_ = window.renderer_event_tx.send(RendererEvent::WindowEvent { event });
 			},
 			None => tracing::warn!("Received window event for unknown window {window_id:?}: {event:?}"),
 		}
@@ -283,14 +273,12 @@ impl WinitApp {
 					panels_renderer,
 					egui_renderer,
 					&egui_painter,
+					&egui_event_handler,
 					menu,
 				)
 			});
 
-			_ = self.windows.insert(window_id, WinitAppWindow {
-				egui_event_handler,
-				renderer_event_tx,
-			});
+			_ = self.windows.insert(window_id, WinitAppWindow { renderer_event_tx });
 		}
 
 		Ok(())
@@ -307,11 +295,8 @@ impl WinitApp {
 /// Renderer event
 #[derive(Debug)]
 enum RendererEvent {
-	/// Resize
-	Resize { size: PhysicalSize<u32> },
-
-	/// Move
-	Move { pos: PhysicalPosition<i32> },
+	/// Window event
+	WindowEvent { event: WindowEvent },
 }
 
 /// Renderer task
@@ -323,6 +308,7 @@ fn renderer(
 	mut panels_renderer: PanelsRenderer,
 	mut egui_renderer: EguiRenderer,
 	egui_painter: &EguiPainter,
+	egui_event_handler: &EguiEventHandler,
 	mut menu: Menu,
 ) -> Result<(), AppError> {
 	let frame_duration = Duration::from_secs_f64(1000.0) / shared_window.monitor_refresh_rate_mhz;
@@ -413,14 +399,23 @@ fn renderer(
 		while let Ok(event) = renderer_event_rx.try_recv() {
 			tracing::trace!("Received renderer event: {event:?}");
 			match event {
-				// Note: We don't handle the resize right now since it's likely
-				//       we might have received quite a few and we only care to
-				//       resize to the latest.
-				RendererEvent::Resize { size } => resize = Some(size),
-				RendererEvent::Move { pos } => move_pos = Some(pos),
+				RendererEvent::WindowEvent { event } => {
+					if egui_event_handler.handle_event(&event) {
+						continue;
+					}
+
+					match event {
+						WindowEvent::Resized(size) => resize = Some(size),
+						WindowEvent::Moved(pos) => move_pos = Some(pos),
+						_ => (),
+					}
+				},
 			}
 		}
 
+		// Note: When resizing we might receive multiple resize events
+		//       per frame, so we only use the latest one from the events,
+		//       since resizing twice only has the affect of the last resize.
 		if let Some(size) = resize {
 			wgpu_renderer
 				.resize(&shared.wgpu, size)
