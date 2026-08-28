@@ -22,7 +22,7 @@ use {
 	crate::shared::{Shared, SharedWindow},
 	app_error::Context,
 	core::{clone::Share, cmp},
-	euclid::default::Vector2D,
+	euclid::default::{Transform3D, Vector2D},
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
@@ -326,7 +326,6 @@ impl PanelsRenderer {
 	) {
 		// Calculate the position matrix for the panel
 		let pos_matrix = panel_geometry.pos_matrix(window_geometry, surface_size);
-		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 
 		match state {
 			PanelState::None(state) => Self::render_panel_none_geometry(
@@ -362,13 +361,13 @@ impl PanelsRenderer {
 		render_pass: &mut wgpu::RenderPass<'_>,
 		shared: &PanelNoneShared,
 		panel_geometry: &mut PanelGeometry,
-		pos_matrix: uniform::Matrix4x4,
+		pos_matrix: Transform3D<f32>,
 		state: &PanelNoneState,
 	) {
 		let geometry_uniforms = panel_geometry.shared.none_or_insert_default().uniforms(wgpu, shared);
 
 		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::None {
-			pos_matrix,
+			pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
 			background_color: uniform::Vec4(state.background_color),
 		});
 
@@ -383,7 +382,7 @@ impl PanelsRenderer {
 		render_pass: &mut wgpu::RenderPass<'_>,
 		shared: &PanelFadeShared,
 		panel_geometry: &mut PanelGeometry,
-		pos_matrix: uniform::Matrix4x4,
+		pos_matrix: Transform3D<f32>,
 		state: &PanelFadeState,
 	) {
 		let p = state.progress_norm();
@@ -458,6 +457,7 @@ impl PanelsRenderer {
 			.fade_or_insert_default()
 			.images
 			.uniforms(wgpu, &shared.images);
+		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 		match state.shader() {
 			PanelFadeShader::Basic => Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::fade::Basic {
 				pos_matrix,
@@ -489,11 +489,12 @@ impl PanelsRenderer {
 		render_pass: &mut wgpu::RenderPass<'_>,
 		shared: &PanelSlideShared,
 		panel_geometry: &mut PanelGeometry,
-		pos_matrix: uniform::Matrix4x4,
+		pos_matrix: Transform3D<f32>,
 		_state: &PanelSlideState,
 	) {
 		let geometry_uniforms = panel_geometry.shared.slide_or_insert_default().uniforms(wgpu, shared);
 
+		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
 
 		// Bind the geometry uniforms
