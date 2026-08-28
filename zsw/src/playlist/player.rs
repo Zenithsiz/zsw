@@ -1,6 +1,5 @@
 //! Playlist player
 
-// Imports
 use {
 	super::Playlist,
 	core::clone::Share,

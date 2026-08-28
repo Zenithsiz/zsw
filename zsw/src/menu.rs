@@ -3,11 +3,9 @@
 // Lints
 #![allow(unused_results)] // Egui produces a lot of results we don't need to use
 
-// Modules
 mod panels;
 mod profiles;
 
-// Imports
 use {
 	crate::{AppEvent, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, time::Duration},

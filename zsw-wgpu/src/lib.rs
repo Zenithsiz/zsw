@@ -1,15 +1,11 @@
 //! Wgpu wrapper
 
-// Features
 #![feature(must_not_suspend, yeet_expr)]
 
-// Modules
 mod renderer;
 
-// Exports
 pub use renderer::{FrameRender, WgpuRenderer};
 
-// Imports
 use {
 	app_error::Context,
 	core::sync::atomic::{self, AtomicBool},

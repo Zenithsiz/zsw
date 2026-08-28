@@ -1,13 +1,10 @@
 //! Panels renderer
 
-// Modules
 pub mod uniform;
 mod vertex;
 
-// Exports
 pub use self::vertex::PanelVertex;
 
-// Imports
 use {
 	super::{
 		Panel,

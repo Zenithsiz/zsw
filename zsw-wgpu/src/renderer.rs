@@ -1,6 +1,5 @@
 //! Wgpu renderer
 
-// Imports
 use {
 	super::Wgpu,
 	app_error::{Context, bail},

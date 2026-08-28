@@ -1,6 +1,5 @@
 //! Zenithsiz's scrolling wallpaper
 
-// Features
 #![feature(
 	never_type,
 	must_not_suspend,
@@ -19,7 +18,6 @@
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 
-// Modules
 mod args;
 mod config;
 mod dirs;
@@ -31,7 +29,6 @@ mod renderer;
 mod shared;
 mod window;
 
-// Imports
 use {
 	self::{
 		args::Args,

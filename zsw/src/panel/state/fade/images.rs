@@ -1,6 +1,5 @@
 //! Panel fade images
 
-// Imports
 use {
 	crate::{panel::renderer::uniform, playlist::PlaylistPlayer},
 	app_error::Context,

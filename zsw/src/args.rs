@@ -1,6 +1,5 @@
 //! Arguments
 
-// Imports
 use std::path::PathBuf;
 
 /// Arguments

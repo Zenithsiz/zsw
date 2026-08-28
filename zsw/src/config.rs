@@ -1,6 +1,5 @@
 //! Configuration
 
-// Imports
 use {
 	app_error::Context,
 	std::{

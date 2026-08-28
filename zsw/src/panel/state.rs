@@ -1,14 +1,11 @@
 //! Panel state
 
-// Modules
 pub mod fade;
 pub mod none;
 pub mod slide;
 
-// Exports
 pub use self::{fade::PanelFadeState, none::PanelNoneState, slide::PanelSlideState};
 
-// Imports
 use {
 	self::{fade::PanelFadeGeometryShared, none::PanelNoneGeometryShared, slide::PanelSlideGeometryShared},
 	super::PanelShader,

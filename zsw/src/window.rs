@@ -1,6 +1,5 @@
 //! Winit initialization
 
-// Imports
 use {
 	app_error::Context,
 	euclid::default::{Point2D, Vector2D},

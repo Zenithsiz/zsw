@@ -1,12 +1,10 @@
 //! Panel
 
-// Modules
 mod geometry;
 mod panels;
 mod renderer;
 pub mod state;
 
-// Exports
 pub use self::{
 	geometry::PanelGeometry,
 	panels::Panels,

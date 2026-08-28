@@ -1,6 +1,5 @@
 //! Panels
 
-// Imports
 use {
 	super::{Panel, PanelGeometry},
 	crate::{

@@ -1,6 +1,5 @@
 //! Panel geometry
 
-// Imports
 use {
 	super::state::PanelGeometryShared,
 	euclid::default::{Transform3D, Vector2D},

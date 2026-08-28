@@ -1,13 +1,10 @@
 //! Playlist
 
-// Modules
 mod player;
 mod ser;
 
-// Exports
 pub use self::player::PlaylistPlayer;
 
-// Imports
 use {
 	core::str::FromStr,
 	std::{borrow::Borrow, collections::BTreeMap, fmt, path::Path, sync::Arc},

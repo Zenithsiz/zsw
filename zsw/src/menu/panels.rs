@@ -1,6 +1,5 @@
 //! Panels tab
 
-// Imports
 use {
 	crate::panel::{
 		PanelGeometry,

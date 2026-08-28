@@ -1,6 +1,5 @@
 //! Renderer
 
-// Imports
 use {
 	crate::{
 		menu::Menu,

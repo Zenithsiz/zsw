@@ -1,6 +1,5 @@
 //! Serialized playlist
 
-// Imports
 use std::path::PathBuf;
 
 /// Playlist

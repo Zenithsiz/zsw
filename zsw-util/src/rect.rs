@@ -1,6 +1,5 @@
 //! Rect
 
-// Imports
 use {
 	crate::AppError,
 	app_error::Context,

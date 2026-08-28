@@ -1,6 +1,5 @@
 //! Panel none state
 
-// Imports
 use {crate::panel::renderer::uniform, zsw_wgpu::Wgpu};
 
 /// Panel none state

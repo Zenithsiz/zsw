@@ -1,6 +1,5 @@
 //! Project directories
 
-// Imports
 use std::{
 	path::{Path, PathBuf},
 	sync::OnceLock,

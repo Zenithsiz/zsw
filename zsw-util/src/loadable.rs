@@ -1,6 +1,5 @@
 //! Loadable
 
-// Imports
 use std::sync::oneshot;
 
 /// Loadable value

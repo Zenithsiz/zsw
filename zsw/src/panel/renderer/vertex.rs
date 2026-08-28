@@ -1,6 +1,5 @@
 //! Panel vertex
 
-// Imports
 use std::mem;
 
 /// Panel vertex

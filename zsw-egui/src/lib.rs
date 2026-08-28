@@ -1,9 +1,7 @@
 //! Egui wrapper
 
-// Features
 #![feature(must_not_suspend)]
 
-// Imports
 use {
 	std::sync::Arc,
 	tracing as _,

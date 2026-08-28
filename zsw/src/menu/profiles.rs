@@ -1,6 +1,5 @@
 //! Profiles tab
 
-// Imports
 use crate::{panel::Panels, playlist::Playlists, profile::Profiles};
 
 /// Draws the profiles tab

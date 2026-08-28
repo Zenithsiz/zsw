@@ -1,12 +1,9 @@
 //! Panel fade state
 
-// Modules
 pub mod images;
 
-// Exports
 pub use self::images::{PanelFadeImage, PanelFadeImageSlot, PanelFadeImages, PanelFadeImagesShared};
 
-// Imports
 use {
 	self::images::PanelFadeImagesGeometryShared,
 	crate::{panel::PanelFadeShader, playlist::PlaylistPlayer},

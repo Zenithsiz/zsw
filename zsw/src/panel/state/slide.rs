@@ -1,6 +1,5 @@
 //! Panel slide state
 
-// Imports
 use {
 	crate::panel::{PanelSlideShader, renderer::uniform},
 	zsw_wgpu::Wgpu,

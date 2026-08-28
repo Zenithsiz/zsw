@@ -1,13 +1,10 @@
 //! Profile
 
-// Modules
 mod geometry;
 mod ser;
 
-// Exports
 pub use self::geometry::ProfilePanelGeometry;
 
-// Imports
 use {
 	crate::playlist::PlaylistName,
 	core::{str::FromStr, time::Duration},

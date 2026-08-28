@@ -1,6 +1,5 @@
 //! Fade uniforms
 
-// Imports
 use {
 	super::{Matrix4x4, Vec2},
 	bytemuck::{Pod, Zeroable},

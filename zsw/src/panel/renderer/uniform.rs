@@ -1,9 +1,7 @@
 //! Uniforms
 
-// Modules
 pub mod fade;
 
-// Imports
 use bytemuck::{Pod, Zeroable};
 
 /// `vec2<f32>`

@@ -1,9 +1,7 @@
 //! Build script
 
-// Features
 #![feature(must_not_suspend)]
 
-// Imports
 use {
 	app_error::{AppError, Context},
 	itertools::Itertools,

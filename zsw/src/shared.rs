@@ -1,6 +1,5 @@
 //! Shared data
 
-// Imports
 use {
 	crate::{
 		AppEvent,

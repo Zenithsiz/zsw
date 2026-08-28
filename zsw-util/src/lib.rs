@@ -1,6 +1,5 @@
 //! Utility
 
-// Features
 #![feature(
 	decl_macro,
 	must_not_suspend,
@@ -16,13 +15,11 @@
 // Lints
 #![expect(internal_features, reason = "There's no other way to check if a type is inhabited")]
 
-// Modules
 pub mod loadable;
 mod rect;
 mod tuple_collect_res;
 mod walk_dir;
 
-// Exports
 pub use {
 	self::{
 		loadable::Loadable,
@@ -33,7 +30,6 @@ pub use {
 	zsw_util_macros::*,
 };
 
-// Imports
 use {
 	app_error::Context,
 	core::{ptr, str::FromStr},
