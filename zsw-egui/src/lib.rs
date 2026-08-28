@@ -1,12 +1,12 @@
 //! Egui wrapper
 
 // Features
-#![feature(must_not_suspend, nonpoison_mutex, sync_nonpoison)]
+#![feature(must_not_suspend)]
 
 // Imports
 use {
 	egui::epaint,
-	std::sync::{Arc, nonpoison::Mutex},
+	std::sync::Arc,
 	tracing as _,
 	winit::{event::WindowEvent, window::Window},
 	zsw_util::AppError,
@@ -24,7 +24,7 @@ pub struct Egui {
 
 	/// State
 	#[debug("..")]
-	state: Arc<Mutex<egui_winit::State>>,
+	state: egui_winit::State,
 
 	/// Renderer
 	#[debug("..")]
@@ -51,8 +51,6 @@ impl Egui {
 			None,
 			Some(wgpu.device.limits().max_texture_dimension_2d as usize),
 		);
-		let state = Arc::new(Mutex::new(state));
-
 
 		Self {
 			window,
@@ -131,8 +129,8 @@ impl Egui {
 	}
 
 	/// Draws egui
-	pub fn draw<E>(&self, mut f: impl FnMut(&egui::Context) -> Result<(), E>) -> Result<egui::FullOutput, E> {
-		let input = self.state.lock().take_egui_input(&self.window);
+	pub fn draw<E>(&mut self, mut f: impl FnMut(&egui::Context) -> Result<(), E>) -> Result<egui::FullOutput, E> {
+		let input = self.state.take_egui_input(&self.window);
 
 		let mut res = Ok(());
 		let full_output = self.ctx.run_ui(input, |ctx| {
@@ -159,8 +157,8 @@ impl Egui {
 	///
 	/// Returns if egui wants exclusive use of the event
 	#[must_use]
-	pub fn handle_event(&self, event: &WindowEvent) -> bool {
-		let response = self.state.lock().on_window_event(&self.window, event);
+	pub fn handle_event(&mut self, event: &WindowEvent) -> bool {
+		let response = self.state.on_window_event(&self.window, event);
 		response.consumed
 	}
 }
