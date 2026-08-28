@@ -17,6 +17,8 @@ use {
 	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
 
+// TODO: Join all these together
+
 /// Egui Renderer
 pub struct EguiRenderer {
 	/// Renderer
