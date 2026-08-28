@@ -1,6 +1,5 @@
 //! Menu
 
-// Lints
 #![allow(unused_results)] // Egui produces a lot of results we don't need to use
 
 mod panels;
@@ -47,10 +46,9 @@ impl Menu {
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		window_geometry: Rect<i32, u32>,
 	) {
-		// Create the window
 		let mut egui_window = egui::Window::new("Menu");
 
-		// Open it at the mouse if pressed
+		// Open the window at the mouse if pressed
 		if !ctx.is_pointer_over_egui() &&
 			ctx.input(|input| input.pointer.secondary_pressed()) &&
 			let Some(pointer_pos) = ctx.input(|input| input.pointer.latest_pos())
@@ -59,7 +57,6 @@ impl Menu {
 			self.open = true;
 		}
 
-		// Then render it
 		egui_window.open(&mut self.open).show(ctx, |ui| {
 			ui.horizontal(|ui| {
 				for tab in Tab::iter() {

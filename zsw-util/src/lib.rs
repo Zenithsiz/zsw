@@ -12,7 +12,6 @@
 	oneshot_channel,
 	extend_one
 )]
-// Lints
 #![expect(internal_features, reason = "There's no other way to check if a type is inhabited")]
 
 pub mod loadable;

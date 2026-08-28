@@ -222,13 +222,11 @@ impl WindowRenderer {
 	/// instead call [`Self::sleep_until_next_frame`] and/or check
 	/// [`Self::next_frame`].
 	pub fn render(&mut self, shared: &Shared, menu: &mut Menu) -> Result<(), AppError> {
-		// Start rendering
 		let mut frame = self
 			.wgpu_renderer
 			.start_render(&shared.wgpu)
 			.context("Unable to start frame")?;
 
-		// Render panels
 		self.panels_renderer
 			.render(
 				shared,
@@ -239,10 +237,8 @@ impl WindowRenderer {
 			)
 			.context("Unable to render panels")?;
 
-		// Render egui
 		self.render_egui(shared, menu, &mut frame);
 
-		// Finish the frame
 		self.wgpu_renderer
 			.finish_render(&shared.wgpu, frame)
 			.context("Unable to finish frame")?;

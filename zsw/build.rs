@@ -162,7 +162,6 @@ fn parse_shader_module(
 	composer: &mut Composer,
 	module: &ImportDefinition,
 ) -> Result<(), AppError> {
-	// If we already have the module, continue
 	if composer.contains_module(&module.import) {
 		return Ok(());
 	}

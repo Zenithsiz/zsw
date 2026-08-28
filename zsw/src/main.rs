@@ -15,7 +15,6 @@
 	share_trait,
 	duration_integer_division
 )]
-// Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 
 mod args;
@@ -77,7 +76,6 @@ fn main() -> ExitCode {
 
 #[tokio::main(flavor = "current_thread")]
 async fn run() -> Result<(), AppError> {
-	// Initialize the logger
 	let logger = Logger::builder()
 		.filter("wgpu", "warn")
 		.filter("naga", "warn")
@@ -85,7 +83,6 @@ async fn run() -> Result<(), AppError> {
 		.filter("mio", "warn")
 		.build();
 
-	// Get arguments
 	let args = Args::parse();
 	tracing::debug!("Args: {args:?}");
 
@@ -103,7 +100,6 @@ async fn run() -> Result<(), AppError> {
 	let dirs = Arc::new(dirs);
 	tracing::debug!("Loaded config: {config:?}");
 
-	// Set the logger file
 	logger.set_file(args.log_file.as_deref().or(config.log_file.as_deref()));
 
 	// Create the event loop
@@ -123,7 +119,6 @@ async fn run() -> Result<(), AppError> {
 	.await
 	.context("Unable to create winit app")?;
 
-	// Finally run the app on the event loop
 	event_loop.run_app(&mut app).context("Unable to run event loop")?;
 
 	Ok(())
@@ -174,29 +169,20 @@ impl WinitApp {
 		let wgpu = Wgpu::new(display).await.context("Unable to initialize wgpu")?;
 		let panels_renderer_shared = PanelsRendererShared::new(&wgpu);
 
-		// TODO: Reading of the these should be synchronous, it shouldn't take long to read some
-		//       toml files, and it'll simplify other things if we can make it mostly immutable.
-
-		// Create and load the playlists
 		let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
-		let playlists = Arc::new(playlists);
-
-		// Create and load the profiles
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
-		let profiles = Arc::new(profiles);
-
-		// Shared state
 		let shared = Shared {
 			event_loop_proxy,
 			config,
 			wgpu,
 			panels_renderer_shared,
-			playlists,
-			profiles,
+			playlists: Arc::new(playlists),
+			profiles: Arc::new(profiles),
 		};
 		let shared = Arc::new(shared);
 
+		// TODO: Make the renderer create the menu and maybe the renderer rx/tx too?
 		let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
 		let menu = Menu::new();
 		let mut renderer = Renderer::new(shared.share(), renderer_event_rx, menu);
@@ -227,7 +213,7 @@ impl WinitApp {
 	#[expect(clippy::needless_pass_by_ref_mut, reason = "We'll use it in the future")]
 	pub fn destroy_window(&mut self) -> Result<(), AppError> {
 		// TODO: Handle destroying all tasks that use the window
-		todo!();
+		todo!("Destroying windows isn't supported yet");
 	}
 }
 
