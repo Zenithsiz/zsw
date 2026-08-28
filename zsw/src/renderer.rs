@@ -136,7 +136,7 @@ impl Renderer {
 
 		// Render egui
 		self.egui
-			.render_egui(
+			.render(
 				&mut frame,
 				&self.shared_window.window,
 				&self.shared.wgpu,

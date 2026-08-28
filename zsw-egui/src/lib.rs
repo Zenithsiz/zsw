@@ -61,7 +61,7 @@ impl Egui {
 	}
 
 	/// Renders egui
-	pub fn render_egui(
+	pub fn render(
 		&mut self,
 		frame: &mut FrameRender,
 		window: &Window,
