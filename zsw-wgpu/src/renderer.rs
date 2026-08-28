@@ -106,6 +106,22 @@ impl WgpuRenderer {
 		})
 	}
 
+	/// Finishes rendering a frame.
+	///
+	/// Reconfigures if the frame as suboptiomal
+	pub fn finish_render(&mut self, wgpu: &Wgpu, frame: FrameRender) -> Result<(), AppError> {
+		// Submit everything to the queue and present the surface's texture
+		_ = wgpu.queue.submit([frame.encoder.finish()]);
+		wgpu.queue.present(frame.surface_texture);
+
+		if frame.suboptimal {
+			self.reconfigure(wgpu)
+				.context("Unable to reconfigure wgpu after a suboptiomal frame")?;
+		}
+
+		Ok(())
+	}
+
 	/// Re-configures the surface
 	pub fn reconfigure(&mut self, wgpu: &Wgpu) -> Result<(), AppError> {
 		tracing::info!(
@@ -158,20 +174,6 @@ pub struct FrameRender {
 
 	/// Whether the surface was sub-optimal
 	pub suboptimal: bool,
-}
-
-impl FrameRender {
-	/// Finishes rendering this frame.
-	///
-	/// Returns if a reconfigure is needed
-	#[must_use]
-	pub fn finish(self, wgpu: &Wgpu) -> bool {
-		// Submit everything to the queue and present the surface's texture
-		_ = wgpu.queue.submit([self.encoder.finish()]);
-		wgpu.queue.present(self.surface_texture);
-
-		self.suboptimal
-	}
 }
 
 /// Configures the window surface and returns the configuration

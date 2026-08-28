@@ -244,11 +244,9 @@ impl WindowRenderer {
 		self.render_egui(shared, menu, &mut frame);
 
 		// Finish the frame
-		if frame.finish(&shared.wgpu) {
-			self.wgpu_renderer
-				.reconfigure(&shared.wgpu)
-				.context("Unable to reconfigure wgpu")?;
-		}
+		self.wgpu_renderer
+			.finish_render(&shared.wgpu, frame)
+			.context("Unable to finish frame")?;
 
 		Ok(())
 	}
