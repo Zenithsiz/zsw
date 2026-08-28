@@ -30,17 +30,32 @@ pub struct Renderer {
 	renderer_event_rx: mpsc::Receiver<Event>,
 	menu:              Menu,
 
+	panels: Panels,
+
 	windows: HashMap<WindowId, WindowRenderer>,
 }
 
 impl Renderer {
-	pub fn new(shared: Arc<Shared>, renderer_event_rx: mpsc::Receiver<Event>, menu: Menu) -> Self {
-		Self {
+	pub fn new(shared: Arc<Shared>, renderer_event_rx: mpsc::Receiver<Event>, menu: Menu) -> Result<Self, AppError> {
+		let mut panels = Panels::new();
+		if let Some(default_profile_name) = &shared.config.default.profile {
+			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
+			let default_profile = shared
+				.profiles
+				.get(&default_profile_name)
+				.with_context(|| format!("Unknown profile {:?}", shared.config.default.profile))?;
+			panels
+				.set_profile(default_profile_name, default_profile, &shared.playlists)
+				.context("Unable to set profile")?;
+		}
+
+		Ok(Self {
 			shared,
 			renderer_event_rx,
 			menu,
+			panels,
 			windows: HashMap::new(),
-		}
+		})
 	}
 
 	/// Renders all windows
@@ -57,7 +72,7 @@ impl Renderer {
 			{
 				Some(window_renderer) => {
 					window_renderer.sleep_until_next_frame();
-					window_renderer.render(&self.shared, &mut self.menu)?
+					window_renderer.render(&self.shared, &mut self.panels, &mut self.menu)?
 				},
 				None => {
 					let Ok(event) = self.renderer_event_rx.recv() else {
@@ -141,25 +156,11 @@ impl WindowRenderer {
 			.context("Unable to create panels renderer")?;
 		let egui = Egui::new(&shared.wgpu, &wgpu_renderer, window.share());
 
-
-		let mut panels = Panels::new();
-		if let Some(default_profile_name) = &shared.config.default.profile {
-			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
-			let default_profile = shared
-				.profiles
-				.get(&default_profile_name)
-				.with_context(|| format!("Unknown profile {:?}", shared.config.default.profile))?;
-			panels
-				.set_profile(default_profile_name, default_profile, &shared.playlists)
-				.context("Unable to set profile")?;
-		}
-
 		let shared_window = SharedWindow {
 			window,
 			monitor_name: app_window.monitor_name,
 			monitor_geometry: app_window.monitor_geometry,
 			monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
-			panels,
 		};
 
 		let frame_duration = Duration::from_secs_f64(1000.0) / shared_window.monitor_refresh_rate_mhz;
@@ -221,7 +222,7 @@ impl WindowRenderer {
 	/// Does not check whether it is time for it or not, you must
 	/// instead call [`Self::sleep_until_next_frame`] and/or check
 	/// [`Self::next_frame`].
-	pub fn render(&mut self, shared: &Shared, menu: &mut Menu) -> Result<(), AppError> {
+	pub fn render(&mut self, shared: &Shared, panels: &mut Panels, menu: &mut Menu) -> Result<(), AppError> {
 		let mut frame = self
 			.wgpu_renderer
 			.start_render(&shared.wgpu)
@@ -230,14 +231,15 @@ impl WindowRenderer {
 		self.panels_renderer
 			.render(
 				shared,
-				&mut self.shared_window,
+				&self.shared_window,
 				&mut frame,
 				&self.wgpu_renderer,
+				panels,
 				&shared.panels_renderer_shared,
 			)
 			.context("Unable to render panels")?;
 
-		self.render_egui(shared, menu, &mut frame);
+		self.render_egui(shared, panels, menu, &mut frame);
 
 		self.wgpu_renderer
 			.finish_render(&shared.wgpu, frame)
@@ -247,7 +249,7 @@ impl WindowRenderer {
 	}
 
 	/// Renders egui
-	fn render_egui(&mut self, shared: &Shared, menu: &mut Menu, frame: &mut FrameRender) {
+	fn render_egui(&mut self, shared: &Shared, panels: &mut Panels, menu: &mut Menu, frame: &mut FrameRender) {
 		self.egui
 			.render(frame, &self.shared_window.window, &shared.wgpu, |ctx| {
 				// Draw the menu
@@ -256,7 +258,7 @@ impl WindowRenderer {
 					&shared.wgpu,
 					&shared.playlists,
 					&shared.profiles,
-					&mut self.shared_window.panels,
+					panels,
 					&shared.event_loop_proxy,
 					self.shared_window.monitor_geometry,
 				);
@@ -268,7 +270,7 @@ impl WindowRenderer {
 					return;
 				};
 				let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
-				for panel in self.shared_window.panels.get_all() {
+				for panel in panels.get_all() {
 					// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 					if ctx.is_pointer_over_egui() ||
 						!panel.geometries.iter().any(|geometry| {

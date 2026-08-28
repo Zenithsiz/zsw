@@ -1,13 +1,7 @@
 //! Shared data
 
 use {
-	crate::{
-		AppEvent,
-		config::Config,
-		panel::{Panels, PanelsRendererShared},
-		playlist::Playlists,
-		profile::Profiles,
-	},
+	crate::{AppEvent, config::Config, panel::PanelsRendererShared, playlist::Playlists, profile::Profiles},
 	std::sync::Arc,
 	winit::{event_loop::EventLoopProxy, window::Window},
 	zsw_util::Rect,
@@ -42,7 +36,4 @@ pub struct SharedWindow {
 
 	/// Monitor refresh rate (in mHz)
 	pub monitor_refresh_rate_mhz: u32,
-
-	/// Panels
-	pub panels: Panels,
 }

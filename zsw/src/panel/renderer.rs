@@ -10,6 +10,7 @@ use {
 		Panel,
 		PanelGeometry,
 		PanelState,
+		Panels,
 		state::{
 			PanelFadeState,
 			PanelNoneState,
@@ -134,9 +135,10 @@ impl PanelsRenderer {
 	pub fn render(
 		&self,
 		shared: &Shared,
-		shared_window: &mut SharedWindow,
+		shared_window: &SharedWindow,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
+		panels: &mut Panels,
 		panels_shared: &PanelsRendererShared,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
@@ -185,7 +187,7 @@ impl PanelsRenderer {
 		render_pass.set_vertex_buffer(0, panels_shared.vertices.slice(..));
 
 		// Then render all panels simultaneously
-		for panel in shared_window.panels.get_all() {
+		for panel in panels.get_all() {
 			self.render_panel(
 				shared,
 				panels_shared,
