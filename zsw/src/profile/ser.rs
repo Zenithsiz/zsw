@@ -85,6 +85,13 @@ pub enum ProfilePanelFadeShaderInner {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanelSlideShader {
+	pub playlist: String,
+
+	#[serde(with = "humantime_serde")]
+	pub duration: Duration,
+
+	pub dir: ProfilePanelSlideDir,
+
 	/// Inner
 	#[serde(flatten)]
 	pub inner: ProfilePanelSlideShaderInner,
@@ -97,4 +104,15 @@ pub struct ProfilePanelSlideShader {
 pub enum ProfilePanelSlideShaderInner {
 	#[serde(rename = "basic")]
 	Basic,
+}
+
+/// Panel slide direction
+#[derive(Clone, Copy, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProfilePanelSlideDir {
+	LeftRight,
+	RightLeft,
+	UpDown,
+	DownUp,
 }

@@ -36,5 +36,7 @@ pub struct None {
 #[derive(Zeroable, Pod)]
 #[repr(C)]
 pub struct Slide {
-	pub pos_matrix: Matrix4x4,
+	pub pos_matrix:  Matrix4x4,
+	pub image_ratio: Vec2,
+	pub offset:      Vec2,
 }

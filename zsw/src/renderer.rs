@@ -308,9 +308,8 @@ impl WindowRenderer {
 					// Scroll panels
 					let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
 					if scroll_delta != 0.0 {
-						#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-						match &mut panel.state {
-							PanelState::None(_) => (),
+						let time_delta = match &panel.state {
+							PanelState::None(_) => TimeDelta::zero(),
 							PanelState::Fade(state) => {
 								// TODO: Make this "speed" configurable
 								// TODO: Perform the conversion better without going through nanos
@@ -318,14 +317,29 @@ impl WindowRenderer {
 								let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
 								let time_delta_abs =
 									TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
-								let time_delta = match scroll_delta.is_sign_positive() {
+								match scroll_delta.is_sign_positive() {
 									true => -time_delta_abs,
 									false => time_delta_abs,
-								};
-
-								state.step(&shared.wgpu, time_delta);
+								}
 							},
-							PanelState::Slide(_) => (),
+							PanelState::Slide(state) => {
+								// TODO: Make this "speed" configurable
+								// TODO: Perform the conversion better without going through nanos
+								let speed = 1.0 / 1000.0;
+								let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
+								let time_delta_abs =
+									TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
+								match scroll_delta.is_sign_positive() {
+									true => -time_delta_abs,
+									false => time_delta_abs,
+								}
+							},
+						};
+
+						match &mut panel.state {
+							PanelState::None(_) => (),
+							PanelState::Fade(state) => state.step(&shared.wgpu, time_delta),
+							PanelState::Slide(state) => state.step(&shared.wgpu, time_delta),
 						}
 					}
 				}

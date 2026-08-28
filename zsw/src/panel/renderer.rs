@@ -17,7 +17,7 @@ use {
 			PanelSlideState,
 			fade::{PanelFadeImage, PanelFadeImageSlot, PanelFadeShared},
 			none::PanelNoneShared,
-			slide::PanelSlideShared,
+			slide::{PanelSlideDir, PanelSlideShared},
 		},
 	},
 	crate::shared::{Shared, SharedWindow},
@@ -217,8 +217,7 @@ impl PanelsRenderer {
 		match &mut panel.state {
 			PanelState::None(_) => (),
 			PanelState::Fade(state) => state.update(&shared.wgpu),
-			#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-			PanelState::Slide(_) => (),
+			PanelState::Slide(state) => state.update(&shared.wgpu),
 		}
 
 		// If the panel images are empty, there's no sense in rendering it either
@@ -260,7 +259,10 @@ impl PanelsRenderer {
 					},
 					PanelState::Slide(_) => {
 						let slide = panels_shared.slide(&shared.wgpu);
-						&[Some(&slide.geometry_uniforms_bind_group_layout)]
+						&[
+							Some(&slide.geometry_uniforms_bind_group_layout),
+							Some(slide.image_bind_group_layout(&shared.wgpu)),
+						]
 					},
 				};
 
@@ -308,7 +310,7 @@ impl PanelsRenderer {
 				&shared.wgpu,
 				panels_shared,
 				surface_size,
-				&panel.state,
+				&mut panel.state,
 				window_geometry,
 				panel_geometry,
 				render_pass,
@@ -321,21 +323,18 @@ impl PanelsRenderer {
 		wgpu: &Wgpu,
 		shared: &PanelsRendererShared,
 		surface_size: PhysicalSize<u32>,
-		state: &PanelState,
+		state: &mut PanelState,
 		window_geometry: Rect<i32, u32>,
 		panel_geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
-		// Calculate the position matrix for the panel
-		let pos_matrix = panel_geometry.rect.pos_matrix(window_geometry, surface_size);
-
 		match state {
 			PanelState::None(state) => Self::render_panel_none_geometry(
 				wgpu,
 				render_pass,
 				shared.none(wgpu),
 				panel_geometry,
-				pos_matrix,
+				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
 				state,
 			),
 			PanelState::Fade(state) => Self::render_panel_fade_geometry(
@@ -343,7 +342,7 @@ impl PanelsRenderer {
 				render_pass,
 				shared.fade(wgpu),
 				panel_geometry,
-				pos_matrix,
+				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
 				state,
 			),
 			PanelState::Slide(state) => Self::render_panel_slide_geometry(
@@ -351,7 +350,7 @@ impl PanelsRenderer {
 				render_pass,
 				shared.slide(wgpu),
 				panel_geometry,
-				pos_matrix,
+				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
 				state,
 			),
 		}
@@ -492,17 +491,79 @@ impl PanelsRenderer {
 		shared: &PanelSlideShared,
 		panel_geometry: &mut PanelGeometry,
 		pos_matrix: Transform3D<f32>,
-		_state: &PanelSlideState,
+		state: &mut PanelSlideState,
 	) {
-		let geometry_uniforms = panel_geometry.shared.slide_or_insert_default().uniforms(wgpu, shared);
+		let mut missing_images = true;
+		let mut cur_global_offset = 0.0;
 
-		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
-		Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide { pos_matrix });
+		let img_offset = state.progress().div_duration_floor(state.duration()) as usize;
+		// TODO: Deduplicate this with below
+		let local_offset = match state.images().nth(img_offset) {
+			Some(image) => {
+				let image_size = image.texture_view.texture().size();
+				let image_size = Vector2D::new(image_size.width, image_size.height);
+				let image_ratio = panel_geometry.rect.image_ratio(image_size);
 
-		// Bind the geometry uniforms
-		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+				let ratio = match state.dir().is_horizontal() {
+					true => image_ratio.y / image_ratio.x,
+					false => image_ratio.x / image_ratio.y,
+				};
 
-		render_pass.draw_indexed(0..6, 0, 0..1);
+				let offset_abs = state.progress().as_secs_f32() / state.duration().as_secs_f32() - img_offset as f32;
+				offset_abs * ratio * 2.0
+			},
+			None => 0.0,
+		};
+
+		for (image_idx, image) in state.images().enumerate().skip(img_offset) {
+			// Calculate the position matrix for the panel
+			let image_size = image.texture_view.texture().size();
+			let image_size = Vector2D::new(image_size.width, image_size.height);
+			let image_ratio = panel_geometry.rect.image_ratio(image_size);
+
+			let offset_abs = cur_global_offset - local_offset;
+			if offset_abs > 2.0 {
+				missing_images = false;
+				break;
+			}
+
+			// Bind the geometry uniforms
+			let geometry_uniforms = panel_geometry
+				.shared
+				.slide_or_insert_default()
+				.uniforms(wgpu, shared, image_idx);
+			render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+			let ratio = match state.dir().is_horizontal() {
+				true => image_ratio.y / image_ratio.x,
+				false => image_ratio.x / image_ratio.y,
+			};
+
+			// TODO: This should be baked into the position matrix instead.
+			let offset: Vector2D<f32> = match state.dir() {
+				PanelSlideDir::LeftRight => euclid::vec2(offset_abs, 0.0),
+				PanelSlideDir::RightLeft => euclid::vec2(2.0 * (1.0 - ratio) - offset_abs, 0.0),
+				PanelSlideDir::UpDown => euclid::vec2(0.0, offset_abs),
+				PanelSlideDir::DownUp => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
+			};
+
+			Self::write_uniforms(wgpu, &geometry_uniforms.buffer, uniform::Slide {
+				pos_matrix:  uniform::Matrix4x4(pos_matrix.to_arrays()),
+				image_ratio: uniform::Vec2(image_ratio.into()),
+				offset:      uniform::Vec2(offset.to_array()),
+			});
+
+			cur_global_offset += ratio * 2.0;
+
+			let sampler = state.image_sampler(wgpu);
+			render_pass.set_bind_group(1, image.bind_group(wgpu, sampler, shared), &[]);
+
+			render_pass.draw_indexed(0..6, 0, 0..1);
+		}
+
+		if missing_images {
+			state.load_next(wgpu);
+		}
 	}
 
 	/// Writes `uniforms` into `buffer`.

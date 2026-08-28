@@ -63,13 +63,25 @@ pub enum ProfilePanelFadeShaderInner {
 /// Profile slide panel shader
 #[derive(Debug)]
 pub struct ProfilePanelSlideShader {
-	pub inner: ProfilePanelSlideShaderInner,
+	pub playlist: PlaylistName,
+	pub duration: Duration,
+	pub dir:      ProfilePanelSlideDir,
+	pub inner:    ProfilePanelSlideShaderInner,
 }
 
 /// Profile panel slide shader inner
 #[derive(Debug)]
 pub enum ProfilePanelSlideShaderInner {
 	Basic,
+}
+
+/// Profile panel slide direction
+#[derive(Clone, Copy, Debug)]
+pub enum ProfilePanelSlideDir {
+	LeftRight,
+	RightLeft,
+	UpDown,
+	DownUp,
 }
 
 impl From<ser::Profile> for Profile {
@@ -102,7 +114,15 @@ impl From<ser::Profile> for Profile {
 							},
 						}),
 						ser::ProfilePanelShader::Slide(shader) => ProfilePanelShader::Slide(ProfilePanelSlideShader {
-							inner: match shader.inner {
+							playlist: PlaylistName::from_str(&shader.playlist).into_ok(),
+							duration: shader.duration,
+							dir:      match shader.dir {
+								ser::ProfilePanelSlideDir::LeftRight => ProfilePanelSlideDir::LeftRight,
+								ser::ProfilePanelSlideDir::RightLeft => ProfilePanelSlideDir::RightLeft,
+								ser::ProfilePanelSlideDir::UpDown => ProfilePanelSlideDir::UpDown,
+								ser::ProfilePanelSlideDir::DownUp => ProfilePanelSlideDir::DownUp,
+							},
+							inner:    match shader.inner {
 								ser::ProfilePanelSlideShaderInner::Basic => ProfilePanelSlideShaderInner::Basic,
 							},
 						}),

@@ -89,6 +89,18 @@ impl Rect<i32, u32> {
 		)
 	}
 
+	/// Returns the width of this rectangle
+	#[must_use]
+	pub fn width(self) -> u32 {
+		self.size.x
+	}
+
+	/// Returns the height of this rectangle
+	#[must_use]
+	pub fn height(self) -> u32 {
+		self.size.y
+	}
+
 	/// Returns if a point is contained in this rectangle
 	///
 	/// # Panics

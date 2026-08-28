@@ -1,7 +1,7 @@
 //! Panels
 
 use {
-	super::{Panel, PanelGeometry},
+	super::{Panel, PanelGeometry, state::slide::PanelSlideDir},
 	crate::{
 		panel::{
 			PanelFadeShader,
@@ -15,6 +15,7 @@ use {
 			ProfileName,
 			ProfilePanelFadeShaderInner,
 			ProfilePanelShader,
+			ProfilePanelSlideDir,
 			ProfilePanelSlideShaderInner,
 		},
 	},
@@ -77,7 +78,17 @@ impl Panels {
 					PanelState::Fade(state)
 				},
 				ProfilePanelShader::Slide(shader) => {
-					let state = PanelSlideState::new(match shader.inner {
+					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
+						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
+
+					let dir = match shader.dir {
+						ProfilePanelSlideDir::LeftRight => PanelSlideDir::LeftRight,
+						ProfilePanelSlideDir::RightLeft => PanelSlideDir::RightLeft,
+						ProfilePanelSlideDir::UpDown => PanelSlideDir::UpDown,
+						ProfilePanelSlideDir::DownUp => PanelSlideDir::DownUp,
+					};
+
+					let state = PanelSlideState::new(shader.duration, playlist_player, dir, match shader.inner {
 						ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
 					});
 
