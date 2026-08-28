@@ -5121,7 +5121,6 @@ dependencies = [
  "tracing",
  "wgpu",
  "winit",
- "zsw-util",
  "zsw-wgpu",
 ]
 

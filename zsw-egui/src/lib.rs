@@ -5,11 +5,9 @@
 
 // Imports
 use {
-	egui::epaint,
 	std::sync::Arc,
 	tracing as _,
 	winit::{event::WindowEvent, window::Window},
-	zsw_util::AppError,
 	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
 
@@ -61,44 +59,36 @@ impl Egui {
 	}
 
 	/// Renders egui
-	pub fn render(
-		&mut self,
-		frame: &mut FrameRender,
-		window: &Window,
-		wgpu: &Wgpu,
-		paint_jobs: &[egui::ClippedPrimitive],
-		textures_delta: Option<egui::TexturesDelta>,
-	) -> Result<(), AppError> {
+	pub fn render(&mut self, frame: &mut FrameRender, window: &Window, wgpu: &Wgpu, draw: impl FnMut(&mut egui::Ui)) {
+		// Paint
+		let input = self.state.take_egui_input(&self.window);
+		let mut full_output = self.ctx.run_ui(input, draw);
+		let paint_jobs = self.ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+
 		// Update textures
+		#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
+		for (&id, deltas) in &full_output.textures_delta.set {
+			for delta in deltas {
+				self.renderer.update_texture(&wgpu.device, &wgpu.queue, id, delta);
+			}
+		}
+		#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
+		for id in &full_output.textures_delta.free {
+			self.renderer.free_texture(id);
+		}
+		full_output.textures_delta.clear();
+
+		// Update buffers
 		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 		let screen_descriptor = egui_wgpu::ScreenDescriptor {
 			size_in_pixels:   [frame.surface_size.width, frame.surface_size.height],
 			pixels_per_point: window.scale_factor() as f32,
 		};
-
-		// If we have any textures delta, update them
-		if let Some(mut textures_delta) = textures_delta {
-			#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
-			for (&id, deltas) in &textures_delta.set {
-				for delta in deltas {
-					self.renderer.update_texture(&wgpu.device, &wgpu.queue, id, delta);
-				}
-			}
-
-			#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
-			for id in &textures_delta.free {
-				self.renderer.free_texture(id);
-			}
-
-			textures_delta.clear();
-		}
-
-		// Update buffers
 		let buffers = self.renderer.update_buffers(
 			&wgpu.device,
 			&wgpu.queue,
 			&mut frame.encoder,
-			paint_jobs,
+			&paint_jobs,
 			&screen_descriptor,
 		);
 		let _: wgpu::SubmissionIndex = wgpu.queue.submit(buffers);
@@ -123,34 +113,7 @@ impl Egui {
 		};
 		let render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
 		let mut render_pass = render_pass.forget_lifetime();
-		self.renderer.render(&mut render_pass, paint_jobs, &screen_descriptor);
-
-		Ok(())
-	}
-
-	/// Draws egui
-	pub fn draw<E>(&mut self, mut f: impl FnMut(&egui::Context) -> Result<(), E>) -> Result<egui::FullOutput, E> {
-		let input = self.state.take_egui_input(&self.window);
-
-		let mut res = Ok(());
-		let full_output = self.ctx.run_ui(input, |ctx| {
-			if let Err(err) = f(ctx) {
-				res = Err(err);
-			}
-		});
-		res?;
-
-		Ok(full_output)
-	}
-
-	/// Tessellate the output shapes
-	#[must_use]
-	pub fn tessellate_shapes(
-		&self,
-		shapes: Vec<epaint::ClippedShape>,
-		pixels_per_point: f32,
-	) -> Vec<egui::ClippedPrimitive> {
-		self.ctx.tessellate(shapes, pixels_per_point)
+		self.renderer.render(&mut render_pass, &paint_jobs, &screen_descriptor);
 	}
 
 	/// Handles an event.
