@@ -33,7 +33,9 @@ pub struct Renderer {
 	egui_painter:       EguiPainter,
 	egui_event_handler: EguiEventHandler,
 	menu:               Menu,
-	frame_duration:     Duration,
+
+	next_frame:     Instant,
+	frame_duration: Duration,
 }
 
 impl Renderer {
@@ -69,117 +71,136 @@ impl Renderer {
 			egui_painter,
 			egui_event_handler,
 			menu,
+			next_frame: Instant::now(),
 			frame_duration,
 		}
 	}
 
-	/// Runs the renderer
-	pub fn run(&mut self) -> Result<!, AppError> {
-		let mut next_frame = Instant::now();
-		loop {
-			let prev_frame_end = Instant::now();
-			let cur_frame_start = next_frame;
-			next_frame += self.frame_duration;
+	/// Sleeps until the next frame and prepares for it.
+	fn sleep_until_next_frame(&mut self) {
+		let prev_frame_end = Instant::now();
+		let cur_frame_start = self.next_frame;
+		self.next_frame += self.frame_duration;
 
-			// Wait until the start of the next frame.
-			// Note: We do this instead of letting wgpu sleep because all vsync
-			//       modes that sleep for us do so with a 3 frame buffer, which
-			//       means that the user is always 3 frames behind, and thus can
-			//       notice pretty heavy lag (at 60Hz, about 50 ms).
-			//       We also set the present mode to mailbox, which means that we
-			//       don't get any tearing, but have minimal lag.
-			thread::sleep_until(cur_frame_start);
+		// Wait until the start of the next frame.
+		// Note: We do this instead of letting wgpu sleep because all vsync
+		//       modes that sleep for us do so with a 3 frame buffer, which
+		//       means that the user is always 3 frames behind, and thus can
+		//       notice pretty heavy lag (at 60Hz, about 50 ms).
+		//       We also set the present mode to mailbox, which means that we
+		//       don't get any tearing, but have minimal lag.
+		thread::sleep_until(cur_frame_start);
 
-			// If we were too late, we need to skip some frames
-			if let Some(late) = prev_frame_end.checked_duration_since(cur_frame_start) &&
-				late > self.frame_duration
-			{
-				#[expect(clippy::cast_sign_loss, reason = "Durations are always positive")]
-				let frames = late.div_duration_f64(self.frame_duration).floor() as u32;
-				tracing::trace!("Frame rendered late {late:.2?}, skipping {frames} frames");
-				next_frame += self.frame_duration * frames;
-			}
+		// If we were too late, we need to skip some frames
+		if let Some(late) = prev_frame_end.checked_duration_since(cur_frame_start) &&
+			late > self.frame_duration
+		{
+			let frames = late.div_duration_floor(self.frame_duration);
+			tracing::trace!("Frame rendered late {late:.2?}, skipping {frames} frames");
 
-			// Paint egui
-			// TODO: Have `egui_renderer` do this for us on render?
-			let (egui_paint_jobs, egui_textures_delta) = match self.paint_egui() {
-				Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
-				Err(err) => {
-					tracing::warn!("Unable to draw egui: {err:?}");
-					(vec![], None)
-				},
-			};
-
-			// Start rendering
-			let mut frame = self
-				.wgpu_renderer
-				.start_render(&self.shared.wgpu)
-				.context("Unable to start frame")?;
-
-			// Render panels
-			self.panels_renderer
-				.render(
-					&self.shared,
-					&mut self.shared_window,
-					&mut frame,
-					&self.wgpu_renderer,
-					&self.shared.panels_renderer_shared,
-				)
-				.context("Unable to render panels")?;
-
-			// Render egui
-			self.egui_renderer
-				.render_egui(
-					&mut frame,
-					&self.shared_window.window,
-					&self.shared.wgpu,
-					&egui_paint_jobs,
-					egui_textures_delta,
-				)
-				.context("Unable to render egui")?;
-
-			// Finish the frame
-			if frame.finish(&self.shared.wgpu) {
-				self.wgpu_renderer
-					.reconfigure(&self.shared.wgpu)
-					.context("Unable to reconfigure wgpu")?;
-			}
-
-			// Handle events
-			let mut resize = None;
-			let mut move_pos = None;
-
-			while let Ok(event) = self.renderer_event_rx.try_recv() {
-				tracing::trace!("Received renderer event: {event:?}");
-				match event {
-					Event::WindowEvent { event } => {
-						if self.egui_event_handler.handle_event(&event) {
-							continue;
-						}
-
-						match event {
-							WindowEvent::Resized(size) => resize = Some(size),
-							WindowEvent::Moved(pos) => move_pos = Some(pos),
-							_ => (),
-						}
-					},
-				}
-			}
-
-			// Note: When resizing we might receive multiple resize events
-			//       per frame, so we only use the latest one from the events,
-			//       since resizing twice only has the affect of the last resize.
-			if let Some(size) = resize {
-				self.wgpu_renderer
-					.resize(&self.shared.wgpu, size)
-					.context("Unable to resize wgpu")?;
-				self.panels_renderer
-					.resize(&self.wgpu_renderer, &self.shared.wgpu, size)
-			}
-			if let Some(pos) = move_pos {
-				self.shared_window.monitor_geometry.pos = euclid::point2(pos.x, pos.y);
+			// Note: This isn't as paranoic as it seems, since if the user sets the frame duration
+			//       to 1 ns by setting their frame rate to infinite, then this would fail if we're
+			//       late 5 seconds (`log2(5s / 1ns) ~ 32.2`). At which point we just give up on
+			//       keeping the frame timing and reset it to now instead.
+			match u32::try_from(frames) {
+				Ok(frames) => self.next_frame += self.frame_duration * frames,
+				Err(_) => self.next_frame = Instant::now(),
 			}
 		}
+	}
+
+	/// Renders the next frame.
+	pub fn render(&mut self) -> Result<(), AppError> {
+		self.sleep_until_next_frame();
+
+		// Paint egui
+		// TODO: Have `egui_renderer` do this for us on render?
+		let (egui_paint_jobs, egui_textures_delta) = match self.paint_egui() {
+			Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
+			Err(err) => {
+				tracing::warn!("Unable to draw egui: {err:?}");
+				(vec![], None)
+			},
+		};
+
+		// Start rendering
+		let mut frame = self
+			.wgpu_renderer
+			.start_render(&self.shared.wgpu)
+			.context("Unable to start frame")?;
+
+		// Render panels
+		self.panels_renderer
+			.render(
+				&self.shared,
+				&mut self.shared_window,
+				&mut frame,
+				&self.wgpu_renderer,
+				&self.shared.panels_renderer_shared,
+			)
+			.context("Unable to render panels")?;
+
+		// Render egui
+		self.egui_renderer
+			.render_egui(
+				&mut frame,
+				&self.shared_window.window,
+				&self.shared.wgpu,
+				&egui_paint_jobs,
+				egui_textures_delta,
+			)
+			.context("Unable to render egui")?;
+
+		// Finish the frame
+		if frame.finish(&self.shared.wgpu) {
+			self.wgpu_renderer
+				.reconfigure(&self.shared.wgpu)
+				.context("Unable to reconfigure wgpu")?;
+		}
+
+		self.handle_events()?;
+
+		Ok(())
+	}
+
+	/// Handles all events
+	fn handle_events(&mut self) -> Result<(), AppError> {
+		// Handle events
+		let mut resize = None;
+		let mut move_pos = None;
+
+		while let Ok(event) = self.renderer_event_rx.try_recv() {
+			tracing::trace!("Received renderer event: {event:?}");
+			match event {
+				Event::WindowEvent { event } => {
+					if self.egui_event_handler.handle_event(&event) {
+						continue;
+					}
+
+					match event {
+						WindowEvent::Resized(size) => resize = Some(size),
+						WindowEvent::Moved(pos) => move_pos = Some(pos),
+						_ => (),
+					}
+				},
+			}
+		}
+
+		// Note: When resizing we might receive multiple resize events
+		//       per frame, so we only use the latest one from the events,
+		//       since resizing twice only has the affect of the last resize.
+		if let Some(size) = resize {
+			self.wgpu_renderer
+				.resize(&self.shared.wgpu, size)
+				.context("Unable to resize wgpu")?;
+			self.panels_renderer
+				.resize(&self.wgpu_renderer, &self.shared.wgpu, size)
+		}
+		if let Some(pos) = move_pos {
+			self.shared_window.monitor_geometry.pos = euclid::point2(pos.x, pos.y);
+		}
+
+		Ok(())
 	}
 
 	/// Paints egui

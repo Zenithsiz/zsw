@@ -13,7 +13,8 @@
 	oneshot_channel,
 	str_as_str,
 	unwrap_infallible,
-	share_trait
+	share_trait,
+	duration_integer_division
 )]
 // Lints
 #![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
@@ -271,7 +272,11 @@ impl WinitApp {
 				egui_event_handler,
 				menu,
 			);
-			zsw_util::spawn_task("Renderer", move || renderer.run()?);
+			zsw_util::spawn_task("Renderer", move || {
+				loop {
+					renderer.render()?;
+				}
+			});
 
 			_ = self.windows.insert(window_id, WinitAppWindow { renderer_event_tx });
 		}
