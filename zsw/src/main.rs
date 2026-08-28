@@ -60,7 +60,7 @@ use {
 		platform::x11::EventLoopBuilderExtX11,
 		window::WindowId,
 	},
-	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
+	zsw_egui::Egui,
 	zsw_util::AppError,
 	zsw_wgpu::{Wgpu, WgpuRenderer},
 	zutil_logger::Logger,
@@ -232,10 +232,7 @@ impl WinitApp {
 			let msaa_samples = 4;
 			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, &self.shared.wgpu, msaa_samples)
 				.context("Unable to create panels renderer")?;
-			let egui_ctx = egui::Context::default();
-			let egui_event_handler = EguiEventHandler::new(&self.shared.wgpu, window.share(), egui_ctx.clone());
-			let egui_painter = EguiPainter::new(&egui_event_handler, egui_ctx.clone());
-			let egui_renderer = EguiRenderer::new(&wgpu_renderer, &self.shared.wgpu);
+			let egui = Egui::new(&self.shared.wgpu, &wgpu_renderer, window.share());
 			let menu = Menu::new();
 
 			let mut panels = Panels::new();
@@ -267,9 +264,7 @@ impl WinitApp {
 				renderer_event_rx,
 				wgpu_renderer,
 				panels_renderer,
-				egui_renderer,
-				egui_painter,
-				egui_event_handler,
+				egui,
 				menu,
 			);
 			zsw_util::spawn_task("Renderer", move || {

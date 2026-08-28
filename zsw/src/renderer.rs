@@ -17,22 +17,20 @@ use {
 		time::Instant,
 	},
 	winit::event::WindowEvent,
-	zsw_egui::{EguiEventHandler, EguiPainter, EguiRenderer},
+	zsw_egui::Egui,
 	zsw_util::AppError,
 	zsw_wgpu::WgpuRenderer,
 };
 
 /// Renderer
 pub struct Renderer {
-	shared:             Arc<Shared>,
-	shared_window:      SharedWindow,
-	renderer_event_rx:  mpsc::Receiver<Event>,
-	wgpu_renderer:      WgpuRenderer,
-	panels_renderer:    PanelsRenderer,
-	egui_renderer:      EguiRenderer,
-	egui_painter:       EguiPainter,
-	egui_event_handler: EguiEventHandler,
-	menu:               Menu,
+	shared:            Arc<Shared>,
+	shared_window:     SharedWindow,
+	renderer_event_rx: mpsc::Receiver<Event>,
+	wgpu_renderer:     WgpuRenderer,
+	panels_renderer:   PanelsRenderer,
+	egui:              Egui,
+	menu:              Menu,
 
 	next_frame:     Instant,
 	frame_duration: Duration,
@@ -45,9 +43,7 @@ impl Renderer {
 		renderer_event_rx: mpsc::Receiver<Event>,
 		wgpu_renderer: WgpuRenderer,
 		panels_renderer: PanelsRenderer,
-		egui_renderer: EguiRenderer,
-		egui_painter: EguiPainter,
-		egui_event_handler: EguiEventHandler,
+		egui: Egui,
 		menu: Menu,
 	) -> Self {
 		let frame_duration = Duration::from_secs_f64(1000.0) / shared_window.monitor_refresh_rate_mhz;
@@ -67,9 +63,7 @@ impl Renderer {
 			renderer_event_rx,
 			wgpu_renderer,
 			panels_renderer,
-			egui_renderer,
-			egui_painter,
-			egui_event_handler,
+			egui,
 			menu,
 			next_frame: Instant::now(),
 			frame_duration,
@@ -114,7 +108,7 @@ impl Renderer {
 		self.sleep_until_next_frame();
 
 		// Paint egui
-		// TODO: Have `egui_renderer` do this for us on render?
+		// TODO: Have `egui` do this for us on render?
 		let (egui_paint_jobs, egui_textures_delta) = match self.paint_egui() {
 			Ok((paint_jobs, textures_delta)) => (paint_jobs, Some(textures_delta)),
 			Err(err) => {
@@ -141,7 +135,7 @@ impl Renderer {
 			.context("Unable to render panels")?;
 
 		// Render egui
-		self.egui_renderer
+		self.egui
 			.render_egui(
 				&mut frame,
 				&self.shared_window.window,
@@ -173,7 +167,7 @@ impl Renderer {
 			tracing::trace!("Received renderer event: {event:?}");
 			match event {
 				Event::WindowEvent { event } => {
-					if self.egui_event_handler.handle_event(&event) {
+					if self.egui.handle_event(&event) {
 						continue;
 					}
 
@@ -205,7 +199,7 @@ impl Renderer {
 
 	/// Paints egui
 	fn paint_egui(&mut self) -> Result<(Vec<egui::ClippedPrimitive>, egui::TexturesDelta), AppError> {
-		let full_output = self.egui_painter.draw(|ctx| {
+		let full_output = self.egui.draw(|ctx| {
 			// Draw the menu
 			self.menu.draw(
 				ctx,
@@ -286,7 +280,7 @@ impl Renderer {
 			Ok::<_, !>(())
 		})?;
 		let paint_jobs = self
-			.egui_painter
+			.egui
 			.tessellate_shapes(full_output.shapes, full_output.pixels_per_point);
 		let textures_delta = full_output.textures_delta;
 

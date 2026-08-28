@@ -1,48 +1,65 @@
 //! Egui wrapper
 
 // Features
-#![feature(must_not_suspend, nonpoison_mutex, sync_nonpoison, share_trait)]
+#![feature(must_not_suspend, nonpoison_mutex, sync_nonpoison)]
 
 // Imports
 use {
-	core::clone::Share,
 	egui::epaint,
-	std::{
-		fmt,
-		sync::{Arc, nonpoison::Mutex},
-	},
+	std::sync::{Arc, nonpoison::Mutex},
 	tracing as _,
 	winit::{event::WindowEvent, window::Window},
 	zsw_util::AppError,
 	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
 
-// TODO: Join all these together
+/// Egui
+#[derive(derive_more::Debug)]
+pub struct Egui {
+	/// Window
+	window: Arc<Window>,
 
-/// Egui Renderer
-pub struct EguiRenderer {
+	/// Context
+	ctx: egui::Context,
+
+	/// State
+	#[debug("..")]
+	state: Arc<Mutex<egui_winit::State>>,
+
 	/// Renderer
+	#[debug("..")]
 	renderer: egui_wgpu::Renderer,
 }
 
-impl fmt::Debug for EguiRenderer {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.debug_struct("EguiRenderer").field("render_pass", &"..").finish()
-	}
-}
-
-impl EguiRenderer {
-	/// Creates a new egui renderer
+impl Egui {
+	/// Creates a new egui
 	#[must_use]
-	pub fn new(wgpu_renderer: &WgpuRenderer, wgpu: &Wgpu) -> Self {
-		// Create the egui renderer
+	pub fn new(wgpu: &Wgpu, wgpu_renderer: &WgpuRenderer, window: Arc<Window>) -> Self {
 		let renderer = egui_wgpu::Renderer::new(
 			&wgpu.device,
 			wgpu_renderer.surface_config().format,
 			egui_wgpu::RendererOptions::default(),
 		);
 
-		Self { renderer }
+		let viewport_id = egui::ViewportId::from_hash_of(window.id());
+		let ctx = egui::Context::default();
+		let state = egui_winit::State::new(
+			ctx.clone(),
+			viewport_id,
+			&window,
+			None,
+			None,
+			Some(wgpu.device.limits().max_texture_dimension_2d as usize),
+		);
+		let state = Arc::new(Mutex::new(state));
+
+
+		Self {
+			window,
+			ctx,
+			state,
+			renderer,
+		}
 	}
 
 	/// Renders egui
@@ -112,35 +129,6 @@ impl EguiRenderer {
 
 		Ok(())
 	}
-}
-
-/// Egui drawer
-pub struct EguiPainter {
-	/// Window
-	window: Arc<Window>,
-
-	/// Context
-	ctx: egui::Context,
-
-	/// State
-	state: Arc<Mutex<egui_winit::State>>,
-}
-
-impl fmt::Debug for EguiPainter {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.debug_struct("EguiPainter").field("platform", &"..").finish()
-	}
-}
-
-impl EguiPainter {
-	#[must_use]
-	pub fn new(event_handler: &EguiEventHandler, ctx: egui::Context) -> Self {
-		Self {
-			window: event_handler.window.share(),
-			ctx,
-			state: event_handler.state.share(),
-		}
-	}
 
 	/// Draws egui
 	pub fn draw<E>(&self, mut f: impl FnMut(&egui::Context) -> Result<(), E>) -> Result<egui::FullOutput, E> {
@@ -165,41 +153,6 @@ impl EguiPainter {
 		pixels_per_point: f32,
 	) -> Vec<egui::ClippedPrimitive> {
 		self.ctx.tessellate(shapes, pixels_per_point)
-	}
-}
-
-/// Egui Event handler
-pub struct EguiEventHandler {
-	/// Window
-	window: Arc<Window>,
-
-	/// State
-	state: Arc<Mutex<egui_winit::State>>,
-}
-
-impl fmt::Debug for EguiEventHandler {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.debug_struct("EguiEventHandler").field("platform", &"..").finish()
-	}
-}
-
-impl EguiEventHandler {
-	#[must_use]
-	pub fn new(wgpu: &Wgpu, window: Arc<Window>, ctx: egui::Context) -> Self {
-		// Create the egui platform
-		let viewport_id = egui::ViewportId::from_hash_of(window.id());
-
-		let state = egui_winit::State::new(
-			ctx,
-			viewport_id,
-			&window,
-			None,
-			None,
-			Some(wgpu.device.limits().max_texture_dimension_2d as usize),
-		);
-		let state = Arc::new(Mutex::new(state));
-
-		Self { window, state }
 	}
 
 	/// Handles an event.

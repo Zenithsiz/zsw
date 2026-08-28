@@ -5114,6 +5114,7 @@ dependencies = [
 name = "zsw-egui"
 version = "0.1.0"
 dependencies = [
+ "derive_more",
  "egui",
  "egui-wgpu",
  "egui-winit",
