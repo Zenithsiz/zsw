@@ -4,19 +4,22 @@
 use {
 	crate::{
 		menu::Menu,
-		panel::{PanelState, PanelsRenderer},
+		panel::{PanelState, Panels, PanelsRenderer},
+		profile::ProfileName,
 		shared::{Shared, SharedWindow},
+		window::AppWindow,
 	},
 	app_error::Context,
 	chrono::TimeDelta,
-	core::time::Duration,
+	core::{clone::Share, time::Duration},
 	euclid::default::Point2D,
 	std::{
+		collections::HashMap,
 		sync::{Arc, mpsc},
 		thread,
 		time::Instant,
 	},
-	winit::event::WindowEvent,
+	winit::{event::WindowEvent, window::WindowId},
 	zsw_egui::Egui,
 	zsw_util::AppError,
 	zsw_wgpu::{FrameRender, WgpuRenderer},
@@ -25,27 +28,141 @@ use {
 /// Renderer
 pub struct Renderer {
 	shared:            Arc<Shared>,
-	shared_window:     SharedWindow,
 	renderer_event_rx: mpsc::Receiver<Event>,
-	wgpu_renderer:     WgpuRenderer,
-	panels_renderer:   PanelsRenderer,
-	egui:              Egui,
 	menu:              Menu,
+
+	windows: HashMap<WindowId, WindowRenderer>,
+}
+
+impl Renderer {
+	pub fn new(shared: Arc<Shared>, renderer_event_rx: mpsc::Receiver<Event>, menu: Menu) -> Self {
+		Self {
+			shared,
+			renderer_event_rx,
+			menu,
+			windows: HashMap::new(),
+		}
+	}
+
+	/// Renders all windows
+	pub fn render(&mut self) -> Result<(), AppError> {
+		loop {
+			while let Ok(event) = self.renderer_event_rx.try_recv() {
+				self.handle_event(event)?;
+			}
+
+			match self
+				.windows
+				.values_mut()
+				.min_by_key(|window_renderer| window_renderer.next_frame)
+			{
+				Some(window_renderer) => {
+					window_renderer.sleep_until_next_frame();
+					window_renderer.render(&self.shared, &mut self.menu)?
+				},
+				None => {
+					let Ok(event) = self.renderer_event_rx.recv() else {
+						break;
+					};
+					self.handle_event(event)?;
+				},
+			}
+		}
+
+		Ok(())
+	}
+
+	/// Handles an event
+	fn handle_event(&mut self, event: Event) -> Result<(), AppError> {
+		tracing::trace!("Received renderer event: {event:?}");
+		match event {
+			Event::WindowEvent { window_id, event } => {
+				let Some(window_renderer) = self.windows.get_mut(&window_id) else {
+					tracing::warn!(?window_id, ?event, "Unknown window id for event");
+					return Ok(());
+				};
+				if window_renderer.egui.handle_event(&event) {
+					return Ok(());
+				}
+
+				// TODO: When resizing we receive many `Resized` events at once,
+				//       and we should only resize after the last we receive to
+				//       avoid lagging while dragging.
+				match event {
+					WindowEvent::Resized(size) => {
+						window_renderer
+							.wgpu_renderer
+							.resize(&self.shared.wgpu, size)
+							.context("Unable to resize wgpu")?;
+						window_renderer
+							.panels_renderer
+							.resize(&window_renderer.wgpu_renderer, &self.shared.wgpu, size)
+					},
+					WindowEvent::Moved(pos) => {
+						window_renderer.shared_window.monitor_geometry.pos = euclid::point2(pos.x, pos.y);
+					},
+					_ => (),
+				}
+			},
+
+			Event::WindowAdd { app_window } => {
+				let window_renderer =
+					WindowRenderer::new(&self.shared, app_window).context("Unable to create window")?;
+				let window_id = window_renderer.shared_window.window.id();
+				if self.windows.insert(window_id, window_renderer).is_some() {
+					tracing::warn!(?window_id, "Window was re-created without being destroyed first");
+				}
+			},
+		}
+
+
+		Ok(())
+	}
+}
+
+#[derive(Debug)]
+struct WindowRenderer {
+	shared_window:   SharedWindow,
+	wgpu_renderer:   WgpuRenderer,
+	panels_renderer: PanelsRenderer,
+	egui:            Egui,
 
 	next_frame:     Instant,
 	frame_duration: Duration,
 }
 
-impl Renderer {
-	pub fn new(
-		shared: Arc<Shared>,
-		shared_window: SharedWindow,
-		renderer_event_rx: mpsc::Receiver<Event>,
-		wgpu_renderer: WgpuRenderer,
-		panels_renderer: PanelsRenderer,
-		egui: Egui,
-		menu: Menu,
-	) -> Self {
+impl WindowRenderer {
+	fn new(shared: &Shared, app_window: AppWindow) -> Result<Self, AppError> {
+		let window = Arc::new(app_window.window);
+		let wgpu_renderer =
+			WgpuRenderer::new(window.share(), &shared.wgpu).context("Unable to create wgpu renderer")?;
+
+		let msaa_samples = 4;
+		let panels_renderer = PanelsRenderer::new(&wgpu_renderer, &shared.wgpu, msaa_samples)
+			.context("Unable to create panels renderer")?;
+		let egui = Egui::new(&shared.wgpu, &wgpu_renderer, window.share());
+
+
+		let mut panels = Panels::new();
+		if let Some(default_profile_name) = &shared.config.default.profile {
+			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
+			let default_profile = shared
+				.profiles
+				.get(&default_profile_name)
+				.with_context(|| format!("Unknown profile {:?}", shared.config.default.profile))?;
+			panels
+				.set_profile(default_profile_name, default_profile, &shared.playlists)
+				.context("Unable to set profile")?;
+		}
+
+		let shared_window = SharedWindow {
+			window,
+			monitor_name: app_window.monitor_name,
+			monitor_geometry: app_window.monitor_geometry,
+			monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
+			panels,
+		};
+
 		let frame_duration = Duration::from_secs_f64(1000.0) / shared_window.monitor_refresh_rate_mhz;
 		tracing::info!(
 			"Window {:?} refresh rate: {:.2} Hz",
@@ -57,17 +174,14 @@ impl Renderer {
 			shared_window.monitor_name
 		);
 
-		Self {
-			shared,
+		Ok(Self {
 			shared_window,
-			renderer_event_rx,
 			wgpu_renderer,
 			panels_renderer,
 			egui,
-			menu,
 			next_frame: Instant::now(),
 			frame_duration,
-		}
+		})
 	}
 
 	/// Sleeps until the next frame and prepares for it.
@@ -103,94 +217,54 @@ impl Renderer {
 		}
 	}
 
-	/// Renders the next frame.
-	pub fn render(&mut self) -> Result<(), AppError> {
-		self.sleep_until_next_frame();
-
+	/// Renders the current frame.
+	///
+	/// Does not check whether it is time for it or not, you must
+	/// instead call [`Self::sleep_until_next_frame`] and/or check
+	/// [`Self::next_frame`].
+	pub fn render(&mut self, shared: &Shared, menu: &mut Menu) -> Result<(), AppError> {
 		// Start rendering
 		let mut frame = self
 			.wgpu_renderer
-			.start_render(&self.shared.wgpu)
+			.start_render(&shared.wgpu)
 			.context("Unable to start frame")?;
 
 		// Render panels
 		self.panels_renderer
 			.render(
-				&self.shared,
+				shared,
 				&mut self.shared_window,
 				&mut frame,
 				&self.wgpu_renderer,
-				&self.shared.panels_renderer_shared,
+				&shared.panels_renderer_shared,
 			)
 			.context("Unable to render panels")?;
 
 		// Render egui
-		self.render_egui(&mut frame);
+		self.render_egui(shared, menu, &mut frame);
 
 		// Finish the frame
-		if frame.finish(&self.shared.wgpu) {
+		if frame.finish(&shared.wgpu) {
 			self.wgpu_renderer
-				.reconfigure(&self.shared.wgpu)
+				.reconfigure(&shared.wgpu)
 				.context("Unable to reconfigure wgpu")?;
-		}
-
-		self.handle_events()?;
-
-		Ok(())
-	}
-
-	/// Handles all events
-	fn handle_events(&mut self) -> Result<(), AppError> {
-		// Handle events
-		let mut resize = None;
-		let mut move_pos = None;
-
-		while let Ok(event) = self.renderer_event_rx.try_recv() {
-			tracing::trace!("Received renderer event: {event:?}");
-			match event {
-				Event::WindowEvent { event } => {
-					if self.egui.handle_event(&event) {
-						continue;
-					}
-
-					match event {
-						WindowEvent::Resized(size) => resize = Some(size),
-						WindowEvent::Moved(pos) => move_pos = Some(pos),
-						_ => (),
-					}
-				},
-			}
-		}
-
-		// Note: When resizing we might receive multiple resize events
-		//       per frame, so we only use the latest one from the events,
-		//       since resizing twice only has the affect of the last resize.
-		if let Some(size) = resize {
-			self.wgpu_renderer
-				.resize(&self.shared.wgpu, size)
-				.context("Unable to resize wgpu")?;
-			self.panels_renderer
-				.resize(&self.wgpu_renderer, &self.shared.wgpu, size)
-		}
-		if let Some(pos) = move_pos {
-			self.shared_window.monitor_geometry.pos = euclid::point2(pos.x, pos.y);
 		}
 
 		Ok(())
 	}
 
 	/// Renders egui
-	fn render_egui(&mut self, frame: &mut FrameRender) {
+	fn render_egui(&mut self, shared: &Shared, menu: &mut Menu, frame: &mut FrameRender) {
 		self.egui
-			.render(frame, &self.shared_window.window, &self.shared.wgpu, |ctx| {
+			.render(frame, &self.shared_window.window, &shared.wgpu, |ctx| {
 				// Draw the menu
-				self.menu.draw(
+				menu.draw(
 					ctx,
-					&self.shared.wgpu,
-					&self.shared.playlists,
-					&self.shared.profiles,
+					&shared.wgpu,
+					&shared.playlists,
+					&shared.profiles,
 					&mut self.shared_window.panels,
-					&self.shared.event_loop_proxy,
+					&shared.event_loop_proxy,
 					self.shared_window.monitor_geometry,
 				);
 
@@ -230,7 +304,7 @@ impl Renderer {
 						#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 						match &mut panel.state {
 							PanelState::None(_) => (),
-							PanelState::Fade(state) => state.skip(&self.shared.wgpu),
+							PanelState::Fade(state) => state.skip(&shared.wgpu),
 							PanelState::Slide(_) => (),
 						}
 					}
@@ -253,7 +327,7 @@ impl Renderer {
 									false => time_delta_abs,
 								};
 
-								state.step(&self.shared.wgpu, time_delta);
+								state.step(&shared.wgpu, time_delta);
 							},
 							PanelState::Slide(_) => (),
 						}
@@ -267,5 +341,11 @@ impl Renderer {
 #[derive(Debug)]
 pub enum Event {
 	/// Window event
-	WindowEvent { event: WindowEvent },
+	WindowEvent {
+		window_id: WindowId,
+		event:     WindowEvent,
+	},
+
+	/// Add new window
+	WindowAdd { app_window: AppWindow },
 }

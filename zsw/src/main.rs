@@ -38,17 +38,17 @@ use {
 		config::Config,
 		dirs::Dirs,
 		menu::Menu,
-		panel::{Panels, PanelsRenderer, PanelsRendererShared},
-		profile::{Profile, ProfileName},
+		panel::PanelsRendererShared,
+		profile::Profile,
 		renderer::Renderer,
-		shared::{Shared, SharedWindow},
+		shared::Shared,
 	},
 	app_error::Context,
 	clap::Parser,
 	core::clone::Share,
 	directories::ProjectDirs,
 	std::{
-		collections::{BTreeMap, HashMap},
+		collections::BTreeMap,
 		fs,
 		process::ExitCode,
 		sync::{Arc, mpsc},
@@ -60,9 +60,8 @@ use {
 		platform::x11::EventLoopBuilderExtX11,
 		window::WindowId,
 	},
-	zsw_egui::Egui,
 	zsw_util::AppError,
-	zsw_wgpu::{Wgpu, WgpuRenderer},
+	zsw_wgpu::Wgpu,
 	zutil_logger::Logger,
 };
 
@@ -135,13 +134,7 @@ async fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
-	windows: HashMap<WindowId, WinitAppWindow>,
-	shared:  Arc<Shared>,
-}
-
-#[derive(Debug)]
-struct WinitAppWindow {
-	/// Renderer event sender
+	shared:            Arc<Shared>,
 	renderer_event_tx: mpsc::Sender<renderer::Event>,
 }
 
@@ -167,12 +160,9 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 	}
 
 	fn window_event(&mut self, _event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-		match self.windows.get(&window_id) {
-			Some(window) => {
-				_ = window.renderer_event_tx.send(renderer::Event::WindowEvent { event });
-			},
-			None => tracing::warn!("Received window event for unknown window {window_id:?}: {event:?}"),
-		}
+		_ = self
+			.renderer_event_tx
+			.send(renderer::Event::WindowEvent { window_id, event });
 	}
 }
 
@@ -210,14 +200,19 @@ impl WinitApp {
 		};
 		let shared = Arc::new(shared);
 
+		let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
+		let menu = Menu::new();
+		let mut renderer = Renderer::new(shared.share(), renderer_event_rx, menu);
+		zsw_util::spawn_task("Renderer", move || renderer.render());
+
 		Ok(Self {
-			windows: HashMap::new(),
 			shared,
+			renderer_event_tx,
 		})
 	}
 
 	/// Initializes the window related things
-	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
+	pub fn init_window(&self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let windows = window::create(
 			event_loop,
 			self.shared.config.transparent_windows,
@@ -225,55 +220,7 @@ impl WinitApp {
 		)
 		.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
-			let window = Arc::new(app_window.window);
-			let wgpu_renderer =
-				WgpuRenderer::new(window.share(), &self.shared.wgpu).context("Unable to create wgpu renderer")?;
-
-			let msaa_samples = 4;
-			let panels_renderer = PanelsRenderer::new(&wgpu_renderer, &self.shared.wgpu, msaa_samples)
-				.context("Unable to create panels renderer")?;
-			let egui = Egui::new(&self.shared.wgpu, &wgpu_renderer, window.share());
-			let menu = Menu::new();
-
-			let mut panels = Panels::new();
-			if let Some(default_profile_name) = &self.shared.config.default.profile {
-				let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
-				let default_profile = self
-					.shared
-					.profiles
-					.get(&default_profile_name)
-					.with_context(|| format!("Unknown profile {:?}", self.shared.config.default.profile))?;
-				panels
-					.set_profile(default_profile_name, default_profile, &self.shared.playlists)
-					.context("Unable to set profile")?;
-			}
-
-			let window_id = window.id();
-			let shared_window = SharedWindow {
-				window,
-				monitor_name: app_window.monitor_name,
-				monitor_geometry: app_window.monitor_geometry,
-				monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
-				panels,
-			};
-
-			let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
-			let mut renderer = Renderer::new(
-				self.shared.share(),
-				shared_window,
-				renderer_event_rx,
-				wgpu_renderer,
-				panels_renderer,
-				egui,
-				menu,
-			);
-			zsw_util::spawn_task("Renderer", move || {
-				loop {
-					renderer.render()?;
-				}
-			});
-
-			_ = self.windows.insert(window_id, WinitAppWindow { renderer_event_tx });
+			_ = self.renderer_event_tx.send(renderer::Event::WindowAdd { app_window });
 		}
 
 		Ok(())
