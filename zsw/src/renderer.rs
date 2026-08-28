@@ -273,6 +273,7 @@ impl WindowRenderer {
 					if ctx.is_pointer_over_egui() ||
 						!panel.geometries.iter().any(|geometry| {
 							geometry
+								.rect
 								.on_window(self.shared_window.monitor_geometry)
 								.contains(pointer_pos)
 						}) {

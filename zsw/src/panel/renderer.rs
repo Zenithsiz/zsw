@@ -297,7 +297,7 @@ impl PanelsRenderer {
 		// Go through all geometries of the panel and render each one
 		for panel_geometry in &mut panel.geometries {
 			// If this geometry is outside our window, we can safely ignore it
-			if !panel_geometry.intersects_window(window_geometry) {
+			if !panel_geometry.rect.intersects_window(window_geometry) {
 				continue;
 			}
 
@@ -325,7 +325,7 @@ impl PanelsRenderer {
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
 		// Calculate the position matrix for the panel
-		let pos_matrix = panel_geometry.pos_matrix(window_geometry, surface_size);
+		let pos_matrix = panel_geometry.rect.pos_matrix(window_geometry, surface_size);
 
 		match state {
 			PanelState::None(state) => Self::render_panel_none_geometry(
@@ -437,7 +437,7 @@ impl PanelsRenderer {
 			// Calculate the position matrix for the panel
 			let image_size = image.texture_view.texture().size();
 			let image_size = Vector2D::new(image_size.width, image_size.height);
-			let image_ratio = panel_geometry.image_ratio(image_size);
+			let image_ratio = panel_geometry.rect.image_ratio(image_size);
 
 			uniform::fade::Image {
 				image_ratio: uniform::Vec2(image_ratio.into()),
