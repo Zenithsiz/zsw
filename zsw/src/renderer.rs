@@ -28,7 +28,6 @@ use {
 pub struct Renderer {
 	shared:            Shared,
 	renderer_event_rx: mpsc::Receiver<Event>,
-	menu:              Menu,
 
 	panels: Panels,
 
@@ -36,7 +35,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-	pub fn new(shared: Shared, renderer_event_rx: mpsc::Receiver<Event>, menu: Menu) -> Result<Self, AppError> {
+	pub fn new(shared: Shared, renderer_event_rx: mpsc::Receiver<Event>) -> Result<Self, AppError> {
 		let mut panels = Panels::new();
 		if let Some(default_profile_name) = &shared.config.default.profile {
 			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
@@ -52,7 +51,6 @@ impl Renderer {
 		Ok(Self {
 			shared,
 			renderer_event_rx,
-			menu,
 			panels,
 			windows: HashMap::new(),
 		})
@@ -72,7 +70,7 @@ impl Renderer {
 			{
 				Some(window_renderer) => {
 					window_renderer.sleep_until_next_frame();
-					window_renderer.render(&self.shared, &mut self.panels, &mut self.menu)?
+					window_renderer.render(&self.shared, &mut self.panels)?
 				},
 				None => {
 					let Ok(event) = self.renderer_event_rx.recv() else {
@@ -140,6 +138,7 @@ struct WindowRenderer {
 	wgpu_renderer:   WgpuRenderer,
 	panels_renderer: PanelsRenderer,
 	egui:            Egui,
+	menu:            Menu,
 
 	next_frame:     Instant,
 	frame_duration: Duration,
@@ -179,6 +178,7 @@ impl WindowRenderer {
 			wgpu_renderer,
 			panels_renderer,
 			egui,
+			menu: Menu::new(),
 			next_frame: Instant::now(),
 			frame_duration,
 		})
@@ -222,7 +222,7 @@ impl WindowRenderer {
 	/// Does not check whether it is time for it or not, you must
 	/// instead call [`Self::sleep_until_next_frame`] and/or check
 	/// [`Self::next_frame`].
-	pub fn render(&mut self, shared: &Shared, panels: &mut Panels, menu: &mut Menu) -> Result<(), AppError> {
+	pub fn render(&mut self, shared: &Shared, panels: &mut Panels) -> Result<(), AppError> {
 		let mut frame = self
 			.wgpu_renderer
 			.start_render(&shared.wgpu)
@@ -239,7 +239,7 @@ impl WindowRenderer {
 			)
 			.context("Unable to render panels")?;
 
-		self.render_egui(shared, panels, menu, &mut frame);
+		self.render_egui(shared, panels, &mut frame);
 
 		self.wgpu_renderer
 			.finish_render(&shared.wgpu, frame)
@@ -249,11 +249,11 @@ impl WindowRenderer {
 	}
 
 	/// Renders egui
-	fn render_egui(&mut self, shared: &Shared, panels: &mut Panels, menu: &mut Menu, frame: &mut FrameRender) {
+	fn render_egui(&mut self, shared: &Shared, panels: &mut Panels, frame: &mut FrameRender) {
 		self.egui
 			.render(frame, &self.shared_window.window, &shared.wgpu, |ctx| {
 				// Draw the menu
-				menu.draw(ctx, shared, panels, self.shared_window.monitor_geometry);
+				self.menu.draw(ctx, shared, panels, self.shared_window.monitor_geometry);
 
 
 				// Then go through all panels checking for interactions with their geometries

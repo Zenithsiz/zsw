@@ -33,7 +33,6 @@ use {
 		args::Args,
 		config::Config,
 		dirs::Dirs,
-		menu::Menu,
 		panel::PanelsRendererShared,
 		profile::Profile,
 		renderer::Renderer,
@@ -184,8 +183,7 @@ impl WinitApp {
 
 		// TODO: Make the renderer create the menu and maybe the renderer rx/tx too?
 		let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
-		let menu = Menu::new();
-		let mut renderer = Renderer::new(shared, renderer_event_rx, menu).context("Unable to build renderer")?;
+		let mut renderer = Renderer::new(shared, renderer_event_rx).context("Unable to build renderer")?;
 		zsw_util::spawn_task("Renderer", move || renderer.render());
 
 		Ok(Self {
