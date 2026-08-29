@@ -6,8 +6,6 @@
 	proc_macro_hygiene,
 	stmt_expr_attributes,
 	bool_toggle,
-	sync_nonpoison,
-	nonpoison_mutex,
 	oneshot_channel,
 	str_as_str,
 	unwrap_infallible,

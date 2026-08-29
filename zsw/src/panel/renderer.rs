@@ -21,12 +21,12 @@ use {
 		},
 	},
 	app_error::Context,
-	core::{clone::Share, cmp},
+	core::cmp,
 	euclid::default::{Transform3D, Vector2D},
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
-		sync::{Arc, OnceLock, nonpoison::Mutex},
+		sync::OnceLock,
 	},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -56,7 +56,7 @@ pub struct PanelsRenderer {
 
 	/// Render pipeline for each shader
 	// TODO: Prune ones that aren't used?
-	render_pipelines: Mutex<HashMap<RenderPipelineId, Arc<wgpu::RenderPipeline>>>,
+	render_pipelines: HashMap<RenderPipelineId, wgpu::RenderPipeline>,
 
 	/// Vertex buffer
 	vertices: wgpu::Buffer,
@@ -87,7 +87,7 @@ impl PanelsRenderer {
 		Ok(Self {
 			msaa_framebuffer,
 			msaa_samples,
-			render_pipelines: Mutex::new(HashMap::new()),
+			render_pipelines: HashMap::new(),
 			vertices,
 			indices,
 			none: OnceLock::new(),
@@ -104,7 +104,7 @@ impl PanelsRenderer {
 
 	/// Renders a panel
 	pub fn render(
-		&self,
+		&mut self,
 		wgpu_renderer: &WgpuRenderer,
 		window_geometry: Rect<i32, u32>,
 		frame: &mut FrameRender,
@@ -171,7 +171,7 @@ impl PanelsRenderer {
 
 	/// Renders a panel
 	fn render_panel(
-		&self,
+		&mut self,
 		wgpu_renderer: &WgpuRenderer,
 
 		surface_size: PhysicalSize<u32>,
@@ -208,8 +208,8 @@ impl PanelsRenderer {
 			}),
 		};
 
-		let render_pipeline = match self.render_pipelines.lock().entry(render_pipeline_id) {
-			hash_map::Entry::Occupied(entry) => entry.get().share(),
+		let render_pipeline = match self.render_pipelines.entry(render_pipeline_id) {
+			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
 					PanelState::None(_) => {
@@ -241,12 +241,12 @@ impl PanelsRenderer {
 				)
 				.context("Unable to create render pipeline")?;
 
-				entry.insert(Arc::new(render_pipeline)).share()
+				entry.insert(render_pipeline)
 			},
 		};
 
 		// Bind the pipeline for the specific shader
-		render_pass.set_pipeline(&render_pipeline);
+		render_pass.set_pipeline(render_pipeline);
 
 		// Then render the panel
 		self.render_panel_geometries(wgpu_renderer, surface_size, window_geometry, render_pass, panel);
