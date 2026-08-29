@@ -177,8 +177,8 @@ impl WinitApp {
 			config: config.share(),
 			wgpu,
 			panels_renderer_shared,
-			playlists: Arc::new(playlists),
-			profiles: Arc::new(profiles),
+			playlists,
+			profiles,
 		};
 
 		// TODO: Make the renderer create the menu and maybe the renderer rx/tx too?

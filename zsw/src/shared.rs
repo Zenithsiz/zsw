@@ -18,8 +18,8 @@ pub struct Shared {
 	pub wgpu:                   Wgpu,
 	pub panels_renderer_shared: PanelsRendererShared,
 
-	pub playlists: Arc<Playlists>,
-	pub profiles:  Arc<Profiles>,
+	pub playlists: Playlists,
+	pub profiles:  Profiles,
 }
 
 /// Shared window data
