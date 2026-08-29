@@ -3,6 +3,7 @@
 use {
 	super::Wgpu,
 	app_error::{Context, bail},
+	core::clone::Share,
 	std::sync::Arc,
 	winit::{dpi::PhysicalSize, window::Window},
 	zsw_util::AppError,
@@ -26,18 +27,12 @@ pub struct WgpuRenderer {
 
 	/// Surface config
 	surface_config: wgpu::SurfaceConfiguration,
-
-	/// Window
-	// SAFETY: Must be dropped *after* the surface
-	_window: Arc<Window>,
 }
 
 impl WgpuRenderer {
-	pub fn new(window: Arc<Window>, wgpu: &Wgpu) -> Result<Self, AppError> {
+	pub fn new(window: &Arc<Window>, wgpu: &Wgpu) -> Result<Self, AppError> {
 		// Create the surface
-		// SAFETY: We keep an `Arc<Window>` that we only drop
-		//         *after* dropping the surface.
-		let surface = unsafe { self::create_surface(wgpu, &window) }?;
+		let surface = self::create_surface(wgpu, window.share())?;
 
 		// Configure the surface and get the preferred texture format and surface size
 		let surface_size = window.inner_size();
@@ -48,7 +43,6 @@ impl WgpuRenderer {
 			surface,
 			surface_size,
 			surface_config,
-			_window: window,
 		})
 	}
 
@@ -198,16 +192,13 @@ fn configure_window_surface(
 }
 
 /// Creates the surface
-///
-/// # Safety
-/// The returned surface *must* be dropped before the window.
-unsafe fn create_surface(wgpu: &Wgpu, window: &Window) -> Result<wgpu::Surface<'static>, AppError> {
+fn create_surface(wgpu: &Wgpu, window: Arc<Window>) -> Result<wgpu::Surface<'static>, AppError> {
 	// Create the surface
 	tracing::debug!(?window, "Requesting wgpu surface");
-	// SAFETY: User ensures that the surface is dropped before the window.
-	let target = unsafe { wgpu::SurfaceTargetUnsafe::from_window(window) }.context("Unable to get window target")?;
-	// SAFETY: User ensures that the surface is dropped before the window.
-	let surface = unsafe { wgpu.instance.create_surface_unsafe(target) }.context("Unable to request surface")?;
+	let surface = wgpu
+		.instance
+		.create_surface(window)
+		.context("Unable to request surface")?;
 	tracing::debug!(?surface, "Created wgpu surface");
 
 	Ok(surface)

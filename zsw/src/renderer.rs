@@ -139,7 +139,7 @@ struct WindowRenderer {
 impl WindowRenderer {
 	fn new(wgpu: &Wgpu, window: Window) -> Result<Self, AppError> {
 		let window = Arc::new(window);
-		let wgpu_renderer = WgpuRenderer::new(window.share(), wgpu).context("Unable to create wgpu renderer")?;
+		let wgpu_renderer = WgpuRenderer::new(&window, wgpu).context("Unable to create wgpu renderer")?;
 
 		let msaa_samples = 4;
 		let panels_renderer =

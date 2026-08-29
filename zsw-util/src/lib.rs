@@ -7,12 +7,10 @@
 	unboxed_closures,
 	proc_macro_hygiene,
 	stmt_expr_attributes,
-	core_intrinsics,
 	current_thread_id,
 	oneshot_channel,
 	extend_one
 )]
-#![expect(internal_features, reason = "There's no other way to check if a type is inhabited")]
 
 pub mod loadable;
 mod rect;
@@ -31,10 +29,10 @@ pub use {
 
 use {
 	app_error::Context,
-	core::{ptr, str::FromStr},
+	core::str::FromStr,
 	image::DynamicImage,
 	serde::de::DeserializeOwned,
-	std::{ffi::OsStr, fs, intrinsics, path::Path, thread},
+	std::{ffi::OsStr, fs, path::Path, thread},
 	zutil_cloned::cloned,
 };
 
@@ -151,16 +149,6 @@ pub macro iter_chain {
 	($first:expr, $($rest:expr),* $(,)?) => {
 		std::iter::chain($first, $crate::iter_chain!($($rest,)*))
 	},
-}
-
-/// Creates a mutable reference to a ZST
-#[must_use]
-pub const fn zst_ref_mut<'a, T>() -> &'a mut T {
-	const { assert!(size_of::<T>() == 0, "Cannot call this function with non-zero `T`") };
-	const { intrinsics::assert_inhabited::<T>() };
-
-	// SAFETY: `T` is a ZST and is inhabited, so this is valid
-	unsafe { &mut *ptr::dangling_mut() }
 }
 
 /// Reads all toml files in a directory as values.
