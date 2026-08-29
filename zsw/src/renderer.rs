@@ -253,15 +253,7 @@ impl WindowRenderer {
 		self.egui
 			.render(frame, &self.shared_window.window, &shared.wgpu, |ctx| {
 				// Draw the menu
-				menu.draw(
-					ctx,
-					&shared.wgpu,
-					&shared.playlists,
-					&shared.profiles,
-					panels,
-					&shared.event_loop_proxy,
-					self.shared_window.monitor_geometry,
-				);
+				menu.draw(ctx, shared, panels, self.shared_window.monitor_geometry);
 
 
 				// Then go through all panels checking for interactions with their geometries

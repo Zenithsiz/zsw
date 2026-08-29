@@ -6,14 +6,12 @@ mod panels;
 mod profiles;
 
 use {
-	crate::{AppEvent, panel::Panels, playlist::Playlists, profile::Profiles},
+	crate::{panel::Panels, shared::Shared},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
 	std::path::Path,
 	strum::IntoEnumIterator,
-	winit::event_loop::EventLoopProxy,
 	zsw_util::{AppError, Rect},
-	zsw_wgpu::Wgpu,
 };
 
 /// Menu
@@ -36,16 +34,7 @@ impl Menu {
 	}
 
 	/// Draws the menu
-	pub fn draw(
-		&mut self,
-		ctx: &egui::Context,
-		wgpu: &Wgpu,
-		playlists: &Playlists,
-		profiles: &Profiles,
-		panels: &mut Panels,
-		event_loop_proxy: &EventLoopProxy<AppEvent>,
-		window_geometry: Rect<i32, u32>,
-	) {
+	pub fn draw(&mut self, ctx: &egui::Context, shared: &Shared, panels: &mut Panels, window_geometry: Rect<i32, u32>) {
 		let mut egui_window = egui::Window::new("Menu");
 
 		// Open the window at the mouse if pressed
@@ -66,9 +55,9 @@ impl Menu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, window_geometry),
-				Tab::Profiles => profiles::draw_profiles_tab(ui, playlists, profiles, panels),
-				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
+				Tab::Panels => panels::draw_panels_tab(ui, shared, panels, window_geometry),
+				Tab::Profiles => profiles::draw_profiles_tab(ui, shared, panels),
+				Tab::Settings => self::draw_settings_tab(ui, shared),
 			}
 		});
 	}
@@ -76,9 +65,10 @@ impl Menu {
 
 
 /// Draws the settings tab
-fn draw_settings_tab(ui: &mut egui::Ui, event_loop_proxy: &EventLoopProxy<AppEvent>) {
+fn draw_settings_tab(ui: &mut egui::Ui, shared: &Shared) {
 	if ui.button("Quit").clicked() {
-		event_loop_proxy
+		shared
+			.event_loop_proxy
 			.send_event(crate::AppEvent::Shutdown)
 			.expect("Unable to send shutdown event to event loop");
 	}
