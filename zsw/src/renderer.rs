@@ -21,6 +21,7 @@ use {
 		time::Instant,
 	},
 	winit::{
+		dpi::PhysicalSize,
 		event::WindowEvent,
 		event_loop::EventLoopProxy,
 		window::{Window, WindowId},
@@ -133,18 +134,8 @@ impl Renderer {
 				//       and we should only resize after the last we receive to
 				//       avoid lagging while dragging.
 				match event {
-					WindowEvent::Resized(size) => {
-						window_renderer
-							.wgpu_renderer
-							.resize(&self.wgpu, size)
-							.context("Unable to resize wgpu")?;
-						window_renderer
-							.panels_renderer
-							.resize(&window_renderer.wgpu_renderer, &self.wgpu, size)
-					},
-					WindowEvent::Moved(pos) => {
-						window_renderer.monitor_geometry.pos = euclid::point2(pos.x, pos.y);
-					},
+					WindowEvent::Resized(size) => window_renderer.queued_resize = Some(size),
+					WindowEvent::Moved(pos) => window_renderer.monitor_geometry.pos = euclid::point2(pos.x, pos.y),
 					_ => (),
 				}
 			},
@@ -178,6 +169,8 @@ struct WindowRenderer {
 
 	next_frame:     Instant,
 	frame_duration: Duration,
+
+	queued_resize: Option<PhysicalSize<u32>>,
 }
 
 impl WindowRenderer {
@@ -212,6 +205,7 @@ impl WindowRenderer {
 			menu: Menu::new(),
 			next_frame: Instant::now(),
 			frame_duration,
+			queued_resize: None,
 		})
 	}
 
@@ -262,6 +256,12 @@ impl WindowRenderer {
 		profiles: &Profiles,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 	) -> Result<(), AppError> {
+		// If we need to resize, do it now
+		if let Some(size) = self.queued_resize.take() {
+			self.wgpu_renderer.resize(wgpu, size).context("Unable to resize wgpu")?;
+			self.panels_renderer.resize(&self.wgpu_renderer, wgpu, size)
+		}
+
 		let mut frame = self.wgpu_renderer.start_render(wgpu).context("Unable to start frame")?;
 
 		self.panels_renderer
