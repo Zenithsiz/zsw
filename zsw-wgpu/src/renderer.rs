@@ -182,16 +182,10 @@ fn configure_window_surface(
 	size: PhysicalSize<u32>,
 ) -> Result<wgpu::SurfaceConfiguration, AppError> {
 	// Get the format
-	let mut config = surface
+	let config = surface
 		.get_default_config(&wgpu.adapter, size.width, size.height)
 		.context("Unable to get surface default config")?;
 	tracing::debug!(?config, "Found surface configuration");
-
-	// Set some options
-	// Note: Since we manually sleep every frame to achieve
-	//       our desired frame-rate, we don't need vsync.
-	config.present_mode = wgpu::PresentMode::Mailbox;
-	tracing::debug!(?config, "Updated surface configuration");
 
 	// Then configure it
 	surface.configure(&wgpu.device, &config);

@@ -31,6 +31,7 @@ use {
 	self::{args::Args, config::Config, dirs::Dirs, panel::PanelsRendererShared, profile::Profile, renderer::Renderer},
 	app_error::Context,
 	clap::Parser,
+	core::cell::LazyCell,
 	directories::ProjectDirs,
 	std::{
 		collections::BTreeMap,
@@ -78,15 +79,16 @@ async fn run() -> Result<(), AppError> {
 	// Create the configuration then load the config
 	let dirs = ProjectDirs::from("", "", "zsw").context("Unable to create app directories")?;
 	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
-	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.toml"));
-	let config = Config::get_or_create_default(&config_path);
+
+	let default_config_path = LazyCell::new(|| dirs.data_dir().join("config.toml"));
+	let config_path = args.config.as_ref().unwrap_or_else(|| &*default_config_path);
+	let config = Config::get_or_create_default(config_path);
 	let dirs = Dirs::new(
 		config_path
 			.parent()
 			.expect("Config file had no parent directory")
 			.to_path_buf(),
 	);
-	let dirs = Arc::new(dirs);
 	tracing::debug!("Loaded config: {config:?}");
 
 	logger.set_file(args.log_file.as_deref().or(config.log_file.as_deref()));
@@ -100,8 +102,9 @@ async fn run() -> Result<(), AppError> {
 
 	// Initialize the app
 	let mut app = WinitApp::new(
+		&args,
 		config,
-		dirs,
+		&dirs,
 		event_loop.owned_display_handle(),
 		event_loop.create_proxy(),
 	)
@@ -150,12 +153,15 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 impl WinitApp {
 	/// Creates a new app
 	pub async fn new(
+		args: &Args,
 		config: Config,
-		dirs: Arc<Dirs>,
+		dirs: &Dirs,
 		display: OwnedDisplayHandle,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
-		let wgpu = Wgpu::new(display).await.context("Unable to initialize wgpu")?;
+		let wgpu = Wgpu::new(display, args.force_opengl)
+			.await
+			.context("Unable to initialize wgpu")?;
 		let panels_renderer_shared = PanelsRendererShared::new(&wgpu);
 
 		let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;

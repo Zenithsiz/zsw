@@ -44,14 +44,14 @@ impl Wgpu {
 	///
 	/// # Panics
 	/// Panics if called twice.
-	pub async fn new(display: OwnedDisplayHandle) -> Result<Self, AppError> {
+	pub async fn new(display: OwnedDisplayHandle, force_opengl: bool) -> Result<Self, AppError> {
 		static ALREADY_CREATED: AtomicBool = AtomicBool::new(false);
 		assert!(
 			!ALREADY_CREATED.swap(true, atomic::Ordering::AcqRel),
 			"Cannot create a second wgpu instance"
 		);
 
-		let instance = self::create_instance(display).context("Unable to create instance")?;
+		let instance = self::create_instance(display, force_opengl).context("Unable to create instance")?;
 		let adapter = self::create_adapter(&instance)
 			.await
 			.context("Unable to create adaptor")?;
@@ -152,8 +152,11 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 }
 
 /// Creates the instance
-fn create_instance(display: OwnedDisplayHandle) -> Result<wgpu::Instance, AppError> {
-	let instance_desc = wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display));
+fn create_instance(display: OwnedDisplayHandle, force_opengl: bool) -> Result<wgpu::Instance, AppError> {
+	let mut instance_desc = wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display));
+	if force_opengl {
+		instance_desc.backends = wgpu::Backends::GL;
+	}
 	tracing::debug!(?instance_desc, "Requesting wgpu instance");
 	let instance = wgpu::Instance::new(instance_desc);
 	tracing::debug!(?instance, "Created wgpu instance");
