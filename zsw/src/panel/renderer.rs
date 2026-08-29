@@ -20,7 +20,7 @@ use {
 			slide::{PanelSlideDir, PanelSlideShared},
 		},
 	},
-	crate::shared::{Shared, SharedWindow},
+	crate::shared::SharedWindow,
 	app_error::Context,
 	core::{clone::Share, cmp},
 	euclid::default::{Transform3D, Vector2D},
@@ -134,7 +134,7 @@ impl PanelsRenderer {
 	/// Renders a panel
 	pub fn render(
 		&self,
-		shared: &Shared,
+		wgpu: &Wgpu,
 		shared_window: &SharedWindow,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
@@ -189,7 +189,7 @@ impl PanelsRenderer {
 		// Then render all panels simultaneously
 		for panel in panels.get_all() {
 			self.render_panel(
-				shared,
+				wgpu,
 				panels_shared,
 				wgpu_renderer,
 				frame.surface_size,
@@ -205,7 +205,7 @@ impl PanelsRenderer {
 	/// Renders a panel
 	fn render_panel(
 		&self,
-		shared: &Shared,
+		wgpu: &Wgpu,
 		panels_shared: &PanelsRendererShared,
 		wgpu_renderer: &WgpuRenderer,
 		surface_size: PhysicalSize<u32>,
@@ -216,8 +216,8 @@ impl PanelsRenderer {
 		// Update the panel before drawing it
 		match &mut panel.state {
 			PanelState::None(_) => (),
-			PanelState::Fade(state) => state.update(&shared.wgpu),
-			PanelState::Slide(state) => state.update(&shared.wgpu),
+			PanelState::Fade(state) => state.update(wgpu),
+			PanelState::Slide(state) => state.update(wgpu),
 		}
 
 		// If the panel images are empty, there's no sense in rendering it either
@@ -247,28 +247,28 @@ impl PanelsRenderer {
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
 					PanelState::None(_) => {
-						let none = panels_shared.none(&shared.wgpu);
+						let none = panels_shared.none(wgpu);
 						&[Some(&none.geometry_uniforms_bind_group_layout)] as &[_]
 					},
 					PanelState::Fade(_) => {
-						let fade = panels_shared.fade(&shared.wgpu);
+						let fade = panels_shared.fade(wgpu);
 						&[
 							Some(&fade.images.geometry_uniforms_bind_group_layout),
-							Some(fade.images.image_bind_group_layout(&shared.wgpu)),
+							Some(fade.images.image_bind_group_layout(wgpu)),
 						]
 					},
 					PanelState::Slide(_) => {
-						let slide = panels_shared.slide(&shared.wgpu);
+						let slide = panels_shared.slide(wgpu);
 						&[
 							Some(&slide.geometry_uniforms_bind_group_layout),
-							Some(slide.image_bind_group_layout(&shared.wgpu)),
+							Some(slide.image_bind_group_layout(wgpu)),
 						]
 					},
 				};
 
 				let render_pipeline = self::create_render_pipeline(
 					wgpu_renderer,
-					&shared.wgpu,
+					wgpu,
 					render_pipeline_id,
 					bind_group_layouts,
 					panel.state.shader(),
@@ -284,14 +284,14 @@ impl PanelsRenderer {
 		render_pass.set_pipeline(&render_pipeline);
 
 		// Then render the panel
-		Self::render_panel_geometries(shared, panels_shared, surface_size, window_geometry, render_pass, panel);
+		Self::render_panel_geometries(wgpu, panels_shared, surface_size, window_geometry, render_pass, panel);
 
 		Ok(())
 	}
 
 	/// Renders a panel's geometries
 	fn render_panel_geometries(
-		shared: &Shared,
+		wgpu: &Wgpu,
 		panels_shared: &PanelsRendererShared,
 		surface_size: PhysicalSize<u32>,
 		window_geometry: Rect<i32, u32>,
@@ -307,7 +307,7 @@ impl PanelsRenderer {
 
 			// Render the panel geometry
 			Self::render_panel_geometry(
-				&shared.wgpu,
+				wgpu,
 				panels_shared,
 				surface_size,
 				&mut panel.state,

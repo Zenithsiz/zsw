@@ -29,18 +29,9 @@ mod shared;
 mod window;
 
 use {
-	self::{
-		args::Args,
-		config::Config,
-		dirs::Dirs,
-		panel::PanelsRendererShared,
-		profile::Profile,
-		renderer::Renderer,
-		shared::Shared,
-	},
+	self::{args::Args, config::Config, dirs::Dirs, panel::PanelsRendererShared, profile::Profile, renderer::Renderer},
 	app_error::Context,
 	clap::Parser,
-	core::clone::Share,
 	directories::ProjectDirs,
 	std::{
 		collections::BTreeMap,
@@ -90,7 +81,6 @@ async fn run() -> Result<(), AppError> {
 	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.toml"));
 	let config = Config::get_or_create_default(&config_path);
-	let config = Arc::new(config);
 	let dirs = Dirs::new(
 		config_path
 			.parent()
@@ -126,7 +116,7 @@ async fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
-	config:            Arc<Config>,
+	config:            Config,
 	renderer_event_tx: mpsc::Sender<renderer::Event>,
 }
 
@@ -161,7 +151,7 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 impl WinitApp {
 	/// Creates a new app
 	pub async fn new(
-		config: Arc<Config>,
+		config: Config,
 		dirs: Arc<Dirs>,
 		display: OwnedDisplayHandle,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
@@ -172,18 +162,19 @@ impl WinitApp {
 		let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
-		let shared = Shared {
+
+		// TODO: Make the renderer create the menu and maybe the renderer rx/tx too?
+		let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
+		let mut renderer = Renderer::new(
+			&config,
 			event_loop_proxy,
-			config: config.share(),
 			wgpu,
 			panels_renderer_shared,
 			playlists,
 			profiles,
-		};
-
-		// TODO: Make the renderer create the menu and maybe the renderer rx/tx too?
-		let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
-		let mut renderer = Renderer::new(shared, renderer_event_rx).context("Unable to build renderer")?;
+			renderer_event_rx,
+		)
+		.context("Unable to build renderer")?;
 		zsw_util::spawn_task("Renderer", move || renderer.render());
 
 		Ok(Self {
