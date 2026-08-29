@@ -106,7 +106,6 @@ fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
-	args:   Args,
 	config: Config,
 
 	display: OwnedDisplayHandle,
@@ -155,11 +154,10 @@ impl WinitApp {
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
 
-		let renderer = Renderer::new(args.profile.clone(), event_loop_proxy, playlists, profiles)
-			.context("Unable to build renderer")?;
+		let renderer =
+			Renderer::new(args.profile, event_loop_proxy, playlists, profiles).context("Unable to build renderer")?;
 
 		Ok(Self {
-			args,
 			config,
 			display,
 			renderer,
@@ -175,7 +173,7 @@ impl WinitApp {
 			.create_window(window_attrs)
 			.context("Unable to create window")?;
 		self.renderer
-			.set_window(self.display.clone(), self.args.force_opengl, window)
+			.set_window(self.display.clone(), window)
 			.await
 			.context("Unable to set renderer window")?;
 

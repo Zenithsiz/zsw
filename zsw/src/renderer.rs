@@ -109,13 +109,8 @@ impl Renderer {
 	}
 
 	/// Sets the window of this renderer
-	pub async fn set_window(
-		&mut self,
-		display: OwnedDisplayHandle,
-		force_opengl: bool,
-		window: Window,
-	) -> Result<(), AppError> {
-		let window_renderer = WindowRenderer::new(display, force_opengl, window)
+	pub async fn set_window(&mut self, display: OwnedDisplayHandle, window: Window) -> Result<(), AppError> {
+		let window_renderer = WindowRenderer::new(display, window)
 			.await
 			.context("Unable to create window")?;
 		self.window_renderer = Some(window_renderer);
@@ -141,9 +136,9 @@ struct WindowRenderer {
 }
 
 impl WindowRenderer {
-	pub async fn new(display: OwnedDisplayHandle, force_opengl: bool, window: Window) -> Result<Self, AppError> {
+	pub async fn new(display: OwnedDisplayHandle, window: Window) -> Result<Self, AppError> {
 		let window = Arc::new(window);
-		let wgpu_renderer = WgpuRenderer::new(display, force_opengl, &window)
+		let wgpu_renderer = WgpuRenderer::new(display, &window)
 			.await
 			.context("Unable to create wgpu renderer")?;
 		let panels_renderer_shared = PanelsRendererShared::new(&wgpu_renderer);

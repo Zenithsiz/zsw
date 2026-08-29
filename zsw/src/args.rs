@@ -19,10 +19,6 @@ pub struct Args {
 	#[clap(long)]
 	pub log_file: Option<PathBuf>,
 
-	/// Forces usage of the OpenGL backend.
-	#[clap(long)]
-	pub force_opengl: bool,
-
 	/// Profile to start with
 	pub profile: ProfileName,
 }

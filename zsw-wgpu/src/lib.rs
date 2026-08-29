@@ -53,8 +53,8 @@ pub struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-	pub async fn new(display: OwnedDisplayHandle, force_opengl: bool, window: &Arc<Window>) -> Result<Self, AppError> {
-		let instance = self::create_instance(display, force_opengl).context("Unable to create instance")?;
+	pub async fn new(display: OwnedDisplayHandle, window: &Arc<Window>) -> Result<Self, AppError> {
+		let instance = self::create_instance(display).context("Unable to create instance")?;
 		let surface = self::create_surface(&instance, window.share())?;
 
 		let adapter = self::create_adapter(&instance, &surface)
@@ -290,12 +290,10 @@ fn create_surface(instance: &wgpu::Instance, window: Arc<Window>) -> Result<wgpu
 }
 
 /// Creates the instance
-fn create_instance(display: OwnedDisplayHandle, force_opengl: bool) -> Result<wgpu::Instance, AppError> {
-	let mut instance_desc = wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display));
-	if force_opengl {
-		instance_desc.backends = wgpu::Backends::GL;
-	}
+fn create_instance(display: OwnedDisplayHandle) -> Result<wgpu::Instance, AppError> {
+	let instance_desc = wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display));
 	tracing::debug!(?instance_desc, "Requesting wgpu instance");
+
 	let instance = wgpu::Instance::new(instance_desc);
 	tracing::debug!(?instance, "Created wgpu instance");
 
