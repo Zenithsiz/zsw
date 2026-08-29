@@ -33,7 +33,6 @@ pub struct Renderer {
 
 	panels: Panels,
 
-	// TODO: This should be mandatory
 	window_renderer: Option<WindowRenderer>,
 }
 
