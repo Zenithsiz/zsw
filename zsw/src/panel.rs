@@ -8,7 +8,7 @@ pub mod state;
 pub use self::{
 	geometry::PanelGeometry,
 	panels::Panels,
-	renderer::{PanelFadeShader, PanelShader, PanelSlideShader, PanelsRenderer, PanelsRendererShared},
+	renderer::{PanelFadeShader, PanelShader, PanelSlideShader, PanelsRenderer},
 	state::PanelState,
 };
 

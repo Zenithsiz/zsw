@@ -34,9 +34,26 @@ use {
 	zsw_wgpu::{FrameRender, WgpuRenderer},
 };
 
-/// Panels renderer shared
+/// Panels renderer
+///
+/// Responsible for rendering all panels.
+///
+/// Exists because all panels share a lot of state, such as
+/// their vertices and indices. Using this renderer means each
+/// panel instance only needs to store their own uniform buffer
+// Note: Vertices and indices are shared because all panels are
+//       rendered as just a quad. Their position is determined by
+//       the matrix sent in the uniform. Their UVs are also determined
+//       via the uniforms.
 #[derive(Debug)]
-pub struct PanelsRendererShared {
+pub struct PanelsRenderer {
+	/// Msaa frame-buffer
+	msaa_framebuffer: wgpu::TextureView,
+
+	/// Massa samples
+	// TODO: If we change this, we need to re-create the render pipelines too
+	msaa_samples: u32,
+
 	/// Render pipeline for each shader
 	// TODO: Prune ones that aren't used?
 	render_pipelines: Mutex<HashMap<RenderPipelineId, Arc<wgpu::RenderPipeline>>>,
@@ -57,69 +74,25 @@ pub struct PanelsRendererShared {
 	slide: OnceLock<PanelSlideShared>,
 }
 
-impl PanelsRendererShared {
-	/// Creates new layouts for the panels renderer
-	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
-		// Create the index / vertex buffer
-		let indices = self::create_indices(wgpu_renderer);
-		let vertices = self::create_vertices(wgpu_renderer);
-
-		Self {
-			render_pipelines: Mutex::new(HashMap::new()),
-			vertices,
-			indices,
-			none: OnceLock::new(),
-			fade: OnceLock::new(),
-			slide: OnceLock::new(),
-		}
-	}
-
-	/// Gets the shared none data
-	pub fn none(&self, wgpu_renderer: &WgpuRenderer) -> &PanelNoneShared {
-		self.none.get_or_init(|| PanelNoneShared::new(wgpu_renderer))
-	}
-
-	/// Gets the shared fade data
-	pub fn fade(&self, wgpu_renderer: &WgpuRenderer) -> &PanelFadeShared {
-		self.fade.get_or_init(|| PanelFadeShared::new(wgpu_renderer))
-	}
-
-	/// Gets the shared slide data
-	pub fn slide(&self, wgpu_renderer: &WgpuRenderer) -> &PanelSlideShared {
-		self.slide.get_or_init(|| PanelSlideShared::new(wgpu_renderer))
-	}
-}
-
-/// Panels renderer
-///
-/// Responsible for rendering all panels.
-///
-/// Exists because all panels share a lot of state, such as
-/// their vertices and indices. Using this renderer means each
-/// panel instance only needs to store their own uniform buffer
-// Note: Vertices and indices are shared because all panels are
-//       rendered as just a quad. Their position is determined by
-//       the matrix sent in the uniform. Their UVs are also determined
-//       via the uniforms.
-#[derive(Debug)]
-pub struct PanelsRenderer {
-	/// Msaa frame-buffer
-	msaa_framebuffer: wgpu::TextureView,
-
-	/// Massa samples
-	// TODO: If we change this, we need to re-create the render pipelines too
-	msaa_samples: u32,
-}
-
 impl PanelsRenderer {
 	/// Creates a new renderer for the panels
 	pub fn new(wgpu_renderer: &WgpuRenderer, msaa_samples: u32) -> Result<Self, AppError> {
 		// Create the framebuffer
 		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_renderer.surface_size, msaa_samples);
 
+		// Create the index / vertex buffer
+		let indices = self::create_indices(wgpu_renderer);
+		let vertices = self::create_vertices(wgpu_renderer);
+
 		Ok(Self {
 			msaa_framebuffer,
 			msaa_samples,
+			render_pipelines: Mutex::new(HashMap::new()),
+			vertices,
+			indices,
+			none: OnceLock::new(),
+			fade: OnceLock::new(),
+			slide: OnceLock::new(),
 		})
 	}
 
@@ -136,7 +109,6 @@ impl PanelsRenderer {
 		window_geometry: Rect<i32, u32>,
 		frame: &mut FrameRender,
 		panels: &mut Panels,
-		panels_shared: &PanelsRendererShared,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match self.msaa_samples {
@@ -180,14 +152,13 @@ impl PanelsRenderer {
 		let mut render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
 
 		// Set our shared indices and vertices
-		render_pass.set_index_buffer(panels_shared.indices.slice(..), wgpu::IndexFormat::Uint32);
-		render_pass.set_vertex_buffer(0, panels_shared.vertices.slice(..));
+		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
 		// Then render all panels simultaneously
 		for panel in panels.get_all() {
 			self.render_panel(
 				wgpu_renderer,
-				panels_shared,
 				frame.surface_size,
 				window_geometry,
 				&mut render_pass,
@@ -202,7 +173,7 @@ impl PanelsRenderer {
 	fn render_panel(
 		&self,
 		wgpu_renderer: &WgpuRenderer,
-		panels_shared: &PanelsRendererShared,
+
 		surface_size: PhysicalSize<u32>,
 		window_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
@@ -237,23 +208,23 @@ impl PanelsRenderer {
 			}),
 		};
 
-		let render_pipeline = match panels_shared.render_pipelines.lock().entry(render_pipeline_id) {
+		let render_pipeline = match self.render_pipelines.lock().entry(render_pipeline_id) {
 			hash_map::Entry::Occupied(entry) => entry.get().share(),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
 					PanelState::None(_) => {
-						let none = panels_shared.none(wgpu_renderer);
+						let none = self.none.get_or_init(|| PanelNoneShared::new(wgpu_renderer));
 						&[Some(&none.geometry_uniforms_bind_group_layout)] as &[_]
 					},
 					PanelState::Fade(_) => {
-						let fade = panels_shared.fade(wgpu_renderer);
+						let fade = self.fade.get_or_init(|| PanelFadeShared::new(wgpu_renderer));
 						&[
 							Some(&fade.images.geometry_uniforms_bind_group_layout),
 							Some(fade.images.image_bind_group_layout(wgpu_renderer)),
 						]
 					},
 					PanelState::Slide(_) => {
-						let slide = panels_shared.slide(wgpu_renderer);
+						let slide = self.slide.get_or_init(|| PanelSlideShared::new(wgpu_renderer));
 						&[
 							Some(&slide.geometry_uniforms_bind_group_layout),
 							Some(slide.image_bind_group_layout(wgpu_renderer)),
@@ -278,22 +249,15 @@ impl PanelsRenderer {
 		render_pass.set_pipeline(&render_pipeline);
 
 		// Then render the panel
-		Self::render_panel_geometries(
-			wgpu_renderer,
-			panels_shared,
-			surface_size,
-			window_geometry,
-			render_pass,
-			panel,
-		);
+		self.render_panel_geometries(wgpu_renderer, surface_size, window_geometry, render_pass, panel);
 
 		Ok(())
 	}
 
 	/// Renders a panel's geometries
 	fn render_panel_geometries(
+		&self,
 		wgpu_renderer: &WgpuRenderer,
-		panels_shared: &PanelsRendererShared,
 		surface_size: PhysicalSize<u32>,
 		window_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
@@ -307,9 +271,8 @@ impl PanelsRenderer {
 			}
 
 			// Render the panel geometry
-			Self::render_panel_geometry(
+			self.render_panel_geometry(
 				wgpu_renderer,
-				panels_shared,
 				surface_size,
 				&mut panel.state,
 				window_geometry,
@@ -321,8 +284,8 @@ impl PanelsRenderer {
 
 	/// Renders a panel's geometry
 	pub fn render_panel_geometry(
+		&self,
 		wgpu_renderer: &WgpuRenderer,
-		shared: &PanelsRendererShared,
 		surface_size: PhysicalSize<u32>,
 		state: &mut PanelState,
 		window_geometry: Rect<i32, u32>,
@@ -330,26 +293,23 @@ impl PanelsRenderer {
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
 		match state {
-			PanelState::None(state) => Self::render_panel_none_geometry(
+			PanelState::None(state) => self.render_panel_none_geometry(
 				wgpu_renderer,
 				render_pass,
-				shared.none(wgpu_renderer),
 				panel_geometry,
 				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
 				state,
 			),
-			PanelState::Fade(state) => Self::render_panel_fade_geometry(
+			PanelState::Fade(state) => self.render_panel_fade_geometry(
 				wgpu_renderer,
 				render_pass,
-				shared.fade(wgpu_renderer),
 				panel_geometry,
 				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
 				state,
 			),
-			PanelState::Slide(state) => Self::render_panel_slide_geometry(
+			PanelState::Slide(state) => self.render_panel_slide_geometry(
 				wgpu_renderer,
 				render_pass,
-				shared.slide(wgpu_renderer),
 				panel_geometry,
 				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
 				state,
@@ -359,17 +319,17 @@ impl PanelsRenderer {
 
 	/// Renders a panel none's geometry
 	fn render_panel_none_geometry(
+		&self,
 		wgpu_renderer: &WgpuRenderer,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		shared: &PanelNoneShared,
 		panel_geometry: &mut PanelGeometry,
 		pos_matrix: Transform3D<f32>,
 		state: &PanelNoneState,
 	) {
-		let geometry_uniforms = panel_geometry
-			.shared
-			.none_or_insert_default()
-			.uniforms(wgpu_renderer, shared);
+		let geometry_uniforms = panel_geometry.shared.none_or_insert_default().uniforms(
+			wgpu_renderer,
+			self.none.get_or_init(|| PanelNoneShared::new(wgpu_renderer)),
+		);
 
 		Self::write_uniforms(wgpu_renderer, &geometry_uniforms.buffer, uniform::None {
 			pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
@@ -383,9 +343,9 @@ impl PanelsRenderer {
 	}
 
 	fn render_panel_fade_geometry(
+		&self,
 		wgpu_renderer: &WgpuRenderer,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		shared: &PanelFadeShared,
 		panel_geometry: &mut PanelGeometry,
 		pos_matrix: Transform3D<f32>,
 		state: &PanelFadeState,
@@ -457,6 +417,7 @@ impl PanelsRenderer {
 			next: image_uniforms(state.images().next.as_ref(), PanelFadeImageSlot::Next),
 		};
 
+		let shared = self.fade.get_or_init(|| PanelFadeShared::new(wgpu_renderer));
 		let geometry_uniforms = panel_geometry
 			.shared
 			.fade_or_insert_default()
@@ -492,9 +453,9 @@ impl PanelsRenderer {
 
 	/// Renders a panel slide's geometry
 	fn render_panel_slide_geometry(
+		&self,
 		wgpu_renderer: &WgpuRenderer,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		shared: &PanelSlideShared,
 		panel_geometry: &mut PanelGeometry,
 		pos_matrix: Transform3D<f32>,
 		state: &mut PanelSlideState,
@@ -534,6 +495,7 @@ impl PanelsRenderer {
 			}
 
 			// Bind the geometry uniforms
+			let shared = self.slide.get_or_init(|| PanelSlideShared::new(wgpu_renderer));
 			let geometry_uniforms =
 				panel_geometry
 					.shared

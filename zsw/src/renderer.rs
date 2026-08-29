@@ -4,7 +4,7 @@ use {
 	crate::{
 		AppEvent,
 		menu::Menu,
-		panel::{PanelState, Panels, PanelsRenderer, PanelsRendererShared},
+		panel::{PanelState, Panels, PanelsRenderer},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
 	},
@@ -125,12 +125,10 @@ struct WindowRenderer {
 	window:      Arc<Window>,
 	window_size: PhysicalSize<u32>,
 
-	wgpu_renderer:          WgpuRenderer,
-	// TODO: Merge both of these?
-	panels_renderer:        PanelsRenderer,
-	panels_renderer_shared: PanelsRendererShared,
-	egui:                   Egui,
-	menu:                   Menu,
+	wgpu_renderer:   WgpuRenderer,
+	panels_renderer: PanelsRenderer,
+	egui:            Egui,
+	menu:            Menu,
 
 	queued_resize: Option<PhysicalSize<u32>>,
 }
@@ -141,7 +139,6 @@ impl WindowRenderer {
 		let wgpu_renderer = WgpuRenderer::new(display, &window)
 			.await
 			.context("Unable to create wgpu renderer")?;
-		let panels_renderer_shared = PanelsRendererShared::new(&wgpu_renderer);
 
 		let msaa_samples = 4;
 		let panels_renderer =
@@ -155,7 +152,6 @@ impl WindowRenderer {
 			window_size: PhysicalSize::new(0, 0),
 			wgpu_renderer,
 			panels_renderer,
-			panels_renderer_shared,
 			egui,
 			menu: Menu::new(),
 			queued_resize: None,
@@ -189,13 +185,7 @@ impl WindowRenderer {
 		let mut frame = self.wgpu_renderer.start_render().context("Unable to start frame")?;
 
 		self.panels_renderer
-			.render(
-				&self.wgpu_renderer,
-				window_geometry,
-				&mut frame,
-				panels,
-				&self.panels_renderer_shared,
-			)
+			.render(&self.wgpu_renderer, window_geometry, &mut frame, panels)
 			.context("Unable to render panels")?;
 
 		self.render_egui(
