@@ -21,6 +21,7 @@ use {
 	},
 	app_error::Context,
 	zsw_util::AppError,
+	zsw_wgpu::WgpuRenderer,
 };
 
 /// Panels
@@ -52,6 +53,7 @@ impl Panels {
 	/// If a profile already exists, unloads it's panels first
 	pub fn set_profile(
 		&mut self,
+		wgpu_renderer: &WgpuRenderer,
 		profile_name: ProfileName,
 		profile: &Profile,
 		playlists: &Playlists,
@@ -88,9 +90,15 @@ impl Panels {
 						ProfilePanelSlideDir::DownUp => PanelSlideDir::DownUp,
 					};
 
-					let state = PanelSlideState::new(shader.duration, playlist_player, dir, match shader.inner {
-						ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
-					});
+					let state = PanelSlideState::new(
+						wgpu_renderer,
+						shader.duration,
+						playlist_player,
+						dir,
+						match shader.inner {
+							ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
+						},
+					);
 
 					PanelState::Slide(state)
 				},

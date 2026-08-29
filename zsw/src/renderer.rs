@@ -30,10 +30,9 @@ use {
 pub struct Renderer {
 	event_loop_proxy: EventLoopProxy<AppEvent>,
 
-	playlists: Playlists,
-	profiles:  Profiles,
-
-	panels: Panels,
+	playlists:    Playlists,
+	profiles:     Profiles,
+	profile_name: ProfileName,
 
 	window_renderer: Option<WindowRenderer>,
 }
@@ -45,19 +44,11 @@ impl Renderer {
 		playlists: Playlists,
 		profiles: Profiles,
 	) -> Result<Self, AppError> {
-		let mut panels = Panels::new();
-		let profile = profiles
-			.get(&profile_name)
-			.with_context(|| format!("Unknown profile {profile_name:?}"))?;
-		panels
-			.set_profile(profile_name, profile, &playlists)
-			.context("Unable to set profile")?;
-
 		Ok(Self {
 			event_loop_proxy,
 			playlists,
 			profiles,
-			panels,
+			profile_name,
 			window_renderer: None,
 		})
 	}
@@ -69,12 +60,7 @@ impl Renderer {
 			.as_mut()
 			.context("Cannot render without a window")?;
 
-		window_renderer.render(
-			&mut self.panels,
-			&self.playlists,
-			&self.profiles,
-			&self.event_loop_proxy,
-		)?;
+		window_renderer.render(&self.playlists, &self.profiles, &self.event_loop_proxy)?;
 
 		// After rendering, request another redraw
 		window_renderer.window.request_redraw();
@@ -110,7 +96,7 @@ impl Renderer {
 
 	/// Sets the window of this renderer
 	pub async fn set_window(&mut self, display: OwnedDisplayHandle, window: Window) -> Result<(), AppError> {
-		let window_renderer = WindowRenderer::new(display, window)
+		let window_renderer = WindowRenderer::new(display, window, &self.profiles, &self.profile_name, &self.playlists)
 			.await
 			.context("Unable to create window")?;
 		self.window_renderer = Some(window_renderer);
@@ -126,6 +112,7 @@ struct WindowRenderer {
 	window_size: PhysicalSize<u32>,
 
 	wgpu_renderer:   WgpuRenderer,
+	panels:          Panels,
 	panels_renderer: PanelsRenderer,
 	egui:            Egui,
 	menu:            Menu,
@@ -134,7 +121,13 @@ struct WindowRenderer {
 }
 
 impl WindowRenderer {
-	pub async fn new(display: OwnedDisplayHandle, window: Window) -> Result<Self, AppError> {
+	pub async fn new(
+		display: OwnedDisplayHandle,
+		window: Window,
+		profiles: &Profiles,
+		profile_name: &ProfileName,
+		playlists: &Playlists,
+	) -> Result<Self, AppError> {
 		let window = Arc::new(window);
 		let wgpu_renderer = WgpuRenderer::new(display, &window)
 			.await
@@ -145,12 +138,21 @@ impl WindowRenderer {
 			PanelsRenderer::new(&wgpu_renderer, msaa_samples).context("Unable to create panels renderer")?;
 		let egui = Egui::new(&wgpu_renderer, window.share());
 
+		let mut panels = Panels::new();
+		let profile = profiles
+			.get(profile_name)
+			.with_context(|| format!("Unknown profile {profile_name:?}"))?;
+		panels
+			.set_profile(&wgpu_renderer, profile_name.clone(), profile, playlists)
+			.context("Unable to set profile")?;
+
 		Ok(Self {
 			window,
 			// Note: We typically always get a resize event before the first
 			//       frame, so this size isn't ever visible.
 			window_size: PhysicalSize::new(0, 0),
 			wgpu_renderer,
+			panels,
 			panels_renderer,
 			egui,
 			menu: Menu::new(),
@@ -165,7 +167,6 @@ impl WindowRenderer {
 	/// [`Self::next_frame`].
 	pub fn render(
 		&mut self,
-		panels: &mut Panels,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
@@ -185,17 +186,10 @@ impl WindowRenderer {
 		let mut frame = self.wgpu_renderer.start_render().context("Unable to start frame")?;
 
 		self.panels_renderer
-			.render(&self.wgpu_renderer, window_geometry, &mut frame, panels)
+			.render(&self.wgpu_renderer, window_geometry, &mut frame, &mut self.panels)
 			.context("Unable to render panels")?;
 
-		self.render_egui(
-			window_geometry,
-			panels,
-			playlists,
-			profiles,
-			event_loop_proxy,
-			&mut frame,
-		);
+		self.render_egui(window_geometry, playlists, profiles, event_loop_proxy, &mut frame);
 
 		self.wgpu_renderer
 			.finish_render(frame)
@@ -208,7 +202,6 @@ impl WindowRenderer {
 	fn render_egui(
 		&mut self,
 		window_geometry: Rect<i32, u32>,
-		panels: &mut Panels,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
@@ -221,7 +214,7 @@ impl WindowRenderer {
 				&self.wgpu_renderer,
 				playlists,
 				profiles,
-				panels,
+				&mut self.panels,
 				event_loop_proxy,
 				window_geometry,
 			);
@@ -232,7 +225,7 @@ impl WindowRenderer {
 				return;
 			};
 			let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
-			for panel in panels.get_all() {
+			for panel in self.panels.get_all() {
 				// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 				if ctx.is_pointer_over_egui() ||
 					!panel

@@ -67,7 +67,7 @@ impl Menu {
 
 			match self.cur_tab {
 				Tab::Panels => panels::draw_panels_tab(ui, wgpu_renderer, panels, window_geometry),
-				Tab::Profiles => profiles::draw_profiles_tab(ui, playlists, profiles, panels),
+				Tab::Profiles => profiles::draw_profiles_tab(ui, wgpu_renderer, playlists, profiles, panels),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}
 		});

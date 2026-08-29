@@ -26,7 +26,6 @@ use {
 	std::{
 		borrow::Cow,
 		collections::{HashMap, hash_map},
-		sync::OnceLock,
 	},
 	wgpu::util::DeviceExt,
 	winit::dpi::PhysicalSize,
@@ -64,14 +63,9 @@ pub struct PanelsRenderer {
 	/// Index buffer
 	indices: wgpu::Buffer,
 
-	/// None
-	none: OnceLock<PanelNoneShared>,
-
-	/// Fade
-	fade: OnceLock<PanelFadeShared>,
-
-	/// Slide
-	slide: OnceLock<PanelSlideShared>,
+	none_shared:  PanelNoneShared,
+	fade_shared:  PanelFadeShared,
+	slide_shared: PanelSlideShared,
 }
 
 impl PanelsRenderer {
@@ -90,9 +84,9 @@ impl PanelsRenderer {
 			render_pipelines: HashMap::new(),
 			vertices,
 			indices,
-			none: OnceLock::new(),
-			fade: OnceLock::new(),
-			slide: OnceLock::new(),
+			none_shared: PanelNoneShared::new(wgpu_renderer),
+			fade_shared: PanelFadeShared::new(wgpu_renderer),
+			slide_shared: PanelSlideShared::new(wgpu_renderer),
 		})
 	}
 
@@ -212,24 +206,15 @@ impl PanelsRenderer {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
-					PanelState::None(_) => {
-						let none = self.none.get_or_init(|| PanelNoneShared::new(wgpu_renderer));
-						&[Some(&none.geometry_uniforms_bind_group_layout)] as &[_]
-					},
-					PanelState::Fade(_) => {
-						let fade = self.fade.get_or_init(|| PanelFadeShared::new(wgpu_renderer));
-						&[
-							Some(&fade.images.geometry_uniforms_bind_group_layout),
-							Some(fade.images.image_bind_group_layout(wgpu_renderer)),
-						]
-					},
-					PanelState::Slide(_) => {
-						let slide = self.slide.get_or_init(|| PanelSlideShared::new(wgpu_renderer));
-						&[
-							Some(&slide.geometry_uniforms_bind_group_layout),
-							Some(slide.image_bind_group_layout(wgpu_renderer)),
-						]
-					},
+					PanelState::None(_) => &[Some(&self.none_shared.geometry_uniforms_bind_group_layout)] as &[_],
+					PanelState::Fade(_) => &[
+						Some(&self.fade_shared.images.geometry_uniforms_bind_group_layout),
+						Some(self.fade_shared.images.image_bind_group_layout(wgpu_renderer)),
+					],
+					PanelState::Slide(_) => &[
+						Some(&self.slide_shared.geometry_uniforms_bind_group_layout),
+						Some(self.slide_shared.image_bind_group_layout(wgpu_renderer)),
+					],
 				};
 
 				let render_pipeline = self::create_render_pipeline(
@@ -326,10 +311,10 @@ impl PanelsRenderer {
 		pos_matrix: Transform3D<f32>,
 		state: &PanelNoneState,
 	) {
-		let geometry_uniforms = panel_geometry.shared.none_or_insert_default().uniforms(
-			wgpu_renderer,
-			self.none.get_or_init(|| PanelNoneShared::new(wgpu_renderer)),
-		);
+		let geometry_uniforms = panel_geometry
+			.shared
+			.none_or_insert_default()
+			.uniforms(wgpu_renderer, &self.none_shared);
 
 		Self::write_uniforms(wgpu_renderer, &geometry_uniforms.buffer, uniform::None {
 			pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
@@ -417,12 +402,11 @@ impl PanelsRenderer {
 			next: image_uniforms(state.images().next.as_ref(), PanelFadeImageSlot::Next),
 		};
 
-		let shared = self.fade.get_or_init(|| PanelFadeShared::new(wgpu_renderer));
 		let geometry_uniforms = panel_geometry
 			.shared
 			.fade_or_insert_default()
 			.images
-			.uniforms(wgpu_renderer, &shared.images);
+			.uniforms(wgpu_renderer, &self.fade_shared.images);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 		match state.shader() {
 			PanelFadeShader::Basic =>
@@ -445,8 +429,13 @@ impl PanelsRenderer {
 
 		// Bind the image uniforms
 		let sampler = state.images().image_sampler(wgpu_renderer);
-		render_pass.set_bind_group(1, state.images().bind_group(wgpu_renderer, sampler, &shared.images), &[
-		]);
+		render_pass.set_bind_group(
+			1,
+			state
+				.images()
+				.bind_group(wgpu_renderer, sampler, &self.fade_shared.images),
+			&[],
+		);
 
 		render_pass.draw_indexed(0..6, 0, 0..1);
 	}
@@ -495,12 +484,11 @@ impl PanelsRenderer {
 			}
 
 			// Bind the geometry uniforms
-			let shared = self.slide.get_or_init(|| PanelSlideShared::new(wgpu_renderer));
 			let geometry_uniforms =
 				panel_geometry
 					.shared
 					.slide_or_insert_default()
-					.uniforms(wgpu_renderer, shared, image_idx);
+					.uniforms(wgpu_renderer, &self.slide_shared, image_idx);
 			render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 
 			let ratio = match state.dir().is_horizontal() {
@@ -524,8 +512,8 @@ impl PanelsRenderer {
 
 			cur_global_offset += ratio * 2.0;
 
-			let sampler = state.image_sampler(wgpu_renderer);
-			render_pass.set_bind_group(1, image.bind_group(wgpu_renderer, sampler, shared), &[]);
+			let sampler = state.image_sampler();
+			render_pass.set_bind_group(1, image.bind_group(wgpu_renderer, sampler, &self.slide_shared), &[]);
 
 			render_pass.draw_indexed(0..6, 0, 0..1);
 		}
