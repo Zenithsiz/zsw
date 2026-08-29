@@ -20,12 +20,9 @@ pub struct Config {
 	pub log_file: Option<PathBuf>,
 
 	/// Transparent windows
+	// TODO: Do we still need this?
 	#[serde(default)]
 	pub transparent_windows: bool,
-
-	/// Default
-	#[serde(default)]
-	pub default: ConfigDefault,
 }
 
 impl Config {
@@ -76,22 +73,6 @@ impl Default for Config {
 		Self {
 			log_file:            None,
 			transparent_windows: false,
-			default:             ConfigDefault::default(),
 		}
-	}
-}
-
-/// Config default
-#[derive(Clone, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct ConfigDefault {
-	/// Profile
-	pub profile: Option<String>,
-}
-
-#[expect(clippy::derivable_impls, reason = "We want to be explicit with defaults")]
-impl Default for ConfigDefault {
-	fn default() -> Self {
-		Self { profile: None }
 	}
 }

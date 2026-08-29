@@ -92,7 +92,7 @@ async fn run() -> Result<(), AppError> {
 
 	// Initialize the app
 	let mut app = WinitApp::new(
-		&args,
+		args,
 		config,
 		&dirs,
 		event_loop.owned_display_handle(),
@@ -143,7 +143,7 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 impl WinitApp {
 	/// Creates a new app
 	pub async fn new(
-		args: &Args,
+		args: Args,
 		config: Config,
 		dirs: &Dirs,
 		display: OwnedDisplayHandle,
@@ -159,7 +159,7 @@ impl WinitApp {
 			.context("Unable to create profiles")?;
 
 		let renderer = Renderer::new(
-			&config,
+			args.profile,
 			event_loop_proxy,
 			wgpu,
 			panels_renderer_shared,

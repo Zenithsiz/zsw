@@ -3,7 +3,6 @@
 use {
 	crate::{
 		AppEvent,
-		config::Config,
 		menu::Menu,
 		panel::{PanelState, Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
@@ -44,7 +43,7 @@ pub struct Renderer {
 
 impl Renderer {
 	pub fn new(
-		config: &Config,
+		profile_name: ProfileName,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
 		wgpu: Wgpu,
 		panels_renderer_shared: PanelsRendererShared,
@@ -52,15 +51,12 @@ impl Renderer {
 		profiles: Profiles,
 	) -> Result<Self, AppError> {
 		let mut panels = Panels::new();
-		if let Some(default_profile_name) = &config.default.profile {
-			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();
-			let default_profile = profiles
-				.get(&default_profile_name)
-				.with_context(|| format!("Unknown profile {:?}", config.default.profile))?;
-			panels
-				.set_profile(default_profile_name, default_profile, &playlists)
-				.context("Unable to set profile")?;
-		}
+		let profile = profiles
+			.get(&profile_name)
+			.with_context(|| format!("Unknown profile {profile_name:?}"))?;
+		panels
+			.set_profile(profile_name, profile, &playlists)
+			.context("Unable to set profile")?;
 
 		Ok(Self {
 			event_loop_proxy,

@@ -1,6 +1,6 @@
 //! Arguments
 
-use std::path::PathBuf;
+use {crate::profile::ProfileName, std::path::PathBuf};
 
 /// Arguments
 #[derive(Debug)]
@@ -22,4 +22,7 @@ pub struct Args {
 	/// Forces usage of the OpenGL backend.
 	#[clap(long)]
 	pub force_opengl: bool,
+
+	/// Profile to start with
+	pub profile: ProfileName,
 }
