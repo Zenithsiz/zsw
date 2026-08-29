@@ -107,7 +107,7 @@ impl WgpuRenderer {
 
 	/// Finishes rendering a frame.
 	///
-	/// Reconfigures if the frame as suboptiomal
+	/// Reconfigures if the frame as suboptimal
 	pub fn finish_render(&mut self, wgpu: &Wgpu, frame: FrameRender) -> Result<(), AppError> {
 		// Submit everything to the queue and present the surface's texture
 		_ = wgpu.queue.submit([frame.encoder.finish()]);
@@ -115,7 +115,7 @@ impl WgpuRenderer {
 
 		if frame.suboptimal {
 			self.reconfigure(wgpu)
-				.context("Unable to reconfigure wgpu after a suboptiomal frame")?;
+				.context("Unable to reconfigure wgpu after a suboptimal frame")?;
 		}
 
 		Ok(())

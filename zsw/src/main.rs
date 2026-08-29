@@ -31,12 +31,7 @@ use {
 	clap::Parser,
 	core::cell::LazyCell,
 	directories::ProjectDirs,
-	std::{
-		collections::BTreeMap,
-		fs,
-		process::ExitCode,
-		sync::{Arc, mpsc},
-	},
+	std::{collections::BTreeMap, fs, process::ExitCode, sync::Arc},
 	winit::{
 		application::ApplicationHandler,
 		event::WindowEvent,
@@ -113,8 +108,8 @@ async fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
-	config:            Config,
-	renderer_event_tx: mpsc::Sender<renderer::Event>,
+	renderer: Renderer,
+	config:   Config,
 }
 
 impl ApplicationHandler<AppEvent> for WinitApp {
@@ -139,9 +134,9 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 	}
 
 	fn window_event(&mut self, _event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-		_ = self
-			.renderer_event_tx
-			.send(renderer::Event::WindowEvent { window_id, event });
+		if let Err(err) = self.renderer.handle_window_event(window_id, &event) {
+			tracing::warn!(?window_id, ?event, ?err, "Unable to handle window event");
+		}
 	}
 }
 
@@ -163,36 +158,30 @@ impl WinitApp {
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
 
-		// TODO: Make the renderer create the menu and maybe the renderer rx/tx too?
-		let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
-		let mut renderer = Renderer::new(
+		let renderer = Renderer::new(
 			&config,
 			event_loop_proxy,
 			wgpu,
 			panels_renderer_shared,
 			playlists,
 			profiles,
-			renderer_event_rx,
 		)
 		.context("Unable to build renderer")?;
-		zsw_util::spawn_task("Renderer", move || renderer.render());
 
-		Ok(Self {
-			config,
-			renderer_event_tx,
-		})
+		Ok(Self { renderer, config })
 	}
 
 	/// Initializes the window
-	pub fn init_window(&self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
+	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let window_attrs = WindowAttributes::default()
 			.with_title("zsw")
 			.with_transparent(self.config.transparent_windows);
 		let window = event_loop
 			.create_window(window_attrs)
 			.context("Unable to create window")?;
-
-		_ = self.renderer_event_tx.send(renderer::Event::WindowAdd { window });
+		self.renderer
+			.set_window(window)
+			.context("Unable to set renderer window")?;
 
 		Ok(())
 	}

@@ -13,7 +13,7 @@ use {
 	chrono::TimeDelta,
 	core::clone::Share,
 	euclid::default::Point2D,
-	std::sync::{Arc, mpsc},
+	std::sync::Arc,
 	winit::{
 		dpi::PhysicalSize,
 		event::WindowEvent,
@@ -27,6 +27,7 @@ use {
 
 /// Renderer
 // TODO: Package some of these together
+#[derive(Debug)]
 pub struct Renderer {
 	event_loop_proxy: EventLoopProxy<AppEvent>,
 
@@ -35,8 +36,6 @@ pub struct Renderer {
 
 	playlists: Playlists,
 	profiles:  Profiles,
-
-	renderer_event_rx: mpsc::Receiver<Event>,
 
 	panels: Panels,
 
@@ -51,7 +50,6 @@ impl Renderer {
 		panels_renderer_shared: PanelsRendererShared,
 		playlists: Playlists,
 		profiles: Profiles,
-		renderer_event_rx: mpsc::Receiver<Event>,
 	) -> Result<Self, AppError> {
 		let mut panels = Panels::new();
 		if let Some(default_profile_name) = &config.default.profile {
@@ -70,66 +68,55 @@ impl Renderer {
 			panels_renderer_shared,
 			playlists,
 			profiles,
-			renderer_event_rx,
 			panels,
 			window_renderer: None,
 		})
 	}
 
 	/// Renders all windows
-	pub fn render(&mut self) -> Result<(), AppError> {
-		loop {
-			while let Ok(event) = self.renderer_event_rx.try_recv() {
-				self.handle_event(event)?;
-			}
+	fn render(&mut self) -> Result<(), AppError> {
+		let Some(window_renderer) = &mut self.window_renderer else {
+			return Ok(());
+		};
 
-			match &mut self.window_renderer {
-				Some(window_renderer) => window_renderer.render(
-					&self.wgpu,
-					&mut self.panels,
-					&self.panels_renderer_shared,
-					&self.playlists,
-					&self.profiles,
-					&self.event_loop_proxy,
-				)?,
-				None => {
-					let Ok(event) = self.renderer_event_rx.recv() else {
-						break;
-					};
-					self.handle_event(event)?;
-				},
-			}
+		window_renderer.render(
+			&self.wgpu,
+			&mut self.panels,
+			&self.panels_renderer_shared,
+			&self.playlists,
+			&self.profiles,
+			&self.event_loop_proxy,
+		)?;
+
+		// After rendering, request another redraw
+		window_renderer.window.request_redraw();
+
+		Ok(())
+	}
+
+	/// Handles a window event
+	pub fn handle_window_event(&mut self, _window_id: WindowId, event: &WindowEvent) -> Result<(), AppError> {
+		let window_renderer = self
+			.window_renderer
+			.as_mut()
+			.context("Received a window event with no window")?;
+		if window_renderer.egui.handle_event(event) {
+			return Ok(());
+		}
+
+		match *event {
+			WindowEvent::Resized(size) => window_renderer.queued_resize = Some(size),
+			WindowEvent::RedrawRequested => self.render()?,
+			_ => (),
 		}
 
 		Ok(())
 	}
 
-	/// Handles an event
-	fn handle_event(&mut self, event: Event) -> Result<(), AppError> {
-		tracing::trace!("Received renderer event: {event:?}");
-		match event {
-			Event::WindowEvent { window_id, event } => {
-				let Some(window_renderer) = &mut self.window_renderer else {
-					tracing::warn!(?window_id, ?event, "Received a window event with no active window");
-					return Ok(());
-				};
-				if window_renderer.egui.handle_event(&event) {
-					return Ok(());
-				}
-
-				#[expect(clippy::single_match, reason = "We'll add more in the future")]
-				match event {
-					WindowEvent::Resized(size) => window_renderer.queued_resize = Some(size),
-					_ => (),
-				}
-			},
-
-			Event::WindowAdd { window } => {
-				let window_renderer = WindowRenderer::new(&self.wgpu, window).context("Unable to create window")?;
-				self.window_renderer = Some(window_renderer);
-			},
-		}
-
+	/// Sets the window of this renderer
+	pub fn set_window(&mut self, window: Window) -> Result<(), AppError> {
+		let window_renderer = WindowRenderer::new(&self.wgpu, window).context("Unable to create window")?;
+		self.window_renderer = Some(window_renderer);
 
 		Ok(())
 	}
@@ -331,17 +318,4 @@ impl WindowRenderer {
 			}
 		})
 	}
-}
-
-/// Renderer event
-#[derive(Debug)]
-pub enum Event {
-	/// Window event
-	WindowEvent {
-		window_id: WindowId,
-		event:     WindowEvent,
-	},
-
-	/// Add new window
-	WindowAdd { window: Window },
 }
