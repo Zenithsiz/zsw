@@ -13,10 +13,15 @@ use {
 	core::clone::Share,
 	euclid::default::Point2D,
 	std::sync::Arc,
-	winit::{dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoopProxy, window::Window},
+	winit::{
+		dpi::PhysicalSize,
+		event::WindowEvent,
+		event_loop::{EventLoopProxy, OwnedDisplayHandle},
+		window::Window,
+	},
 	zsw_egui::Egui,
 	zsw_util::{AppError, Rect},
-	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
+	zsw_wgpu::{FrameRender, WgpuRenderer},
 };
 
 /// Renderer
@@ -24,8 +29,6 @@ use {
 #[derive(Debug)]
 pub struct Renderer {
 	event_loop_proxy: EventLoopProxy<AppEvent>,
-
-	wgpu: Wgpu,
 
 	playlists: Playlists,
 	profiles:  Profiles,
@@ -39,7 +42,6 @@ impl Renderer {
 	pub fn new(
 		profile_name: ProfileName,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
-		wgpu: Wgpu,
 		playlists: Playlists,
 		profiles: Profiles,
 	) -> Result<Self, AppError> {
@@ -53,7 +55,6 @@ impl Renderer {
 
 		Ok(Self {
 			event_loop_proxy,
-			wgpu,
 			playlists,
 			profiles,
 			panels,
@@ -108,8 +109,13 @@ impl Renderer {
 	}
 
 	/// Sets the window of this renderer
-	pub async fn set_window(&mut self, window: Window) -> Result<(), AppError> {
-		let window_renderer = WindowRenderer::new(&self.wgpu, window)
+	pub async fn set_window(
+		&mut self,
+		display: OwnedDisplayHandle,
+		force_opengl: bool,
+		window: Window,
+	) -> Result<(), AppError> {
+		let window_renderer = WindowRenderer::new(display, force_opengl, window)
 			.await
 			.context("Unable to create window")?;
 		self.window_renderer = Some(window_renderer);
@@ -135,9 +141,9 @@ struct WindowRenderer {
 }
 
 impl WindowRenderer {
-	pub async fn new(wgpu: &Wgpu, window: Window) -> Result<Self, AppError> {
+	pub async fn new(display: OwnedDisplayHandle, force_opengl: bool, window: Window) -> Result<Self, AppError> {
 		let window = Arc::new(window);
-		let wgpu_renderer = WgpuRenderer::new(&window, wgpu)
+		let wgpu_renderer = WgpuRenderer::new(display, force_opengl, &window)
 			.await
 			.context("Unable to create wgpu renderer")?;
 		let panels_renderer_shared = PanelsRendererShared::new(&wgpu_renderer);

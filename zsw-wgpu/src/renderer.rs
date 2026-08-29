@@ -1,19 +1,21 @@
 //! Wgpu renderer
 
 use {
-	super::Wgpu,
 	app_error::{Context, bail},
 	core::clone::Share,
 	image::DynamicImage,
 	std::sync::Arc,
 	wgpu::util::{self as wgpu_util, DeviceExt},
-	winit::{dpi::PhysicalSize, window::Window},
+	winit::{dpi::PhysicalSize, event_loop::OwnedDisplayHandle, window::Window},
 	zsw_util::AppError,
 };
 
 /// Wgpu renderer
 #[derive(Debug)]
 pub struct WgpuRenderer {
+	/// Instance
+	pub instance: wgpu::Instance,
+
 	/// Adapter
 	pub adapter: wgpu::Adapter,
 
@@ -49,11 +51,11 @@ pub struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-	pub async fn new(window: &Arc<Window>, wgpu: &Wgpu) -> Result<Self, AppError> {
-		// Create the surface
-		let surface = self::create_surface(wgpu, window.share())?;
+	pub async fn new(display: OwnedDisplayHandle, force_opengl: bool, window: &Arc<Window>) -> Result<Self, AppError> {
+		let instance = self::create_instance(display, force_opengl).context("Unable to create instance")?;
+		let surface = self::create_surface(&instance, window.share())?;
 
-		let adapter = self::create_adapter(&wgpu.instance, &surface)
+		let adapter = self::create_adapter(&instance, &surface)
 			.await
 			.context("Unable to create adaptor")?;
 		let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
@@ -67,6 +69,7 @@ impl WgpuRenderer {
 			.context("Unable to configure window surface")?;
 
 		Ok(Self {
+			instance,
 			adapter,
 			device,
 			queue,
@@ -275,18 +278,27 @@ fn configure_window_surface(
 }
 
 /// Creates the surface
-fn create_surface(wgpu: &Wgpu, window: Arc<Window>) -> Result<wgpu::Surface<'static>, AppError> {
+fn create_surface(instance: &wgpu::Instance, window: Arc<Window>) -> Result<wgpu::Surface<'static>, AppError> {
 	// Create the surface
 	tracing::debug!(?window, "Requesting wgpu surface");
-	let surface = wgpu
-		.instance
-		.create_surface(window)
-		.context("Unable to request surface")?;
+	let surface = instance.create_surface(window).context("Unable to request surface")?;
 	tracing::debug!(?surface, "Created wgpu surface");
 
 	Ok(surface)
 }
 
+/// Creates the instance
+fn create_instance(display: OwnedDisplayHandle, force_opengl: bool) -> Result<wgpu::Instance, AppError> {
+	let mut instance_desc = wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display));
+	if force_opengl {
+		instance_desc.backends = wgpu::Backends::GL;
+	}
+	tracing::debug!(?instance_desc, "Requesting wgpu instance");
+	let instance = wgpu::Instance::new(instance_desc);
+	tracing::debug!(?instance, "Created wgpu instance");
+
+	Ok(instance)
+}
 
 /// Creates the device
 async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), AppError> {

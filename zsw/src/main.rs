@@ -40,7 +40,6 @@ use {
 		window::{WindowAttributes, WindowId},
 	},
 	zsw_util::AppError,
-	zsw_wgpu::Wgpu,
 	zutil_logger::Logger,
 };
 
@@ -107,8 +106,12 @@ fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
+	args:   Args,
+	config: Config,
+
+	display: OwnedDisplayHandle,
+
 	renderer: Renderer,
-	config:   Config,
 }
 
 impl ApplicationHandler<AppEvent> for WinitApp {
@@ -148,15 +151,19 @@ impl WinitApp {
 		display: OwnedDisplayHandle,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
-		let wgpu = Wgpu::new(display, args.force_opengl).context("Unable to initialize wgpu")?;
 		let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
 
-		let renderer = Renderer::new(args.profile, event_loop_proxy, wgpu, playlists, profiles)
+		let renderer = Renderer::new(args.profile.clone(), event_loop_proxy, playlists, profiles)
 			.context("Unable to build renderer")?;
 
-		Ok(Self { renderer, config })
+		Ok(Self {
+			args,
+			config,
+			display,
+			renderer,
+		})
 	}
 
 	/// Initializes the window
@@ -168,7 +175,7 @@ impl WinitApp {
 			.create_window(window_attrs)
 			.context("Unable to create window")?;
 		self.renderer
-			.set_window(window)
+			.set_window(self.display.clone(), self.args.force_opengl, window)
 			.await
 			.context("Unable to set renderer window")?;
 
