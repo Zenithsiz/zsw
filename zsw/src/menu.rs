@@ -13,7 +13,7 @@ use {
 	strum::IntoEnumIterator,
 	winit::event_loop::EventLoopProxy,
 	zsw_util::{AppError, Rect},
-	zsw_wgpu::Wgpu,
+	zsw_wgpu::WgpuRenderer,
 };
 
 /// Menu
@@ -39,7 +39,7 @@ impl Menu {
 	pub fn draw(
 		&mut self,
 		ctx: &egui::Context,
-		wgpu: &Wgpu,
+		wgpu_renderer: &WgpuRenderer,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		panels: &mut Panels,
@@ -66,7 +66,7 @@ impl Menu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, window_geometry),
+				Tab::Panels => panels::draw_panels_tab(ui, wgpu_renderer, panels, window_geometry),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, playlists, profiles, panels),
 				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
 			}

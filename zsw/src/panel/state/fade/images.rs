@@ -11,7 +11,7 @@ use {
 		sync::{Arc, OnceLock},
 	},
 	zsw_util::{AppError, Loadable},
-	zsw_wgpu::Wgpu,
+	zsw_wgpu::WgpuRenderer,
 	zutil_cloned::cloned,
 };
 
@@ -24,9 +24,13 @@ pub struct PanelFadeImagesGeometryShared {
 
 impl PanelFadeImagesGeometryShared {
 	/// Returns the geometry uniforms
-	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> &mut PanelFadeImageGeometryUniforms {
+	pub fn uniforms(
+		&mut self,
+		wgpu_renderer: &WgpuRenderer,
+		shared: &PanelFadeImagesShared,
+	) -> &mut PanelFadeImageGeometryUniforms {
 		self.uniforms
-			.get_or_insert_with(|| self::create_image_geometry_uniforms(wgpu, shared))
+			.get_or_insert_with(|| self::create_image_geometry_uniforms(wgpu_renderer, shared))
 	}
 }
 
@@ -42,8 +46,8 @@ pub struct PanelFadeImagesShared {
 
 impl PanelFadeImagesShared {
 	/// Creates the shared
-	pub fn new(wgpu: &Wgpu) -> Self {
-		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu);
+	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
+		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu_renderer);
 
 		Self {
 			geometry_uniforms_bind_group_layout,
@@ -52,9 +56,9 @@ impl PanelFadeImagesShared {
 	}
 
 	/// Gets the image bind group layout, or initializes it, if uninitialized
-	pub fn image_bind_group_layout(&self, wgpu: &Wgpu) -> &wgpu::BindGroupLayout {
+	pub fn image_bind_group_layout(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::BindGroupLayout {
 		self.image_bind_group_layout
-			.get_or_init(|| self::create_bind_group_layout(wgpu))
+			.get_or_init(|| self::create_bind_group_layout(wgpu_renderer))
 	}
 }
 
@@ -112,13 +116,13 @@ impl PanelFadeImages {
 	/// If successful, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub fn step_prev(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Result<(), ()> {
+	pub fn step_prev(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_renderer: &WgpuRenderer) -> Result<(), ()> {
 		playlist_player.step_prev()?;
 		mem::swap(&mut self.cur, &mut self.next);
 		mem::swap(&mut self.prev, &mut self.cur);
 		self.prev = None;
 		self.bind_group = OnceLock::new();
-		self.load_missing(playlist_player, wgpu);
+		self.load_missing(playlist_player, wgpu_renderer);
 
 		Ok(())
 	}
@@ -128,7 +132,7 @@ impl PanelFadeImages {
 	/// If successful, starts loading any missing images
 	///
 	/// Returns `Err(())` if this would erase the current image.
-	pub fn step_next(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Result<(), ()> {
+	pub fn step_next(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_renderer: &WgpuRenderer) -> Result<(), ()> {
 		if self.next.is_none() {
 			return Err(());
 		}
@@ -138,33 +142,41 @@ impl PanelFadeImages {
 		mem::swap(&mut self.cur, &mut self.next);
 		self.next = None;
 		self.bind_group = OnceLock::new();
-		self.load_missing(playlist_player, wgpu);
+		self.load_missing(playlist_player, wgpu_renderer);
 
 		Ok(())
 	}
 
 	/// Gets the image sampler, or initializes it, if uninitialized
-	pub fn image_sampler(&self, wgpu: &Wgpu) -> &wgpu::Sampler {
-		self.image_sampler.get_or_init(|| self::create_image_sampler(wgpu))
+	pub fn image_sampler(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::Sampler {
+		self.image_sampler
+			.get_or_init(|| self::create_image_sampler(wgpu_renderer))
 	}
 
 	/// Gets the bind group, or initializes it, if uninitialized
-	pub fn bind_group(&self, wgpu: &Wgpu, sampler: &wgpu::Sampler, shared: &PanelFadeImagesShared) -> &wgpu::BindGroup {
+	pub fn bind_group(
+		&self,
+		wgpu_renderer: &WgpuRenderer,
+		sampler: &wgpu::Sampler,
+		shared: &PanelFadeImagesShared,
+	) -> &wgpu::BindGroup {
 		self.bind_group.get_or_init(|| {
-			let [prev, cur, next] = [&self.prev, &self.cur, &self.next]
-				.map(|img| img.as_ref().map_or(&wgpu.empty_texture_view, |img| &img.texture_view));
+			let [prev, cur, next] = [&self.prev, &self.cur, &self.next].map(|img| {
+				img.as_ref()
+					.map_or(&wgpu_renderer.empty_texture_view, |img| &img.texture_view)
+			});
 
-			let layout = shared.image_bind_group_layout(wgpu);
-			self::create_image_bind_group(wgpu, layout, prev, cur, next, sampler)
+			let layout = shared.image_bind_group_layout(wgpu_renderer);
+			self::create_image_bind_group(wgpu_renderer, layout, prev, cur, next, sampler)
 		})
 	}
 
 	/// Loads any missing images, prioritizing the current, then next, then previous.
 	///
 	/// Requests images if missing any.
-	pub fn load_missing(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) {
+	pub fn load_missing(&mut self, playlist_player: &mut PlaylistPlayer, wgpu_renderer: &WgpuRenderer) {
 		// Get the next image, if we can
-		let Some(res) = self.next_image(playlist_player, wgpu) else {
+		let Some(res) = self.next_image(playlist_player, wgpu_renderer) else {
 			return;
 		};
 
@@ -178,7 +190,7 @@ impl PanelFadeImages {
 				tracing::warn!("Unable to load image {:?}, removing it from player: {err:?}", res.path);
 				playlist_player.remove(&res.path);
 
-				_ = self.schedule_load_image(playlist_player, wgpu);
+				_ = self.schedule_load_image(playlist_player, wgpu_renderer);
 				return;
 			},
 		};
@@ -203,7 +215,7 @@ impl PanelFadeImages {
 
 		if let Some(slot) = slot {
 			let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
-			let texture_view = match wgpu.create_texture_from_image(&texture_label, image) {
+			let texture_view = match wgpu_renderer.create_texture_from_image(&texture_label, image) {
 				Ok((_, texture_view)) => texture_view,
 				Err(err) => {
 					tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
@@ -230,16 +242,24 @@ impl PanelFadeImages {
 	///
 	/// If an image is not scheduled, schedules it, even after
 	/// successfully returning an image
-	fn next_image(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Option<ImageLoadRes> {
+	fn next_image(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_renderer: &WgpuRenderer,
+	) -> Option<ImageLoadRes> {
 		// Schedule it and try to take any existing image result
-		_ = self.schedule_load_image(playlist_player, wgpu);
+		_ = self.schedule_load_image(playlist_player, wgpu_renderer);
 		self.next_image.take()
 	}
 
 	/// Schedules a new image.
 	///
 	/// If the image is loaded, returns it
-	fn schedule_load_image(&mut self, playlist_player: &mut PlaylistPlayer, wgpu: &Wgpu) -> Option<&mut ImageLoadRes> {
+	fn schedule_load_image(
+		&mut self,
+		playlist_player: &mut PlaylistPlayer,
+		wgpu_renderer: &WgpuRenderer,
+	) -> Option<&mut ImageLoadRes> {
 		// If we're loaded, just return it
 		// Note: We can't use if-let due to a borrow-checker limitation
 		if self.next_image.get().is_some() {
@@ -254,7 +274,7 @@ impl PanelFadeImages {
 			() => return None,
 		};
 
-		let max_image_size = wgpu.device.limits().max_texture_dimension_2d;
+		let max_image_size = wgpu_renderer.device.limits().max_texture_dimension_2d;
 
 		self.next_image.try_load(|tx| {
 			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
@@ -315,7 +335,7 @@ pub fn load(path: &Path, max_image_size: u32) -> Result<DynamicImage, AppError> 
 }
 
 /// Creates the fade image bind group layout
-fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+fn create_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> wgpu::BindGroupLayout {
 	let entry = wgpu::BindGroupLayoutEntry {
 		binding:    0,
 		visibility: wgpu::ShaderStages::FRAGMENT,
@@ -342,12 +362,12 @@ fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 		],
 	};
 
-	wgpu.device.create_bind_group_layout(&descriptor)
+	wgpu_renderer.device.create_bind_group_layout(&descriptor)
 }
 
 /// Creates the image bind group
 fn create_image_bind_group(
-	wgpu: &Wgpu,
+	wgpu_renderer: &WgpuRenderer,
 	bind_group_layout: &wgpu::BindGroupLayout,
 	prev_view: &wgpu::TextureView,
 	cur_view: &wgpu::TextureView,
@@ -376,11 +396,11 @@ fn create_image_bind_group(
 			},
 		],
 	};
-	wgpu.device.create_bind_group(&descriptor)
+	wgpu_renderer.device.create_bind_group(&descriptor)
 }
 
 /// Creates the geometry uniforms bind group layout
-fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+fn create_geometry_uniforms_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("zsw-panel-fade-geometry-uniforms-bind-group-layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
@@ -395,7 +415,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 		}],
 	};
 
-	wgpu.device.create_bind_group_layout(&descriptor)
+	wgpu_renderer.device.create_bind_group_layout(&descriptor)
 }
 
 /// Panel fade geometry image uniforms
@@ -409,7 +429,10 @@ pub struct PanelFadeImageGeometryUniforms {
 }
 
 /// Creates the image geometry uniforms
-fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> PanelFadeImageGeometryUniforms {
+fn create_image_geometry_uniforms(
+	wgpu_renderer: &WgpuRenderer,
+	shared: &PanelFadeImagesShared,
+) -> PanelFadeImageGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-fade-geometry-uniforms-buffer"),
@@ -421,7 +444,7 @@ fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -
 		.expect("Maximum uniform size didn't fit into a `u64`"),
 		mapped_at_creation: false,
 	};
-	let buffer = wgpu.device.create_buffer(&buffer_descriptor);
+	let buffer = wgpu_renderer.device.create_buffer(&buffer_descriptor);
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
@@ -432,13 +455,13 @@ fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -
 			resource: buffer.as_entire_binding(),
 		}],
 	};
-	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
+	let bind_group = wgpu_renderer.device.create_bind_group(&bind_group_descriptor);
 
 	PanelFadeImageGeometryUniforms { buffer, bind_group }
 }
 
 /// Creates the image sampler
-fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
+fn create_image_sampler(wgpu_renderer: &WgpuRenderer) -> wgpu::Sampler {
 	let descriptor = wgpu::SamplerDescriptor {
 		label: Some("zsw-panel-fade-image-sampler"),
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -449,5 +472,5 @@ fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
 		mipmap_filter: wgpu::MipmapFilterMode::Linear,
 		..wgpu::SamplerDescriptor::default()
 	};
-	wgpu.device.create_sampler(&descriptor)
+	wgpu_renderer.device.create_sampler(&descriptor)
 }

@@ -25,8 +25,7 @@ use {
 pub struct Renderer {
 	event_loop_proxy: EventLoopProxy<AppEvent>,
 
-	wgpu:                   Wgpu,
-	panels_renderer_shared: PanelsRendererShared,
+	wgpu: Wgpu,
 
 	playlists: Playlists,
 	profiles:  Profiles,
@@ -41,7 +40,6 @@ impl Renderer {
 		profile_name: ProfileName,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
 		wgpu: Wgpu,
-		panels_renderer_shared: PanelsRendererShared,
 		playlists: Playlists,
 		profiles: Profiles,
 	) -> Result<Self, AppError> {
@@ -56,7 +54,6 @@ impl Renderer {
 		Ok(Self {
 			event_loop_proxy,
 			wgpu,
-			panels_renderer_shared,
 			playlists,
 			profiles,
 			panels,
@@ -72,9 +69,7 @@ impl Renderer {
 			.context("Cannot render without a window")?;
 
 		window_renderer.render(
-			&self.wgpu,
 			&mut self.panels,
-			&self.panels_renderer_shared,
 			&self.playlists,
 			&self.profiles,
 			&self.event_loop_proxy,
@@ -113,8 +108,10 @@ impl Renderer {
 	}
 
 	/// Sets the window of this renderer
-	pub fn set_window(&mut self, window: Window) -> Result<(), AppError> {
-		let window_renderer = WindowRenderer::new(&self.wgpu, window).context("Unable to create window")?;
+	pub async fn set_window(&mut self, window: Window) -> Result<(), AppError> {
+		let window_renderer = WindowRenderer::new(&self.wgpu, window)
+			.await
+			.context("Unable to create window")?;
 		self.window_renderer = Some(window_renderer);
 
 		Ok(())
@@ -127,23 +124,28 @@ struct WindowRenderer {
 	window:      Arc<Window>,
 	window_size: PhysicalSize<u32>,
 
-	wgpu_renderer:   WgpuRenderer,
-	panels_renderer: PanelsRenderer,
-	egui:            Egui,
-	menu:            Menu,
+	wgpu_renderer:          WgpuRenderer,
+	// TODO: Merge both of these?
+	panels_renderer:        PanelsRenderer,
+	panels_renderer_shared: PanelsRendererShared,
+	egui:                   Egui,
+	menu:                   Menu,
 
 	queued_resize: Option<PhysicalSize<u32>>,
 }
 
 impl WindowRenderer {
-	fn new(wgpu: &Wgpu, window: Window) -> Result<Self, AppError> {
+	pub async fn new(wgpu: &Wgpu, window: Window) -> Result<Self, AppError> {
 		let window = Arc::new(window);
-		let wgpu_renderer = WgpuRenderer::new(&window, wgpu).context("Unable to create wgpu renderer")?;
+		let wgpu_renderer = WgpuRenderer::new(&window, wgpu)
+			.await
+			.context("Unable to create wgpu renderer")?;
+		let panels_renderer_shared = PanelsRendererShared::new(&wgpu_renderer);
 
 		let msaa_samples = 4;
 		let panels_renderer =
-			PanelsRenderer::new(&wgpu_renderer, wgpu, msaa_samples).context("Unable to create panels renderer")?;
-		let egui = Egui::new(wgpu, &wgpu_renderer, window.share());
+			PanelsRenderer::new(&wgpu_renderer, msaa_samples).context("Unable to create panels renderer")?;
+		let egui = Egui::new(&wgpu_renderer, window.share());
 
 		Ok(Self {
 			window,
@@ -152,6 +154,7 @@ impl WindowRenderer {
 			window_size: PhysicalSize::new(0, 0),
 			wgpu_renderer,
 			panels_renderer,
+			panels_renderer_shared,
 			egui,
 			menu: Menu::new(),
 			queued_resize: None,
@@ -165,17 +168,15 @@ impl WindowRenderer {
 	/// [`Self::next_frame`].
 	pub fn render(
 		&mut self,
-		wgpu: &Wgpu,
 		panels: &mut Panels,
-		panels_renderer_shared: &PanelsRendererShared,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 	) -> Result<(), AppError> {
 		// If we need to resize, do it now
 		if let Some(size) = self.queued_resize.take() {
-			self.wgpu_renderer.resize(wgpu, size).context("Unable to resize wgpu")?;
-			self.panels_renderer.resize(&self.wgpu_renderer, wgpu, size);
+			self.wgpu_renderer.resize(size).context("Unable to resize wgpu")?;
+			self.panels_renderer.resize(&self.wgpu_renderer, size);
 			self.window_size = size;
 		}
 
@@ -184,21 +185,19 @@ impl WindowRenderer {
 			size: euclid::vec2(self.window_size.width, self.window_size.height),
 		};
 
-		let mut frame = self.wgpu_renderer.start_render(wgpu).context("Unable to start frame")?;
+		let mut frame = self.wgpu_renderer.start_render().context("Unable to start frame")?;
 
 		self.panels_renderer
 			.render(
-				wgpu,
+				&self.wgpu_renderer,
 				window_geometry,
 				&mut frame,
-				&self.wgpu_renderer,
 				panels,
-				panels_renderer_shared,
+				&self.panels_renderer_shared,
 			)
 			.context("Unable to render panels")?;
 
 		self.render_egui(
-			wgpu,
 			window_geometry,
 			panels,
 			playlists,
@@ -208,7 +207,7 @@ impl WindowRenderer {
 		);
 
 		self.wgpu_renderer
-			.finish_render(wgpu, frame)
+			.finish_render(frame)
 			.context("Unable to finish frame")?;
 
 		Ok(())
@@ -217,7 +216,6 @@ impl WindowRenderer {
 	/// Renders egui
 	fn render_egui(
 		&mut self,
-		wgpu: &Wgpu,
 		window_geometry: Rect<i32, u32>,
 		panels: &mut Panels,
 		playlists: &Playlists,
@@ -225,11 +223,11 @@ impl WindowRenderer {
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		frame: &mut FrameRender,
 	) {
-		self.egui.render(frame, &self.window, wgpu, |ctx| {
+		self.egui.render(frame, &self.window, &self.wgpu_renderer, |ctx| {
 			// Draw the menu
 			self.menu.draw(
 				ctx,
-				wgpu,
+				&self.wgpu_renderer,
 				playlists,
 				profiles,
 				panels,
@@ -272,7 +270,7 @@ impl WindowRenderer {
 					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 					match &mut panel.state {
 						PanelState::None(_) => (),
-						PanelState::Fade(state) => state.skip(wgpu),
+						PanelState::Fade(state) => state.skip(&self.wgpu_renderer),
 						PanelState::Slide(_) => (),
 					}
 				}
@@ -310,8 +308,8 @@ impl WindowRenderer {
 
 					match &mut panel.state {
 						PanelState::None(_) => (),
-						PanelState::Fade(state) => state.step(wgpu, time_delta),
-						PanelState::Slide(state) => state.step(wgpu, time_delta),
+						PanelState::Fade(state) => state.step(&self.wgpu_renderer, time_delta),
+						PanelState::Slide(state) => state.step(&self.wgpu_renderer, time_delta),
 					}
 				}
 			}

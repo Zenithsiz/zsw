@@ -18,7 +18,7 @@ use {
 		time::Instant,
 	},
 	zsw_util::{AppError, Loadable},
-	zsw_wgpu::Wgpu,
+	zsw_wgpu::WgpuRenderer,
 	zutil_cloned::cloned,
 };
 
@@ -117,12 +117,13 @@ impl PanelSlideState {
 	}
 
 	/// Returns the sampler
-	pub fn image_sampler(&self, wgpu: &Wgpu) -> &wgpu::Sampler {
-		self.image_sampler.get_or_init(|| self::create_image_sampler(wgpu))
+	pub fn image_sampler(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::Sampler {
+		self.image_sampler
+			.get_or_init(|| self::create_image_sampler(wgpu_renderer))
 	}
 
 	/// Schedules a previous next image.
-	fn schedule_load_prev_image(&mut self, wgpu: &Wgpu) -> Option<&mut ImageLoadRes> {
+	fn schedule_load_prev_image(&mut self, wgpu_renderer: &WgpuRenderer) -> Option<&mut ImageLoadRes> {
 		// If we're loaded, just return it
 		// Note: We can't use if-let due to a borrow-checker limitation
 		if self.prev_image.get().is_some() {
@@ -131,7 +132,7 @@ impl PanelSlideState {
 
 		let (_, path) = self.playlist_player.get(-self.images.len().cast_signed() - 1)?;
 
-		let max_image_size = wgpu.device.limits().max_texture_dimension_2d;
+		let max_image_size = wgpu_renderer.device.limits().max_texture_dimension_2d;
 
 		self.prev_image.try_load(|tx| {
 			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
@@ -144,7 +145,7 @@ impl PanelSlideState {
 	}
 
 	/// Schedules a new next image.
-	fn schedule_load_next_image(&mut self, wgpu: &Wgpu) -> Option<&mut ImageLoadRes> {
+	fn schedule_load_next_image(&mut self, wgpu_renderer: &WgpuRenderer) -> Option<&mut ImageLoadRes> {
 		// If we're loaded, just return it
 		// Note: We can't use if-let due to a borrow-checker limitation
 		if self.next_image.get().is_some() {
@@ -153,7 +154,7 @@ impl PanelSlideState {
 
 		let (_, path) = self.playlist_player.get(0)?;
 
-		let max_image_size = wgpu.device.limits().max_texture_dimension_2d;
+		let max_image_size = wgpu_renderer.device.limits().max_texture_dimension_2d;
 
 		self.next_image.try_load(|tx| {
 			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
@@ -166,12 +167,12 @@ impl PanelSlideState {
 	}
 
 	/// Loads more images
-	pub fn load_next(&mut self, wgpu: &Wgpu) {
-		_ = self.schedule_load_next_image(wgpu);
+	pub fn load_next(&mut self, wgpu_renderer: &WgpuRenderer) {
+		_ = self.schedule_load_next_image(wgpu_renderer);
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
-	pub fn step(&mut self, wgpu: &Wgpu, delta: TimeDelta) {
+	pub fn step(&mut self, wgpu_renderer: &WgpuRenderer, delta: TimeDelta) {
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
 			true => Some(self.progress.saturating_add(delta_abs)),
@@ -184,7 +185,7 @@ impl PanelSlideState {
 				Some(res) => match res.image_res {
 					Ok(image) => {
 						let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
-						let texture_view = match wgpu.create_texture_from_image(&texture_label, image) {
+						let texture_view = match wgpu_renderer.create_texture_from_image(&texture_label, image) {
 							Ok((_, texture_view)) => texture_view,
 							Err(err) => {
 								tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
@@ -202,14 +203,14 @@ impl PanelSlideState {
 					},
 					Err(err) => {
 						tracing::warn!("Unable to load image {:?}, removing it from player: {err:?}", res.path);
-						_ = self.schedule_load_next_image(wgpu);
+						_ = self.schedule_load_next_image(wgpu_renderer);
 						self.playlist_player.remove(&res.path);
 
 						Duration::ZERO
 					},
 				},
 				None => {
-					_ = self.schedule_load_prev_image(wgpu);
+					_ = self.schedule_load_prev_image(wgpu_renderer);
 					Duration::ZERO
 				},
 			},
@@ -225,7 +226,7 @@ impl PanelSlideState {
 			match res.image_res {
 				Ok(image) => {
 					let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
-					let texture_view = match wgpu.create_texture_from_image(&texture_label, image) {
+					let texture_view = match wgpu_renderer.create_texture_from_image(&texture_label, image) {
 						Ok((_, texture_view)) => texture_view,
 						Err(err) => {
 							tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
@@ -241,7 +242,7 @@ impl PanelSlideState {
 				},
 				Err(err) => {
 					tracing::warn!("Unable to load image {:?}, removing it from player: {err:?}", res.path);
-					_ = self.schedule_load_next_image(wgpu);
+					_ = self.schedule_load_next_image(wgpu_renderer);
 					self.playlist_player.remove(&res.path);
 				},
 			}
@@ -249,10 +250,10 @@ impl PanelSlideState {
 	}
 
 	/// Updates this panel's state using the current time as a delta
-	pub fn update(&mut self, wgpu: &Wgpu) {
+	pub fn update(&mut self, wgpu_renderer: &WgpuRenderer) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
-		//self.images.load_missing(&mut self.playlist_player, wgpu);
+		//self.images.load_missing(&mut self.playlist_player, wgpu_renderer);
 
 		// If we're paused, don't update anything
 		if self.paused {
@@ -271,7 +272,7 @@ impl PanelSlideState {
 		}
 		self.last_update = now;
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
-		self.step(wgpu, delta);
+		self.step(wgpu_renderer, delta);
 	}
 }
 
@@ -287,7 +288,7 @@ impl PanelSlideGeometryShared {
 	/// Returns this geometry's uniforms
 	pub fn uniforms(
 		&mut self,
-		wgpu: &Wgpu,
+		wgpu_renderer: &WgpuRenderer,
 		shared: &PanelSlideShared,
 		image_idx: usize,
 	) -> &mut PanelSlideGeometryUniforms {
@@ -296,7 +297,7 @@ impl PanelSlideGeometryShared {
 		}
 
 		self.uniforms
-			.resize_with(image_idx + 1, || self::create_geometry_uniforms(wgpu, shared));
+			.resize_with(image_idx + 1, || self::create_geometry_uniforms(wgpu_renderer, shared));
 		&mut self.uniforms[image_idx]
 	}
 }
@@ -314,8 +315,8 @@ pub struct PanelSlideShared {
 
 impl PanelSlideShared {
 	/// Creates the shared
-	pub fn new(wgpu: &Wgpu) -> Self {
-		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu);
+	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
+		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu_renderer);
 
 		Self {
 			geometry_uniforms_bind_group_layout,
@@ -324,9 +325,9 @@ impl PanelSlideShared {
 	}
 
 	/// Gets the image bind group layout, or initializes it, if uninitialized
-	pub fn image_bind_group_layout(&self, wgpu: &Wgpu) -> &wgpu::BindGroupLayout {
+	pub fn image_bind_group_layout(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::BindGroupLayout {
 		self.image_bind_group_layout
-			.get_or_init(|| self::create_bind_group_layout(wgpu))
+			.get_or_init(|| self::create_bind_group_layout(wgpu_renderer))
 	}
 }
 
@@ -345,10 +346,15 @@ pub struct PanelSlideImage {
 
 impl PanelSlideImage {
 	/// Gets the bind group, or initializes it, if uninitialized
-	pub fn bind_group(&self, wgpu: &Wgpu, sampler: &wgpu::Sampler, shared: &PanelSlideShared) -> &wgpu::BindGroup {
+	pub fn bind_group(
+		&self,
+		wgpu_renderer: &WgpuRenderer,
+		sampler: &wgpu::Sampler,
+		shared: &PanelSlideShared,
+	) -> &wgpu::BindGroup {
 		self.bind_group.get_or_init(|| {
-			let layout = shared.image_bind_group_layout(wgpu);
-			self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
+			let layout = shared.image_bind_group_layout(wgpu_renderer);
+			self::create_image_bind_group(wgpu_renderer, layout, &self.texture_view, sampler)
 		})
 	}
 }
@@ -385,7 +391,7 @@ impl PanelSlideDir {
 }
 
 /// Creates the geometry uniforms bind group layout
-fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+fn create_geometry_uniforms_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("zsw-panel-slide-geometry-uniforms-bind-group-layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
@@ -400,11 +406,11 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 		}],
 	};
 
-	wgpu.device.create_bind_group_layout(&descriptor)
+	wgpu_renderer.device.create_bind_group_layout(&descriptor)
 }
 
 /// Creates the panel none geometry uniforms
-fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelSlideShared) -> PanelSlideGeometryUniforms {
+fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelSlideShared) -> PanelSlideGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),
@@ -415,7 +421,7 @@ fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelSlideShared) -> PanelSlid
 		.expect("Maximum uniform size didn't fit into a `u64`"),
 		mapped_at_creation: false,
 	};
-	let buffer = wgpu.device.create_buffer(&buffer_descriptor);
+	let buffer = wgpu_renderer.device.create_buffer(&buffer_descriptor);
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
@@ -426,13 +432,13 @@ fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelSlideShared) -> PanelSlid
 			resource: buffer.as_entire_binding(),
 		}],
 	};
-	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
+	let bind_group = wgpu_renderer.device.create_bind_group(&bind_group_descriptor);
 
 	PanelSlideGeometryUniforms { buffer, bind_group }
 }
 
 /// Creates the image sampler
-fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
+fn create_image_sampler(wgpu_renderer: &WgpuRenderer) -> wgpu::Sampler {
 	let descriptor = wgpu::SamplerDescriptor {
 		label: Some("zsw-panel-slide-image-sampler"),
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -443,12 +449,12 @@ fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
 		mipmap_filter: wgpu::MipmapFilterMode::Linear,
 		..wgpu::SamplerDescriptor::default()
 	};
-	wgpu.device.create_sampler(&descriptor)
+	wgpu_renderer.device.create_sampler(&descriptor)
 }
 
 /// Creates the image bind group
 fn create_image_bind_group(
-	wgpu: &Wgpu,
+	wgpu_renderer: &WgpuRenderer,
 	bind_group_layout: &wgpu::BindGroupLayout,
 	view: &wgpu::TextureView,
 	sampler: &wgpu::Sampler,
@@ -467,11 +473,11 @@ fn create_image_bind_group(
 			},
 		],
 	};
-	wgpu.device.create_bind_group(&descriptor)
+	wgpu_renderer.device.create_bind_group(&descriptor)
 }
 
 /// Creates the slide image bind group layout
-fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
+fn create_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("zsw-panel-slide-image-bind-group-layout"),
 		entries: &[
@@ -494,7 +500,7 @@ fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 		],
 	};
 
-	wgpu.device.create_bind_group_layout(&descriptor)
+	wgpu_renderer.device.create_bind_group_layout(&descriptor)
 }
 
 #[derive(Debug)]

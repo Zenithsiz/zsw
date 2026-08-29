@@ -6,7 +6,7 @@ use {
 	std::sync::Arc,
 	tracing as _,
 	winit::{event::WindowEvent, window::Window},
-	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
+	zsw_wgpu::{FrameRender, WgpuRenderer},
 };
 
 /// Egui
@@ -30,10 +30,10 @@ pub struct Egui {
 impl Egui {
 	/// Creates a new egui
 	#[must_use]
-	pub fn new(wgpu: &Wgpu, wgpu_renderer: &WgpuRenderer, window: Arc<Window>) -> Self {
+	pub fn new(wgpu_renderer: &WgpuRenderer, window: Arc<Window>) -> Self {
 		let renderer = egui_wgpu::Renderer::new(
-			&wgpu.device,
-			wgpu_renderer.surface_config().format,
+			&wgpu_renderer.device,
+			wgpu_renderer.surface_config.format,
 			egui_wgpu::RendererOptions::default(),
 		);
 
@@ -45,7 +45,7 @@ impl Egui {
 			&window,
 			None,
 			None,
-			Some(wgpu.device.limits().max_texture_dimension_2d as usize),
+			Some(wgpu_renderer.device.limits().max_texture_dimension_2d as usize),
 		);
 
 		Self {
@@ -57,7 +57,13 @@ impl Egui {
 	}
 
 	/// Renders egui
-	pub fn render(&mut self, frame: &mut FrameRender, window: &Window, wgpu: &Wgpu, draw: impl FnMut(&mut egui::Ui)) {
+	pub fn render(
+		&mut self,
+		frame: &mut FrameRender,
+		window: &Window,
+		wgpu_renderer: &WgpuRenderer,
+		draw: impl FnMut(&mut egui::Ui),
+	) {
 		// Paint
 		let input = self.state.take_egui_input(&self.window);
 		let mut full_output = self.ctx.run_ui(input, draw);
@@ -67,7 +73,8 @@ impl Egui {
 		#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
 		for (&id, deltas) in &full_output.textures_delta.set {
 			for delta in deltas {
-				self.renderer.update_texture(&wgpu.device, &wgpu.queue, id, delta);
+				self.renderer
+					.update_texture(&wgpu_renderer.device, &wgpu_renderer.queue, id, delta);
 			}
 		}
 		#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
@@ -83,13 +90,13 @@ impl Egui {
 			pixels_per_point: window.scale_factor() as f32,
 		};
 		let buffers = self.renderer.update_buffers(
-			&wgpu.device,
-			&wgpu.queue,
+			&wgpu_renderer.device,
+			&wgpu_renderer.queue,
 			&mut frame.encoder,
 			&paint_jobs,
 			&screen_descriptor,
 		);
-		let _: wgpu::SubmissionIndex = wgpu.queue.submit(buffers);
+		let _: wgpu::SubmissionIndex = wgpu_renderer.queue.submit(buffers);
 
 		// Record all render passes.
 		let render_pass_color_attachment = wgpu::RenderPassColorAttachment {

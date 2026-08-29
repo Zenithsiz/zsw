@@ -10,18 +10,28 @@ use {
 	core::time::Duration,
 	std::ptr,
 	zsw_util::Rect,
-	zsw_wgpu::Wgpu,
+	zsw_wgpu::WgpuRenderer,
 };
 
 /// Draws the panels tab
-pub fn draw_panels_tab(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut Panels, window_geometry: Rect<i32, u32>) {
-	self::draw_panels_editor(ui, wgpu, panels, window_geometry);
+pub fn draw_panels_tab(
+	ui: &mut egui::Ui,
+	wgpu_renderer: &WgpuRenderer,
+	panels: &mut Panels,
+	window_geometry: Rect<i32, u32>,
+) {
+	self::draw_panels_editor(ui, wgpu_renderer, panels, window_geometry);
 	ui.separator();
 }
 
 /// Draws the panels editor
 // TODO: Not edit the values as-is, as that breaks some invariants of panels (such as duration versus image states)
-fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut Panels, window_geometry: Rect<i32, u32>) {
+fn draw_panels_editor(
+	ui: &mut egui::Ui,
+	wgpu_renderer: &WgpuRenderer,
+	panels: &mut Panels,
+	window_geometry: Rect<i32, u32>,
+) {
 	let panels = panels.get_all();
 	if panels.is_empty() {
 		ui.label("None loaded");
@@ -45,7 +55,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut Panels, windo
 				match &mut panel.state {
 					PanelState::None(_) => (),
 					PanelState::Fade(state) =>
-						self::draw_fade_panel_editor(ui, wgpu, window_geometry, state, &panel.geometries),
+						self::draw_fade_panel_editor(ui, wgpu_renderer, window_geometry, state, &panel.geometries),
 					PanelState::Slide(_) => (),
 				}
 			});
@@ -55,7 +65,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Wgpu, panels: &mut Panels, windo
 /// Draws the fade panel editor
 fn draw_fade_panel_editor(
 	ui: &mut egui::Ui,
-	wgpu: &Wgpu,
+	wgpu_renderer: &WgpuRenderer,
 	window_geometry: Rect<i32, u32>,
 	state: &mut PanelFadeState,
 	geometries: &[PanelGeometry],
@@ -113,7 +123,7 @@ fn draw_fade_panel_editor(
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			state.skip(wgpu);
+			state.skip(wgpu_renderer);
 		}
 	});
 

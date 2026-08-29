@@ -26,11 +26,12 @@ mod profile;
 mod renderer;
 
 use {
-	self::{args::Args, config::Config, dirs::Dirs, panel::PanelsRendererShared, profile::Profile, renderer::Renderer},
+	self::{args::Args, config::Config, dirs::Dirs, profile::Profile, renderer::Renderer},
 	app_error::Context,
 	clap::Parser,
 	core::cell::LazyCell,
 	directories::ProjectDirs,
+	pollster::FutureExt,
 	std::{collections::BTreeMap, fs, process::ExitCode, sync::Arc},
 	winit::{
 		application::ApplicationHandler,
@@ -56,8 +57,7 @@ fn main() -> ExitCode {
 	}
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn run() -> Result<(), AppError> {
+fn run() -> Result<(), AppError> {
 	let logger = Logger::builder()
 		.filter("wgpu", "warn")
 		.filter("naga", "warn")
@@ -98,7 +98,6 @@ async fn run() -> Result<(), AppError> {
 		event_loop.owned_display_handle(),
 		event_loop.create_proxy(),
 	)
-	.await
 	.context("Unable to create winit app")?;
 
 	event_loop.run_app(&mut app).context("Unable to run event loop")?;
@@ -114,7 +113,7 @@ struct WinitApp {
 
 impl ApplicationHandler<AppEvent> for WinitApp {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-		if let Err(err) = self.init_window(event_loop) {
+		if let Err(err) = self.init_window(event_loop).block_on() {
 			tracing::warn!("Unable to initialize window: {err:?}");
 			event_loop.exit();
 		}
@@ -142,37 +141,26 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 
 impl WinitApp {
 	/// Creates a new app
-	pub async fn new(
+	pub fn new(
 		args: Args,
 		config: Config,
 		dirs: &Dirs,
 		display: OwnedDisplayHandle,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
 	) -> Result<Self, AppError> {
-		let wgpu = Wgpu::new(display, args.force_opengl)
-			.await
-			.context("Unable to initialize wgpu")?;
-		let panels_renderer_shared = PanelsRendererShared::new(&wgpu);
-
+		let wgpu = Wgpu::new(display, args.force_opengl).context("Unable to initialize wgpu")?;
 		let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
 
-		let renderer = Renderer::new(
-			args.profile,
-			event_loop_proxy,
-			wgpu,
-			panels_renderer_shared,
-			playlists,
-			profiles,
-		)
-		.context("Unable to build renderer")?;
+		let renderer = Renderer::new(args.profile, event_loop_proxy, wgpu, playlists, profiles)
+			.context("Unable to build renderer")?;
 
 		Ok(Self { renderer, config })
 	}
 
 	/// Initializes the window
-	pub fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
+	pub async fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let window_attrs = WindowAttributes::default()
 			.with_title("zsw")
 			.with_transparent(self.config.transparent_windows);
@@ -181,6 +169,7 @@ impl WinitApp {
 			.context("Unable to create window")?;
 		self.renderer
 			.set_window(window)
+			.await
 			.context("Unable to set renderer window")?;
 
 		Ok(())

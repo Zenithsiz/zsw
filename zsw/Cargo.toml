@@ -24,12 +24,12 @@ image           = { workspace = true }
 naga            = { features = ["deserialize"], workspace = true }
 num-rational    = { workspace = true }
 opener          = { workspace = true }
+pollster        = { workspace = true }
 rand            = { workspace = true }
 serde           = { features = ["derive", "rc"], workspace = true }
 serde_json      = { workspace = true }
 serde_with      = { workspace = true }
 strum           = { features = ["derive"], workspace = true }
-tokio           = { features = ["full", "tracing"], workspace = true }
 toml            = { workspace = true }
 tracing         = { features = ["log"], workspace = true }
 wgpu            = { features = ["naga-ir"], workspace = true }
