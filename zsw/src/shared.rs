@@ -13,7 +13,7 @@ use {
 pub struct Shared {
 	pub event_loop_proxy: EventLoopProxy<AppEvent>,
 
-	pub config: Config,
+	pub config: Arc<Config>,
 
 	pub wgpu:                   Wgpu,
 	pub panels_renderer_shared: PanelsRendererShared,

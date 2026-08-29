@@ -26,7 +26,7 @@ use {
 
 /// Renderer
 pub struct Renderer {
-	shared:            Arc<Shared>,
+	shared:            Shared,
 	renderer_event_rx: mpsc::Receiver<Event>,
 	menu:              Menu,
 
@@ -36,7 +36,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-	pub fn new(shared: Arc<Shared>, renderer_event_rx: mpsc::Receiver<Event>, menu: Menu) -> Result<Self, AppError> {
+	pub fn new(shared: Shared, renderer_event_rx: mpsc::Receiver<Event>, menu: Menu) -> Result<Self, AppError> {
 		let mut panels = Panels::new();
 		if let Some(default_profile_name) = &shared.config.default.profile {
 			let default_profile_name = default_profile_name.parse::<ProfileName>().into_ok();

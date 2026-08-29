@@ -91,6 +91,7 @@ async fn run() -> Result<(), AppError> {
 	fs::create_dir_all(dirs.data_dir()).context("Unable to create data directory")?;
 	let config_path = args.config.unwrap_or_else(|| dirs.data_dir().join("config.toml"));
 	let config = Config::get_or_create_default(&config_path);
+	let config = Arc::new(config);
 	let dirs = Dirs::new(
 		config_path
 			.parent()
@@ -126,7 +127,7 @@ async fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
-	shared:            Arc<Shared>,
+	config:            Arc<Config>,
 	renderer_event_tx: mpsc::Sender<renderer::Event>,
 }
 
@@ -161,7 +162,7 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 impl WinitApp {
 	/// Creates a new app
 	pub async fn new(
-		config: Config,
+		config: Arc<Config>,
 		dirs: Arc<Dirs>,
 		display: OwnedDisplayHandle,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
@@ -174,23 +175,21 @@ impl WinitApp {
 			.context("Unable to create profiles")?;
 		let shared = Shared {
 			event_loop_proxy,
-			config,
+			config: config.share(),
 			wgpu,
 			panels_renderer_shared,
 			playlists: Arc::new(playlists),
 			profiles: Arc::new(profiles),
 		};
-		let shared = Arc::new(shared);
 
 		// TODO: Make the renderer create the menu and maybe the renderer rx/tx too?
 		let (renderer_event_tx, renderer_event_rx) = mpsc::channel();
 		let menu = Menu::new();
-		let mut renderer =
-			Renderer::new(shared.share(), renderer_event_rx, menu).context("Unable to build renderer")?;
+		let mut renderer = Renderer::new(shared, renderer_event_rx, menu).context("Unable to build renderer")?;
 		zsw_util::spawn_task("Renderer", move || renderer.render());
 
 		Ok(Self {
-			shared,
+			config,
 			renderer_event_tx,
 		})
 	}
@@ -199,8 +198,8 @@ impl WinitApp {
 	pub fn init_window(&self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
 		let windows = window::create(
 			event_loop,
-			self.shared.config.transparent_windows,
-			self.shared.config.monitors.as_deref(),
+			self.config.transparent_windows,
+			self.config.monitors.as_deref(),
 		)
 		.context("Unable to create winit event loop and window")?;
 		for app_window in windows {
