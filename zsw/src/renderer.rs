@@ -13,12 +13,7 @@ use {
 	core::clone::Share,
 	euclid::default::Point2D,
 	std::sync::Arc,
-	winit::{
-		dpi::PhysicalSize,
-		event::WindowEvent,
-		event_loop::EventLoopProxy,
-		window::{Window, WindowId},
-	},
+	winit::{dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoopProxy, window::Window},
 	zsw_egui::Egui,
 	zsw_util::{AppError, Rect},
 	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
@@ -38,6 +33,7 @@ pub struct Renderer {
 
 	panels: Panels,
 
+	// TODO: This should be mandatory
 	window_renderer: Option<WindowRenderer>,
 }
 
@@ -70,10 +66,11 @@ impl Renderer {
 	}
 
 	/// Renders all windows
-	fn render(&mut self) -> Result<(), AppError> {
-		let Some(window_renderer) = &mut self.window_renderer else {
-			return Ok(());
-		};
+	pub fn render(&mut self) -> Result<(), AppError> {
+		let window_renderer = self
+			.window_renderer
+			.as_mut()
+			.context("Cannot render without a window")?;
 
 		window_renderer.render(
 			&self.wgpu,
@@ -90,21 +87,28 @@ impl Renderer {
 		Ok(())
 	}
 
-	/// Handles a window event
-	pub fn handle_window_event(&mut self, _window_id: WindowId, event: &WindowEvent) -> Result<(), AppError> {
+	/// Forwards a window event to egui.
+	///
+	/// Returns if egui wants exclusive use of that event
+	pub fn forward_egui_window_event(&mut self, event: &WindowEvent) -> Result<bool, AppError> {
 		let window_renderer = self
 			.window_renderer
 			.as_mut()
-			.context("Received a window event with no window")?;
-		if window_renderer.egui.handle_event(event) {
-			return Ok(());
-		}
+			.context("Cannot forward window event without a window")?;
 
-		match *event {
-			WindowEvent::Resized(size) => window_renderer.queued_resize = Some(size),
-			WindowEvent::RedrawRequested => self.render()?,
-			_ => (),
-		}
+		Ok(window_renderer.egui.handle_event(event))
+	}
+
+	/// Queues a resize to this renderer
+	///
+	/// This will stay queued for the next redraw
+	pub fn queue_resize(&mut self, size: PhysicalSize<u32>) -> Result<(), AppError> {
+		let window_renderer = self
+			.window_renderer
+			.as_mut()
+			.context("Cannot render without a window")?;
+
+		window_renderer.queued_resize = Some(size);
 
 		Ok(())
 	}

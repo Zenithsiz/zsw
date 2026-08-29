@@ -133,8 +133,8 @@ impl ApplicationHandler<AppEvent> for WinitApp {
 		}
 	}
 
-	fn window_event(&mut self, _event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-		if let Err(err) = self.renderer.handle_window_event(window_id, &event) {
+	fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+		if let Err(err) = self.handle_window_event(event_loop, &event) {
 			tracing::warn!(?window_id, ?event, ?err, "Unable to handle window event");
 		}
 	}
@@ -191,6 +191,22 @@ impl WinitApp {
 	pub fn destroy_window(&mut self) -> Result<(), AppError> {
 		// TODO: Handle destroying all tasks that use the window
 		todo!("Destroying windows isn't supported yet");
+	}
+
+	/// Handles a window event
+	pub fn handle_window_event(&mut self, event_loop: &ActiveEventLoop, event: &WindowEvent) -> Result<(), AppError> {
+		if self.renderer.forward_egui_window_event(event)? {
+			return Ok(());
+		}
+
+		match *event {
+			WindowEvent::Resized(size) => self.renderer.queue_resize(size)?,
+			WindowEvent::CloseRequested => event_loop.exit(),
+			WindowEvent::RedrawRequested => self.renderer.render()?,
+			_ => (),
+		}
+
+		Ok(())
 	}
 }
 
