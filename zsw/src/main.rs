@@ -25,7 +25,6 @@ mod panel;
 mod playlist;
 mod profile;
 mod renderer;
-mod shared;
 mod window;
 
 use {

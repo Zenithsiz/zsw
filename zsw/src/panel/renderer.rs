@@ -20,7 +20,6 @@ use {
 			slide::{PanelSlideDir, PanelSlideShared},
 		},
 	},
-	crate::shared::SharedWindow,
 	app_error::Context,
 	core::{clone::Share, cmp},
 	euclid::default::{Transform3D, Vector2D},
@@ -135,7 +134,7 @@ impl PanelsRenderer {
 	pub fn render(
 		&self,
 		wgpu: &Wgpu,
-		shared_window: &SharedWindow,
+		window_geometry: Rect<i32, u32>,
 		frame: &mut FrameRender,
 		wgpu_renderer: &WgpuRenderer,
 		panels: &mut Panels,
@@ -193,7 +192,7 @@ impl PanelsRenderer {
 				panels_shared,
 				wgpu_renderer,
 				frame.surface_size,
-				shared_window.monitor_geometry,
+				window_geometry,
 				&mut render_pass,
 				panel,
 			)?;

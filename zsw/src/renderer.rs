@@ -8,7 +8,6 @@ use {
 		panel::{PanelState, Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
-		shared::SharedWindow,
 		window::AppWindow,
 	},
 	app_error::Context,
@@ -21,13 +20,18 @@ use {
 		thread,
 		time::Instant,
 	},
-	winit::{event::WindowEvent, event_loop::EventLoopProxy, window::WindowId},
+	winit::{
+		event::WindowEvent,
+		event_loop::EventLoopProxy,
+		window::{Window, WindowId},
+	},
 	zsw_egui::Egui,
-	zsw_util::AppError,
+	zsw_util::{AppError, Rect},
 	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
 
 /// Renderer
+// TODO: Package some of these together
 pub struct Renderer {
 	event_loop_proxy: EventLoopProxy<AppEvent>,
 
@@ -139,7 +143,7 @@ impl Renderer {
 							.resize(&window_renderer.wgpu_renderer, &self.wgpu, size)
 					},
 					WindowEvent::Moved(pos) => {
-						window_renderer.shared_window.monitor_geometry.pos = euclid::point2(pos.x, pos.y);
+						window_renderer.monitor_geometry.pos = euclid::point2(pos.x, pos.y);
 					},
 					_ => (),
 				}
@@ -147,7 +151,7 @@ impl Renderer {
 
 			Event::WindowAdd { app_window } => {
 				let window_renderer = WindowRenderer::new(&self.wgpu, app_window).context("Unable to create window")?;
-				let window_id = window_renderer.shared_window.window.id();
+				let window_id = window_renderer.window.id();
 				if self.windows.insert(window_id, window_renderer).is_some() {
 					tracing::warn!(?window_id, "Window was re-created without being destroyed first");
 				}
@@ -159,9 +163,14 @@ impl Renderer {
 	}
 }
 
+// TODO: Package some of these together
 #[derive(Debug)]
 struct WindowRenderer {
-	shared_window:   SharedWindow,
+	window:                    Arc<Window>,
+	_monitor_name:             String,
+	monitor_geometry:          Rect<i32, u32>,
+	_monitor_refresh_rate_mhz: u32,
+
 	wgpu_renderer:   WgpuRenderer,
 	panels_renderer: PanelsRenderer,
 	egui:            Egui,
@@ -181,26 +190,22 @@ impl WindowRenderer {
 			PanelsRenderer::new(&wgpu_renderer, wgpu, msaa_samples).context("Unable to create panels renderer")?;
 		let egui = Egui::new(wgpu, &wgpu_renderer, window.share());
 
-		let shared_window = SharedWindow {
-			window,
-			monitor_name: app_window.monitor_name,
-			monitor_geometry: app_window.monitor_geometry,
-			monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
-		};
-
-		let frame_duration = Duration::from_secs_f64(1000.0) / shared_window.monitor_refresh_rate_mhz;
+		let frame_duration = Duration::from_secs_f64(1000.0) / app_window.monitor_refresh_rate_mhz;
 		tracing::info!(
 			"Window {:?} refresh rate: {:.2} Hz",
-			shared_window.monitor_name,
-			f64::from(shared_window.monitor_refresh_rate_mhz) / 1000.0,
+			app_window.monitor_name,
+			f64::from(app_window.monitor_refresh_rate_mhz) / 1000.0,
 		);
 		tracing::info!(
 			"Window {:?} frame duration: {frame_duration:.2?}",
-			shared_window.monitor_name
+			app_window.monitor_name
 		);
 
 		Ok(Self {
-			shared_window,
+			window,
+			_monitor_name: app_window.monitor_name,
+			monitor_geometry: app_window.monitor_geometry,
+			_monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
 			wgpu_renderer,
 			panels_renderer,
 			egui,
@@ -262,7 +267,7 @@ impl WindowRenderer {
 		self.panels_renderer
 			.render(
 				wgpu,
-				&self.shared_window,
+				self.monitor_geometry,
 				&mut frame,
 				&self.wgpu_renderer,
 				panels,
@@ -289,7 +294,7 @@ impl WindowRenderer {
 		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		frame: &mut FrameRender,
 	) {
-		self.egui.render(frame, &self.shared_window.window, wgpu, |ctx| {
+		self.egui.render(frame, &self.window, wgpu, |ctx| {
 			// Draw the menu
 			self.menu.draw(
 				ctx,
@@ -298,7 +303,7 @@ impl WindowRenderer {
 				profiles,
 				panels,
 				event_loop_proxy,
-				self.shared_window.monitor_geometry,
+				self.monitor_geometry,
 			);
 
 			// Then go through all panels checking for interactions with their geometries
@@ -310,12 +315,11 @@ impl WindowRenderer {
 			for panel in panels.get_all() {
 				// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 				if ctx.is_pointer_over_egui() ||
-					!panel.geometries.iter().any(|geometry| {
-						geometry
-							.rect
-							.on_window(self.shared_window.monitor_geometry)
-							.contains(pointer_pos)
-					}) {
+					!panel
+						.geometries
+						.iter()
+						.any(|geometry| geometry.rect.on_window(self.monitor_geometry).contains(pointer_pos))
+				{
 					continue;
 				}
 
