@@ -182,10 +182,14 @@ fn configure_window_surface(
 	size: PhysicalSize<u32>,
 ) -> Result<wgpu::SurfaceConfiguration, AppError> {
 	// Get the format
-	let config = surface
+	let mut config = surface
 		.get_default_config(&wgpu.adapter, size.width, size.height)
 		.context("Unable to get surface default config")?;
 	tracing::debug!(?config, "Found surface configuration");
+
+	// Set some options
+	config.present_mode = wgpu::PresentMode::AutoVsync;
+	tracing::debug!(?config, "Updated surface configuration");
 
 	// Then configure it
 	surface.configure(&wgpu.device, &config);

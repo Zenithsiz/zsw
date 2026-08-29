@@ -8,18 +8,12 @@ use {
 		panel::{PanelState, Panels, PanelsRenderer, PanelsRendererShared},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
-		window::AppWindow,
 	},
 	app_error::Context,
 	chrono::TimeDelta,
-	core::{clone::Share, time::Duration},
+	core::clone::Share,
 	euclid::default::Point2D,
-	std::{
-		collections::HashMap,
-		sync::{Arc, mpsc},
-		thread,
-		time::Instant,
-	},
+	std::sync::{Arc, mpsc},
 	winit::{
 		dpi::PhysicalSize,
 		event::WindowEvent,
@@ -46,7 +40,7 @@ pub struct Renderer {
 
 	panels: Panels,
 
-	windows: HashMap<WindowId, WindowRenderer>,
+	window_renderer: Option<WindowRenderer>,
 }
 
 impl Renderer {
@@ -78,7 +72,7 @@ impl Renderer {
 			profiles,
 			renderer_event_rx,
 			panels,
-			windows: HashMap::new(),
+			window_renderer: None,
 		})
 	}
 
@@ -89,22 +83,15 @@ impl Renderer {
 				self.handle_event(event)?;
 			}
 
-			match self
-				.windows
-				.values_mut()
-				.min_by_key(|window_renderer| window_renderer.next_frame)
-			{
-				Some(window_renderer) => {
-					window_renderer.sleep_until_next_frame();
-					window_renderer.render(
-						&self.wgpu,
-						&mut self.panels,
-						&self.panels_renderer_shared,
-						&self.playlists,
-						&self.profiles,
-						&self.event_loop_proxy,
-					)?;
-				},
+			match &mut self.window_renderer {
+				Some(window_renderer) => window_renderer.render(
+					&self.wgpu,
+					&mut self.panels,
+					&self.panels_renderer_shared,
+					&self.playlists,
+					&self.profiles,
+					&self.event_loop_proxy,
+				)?,
 				None => {
 					let Ok(event) = self.renderer_event_rx.recv() else {
 						break;
@@ -122,30 +109,24 @@ impl Renderer {
 		tracing::trace!("Received renderer event: {event:?}");
 		match event {
 			Event::WindowEvent { window_id, event } => {
-				let Some(window_renderer) = self.windows.get_mut(&window_id) else {
-					tracing::warn!(?window_id, ?event, "Unknown window id for event");
+				let Some(window_renderer) = &mut self.window_renderer else {
+					tracing::warn!(?window_id, ?event, "Received a window event with no active window");
 					return Ok(());
 				};
 				if window_renderer.egui.handle_event(&event) {
 					return Ok(());
 				}
 
-				// TODO: When resizing we receive many `Resized` events at once,
-				//       and we should only resize after the last we receive to
-				//       avoid lagging while dragging.
+				#[expect(clippy::single_match, reason = "We'll add more in the future")]
 				match event {
 					WindowEvent::Resized(size) => window_renderer.queued_resize = Some(size),
-					WindowEvent::Moved(pos) => window_renderer.monitor_geometry.pos = euclid::point2(pos.x, pos.y),
 					_ => (),
 				}
 			},
 
-			Event::WindowAdd { app_window } => {
-				let window_renderer = WindowRenderer::new(&self.wgpu, app_window).context("Unable to create window")?;
-				let window_id = window_renderer.window.id();
-				if self.windows.insert(window_id, window_renderer).is_some() {
-					tracing::warn!(?window_id, "Window was re-created without being destroyed first");
-				}
+			Event::WindowAdd { window } => {
+				let window_renderer = WindowRenderer::new(&self.wgpu, window).context("Unable to create window")?;
+				self.window_renderer = Some(window_renderer);
 			},
 		}
 
@@ -157,25 +138,20 @@ impl Renderer {
 // TODO: Package some of these together
 #[derive(Debug)]
 struct WindowRenderer {
-	window:                    Arc<Window>,
-	_monitor_name:             String,
-	monitor_geometry:          Rect<i32, u32>,
-	_monitor_refresh_rate_mhz: u32,
+	window:      Arc<Window>,
+	window_size: PhysicalSize<u32>,
 
 	wgpu_renderer:   WgpuRenderer,
 	panels_renderer: PanelsRenderer,
 	egui:            Egui,
 	menu:            Menu,
 
-	next_frame:     Instant,
-	frame_duration: Duration,
-
 	queued_resize: Option<PhysicalSize<u32>>,
 }
 
 impl WindowRenderer {
-	fn new(wgpu: &Wgpu, app_window: AppWindow) -> Result<Self, AppError> {
-		let window = Arc::new(app_window.window);
+	fn new(wgpu: &Wgpu, window: Window) -> Result<Self, AppError> {
+		let window = Arc::new(window);
 		let wgpu_renderer = WgpuRenderer::new(window.share(), wgpu).context("Unable to create wgpu renderer")?;
 
 		let msaa_samples = 4;
@@ -183,63 +159,17 @@ impl WindowRenderer {
 			PanelsRenderer::new(&wgpu_renderer, wgpu, msaa_samples).context("Unable to create panels renderer")?;
 		let egui = Egui::new(wgpu, &wgpu_renderer, window.share());
 
-		let frame_duration = Duration::from_secs_f64(1000.0) / app_window.monitor_refresh_rate_mhz;
-		tracing::info!(
-			"Window {:?} refresh rate: {:.2} Hz",
-			app_window.monitor_name,
-			f64::from(app_window.monitor_refresh_rate_mhz) / 1000.0,
-		);
-		tracing::info!(
-			"Window {:?} frame duration: {frame_duration:.2?}",
-			app_window.monitor_name
-		);
-
 		Ok(Self {
 			window,
-			_monitor_name: app_window.monitor_name,
-			monitor_geometry: app_window.monitor_geometry,
-			_monitor_refresh_rate_mhz: app_window.monitor_refresh_rate_mhz,
+			// Note: We typically always get a resize event before the first
+			//       frame, so this size isn't ever visible.
+			window_size: PhysicalSize::new(0, 0),
 			wgpu_renderer,
 			panels_renderer,
 			egui,
 			menu: Menu::new(),
-			next_frame: Instant::now(),
-			frame_duration,
 			queued_resize: None,
 		})
-	}
-
-	/// Sleeps until the next frame and prepares for it.
-	fn sleep_until_next_frame(&mut self) {
-		let prev_frame_end = Instant::now();
-		let cur_frame_start = self.next_frame;
-		self.next_frame += self.frame_duration;
-
-		// Wait until the start of the next frame.
-		// Note: We do this instead of letting wgpu sleep because all vsync
-		//       modes that sleep for us do so with a 3 frame buffer, which
-		//       means that the user is always 3 frames behind, and thus can
-		//       notice pretty heavy lag (at 60Hz, about 50 ms).
-		//       We also set the present mode to mailbox, which means that we
-		//       don't get any tearing, but have minimal lag.
-		thread::sleep_until(cur_frame_start);
-
-		// If we were too late, we need to skip some frames
-		if let Some(late) = prev_frame_end.checked_duration_since(cur_frame_start) &&
-			late > self.frame_duration
-		{
-			let frames = late.div_duration_floor(self.frame_duration);
-			tracing::trace!("Frame rendered late {late:.2?}, skipping {frames} frames");
-
-			// Note: This isn't as paranoic as it seems, since if the user sets the frame duration
-			//       to 1 ns by setting their frame rate to infinite, then this would fail if we're
-			//       late 5 seconds (`log2(5s / 1ns) ~ 32.2`). At which point we just give up on
-			//       keeping the frame timing and reset it to now instead.
-			match u32::try_from(frames) {
-				Ok(frames) => self.next_frame += self.frame_duration * frames,
-				Err(_) => self.next_frame = Instant::now(),
-			}
-		}
 	}
 
 	/// Renders the current frame.
@@ -259,15 +189,21 @@ impl WindowRenderer {
 		// If we need to resize, do it now
 		if let Some(size) = self.queued_resize.take() {
 			self.wgpu_renderer.resize(wgpu, size).context("Unable to resize wgpu")?;
-			self.panels_renderer.resize(&self.wgpu_renderer, wgpu, size)
+			self.panels_renderer.resize(&self.wgpu_renderer, wgpu, size);
+			self.window_size = size;
 		}
+
+		let window_geometry = Rect {
+			pos:  euclid::point2(0, 0),
+			size: euclid::vec2(self.window_size.width, self.window_size.height),
+		};
 
 		let mut frame = self.wgpu_renderer.start_render(wgpu).context("Unable to start frame")?;
 
 		self.panels_renderer
 			.render(
 				wgpu,
-				self.monitor_geometry,
+				window_geometry,
 				&mut frame,
 				&self.wgpu_renderer,
 				panels,
@@ -275,7 +211,15 @@ impl WindowRenderer {
 			)
 			.context("Unable to render panels")?;
 
-		self.render_egui(wgpu, panels, playlists, profiles, event_loop_proxy, &mut frame);
+		self.render_egui(
+			wgpu,
+			window_geometry,
+			panels,
+			playlists,
+			profiles,
+			event_loop_proxy,
+			&mut frame,
+		);
 
 		self.wgpu_renderer
 			.finish_render(wgpu, frame)
@@ -288,6 +232,7 @@ impl WindowRenderer {
 	fn render_egui(
 		&mut self,
 		wgpu: &Wgpu,
+		window_geometry: Rect<i32, u32>,
 		panels: &mut Panels,
 		playlists: &Playlists,
 		profiles: &Profiles,
@@ -303,7 +248,7 @@ impl WindowRenderer {
 				profiles,
 				panels,
 				event_loop_proxy,
-				self.monitor_geometry,
+				window_geometry,
 			);
 
 			// Then go through all panels checking for interactions with their geometries
@@ -318,7 +263,7 @@ impl WindowRenderer {
 					!panel
 						.geometries
 						.iter()
-						.any(|geometry| geometry.rect.on_window(self.monitor_geometry).contains(pointer_pos))
+						.any(|geometry| geometry.rect.on_window(window_geometry).contains(pointer_pos))
 				{
 					continue;
 				}
@@ -398,5 +343,5 @@ pub enum Event {
 	},
 
 	/// Add new window
-	WindowAdd { app_window: AppWindow },
+	WindowAdd { window: Window },
 }

@@ -8,7 +8,6 @@
 	bool_toggle,
 	sync_nonpoison,
 	nonpoison_mutex,
-	thread_sleep_until,
 	oneshot_channel,
 	str_as_str,
 	unwrap_infallible,
@@ -25,7 +24,6 @@ mod panel;
 mod playlist;
 mod profile;
 mod renderer;
-mod window;
 
 use {
 	self::{args::Args, config::Config, dirs::Dirs, panel::PanelsRendererShared, profile::Profile, renderer::Renderer},
@@ -43,8 +41,7 @@ use {
 		application::ApplicationHandler,
 		event::WindowEvent,
 		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy, OwnedDisplayHandle},
-		platform::x11::EventLoopBuilderExtX11,
-		window::WindowId,
+		window::{WindowAttributes, WindowId},
 	},
 	zsw_util::AppError,
 	zsw_wgpu::Wgpu,
@@ -94,9 +91,7 @@ async fn run() -> Result<(), AppError> {
 	logger.set_file(args.log_file.as_deref().or(config.log_file.as_deref()));
 
 	// Create the event loop
-	// TODO: Not force x11 once we can get wayland to lower our window on startup
 	let event_loop = EventLoop::with_user_event()
-		.with_x11()
 		.build()
 		.context("Unable to build winit event loop")?;
 
@@ -188,22 +183,21 @@ impl WinitApp {
 		})
 	}
 
-	/// Initializes the window related things
+	/// Initializes the window
 	pub fn init_window(&self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
-		let windows = window::create(
-			event_loop,
-			self.config.transparent_windows,
-			self.config.monitors.as_deref(),
-		)
-		.context("Unable to create winit event loop and window")?;
-		for app_window in windows {
-			_ = self.renderer_event_tx.send(renderer::Event::WindowAdd { app_window });
-		}
+		let window_attrs = WindowAttributes::default()
+			.with_title("zsw")
+			.with_transparent(self.config.transparent_windows);
+		let window = event_loop
+			.create_window(window_attrs)
+			.context("Unable to create window")?;
+
+		_ = self.renderer_event_tx.send(renderer::Event::WindowAdd { window });
 
 		Ok(())
 	}
 
-	/// Destroys the window related things
+	/// Destroys the window
 	#[expect(clippy::needless_pass_by_ref_mut, reason = "We'll use it in the future")]
 	pub fn destroy_window(&mut self) -> Result<(), AppError> {
 		// TODO: Handle destroying all tasks that use the window
