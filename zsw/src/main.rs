@@ -29,7 +29,7 @@ use {
 		dirs::Dirs,
 		playlist::Playlists,
 		profile::{Profile, ProfileName, Profiles},
-		renderer::Renderer,
+		renderer::WindowRenderer,
 	},
 	app_error::Context,
 	clap::Parser,
@@ -117,7 +117,7 @@ struct WinitApp {
 
 	display: OwnedDisplayHandle,
 
-	renderer: Renderer,
+	renderer: Option<WindowRenderer>,
 }
 
 impl ApplicationHandler<AppEvent> for WinitApp {
@@ -160,34 +160,37 @@ impl WinitApp {
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
 
-		let renderer = Renderer::new().context("Unable to build renderer")?;
-
 		Ok(Self {
 			event_loop_proxy,
 			playlists,
 			profiles,
 			profile_name: args.profile,
 			display,
-			renderer,
+			renderer: None,
 		})
 	}
 
 	/// Initializes the window
 	pub async fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
+		// Note: We drop the windows before creating new ones because having
+		//       multiple surfaces on the same actual window is an error.
+		self.renderer = None;
+
 		let window_attrs = WindowAttributes::default().with_title("zsw");
 		let window = event_loop
 			.create_window(window_attrs)
 			.context("Unable to create window")?;
-		self.renderer
-			.set_window(
-				&self.playlists,
-				&self.profiles,
-				&self.profile_name,
-				self.display.clone(),
-				window,
-			)
-			.await
-			.context("Unable to set renderer window")?;
+
+		let renderer = WindowRenderer::new(
+			self.display.clone(),
+			window,
+			&self.profiles,
+			&self.profile_name,
+			&self.playlists,
+		)
+		.await
+		.context("Unable to create renderer")?;
+		self.renderer = Some(renderer);
 
 		Ok(())
 	}
@@ -201,16 +204,22 @@ impl WinitApp {
 
 	/// Handles a window event
 	pub fn handle_window_event(&mut self, event_loop: &ActiveEventLoop, event: &WindowEvent) -> Result<(), AppError> {
-		if self.renderer.forward_egui_window_event(event)? {
+		let Some(renderer) = &mut self.renderer else {
+			tracing::warn!(?event, "Got a window event before initializing a window");
+			return Ok(());
+		};
+
+		if renderer.forward_egui_window_event(event) {
 			return Ok(());
 		}
 
 		match *event {
-			WindowEvent::Resized(size) => self.renderer.queue_resize(euclid::vec2(size.width, size.height))?,
+			WindowEvent::Resized(size) => renderer.queue_resize(euclid::vec2(size.width, size.height)),
 			WindowEvent::CloseRequested => event_loop.exit(),
-			WindowEvent::RedrawRequested =>
-				self.renderer
-					.render(&self.playlists, &self.profiles, &self.event_loop_proxy)?,
+			WindowEvent::RedrawRequested => {
+				renderer.render(&self.playlists, &self.profiles, &self.event_loop_proxy)?;
+				renderer.window().request_redraw();
+			},
 			_ => (),
 		}
 

@@ -23,84 +23,8 @@ use {
 	zsw_wgpu::{FrameRender, WgpuRenderer},
 };
 
-/// Renderer
 #[derive(Debug)]
-pub struct Renderer {
-	window_renderer: Option<WindowRenderer>,
-}
-
-impl Renderer {
-	pub fn new() -> Result<Self, AppError> {
-		Ok(Self { window_renderer: None })
-	}
-
-	/// Renders all windows
-	pub fn render(
-		&mut self,
-		playlists: &Playlists,
-		profiles: &Profiles,
-		event_loop_proxy: &EventLoopProxy<AppEvent>,
-	) -> Result<(), AppError> {
-		let window_renderer = self
-			.window_renderer
-			.as_mut()
-			.context("Cannot render without a window")?;
-
-		window_renderer.render(playlists, profiles, event_loop_proxy)?;
-
-		// After rendering, request another redraw
-		window_renderer.window.request_redraw();
-
-		Ok(())
-	}
-
-	/// Forwards a window event to egui.
-	///
-	/// Returns if egui wants exclusive use of that event
-	pub fn forward_egui_window_event(&mut self, event: &WindowEvent) -> Result<bool, AppError> {
-		let window_renderer = self
-			.window_renderer
-			.as_mut()
-			.context("Cannot forward window event without a window")?;
-
-		Ok(window_renderer.egui.handle_event(event))
-	}
-
-	/// Queues a resize to this renderer
-	///
-	/// This will stay queued for the next redraw
-	pub fn queue_resize(&mut self, size: Vector2D<u32>) -> Result<(), AppError> {
-		let window_renderer = self
-			.window_renderer
-			.as_mut()
-			.context("Cannot render without a window")?;
-
-		window_renderer.queued_resize = Some(size);
-
-		Ok(())
-	}
-
-	/// Sets the window of this renderer
-	pub async fn set_window(
-		&mut self,
-		playlists: &Playlists,
-		profiles: &Profiles,
-		profile_name: &ProfileName,
-		display: OwnedDisplayHandle,
-		window: Window,
-	) -> Result<(), AppError> {
-		let window_renderer = WindowRenderer::new(display, window, profiles, profile_name, playlists)
-			.await
-			.context("Unable to create window")?;
-		self.window_renderer = Some(window_renderer);
-
-		Ok(())
-	}
-}
-
-// TODO: Package some of these together
-#[derive(Debug)]
-struct WindowRenderer {
+pub struct WindowRenderer {
 	window:      Arc<Window>,
 	window_size: Vector2D<u32>,
 
@@ -153,11 +77,24 @@ impl WindowRenderer {
 		})
 	}
 
-	/// Renders the current frame.
+	/// Returns the window this renderer is using
+	pub fn window(&self) -> &Window {
+		&self.window
+	}
+
+	/// Forwards a window event to egui.
 	///
-	/// Does not check whether it is time for it or not, you must
-	/// instead call [`Self::sleep_until_next_frame`] and/or check
-	/// [`Self::next_frame`].
+	/// Returns if egui wants exclusive use of that event
+	pub fn forward_egui_window_event(&mut self, event: &WindowEvent) -> bool {
+		self.egui.handle_event(event)
+	}
+
+	/// Queues a resize for the next render
+	pub fn queue_resize(&mut self, size: Vector2D<u32>) {
+		self.queued_resize = Some(size);
+	}
+
+	/// Renders the current frame.
 	pub fn render(
 		&mut self,
 		playlists: &Playlists,
