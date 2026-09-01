@@ -12,7 +12,6 @@
 	share_trait,
 	duration_integer_division
 )]
-#![expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 
 mod args;
 mod config;

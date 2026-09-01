@@ -36,6 +36,7 @@ impl Menu {
 	}
 
 	/// Draws the menu
+	#[expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
 	pub fn draw(
 		&mut self,
 		ctx: &egui::Context,
