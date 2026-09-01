@@ -23,7 +23,14 @@ mod profile;
 mod renderer;
 
 use {
-	self::{args::Args, config::Config, dirs::Dirs, profile::Profile, renderer::Renderer},
+	self::{
+		args::Args,
+		config::Config,
+		dirs::Dirs,
+		playlist::Playlists,
+		profile::{Profile, ProfileName, Profiles},
+		renderer::Renderer,
+	},
 	app_error::Context,
 	clap::Parser,
 	core::cell::LazyCell,
@@ -102,6 +109,12 @@ fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
+	event_loop_proxy: EventLoopProxy<AppEvent>,
+
+	playlists:    Playlists,
+	profiles:     Profiles,
+	profile_name: ProfileName,
+
 	display: OwnedDisplayHandle,
 
 	renderer: Renderer,
@@ -147,10 +160,16 @@ impl WinitApp {
 		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
 			.context("Unable to create profiles")?;
 
-		let renderer =
-			Renderer::new(args.profile, event_loop_proxy, playlists, profiles).context("Unable to build renderer")?;
+		let renderer = Renderer::new().context("Unable to build renderer")?;
 
-		Ok(Self { display, renderer })
+		Ok(Self {
+			event_loop_proxy,
+			playlists,
+			profiles,
+			profile_name: args.profile,
+			display,
+			renderer,
+		})
 	}
 
 	/// Initializes the window
@@ -160,7 +179,13 @@ impl WinitApp {
 			.create_window(window_attrs)
 			.context("Unable to create window")?;
 		self.renderer
-			.set_window(self.display.clone(), window)
+			.set_window(
+				&self.playlists,
+				&self.profiles,
+				&self.profile_name,
+				self.display.clone(),
+				window,
+			)
 			.await
 			.context("Unable to set renderer window")?;
 
@@ -183,7 +208,9 @@ impl WinitApp {
 		match *event {
 			WindowEvent::Resized(size) => self.renderer.queue_resize(euclid::vec2(size.width, size.height))?,
 			WindowEvent::CloseRequested => event_loop.exit(),
-			WindowEvent::RedrawRequested => self.renderer.render()?,
+			WindowEvent::RedrawRequested =>
+				self.renderer
+					.render(&self.playlists, &self.profiles, &self.event_loop_proxy)?,
 			_ => (),
 		}
 

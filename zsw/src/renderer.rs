@@ -24,42 +24,29 @@ use {
 };
 
 /// Renderer
-// TODO: Package some of these together
 #[derive(Debug)]
 pub struct Renderer {
-	event_loop_proxy: EventLoopProxy<AppEvent>,
-
-	playlists:    Playlists,
-	profiles:     Profiles,
-	profile_name: ProfileName,
-
 	window_renderer: Option<WindowRenderer>,
 }
 
 impl Renderer {
-	pub fn new(
-		profile_name: ProfileName,
-		event_loop_proxy: EventLoopProxy<AppEvent>,
-		playlists: Playlists,
-		profiles: Profiles,
-	) -> Result<Self, AppError> {
-		Ok(Self {
-			event_loop_proxy,
-			playlists,
-			profiles,
-			profile_name,
-			window_renderer: None,
-		})
+	pub fn new() -> Result<Self, AppError> {
+		Ok(Self { window_renderer: None })
 	}
 
 	/// Renders all windows
-	pub fn render(&mut self) -> Result<(), AppError> {
+	pub fn render(
+		&mut self,
+		playlists: &Playlists,
+		profiles: &Profiles,
+		event_loop_proxy: &EventLoopProxy<AppEvent>,
+	) -> Result<(), AppError> {
 		let window_renderer = self
 			.window_renderer
 			.as_mut()
 			.context("Cannot render without a window")?;
 
-		window_renderer.render(&self.playlists, &self.profiles, &self.event_loop_proxy)?;
+		window_renderer.render(playlists, profiles, event_loop_proxy)?;
 
 		// After rendering, request another redraw
 		window_renderer.window.request_redraw();
@@ -94,8 +81,15 @@ impl Renderer {
 	}
 
 	/// Sets the window of this renderer
-	pub async fn set_window(&mut self, display: OwnedDisplayHandle, window: Window) -> Result<(), AppError> {
-		let window_renderer = WindowRenderer::new(display, window, &self.profiles, &self.profile_name, &self.playlists)
+	pub async fn set_window(
+		&mut self,
+		playlists: &Playlists,
+		profiles: &Profiles,
+		profile_name: &ProfileName,
+		display: OwnedDisplayHandle,
+		window: Window,
+	) -> Result<(), AppError> {
+		let window_renderer = WindowRenderer::new(display, window, profiles, profile_name, playlists)
 			.await
 			.context("Unable to create window")?;
 		self.window_renderer = Some(window_renderer);
