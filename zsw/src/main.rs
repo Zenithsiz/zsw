@@ -90,7 +90,6 @@ fn run() -> Result<(), AppError> {
 	// Initialize the app
 	let mut app = WinitApp::new(
 		args,
-		config,
 		&dirs,
 		event_loop.owned_display_handle(),
 		event_loop.create_proxy(),
@@ -104,8 +103,6 @@ fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct WinitApp {
-	config: Config,
-
 	display: OwnedDisplayHandle,
 
 	renderer: Renderer,
@@ -143,7 +140,6 @@ impl WinitApp {
 	/// Creates a new app
 	pub fn new(
 		args: Args,
-		config: Config,
 		dirs: &Dirs,
 		display: OwnedDisplayHandle,
 		event_loop_proxy: EventLoopProxy<AppEvent>,
@@ -155,18 +151,12 @@ impl WinitApp {
 		let renderer =
 			Renderer::new(args.profile, event_loop_proxy, playlists, profiles).context("Unable to build renderer")?;
 
-		Ok(Self {
-			config,
-			display,
-			renderer,
-		})
+		Ok(Self { display, renderer })
 	}
 
 	/// Initializes the window
 	pub async fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
-		let window_attrs = WindowAttributes::default()
-			.with_title("zsw")
-			.with_transparent(self.config.transparent_windows);
+		let window_attrs = WindowAttributes::default().with_title("zsw");
 		let window = event_loop
 			.create_window(window_attrs)
 			.context("Unable to create window")?;

@@ -18,11 +18,6 @@ pub struct Config {
 	/// Will be overridden by command-line arguments
 	#[serde(default)]
 	pub log_file: Option<PathBuf>,
-
-	/// Transparent windows
-	// TODO: Do we still need this?
-	#[serde(default)]
-	pub transparent_windows: bool,
 }
 
 impl Config {
@@ -70,9 +65,6 @@ impl Config {
 #[expect(clippy::derivable_impls, reason = "We want to be explicit with defaults")]
 impl Default for Config {
 	fn default() -> Self {
-		Self {
-			log_file:            None,
-			transparent_windows: false,
-		}
+		Self { log_file: None }
 	}
 }
