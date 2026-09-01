@@ -11,10 +11,9 @@ use {
 	app_error::Context,
 	chrono::TimeDelta,
 	core::clone::Share,
-	euclid::default::Point2D,
+	euclid::default::{Point2D, Vector2D},
 	std::sync::Arc,
 	winit::{
-		dpi::PhysicalSize,
 		event::WindowEvent,
 		event_loop::{EventLoopProxy, OwnedDisplayHandle},
 		window::Window,
@@ -83,7 +82,7 @@ impl Renderer {
 	/// Queues a resize to this renderer
 	///
 	/// This will stay queued for the next redraw
-	pub fn queue_resize(&mut self, size: PhysicalSize<u32>) -> Result<(), AppError> {
+	pub fn queue_resize(&mut self, size: Vector2D<u32>) -> Result<(), AppError> {
 		let window_renderer = self
 			.window_renderer
 			.as_mut()
@@ -109,7 +108,7 @@ impl Renderer {
 #[derive(Debug)]
 struct WindowRenderer {
 	window:      Arc<Window>,
-	window_size: PhysicalSize<u32>,
+	window_size: Vector2D<u32>,
 
 	wgpu_renderer:   WgpuRenderer,
 	panels:          Panels,
@@ -117,7 +116,7 @@ struct WindowRenderer {
 	egui:            Egui,
 	menu:            Menu,
 
-	queued_resize: Option<PhysicalSize<u32>>,
+	queued_resize: Option<Vector2D<u32>>,
 }
 
 impl WindowRenderer {
@@ -150,7 +149,7 @@ impl WindowRenderer {
 			window,
 			// Note: We typically always get a resize event before the first
 			//       frame, so this size isn't ever visible.
-			window_size: PhysicalSize::new(0, 0),
+			window_size: Vector2D::new(0, 0),
 			wgpu_renderer,
 			panels,
 			panels_renderer,
@@ -180,7 +179,7 @@ impl WindowRenderer {
 
 		let window_geometry = Rect {
 			pos:  euclid::point2(0, 0),
-			size: euclid::vec2(self.window_size.width, self.window_size.height),
+			size: self.window_size,
 		};
 
 		let mut frame = self.wgpu_renderer.start_render().context("Unable to start frame")?;

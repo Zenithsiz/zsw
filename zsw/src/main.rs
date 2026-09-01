@@ -192,7 +192,7 @@ impl WinitApp {
 		}
 
 		match *event {
-			WindowEvent::Resized(size) => self.renderer.queue_resize(size)?,
+			WindowEvent::Resized(size) => self.renderer.queue_resize(euclid::vec2(size.width, size.height))?,
 			WindowEvent::CloseRequested => event_loop.exit(),
 			WindowEvent::RedrawRequested => self.renderer.render()?,
 			_ => (),

@@ -86,7 +86,7 @@ impl Egui {
 		// Update buffers
 		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 		let screen_descriptor = egui_wgpu::ScreenDescriptor {
-			size_in_pixels:   [frame.surface_size.width, frame.surface_size.height],
+			size_in_pixels:   [frame.surface_size.x, frame.surface_size.y],
 			pixels_per_point: window.scale_factor() as f32,
 		};
 		let buffers = self.renderer.update_buffers(

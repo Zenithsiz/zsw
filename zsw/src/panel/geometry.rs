@@ -4,7 +4,6 @@ use {
 	super::state::PanelGeometryShared,
 	euclid::default::{Transform3D, Vector2D},
 	num_rational::Rational32,
-	winit::dpi::PhysicalSize,
 	zsw_util::Rect,
 };
 
@@ -48,14 +47,14 @@ impl PanelGeometryRect {
 	// Note: This matrix simply goes from a geometry in physical units
 	//       onto shader coordinates.
 	#[must_use]
-	pub fn pos_matrix(&self, window_geometry: Rect<i32, u32>, surface_size: PhysicalSize<u32>) -> Transform3D<f32> {
+	pub fn pos_matrix(&self, window_geometry: Rect<i32, u32>, surface_size: Vector2D<u32>) -> Transform3D<f32> {
 		let geometry = self.on_window(window_geometry);
 
-		let x_scale = geometry.size.x as f32 / surface_size.width as f32;
-		let y_scale = geometry.size.y as f32 / surface_size.height as f32;
+		let x_scale = geometry.size.x as f32 / surface_size.x as f32;
+		let y_scale = geometry.size.y as f32 / surface_size.y as f32;
 
-		let x_offset = geometry.pos.x as f32 / surface_size.width as f32;
-		let y_offset = geometry.pos.y as f32 / surface_size.height as f32;
+		let x_offset = geometry.pos.x as f32 / surface_size.x as f32;
+		let y_offset = geometry.pos.y as f32 / surface_size.y as f32;
 
 		let translation =
 			Transform3D::translation(-1.0 + x_scale + 2.0 * x_offset, 1.0 - y_scale - 2.0 * y_offset, 0.0);

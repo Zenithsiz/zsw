@@ -28,7 +28,6 @@ use {
 		collections::{HashMap, hash_map},
 	},
 	wgpu::util::DeviceExt,
-	winit::dpi::PhysicalSize,
 	zsw_util::{AppError, Rect},
 	zsw_wgpu::{FrameRender, WgpuRenderer},
 };
@@ -91,8 +90,8 @@ impl PanelsRenderer {
 	}
 
 	/// Resizes the buffer
-	pub fn resize(&mut self, wgpu_renderer: &WgpuRenderer, size: PhysicalSize<u32>) {
-		tracing::debug!("Resizing msaa framebuffer to {}x{}", size.width, size.height);
+	pub fn resize(&mut self, wgpu_renderer: &WgpuRenderer, size: Vector2D<u32>) {
+		tracing::debug!("Resizing msaa framebuffer to {}x{}", size.x, size.y);
 		self.msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, size, self.msaa_samples);
 	}
 
@@ -168,7 +167,7 @@ impl PanelsRenderer {
 		&mut self,
 		wgpu_renderer: &WgpuRenderer,
 
-		surface_size: PhysicalSize<u32>,
+		surface_size: Vector2D<u32>,
 		window_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &mut Panel,
@@ -243,7 +242,7 @@ impl PanelsRenderer {
 	fn render_panel_geometries(
 		&self,
 		wgpu_renderer: &WgpuRenderer,
-		surface_size: PhysicalSize<u32>,
+		surface_size: Vector2D<u32>,
 		window_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &mut Panel,
@@ -271,7 +270,7 @@ impl PanelsRenderer {
 	pub fn render_panel_geometry(
 		&self,
 		wgpu_renderer: &WgpuRenderer,
-		surface_size: PhysicalSize<u32>,
+		surface_size: Vector2D<u32>,
 		state: &mut PanelState,
 		window_geometry: Rect<i32, u32>,
 		panel_geometry: &mut PanelGeometry,
@@ -692,14 +691,10 @@ fn create_render_pipeline(
 }
 
 /// Creates the msaa framebuffer
-fn create_msaa_framebuffer(
-	wgpu_renderer: &WgpuRenderer,
-	size: PhysicalSize<u32>,
-	msaa_samples: u32,
-) -> wgpu::TextureView {
+fn create_msaa_framebuffer(wgpu_renderer: &WgpuRenderer, size: Vector2D<u32>, msaa_samples: u32) -> wgpu::TextureView {
 	let msaa_texture_extent = wgpu::Extent3d {
-		width:                 size.width,
-		height:                size.height,
+		width:                 size.x,
+		height:                size.y,
 		depth_or_array_layers: 1,
 	};
 

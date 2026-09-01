@@ -5,10 +5,11 @@
 use {
 	app_error::{Context, bail},
 	core::clone::Share,
+	euclid::default::Vector2D,
 	image::DynamicImage,
 	std::sync::Arc,
 	wgpu::util::{self as wgpu_util, DeviceExt},
-	winit::{dpi::PhysicalSize, event_loop::OwnedDisplayHandle, window::Window},
+	winit::{event_loop::OwnedDisplayHandle, window::Window},
 	zsw_util::AppError,
 };
 
@@ -46,7 +47,7 @@ pub struct WgpuRenderer {
 	//       Wgpu validation code can panic if the size we give it
 	//       is invalid (for example, during scissoring), so we *must*
 	//       ensure this size is the surface's actual size.
-	pub surface_size: PhysicalSize<u32>,
+	pub surface_size: Vector2D<u32>,
 
 	/// Surface config
 	pub surface_config: wgpu::SurfaceConfiguration,
@@ -67,6 +68,7 @@ impl WgpuRenderer {
 
 		// Configure the surface and get the preferred texture format and surface size
 		let surface_size = window.inner_size();
+		let surface_size = euclid::vec2(surface_size.width, surface_size.height);
 		let surface_config = self::configure_window_surface(&adapter, &device, &surface, surface_size)
 			.context("Unable to configure window surface")?;
 
@@ -205,8 +207,8 @@ impl WgpuRenderer {
 	pub fn reconfigure(&mut self) -> Result<(), AppError> {
 		tracing::info!(
 			"Reconfiguring wgpu surface to {}x{}",
-			self.surface_size.width,
-			self.surface_size.height
+			self.surface_size.x,
+			self.surface_size.y
 		);
 
 		// Update our surface
@@ -218,15 +220,15 @@ impl WgpuRenderer {
 	}
 
 	/// Performs a resize
-	pub fn resize(&mut self, size: PhysicalSize<u32>) -> Result<(), AppError> {
+	pub fn resize(&mut self, size: Vector2D<u32>) -> Result<(), AppError> {
 		tracing::info!(
 			"Resizing wgpu surface to {}x{}",
-			self.surface_size.width,
-			self.surface_size.height
+			self.surface_size.x,
+			self.surface_size.y
 		);
 
 		// TODO: Don't ignore resizes to the same size?
-		if size.width > 0 && size.height > 0 && size != self.surface_size {
+		if size.x > 0 && size.y > 0 && size != self.surface_size {
 			// Update our surface
 			self.surface_config = self::configure_window_surface(&self.adapter, &self.device, &self.surface, size)
 				.context("Unable to configure window surface")?;
@@ -250,7 +252,7 @@ pub struct FrameRender {
 	pub surface_view: wgpu::TextureView,
 
 	/// Surface size
-	pub surface_size: PhysicalSize<u32>,
+	pub surface_size: Vector2D<u32>,
 
 	/// Whether the surface was sub-optimal
 	pub suboptimal: bool,
@@ -261,11 +263,11 @@ fn configure_window_surface(
 	adapter: &wgpu::Adapter,
 	device: &wgpu::Device,
 	surface: &wgpu::Surface<'static>,
-	size: PhysicalSize<u32>,
+	size: Vector2D<u32>,
 ) -> Result<wgpu::SurfaceConfiguration, AppError> {
 	// Get the format
 	let mut config = surface
-		.get_default_config(adapter, size.width, size.height)
+		.get_default_config(adapter, size.x, size.y)
 		.context("Unable to get surface default config")?;
 	tracing::debug!(?config, "Found surface configuration");
 
