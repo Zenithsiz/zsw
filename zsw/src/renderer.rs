@@ -94,26 +94,34 @@ impl WindowRenderer {
 		self.queued_resize = Some(size);
 	}
 
-	/// Renders the current frame.
-	pub fn render(
-		&mut self,
-		playlists: &Playlists,
-		profiles: &Profiles,
-		event_loop_proxy: &EventLoopProxy<AppEvent>,
-	) -> Result<(), AppError> {
-		// If we need to resize, do it now
+	/// Waits until the next frame.
+	///
+	/// Performs any queued resize
+	pub fn wait_frame(&mut self) -> Result<FrameRender, AppError> {
+		// If we need to resize, do it now before starting the new frame
 		if let Some(size) = self.queued_resize.take() {
 			self.wgpu_renderer.resize(size).context("Unable to resize wgpu")?;
 			self.panels_renderer.resize(&self.wgpu_renderer, size);
 			self.window_size = size;
 		}
 
+		self.wgpu_renderer.start_render().context("Unable to start frame")
+	}
+
+	/// Renders the a frame.
+	///
+	/// You can get the current frame from [`wait_frame`](Self::wait_frame).
+	pub fn render(
+		&mut self,
+		playlists: &Playlists,
+		profiles: &Profiles,
+		event_loop_proxy: &EventLoopProxy<AppEvent>,
+		mut frame: FrameRender,
+	) -> Result<(), AppError> {
 		let window_geometry = Rect {
 			pos:  euclid::point2(0, 0),
 			size: self.window_size,
 		};
-
-		let mut frame = self.wgpu_renderer.start_render().context("Unable to start frame")?;
 
 		self.panels_renderer
 			.render(&self.wgpu_renderer, window_geometry, &mut frame, &mut self.panels)

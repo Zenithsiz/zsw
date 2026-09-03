@@ -217,7 +217,8 @@ impl WinitApp {
 			WindowEvent::Resized(size) => renderer.queue_resize(euclid::vec2(size.width, size.height)),
 			WindowEvent::CloseRequested => event_loop.exit(),
 			WindowEvent::RedrawRequested => {
-				renderer.render(&self.playlists, &self.profiles, &self.event_loop_proxy)?;
+				let frame = renderer.wait_frame()?;
+				renderer.render(&self.playlists, &self.profiles, &self.event_loop_proxy, frame)?;
 				renderer.window().request_redraw();
 			},
 			_ => (),
