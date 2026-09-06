@@ -67,7 +67,10 @@ impl Egui {
 
 		// Update buffers
 		let screen_descriptor = egui_wgpu::ScreenDescriptor {
-			size_in_pixels:   [frame.surface_size.x, frame.surface_size.y],
+			size_in_pixels:   [
+				frame.surface_texture.texture.width(),
+				frame.surface_texture.texture.height(),
+			],
 			pixels_per_point: match wayland_data.scale_factor {
 				// TODO: Is this correct?
 				Some(scale_factor) => scale_factor as f32,

@@ -172,7 +172,6 @@ impl WgpuRenderer {
 			encoder,
 			surface_texture,
 			surface_view: surface_texture_view,
-			surface_size: self.surface_size(),
 			suboptimal,
 		})
 	}
@@ -234,9 +233,6 @@ pub struct FrameRender {
 
 	/// Surface view
 	pub surface_view: wgpu::TextureView,
-
-	/// Surface size
-	pub surface_size: Vector2D<u32>,
 
 	/// Whether the surface was sub-optimal
 	pub suboptimal: bool,

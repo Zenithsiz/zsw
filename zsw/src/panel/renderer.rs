@@ -148,15 +148,14 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
+		let surface_size = euclid::vec2(
+			frame.surface_texture.texture.width(),
+			frame.surface_texture.texture.height(),
+		);
+
 		// Then render all panels simultaneously
 		for panel in panels.get_all() {
-			self.render_panel(
-				wgpu_renderer,
-				frame.surface_size,
-				surface_geometry,
-				&mut render_pass,
-				panel,
-			)?;
+			self.render_panel(wgpu_renderer, surface_size, surface_geometry, &mut render_pass, panel)?;
 		}
 
 		Ok(())
