@@ -71,7 +71,7 @@ impl PanelsRenderer {
 	/// Creates a new renderer for the panels
 	pub fn new(wgpu_renderer: &WgpuRenderer, msaa_samples: u32) -> Result<Self, AppError> {
 		// Create the framebuffer
-		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_renderer.surface_size, msaa_samples);
+		let msaa_framebuffer = self::create_msaa_framebuffer(wgpu_renderer, wgpu_renderer.surface_size(), msaa_samples);
 
 		// Create the index / vertex buffer
 		let indices = self::create_indices(wgpu_renderer);

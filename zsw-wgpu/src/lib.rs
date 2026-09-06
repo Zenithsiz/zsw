@@ -36,16 +36,6 @@ pub struct WgpuRenderer {
 	/// Surface
 	pub surface: wgpu::Surface<'static>,
 
-	/// Surface size
-	// Note: We keep the size ourselves instead of using the inner
-	//       surface size because the surface resizes asynchronously
-	//       from us, so it's possible for the surface sizes to be
-	//       wrong relative to the surface size.
-	//       Wgpu validation code can panic if the size we give it
-	//       is invalid (for example, during scissoring), so we *must*
-	//       ensure this size is the surface's actual size.
-	pub surface_size: Vector2D<u32>,
-
 	/// Surface config
 	pub surface_config: wgpu::SurfaceConfiguration,
 }
@@ -76,9 +66,13 @@ impl WgpuRenderer {
 			empty_texture,
 			empty_texture_view,
 			surface,
-			surface_size,
 			surface_config,
 		})
+	}
+
+	/// Returns the surface size
+	pub fn surface_size(&self) -> Vector2D<u32> {
+		euclid::vec2(self.surface_config.width, self.surface_config.height)
 	}
 
 	/// Creates a texture from an image.
@@ -178,7 +172,7 @@ impl WgpuRenderer {
 			encoder,
 			surface_texture,
 			surface_view: surface_texture_view,
-			surface_size: self.surface_size,
+			surface_size: self.surface_size(),
 			suboptimal,
 		})
 	}
@@ -203,12 +197,12 @@ impl WgpuRenderer {
 	pub fn reconfigure(&mut self) -> Result<(), AppError> {
 		tracing::info!(
 			"Reconfiguring wgpu surface to {}x{}",
-			self.surface_size.x,
-			self.surface_size.y
+			self.surface_config.width,
+			self.surface_config.height
 		);
 
 		// Update our surface
-		self.surface_config = self::configure_surface(&self.adapter, &self.device, &self.surface, self.surface_size)
+		self.surface_config = self::configure_surface(&self.adapter, &self.device, &self.surface, self.surface_size())
 			.context("Unable to configure surface")?;
 
 		Ok(())
@@ -216,18 +210,13 @@ impl WgpuRenderer {
 
 	/// Performs a resize
 	pub fn resize(&mut self, size: Vector2D<u32>) -> Result<(), AppError> {
-		tracing::info!(
-			"Resizing wgpu surface to {}x{}",
-			self.surface_size.x,
-			self.surface_size.y
-		);
+		tracing::info!("Resizing wgpu surface to {}x{}", size.x, size.y);
 
 		// TODO: Don't ignore resizes to the same size?
-		if size.x > 0 && size.y > 0 && size != self.surface_size {
+		if size.x > 0 && size.y > 0 && size != self.surface_size() {
 			// Update our surface
 			self.surface_config = self::configure_surface(&self.adapter, &self.device, &self.surface, size)
 				.context("Unable to configure surface")?;
-			self.surface_size = size;
 		}
 
 		Ok(())
