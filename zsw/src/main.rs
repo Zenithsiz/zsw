@@ -1,11 +1,8 @@
 //! Zenithsiz's scrolling wallpaper
 
 #![feature(
-	never_type,
-	must_not_suspend,
 	proc_macro_hygiene,
 	stmt_expr_attributes,
-	bool_toggle,
 	oneshot_channel,
 	str_as_str,
 	unwrap_infallible,

@@ -1,6 +1,6 @@
 //! Wgpu wrapper
 
-#![feature(must_not_suspend, yeet_expr)]
+#![feature(yeet_expr)]
 
 use {
 	app_error::{Context, bail},

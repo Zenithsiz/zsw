@@ -1,7 +1,5 @@
 //! Egui wrapper
 
-#![feature(must_not_suspend)]
-
 mod wayland;
 
 pub use self::wayland::EguiWaylandState;

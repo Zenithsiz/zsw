@@ -1,7 +1,5 @@
 //! Build script
 
-#![feature(must_not_suspend)]
-
 use {
 	app_error::{AppError, Context},
 	itertools::Itertools,

@@ -2,7 +2,6 @@
 
 #![feature(
 	decl_macro,
-	must_not_suspend,
 	const_trait_impl,
 	unboxed_closures,
 	proc_macro_hygiene,

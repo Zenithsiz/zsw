@@ -1,6 +1,6 @@
 //! Utility macros
 
-#![feature(must_not_suspend, yeet_expr)]
+#![feature(yeet_expr)]
 
 mod get_or_insert;
 
