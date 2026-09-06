@@ -18,7 +18,7 @@ use {
 };
 
 #[derive(Debug)]
-pub struct WindowRenderer {
+pub struct SurfaceRenderer {
 	surface_size: Vector2D<u32>,
 
 	wgpu_renderer:   WgpuRenderer,
@@ -30,8 +30,8 @@ pub struct WindowRenderer {
 	queued_resize: Option<Vector2D<u32>>,
 }
 
-impl WindowRenderer {
-	/// Creates the window renderer
+impl SurfaceRenderer {
+	/// Creates the surface renderer
 	pub async fn new(
 		target: zsw_wgpu::SurfaceTarget,
 		surface_size: Vector2D<u32>,
@@ -67,7 +67,7 @@ impl WindowRenderer {
 		})
 	}
 
-	/// Returns the wgpu renderer used to render this window
+	/// Returns the wgpu renderer for this surface
 	pub fn wgpu_renderer(&self) -> &WgpuRenderer {
 		&self.wgpu_renderer
 	}
@@ -104,18 +104,18 @@ impl WindowRenderer {
 		egui_input: egui::RawInput,
 		mut frame: FrameRender,
 	) -> Result<egui::PlatformOutput, AppError> {
-		let window_geometry = Rect {
+		let surface_geometry = Rect {
 			pos:  euclid::point2(0, 0),
 			size: self.surface_size,
 		};
 
 		self.panels_renderer
-			.render(&self.wgpu_renderer, window_geometry, &mut frame, &mut self.panels)
+			.render(&self.wgpu_renderer, surface_geometry, &mut frame, &mut self.panels)
 			.context("Unable to render panels")?;
 
 		let egui_output = self.render_egui(
 			wayland_data,
-			window_geometry,
+			surface_geometry,
 			playlists,
 			profiles,
 			egui_input,
@@ -133,7 +133,7 @@ impl WindowRenderer {
 	fn render_egui(
 		&mut self,
 		wayland_data: &mut WaylandData<Zsw>,
-		window_geometry: Rect<i32, u32>,
+		surface_geometry: Rect<i32, u32>,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		egui_input: egui::RawInput,
@@ -148,7 +148,7 @@ impl WindowRenderer {
 				playlists,
 				profiles,
 				&mut self.panels,
-				window_geometry,
+				surface_geometry,
 			);
 
 			// Then go through all panels checking for interactions with their geometries
@@ -163,7 +163,7 @@ impl WindowRenderer {
 					!panel
 						.geometries
 						.iter()
-						.any(|geometry| geometry.rect.on_window(window_geometry).contains(pointer_pos))
+						.any(|geometry| geometry.rect.relative_to(surface_geometry).contains(pointer_pos))
 				{
 					continue;
 				}

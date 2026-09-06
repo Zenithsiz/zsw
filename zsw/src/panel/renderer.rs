@@ -99,7 +99,7 @@ impl PanelsRenderer {
 	pub fn render(
 		&mut self,
 		wgpu_renderer: &WgpuRenderer,
-		window_geometry: Rect<i32, u32>,
+		surface_geometry: Rect<i32, u32>,
 		frame: &mut FrameRender,
 		panels: &mut Panels,
 	) -> Result<(), AppError> {
@@ -153,7 +153,7 @@ impl PanelsRenderer {
 			self.render_panel(
 				wgpu_renderer,
 				frame.surface_size,
-				window_geometry,
+				surface_geometry,
 				&mut render_pass,
 				panel,
 			)?;
@@ -166,9 +166,8 @@ impl PanelsRenderer {
 	fn render_panel(
 		&mut self,
 		wgpu_renderer: &WgpuRenderer,
-
 		surface_size: Vector2D<u32>,
-		window_geometry: Rect<i32, u32>,
+		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &mut Panel,
 	) -> Result<(), app_error::AppError> {
@@ -233,7 +232,7 @@ impl PanelsRenderer {
 		render_pass.set_pipeline(render_pipeline);
 
 		// Then render the panel
-		self.render_panel_geometries(wgpu_renderer, surface_size, window_geometry, render_pass, panel);
+		self.render_panel_geometries(wgpu_renderer, surface_size, surface_geometry, render_pass, panel);
 
 		Ok(())
 	}
@@ -243,14 +242,14 @@ impl PanelsRenderer {
 		&self,
 		wgpu_renderer: &WgpuRenderer,
 		surface_size: Vector2D<u32>,
-		window_geometry: Rect<i32, u32>,
+		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &mut Panel,
 	) {
 		// Go through all geometries of the panel and render each one
 		for panel_geometry in &mut panel.geometries {
-			// If this geometry is outside our window, we can safely ignore it
-			if !panel_geometry.rect.intersects_window(window_geometry) {
+			// If this geometry is outside our surface, we can safely ignore it
+			if !panel_geometry.rect.intersects(surface_geometry) {
 				continue;
 			}
 
@@ -259,7 +258,7 @@ impl PanelsRenderer {
 				wgpu_renderer,
 				surface_size,
 				&mut panel.state,
-				window_geometry,
+				surface_geometry,
 				panel_geometry,
 				render_pass,
 			);
@@ -272,7 +271,7 @@ impl PanelsRenderer {
 		wgpu_renderer: &WgpuRenderer,
 		surface_size: Vector2D<u32>,
 		state: &mut PanelState,
-		window_geometry: Rect<i32, u32>,
+		surface_geometry: Rect<i32, u32>,
 		panel_geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
@@ -281,21 +280,21 @@ impl PanelsRenderer {
 				wgpu_renderer,
 				render_pass,
 				panel_geometry,
-				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
+				panel_geometry.rect.pos_matrix(surface_geometry, surface_size),
 				state,
 			),
 			PanelState::Fade(state) => self.render_panel_fade_geometry(
 				wgpu_renderer,
 				render_pass,
 				panel_geometry,
-				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
+				panel_geometry.rect.pos_matrix(surface_geometry, surface_size),
 				state,
 			),
 			PanelState::Slide(state) => self.render_panel_slide_geometry(
 				wgpu_renderer,
 				render_pass,
 				panel_geometry,
-				panel_geometry.rect.pos_matrix(window_geometry, surface_size),
+				panel_geometry.rect.pos_matrix(surface_geometry, surface_size),
 				state,
 			),
 		}

@@ -38,8 +38,8 @@ pub struct WgpuRenderer {
 
 	/// Surface size
 	// Note: We keep the size ourselves instead of using the inner
-	//       window size because the window resizes asynchronously
-	//       from us, so it's possible for the window sizes to be
+	//       surface size because the surface resizes asynchronously
+	//       from us, so it's possible for the surface sizes to be
 	//       wrong relative to the surface size.
 	//       Wgpu validation code can panic if the size we give it
 	//       is invalid (for example, during scissoring), so we *must*
@@ -65,8 +65,8 @@ impl WgpuRenderer {
 
 
 		// Configure the surface and get the preferred texture format and surface size
-		let surface_config = self::configure_window_surface(&adapter, &device, &surface, surface_size)
-			.context("Unable to configure window surface")?;
+		let surface_config = self::configure_surface(&adapter, &device, &surface, surface_size)
+			.context("Unable to configure surface")?;
 
 		Ok(Self {
 			instance,
@@ -208,9 +208,8 @@ impl WgpuRenderer {
 		);
 
 		// Update our surface
-		self.surface_config =
-			self::configure_window_surface(&self.adapter, &self.device, &self.surface, self.surface_size)
-				.context("Unable to configure window surface")?;
+		self.surface_config = self::configure_surface(&self.adapter, &self.device, &self.surface, self.surface_size)
+			.context("Unable to configure surface")?;
 
 		Ok(())
 	}
@@ -226,8 +225,8 @@ impl WgpuRenderer {
 		// TODO: Don't ignore resizes to the same size?
 		if size.x > 0 && size.y > 0 && size != self.surface_size {
 			// Update our surface
-			self.surface_config = self::configure_window_surface(&self.adapter, &self.device, &self.surface, size)
-				.context("Unable to configure window surface")?;
+			self.surface_config = self::configure_surface(&self.adapter, &self.device, &self.surface, size)
+				.context("Unable to configure surface")?;
 			self.surface_size = size;
 		}
 
@@ -254,8 +253,8 @@ pub struct FrameRender {
 	pub suboptimal: bool,
 }
 
-/// Configures the window surface and returns the configuration
-fn configure_window_surface(
+/// Configures the surface and returns the configuration
+fn configure_surface(
 	adapter: &wgpu::Adapter,
 	device: &wgpu::Device,
 	surface: &wgpu::Surface<'static>,

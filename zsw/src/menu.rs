@@ -45,7 +45,7 @@ impl Menu {
 		playlists: &Playlists,
 		profiles: &Profiles,
 		panels: &mut Panels,
-		window_geometry: Rect<i32, u32>,
+		surface_geometry: Rect<i32, u32>,
 	) {
 		let mut egui_window = egui::Window::new("Menu");
 
@@ -67,7 +67,7 @@ impl Menu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => panels::draw_panels_tab(ui, wgpu_renderer, panels, window_geometry),
+				Tab::Panels => panels::draw_panels_tab(ui, wgpu_renderer, panels, surface_geometry),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, wgpu_renderer, playlists, profiles, panels),
 				Tab::Settings => self::draw_settings_tab(ui, wayland_data),
 			}

@@ -30,15 +30,15 @@ impl PanelGeometry {
 pub struct PanelGeometryRect(pub Rect<i32, u32>);
 
 impl PanelGeometryRect {
-	/// Returns if this geometry intersects a window
-	pub fn intersects_window(&self, window_geometry: Rect<i32, u32>) -> bool {
-		self.0.intersection(window_geometry).is_some()
+	/// Returns if this geometry intersects a rect
+	pub fn intersects(&self, geometry: Rect<i32, u32>) -> bool {
+		self.0.intersection(geometry).is_some()
 	}
 
-	/// Returns this geometry's rectangle for a certain window
-	pub fn on_window(&self, window_geometry: Rect<i32, u32>) -> Rect<i32, u32> {
+	/// Returns this geometry's rectangle relative to another geometry
+	pub fn relative_to(&self, other: Rect<i32, u32>) -> Rect<i32, u32> {
 		let mut geometry = self.0;
-		geometry.pos -= Vector2D::new(window_geometry.pos.x, window_geometry.pos.y);
+		geometry.pos -= Vector2D::new(other.pos.x, other.pos.y);
 
 		geometry
 	}
@@ -47,8 +47,8 @@ impl PanelGeometryRect {
 	// Note: This matrix simply goes from a geometry in physical units
 	//       onto shader coordinates.
 	#[must_use]
-	pub fn pos_matrix(&self, window_geometry: Rect<i32, u32>, surface_size: Vector2D<u32>) -> Transform3D<f32> {
-		let geometry = self.on_window(window_geometry);
+	pub fn pos_matrix(&self, surface_geometry: Rect<i32, u32>, surface_size: Vector2D<u32>) -> Transform3D<f32> {
+		let geometry = self.relative_to(surface_geometry);
 
 		let x_scale = geometry.size.x as f32 / surface_size.x as f32;
 		let y_scale = geometry.size.y as f32 / surface_size.y as f32;
@@ -97,7 +97,7 @@ impl PanelGeometryRect {
 }
 
 /// Converts a `Ratio<i32>` to `f32`, rounding
-// TODO: Although image and window sizes fit into an `f32`, maybe a
+// TODO: Although image and surface sizes fit into an `f32`, maybe a
 //       rational of the two wouldn't fit properly when in a num / denom
 //       format, since both may be bigger than `2^24`, check if this is fine.
 fn ratio_as_f32(ratio: Rational32) -> f32 {

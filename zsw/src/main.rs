@@ -27,7 +27,7 @@ use {
 		dirs::Dirs,
 		playlist::Playlists,
 		profile::{Profile, ProfileName, Profiles},
-		renderer::WindowRenderer,
+		renderer::SurfaceRenderer,
 	},
 	app_error::Context,
 	clap::Parser,
@@ -163,7 +163,7 @@ fn run() -> Result<(), AppError> {
 }
 
 struct ZswLayer {
-	renderer:   Option<WindowRenderer>,
+	renderer:   Option<SurfaceRenderer>,
 	egui_state: EguiWaylandState,
 }
 
@@ -211,7 +211,7 @@ impl WaylandApp for Zsw {
 				// SAFETY: The window is only dropped after wgpu.
 				let target = unsafe { zsw_wgpu::SurfaceTarget::from_wgpu_unsafe(target) };
 
-				match WindowRenderer::new(
+				match SurfaceRenderer::new(
 					target,
 					surface_size,
 					&self.profiles,
@@ -224,9 +224,7 @@ impl WaylandApp for Zsw {
 						layer.egui_state.update_wgpu(renderer.wgpu_renderer());
 						layer.renderer = Some(renderer);
 					},
-					Err(err) => {
-						tracing::error!("Unable to create window: {err:?}");
-					},
+					Err(err) => tracing::error!("Unable to create surface renderer: {err:?}"),
 				}
 			},
 		}

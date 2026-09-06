@@ -144,9 +144,9 @@ clippy.suboptimal_flops = "allow"
 # Some functions might return an error in the future
 clippy.unnecessary_wraps = "allow"
 
-# Due to working with windows and rendering, which use `u32` / `f32` liberally
+# Due to working with surfaces and rendering, which use `u32` / `f32` liberally
 # and interchangeably, we can't do much aside from casting and accepting possible
-# losses, although most will be lossless, since we deal with window sizes and the
+# losses, although most will be lossless, since we deal with surface sizes and the
 # such, which will fit within a `f32` losslessly.
 clippy.cast_possible_truncation = "allow"
 clippy.cast_precision_loss      = "allow"

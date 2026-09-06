@@ -18,9 +18,9 @@ pub fn draw_panels_tab(
 	ui: &mut egui::Ui,
 	wgpu_renderer: &WgpuRenderer,
 	panels: &mut Panels,
-	window_geometry: Rect<i32, u32>,
+	surface_geometry: Rect<i32, u32>,
 ) {
-	self::draw_panels_editor(ui, wgpu_renderer, panels, window_geometry);
+	self::draw_panels_editor(ui, wgpu_renderer, panels, surface_geometry);
 	ui.separator();
 }
 
@@ -30,7 +30,7 @@ fn draw_panels_editor(
 	ui: &mut egui::Ui,
 	wgpu_renderer: &WgpuRenderer,
 	panels: &mut Panels,
-	window_geometry: Rect<i32, u32>,
+	surface_geometry: Rect<i32, u32>,
 ) {
 	let panels = panels.get_all();
 	if panels.is_empty() {
@@ -43,7 +43,7 @@ fn draw_panels_editor(
 		if panel
 			.geometries
 			.iter()
-			.all(|geometry| !geometry.rect.intersects_window(window_geometry))
+			.all(|geometry| !geometry.rect.intersects(surface_geometry))
 		{
 			name = name.weak();
 		}
@@ -55,7 +55,7 @@ fn draw_panels_editor(
 				match &mut panel.state {
 					PanelState::None(_) => (),
 					PanelState::Fade(state) =>
-						self::draw_fade_panel_editor(ui, wgpu_renderer, window_geometry, state, &panel.geometries),
+						self::draw_fade_panel_editor(ui, wgpu_renderer, surface_geometry, state, &panel.geometries),
 					PanelState::Slide(_) => (),
 				}
 			});
@@ -66,7 +66,7 @@ fn draw_panels_editor(
 fn draw_fade_panel_editor(
 	ui: &mut egui::Ui,
 	wgpu_renderer: &WgpuRenderer,
-	window_geometry: Rect<i32, u32>,
+	surface_geometry: Rect<i32, u32>,
 	state: &mut PanelFadeState,
 	geometries: &[PanelGeometry],
 ) {
@@ -80,7 +80,7 @@ fn draw_fade_panel_editor(
 		for (geometry_idx, panel_geometry) in geometries.iter().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
-				if !panel_geometry.rect.intersects_window(window_geometry) {
+				if !panel_geometry.rect.intersects(surface_geometry) {
 					name = name.weak();
 				}
 
