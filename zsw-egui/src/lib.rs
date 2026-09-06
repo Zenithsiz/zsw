@@ -2,25 +2,21 @@
 
 #![feature(must_not_suspend)]
 
+mod wayland;
+
+pub use self::wayland::EguiWaylandState;
+
 use {
-	std::sync::Arc,
 	tracing as _,
-	winit::{event::WindowEvent, window::Window},
+	zsw_wayland::WaylandData,
 	zsw_wgpu::{FrameRender, WgpuRenderer},
 };
 
 /// Egui
 #[derive(derive_more::Debug)]
 pub struct Egui {
-	/// Window
-	window: Arc<Window>,
-
 	/// Context
 	ctx: egui::Context,
-
-	/// State
-	#[debug("..")]
-	state: egui_winit::State,
 
 	/// Renderer
 	#[debug("..")]
@@ -30,43 +26,31 @@ pub struct Egui {
 impl Egui {
 	/// Creates a new egui
 	#[must_use]
-	pub fn new(wgpu_renderer: &WgpuRenderer, window: Arc<Window>) -> Self {
+	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
 		let renderer = egui_wgpu::Renderer::new(
 			&wgpu_renderer.device,
 			wgpu_renderer.surface_config.format,
 			egui_wgpu::RendererOptions::default(),
 		);
 
-		let viewport_id = egui::ViewportId::from_hash_of(window.id());
 		let ctx = egui::Context::default();
-		let state = egui_winit::State::new(
-			ctx.clone(),
-			viewport_id,
-			&window,
-			None,
-			None,
-			Some(wgpu_renderer.device.limits().max_texture_dimension_2d as usize),
-		);
 
-		Self {
-			window,
-			ctx,
-			state,
-			renderer,
-		}
+		Self { ctx, renderer }
 	}
 
-	/// Renders egui
-	pub fn render(
+	/// Paints egui
+	pub fn paint(&mut self, input: egui::RawInput, draw: impl FnMut(&mut egui::Ui)) -> egui::FullOutput {
+		self.ctx.run_ui(input, draw)
+	}
+
+	/// Renders egui after painting
+	pub fn render<A>(
 		&mut self,
 		frame: &mut FrameRender,
-		window: &Window,
+		wayland_data: &mut WaylandData<A>,
 		wgpu_renderer: &WgpuRenderer,
-		draw: impl FnMut(&mut egui::Ui),
-	) {
-		// Paint
-		let input = self.state.take_egui_input(&self.window);
-		let mut full_output = self.ctx.run_ui(input, draw);
+		mut full_output: egui::FullOutput,
+	) -> egui::PlatformOutput {
 		let paint_jobs = self.ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
 
 		// Update textures
@@ -84,10 +68,13 @@ impl Egui {
 		full_output.textures_delta.clear();
 
 		// Update buffers
-		#[expect(clippy::cast_possible_truncation)] // Unfortunately `egui` takes an `f32`
 		let screen_descriptor = egui_wgpu::ScreenDescriptor {
 			size_in_pixels:   [frame.surface_size.x, frame.surface_size.y],
-			pixels_per_point: window.scale_factor() as f32,
+			pixels_per_point: match wayland_data.scale_factor {
+				// TODO: Is this correct?
+				Some(scale_factor) => scale_factor as f32,
+				None => 1.0,
+			},
 		};
 		let buffers = self.renderer.update_buffers(
 			&wgpu_renderer.device,
@@ -119,14 +106,7 @@ impl Egui {
 		let render_pass = frame.encoder.begin_render_pass(&render_pass_descriptor);
 		let mut render_pass = render_pass.forget_lifetime();
 		self.renderer.render(&mut render_pass, &paint_jobs, &screen_descriptor);
-	}
 
-	/// Handles an event.
-	///
-	/// Returns if egui wants exclusive use of the event
-	#[must_use]
-	pub fn handle_event(&mut self, event: &WindowEvent) -> bool {
-		let response = self.state.on_window_event(&self.window, event);
-		response.consumed
+		full_output.platform_output
 	}
 }

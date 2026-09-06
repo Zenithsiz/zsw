@@ -11,4 +11,10 @@ absolute-paths-allowed-crates = [
 
 	# Some modules are named generically, so we can't import them (e.g. `egui::util`)
 	"egui",
+
+	# `wayland_client::globals` functions make this hard, since `globals` is a very generic term
+	"wayland_client",
+
+	# `smithay_client_toolkit` has a lot of generic names
+	"smithay_client_toolkit",
 ]

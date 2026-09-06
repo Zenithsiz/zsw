@@ -6,13 +6,13 @@ mod panels;
 mod profiles;
 
 use {
-	crate::{AppEvent, panel::Panels, playlist::Playlists, profile::Profiles},
+	crate::{Zsw, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
 	std::path::Path,
 	strum::IntoEnumIterator,
-	winit::event_loop::EventLoopProxy,
 	zsw_util::{AppError, Rect},
+	zsw_wayland::WaylandData,
 	zsw_wgpu::WgpuRenderer,
 };
 
@@ -36,15 +36,15 @@ impl Menu {
 	}
 
 	/// Draws the menu
-	#[expect(clippy::too_many_arguments, reason = "TODO: Merge some arguments")]
+	#[expect(clippy::too_many_arguments, reason = "TODO: Package some together")]
 	pub fn draw(
 		&mut self,
 		ctx: &egui::Context,
+		wayland_data: &mut WaylandData<Zsw>,
 		wgpu_renderer: &WgpuRenderer,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		panels: &mut Panels,
-		event_loop_proxy: &EventLoopProxy<AppEvent>,
 		window_geometry: Rect<i32, u32>,
 	) {
 		let mut egui_window = egui::Window::new("Menu");
@@ -69,7 +69,7 @@ impl Menu {
 			match self.cur_tab {
 				Tab::Panels => panels::draw_panels_tab(ui, wgpu_renderer, panels, window_geometry),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, wgpu_renderer, playlists, profiles, panels),
-				Tab::Settings => self::draw_settings_tab(ui, event_loop_proxy),
+				Tab::Settings => self::draw_settings_tab(ui, wayland_data),
 			}
 		});
 	}
@@ -77,11 +77,9 @@ impl Menu {
 
 
 /// Draws the settings tab
-fn draw_settings_tab(ui: &mut egui::Ui, event_loop_proxy: &EventLoopProxy<AppEvent>) {
+fn draw_settings_tab(ui: &mut egui::Ui, wayland_data: &mut WaylandData<Zsw>) {
 	if ui.button("Quit").clicked() {
-		event_loop_proxy
-			.send_event(crate::AppEvent::Shutdown)
-			.expect("Unable to send shutdown event to event loop");
+		wayland_data.should_quit = true;
 	}
 }
 
@@ -129,6 +127,7 @@ fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusi
 		.custom_parser(|s| humantime::parse_duration(s).ok().map(|d| d.as_secs_f64()))
 		.clamping(egui::SliderClamping::Never)
 		.ui(ui);
+	secs = secs.max(0.0);
 	*duration = Duration::from_secs_f32(secs);
 }
 

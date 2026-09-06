@@ -10,7 +10,8 @@
 	str_as_str,
 	unwrap_infallible,
 	share_trait,
-	duration_integer_division
+	duration_integer_division,
+	arbitrary_self_types
 )]
 
 mod args;
@@ -33,17 +34,17 @@ use {
 	},
 	app_error::Context,
 	clap::Parser,
-	core::cell::LazyCell,
+	core::{cell::LazyCell, ptr::NonNull},
 	directories::ProjectDirs,
+	euclid::default::Vector2D,
 	pollster::FutureExt,
+	smithay_client_toolkit::shell::{WaylandSurface, wlr_layer::LayerSurface},
 	std::{collections::BTreeMap, fs, process::ExitCode, sync::Arc},
-	winit::{
-		application::ApplicationHandler,
-		event::WindowEvent,
-		event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy, OwnedDisplayHandle},
-		window::{WindowAttributes, WindowId},
-	},
+	wayland_client::{Connection, Proxy},
+	wgpu::rwh::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle},
+	zsw_egui::EguiWaylandState,
 	zsw_util::AppError,
+	zsw_wayland::{WaylandApp, WaylandData, WaylandEventLoop, WaylandState},
 	zutil_logger::Logger,
 };
 
@@ -88,150 +89,153 @@ fn run() -> Result<(), AppError> {
 
 	logger.set_file(args.log_file.as_deref().or(config.log_file.as_deref()));
 
-	// Create the event loop
-	let event_loop = EventLoop::with_user_event()
-		.build()
-		.context("Unable to build winit event loop")?;
+	let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
+	let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
+		.context("Unable to create profiles")?;
 
-	// Initialize the app
-	let mut app = WinitApp::new(
-		args,
-		&dirs,
-		event_loop.owned_display_handle(),
-		event_loop.create_proxy(),
-	)
-	.context("Unable to create winit app")?;
+	let zsw = Zsw {
+		playlists,
+		profiles,
+		profile_name: args.profile,
 
-	event_loop.run_app(&mut app).context("Unable to run event loop")?;
+		renderer: None,
+
+		egui_state: EguiWaylandState::new(),
+	};
+
+	let mut wayland_event_loop = WaylandEventLoop::new().context("Unable to create wayland event loop")?;
+	let wayland_data = WaylandData::new(&wayland_event_loop).context("Unable to create wayland")?;
+	let mut wayland_state = WaylandState {
+		app:  zsw,
+		data: wayland_data,
+	};
+
+	while !wayland_state.data.should_quit {
+		// Wait until the next frame
+		let frame = match &mut wayland_state.app.renderer {
+			Some(renderer) => Some(renderer.wait_frame().context("Unable to start new frame")?),
+			None => None,
+		};
+
+		// Dispatch any events
+		// Note: We do this now instead of before starting the frame to get the latest
+		//       events for this frame, instead of always being a frame late.
+		wayland_event_loop.dispatch(&mut wayland_state)?;
+
+		// Finally render
+		if let Some(renderer) = &mut wayland_state.app.renderer &&
+			let Some(frame) = frame
+		{
+			let egui_input = wayland_state.app.egui_state.take_input();
+			let egui_output = renderer
+				.render(
+					&mut wayland_state.data,
+					&wayland_state.app.playlists,
+					&wayland_state.app.profiles,
+					egui_input,
+					frame,
+				)
+				.context("Unable to render frame")?;
+
+			wayland_state
+				.app
+				.egui_state
+				.update_output(&mut wayland_event_loop, &mut wayland_state.data, egui_output);
+		}
+	}
 
 	Ok(())
 }
 
-#[derive(Debug)]
-struct WinitApp {
-	event_loop_proxy: EventLoopProxy<AppEvent>,
-
+struct Zsw {
 	playlists:    Playlists,
 	profiles:     Profiles,
 	profile_name: ProfileName,
 
-	display: OwnedDisplayHandle,
-
 	renderer: Option<WindowRenderer>,
+
+	egui_state: EguiWaylandState,
 }
 
-impl ApplicationHandler<AppEvent> for WinitApp {
-	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-		if let Err(err) = self.init_window(event_loop).block_on() {
-			tracing::warn!("Unable to initialize window: {err:?}");
-			event_loop.exit();
-		}
-	}
-
-	fn suspended(&mut self, event_loop: &ActiveEventLoop) {
-		if let Err(err) = self.destroy_window() {
-			tracing::warn!("Unable to destroy window: {err:?}");
-			event_loop.exit();
-		}
-	}
-
-	fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
-		match event {
-			AppEvent::Shutdown => event_loop.exit(),
-		}
-	}
-
-	fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-		if let Err(err) = self.handle_window_event(event_loop, &event) {
-			tracing::warn!(?window_id, ?event, ?err, "Unable to handle window event");
-		}
-	}
-}
-
-impl WinitApp {
-	/// Creates a new app
-	pub fn new(
-		args: Args,
-		dirs: &Dirs,
-		display: OwnedDisplayHandle,
-		event_loop_proxy: EventLoopProxy<AppEvent>,
-	) -> Result<Self, AppError> {
-		let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
-		let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
-			.context("Unable to create profiles")?;
-
-		Ok(Self {
-			event_loop_proxy,
-			playlists,
-			profiles,
-			profile_name: args.profile,
-			display,
-			renderer: None,
-		})
-	}
-
-	/// Initializes the window
-	pub async fn init_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
-		// Note: We drop the windows before creating new ones because having
-		//       multiple surfaces on the same actual window is an error.
-		self.renderer = None;
-
-		let window_attrs = WindowAttributes::default().with_title("zsw");
-		let window = event_loop
-			.create_window(window_attrs)
-			.context("Unable to create window")?;
-
-		let renderer = WindowRenderer::new(
-			self.display.clone(),
-			window,
-			&self.profiles,
-			&self.profile_name,
-			&self.playlists,
-		)
-		.await
-		.context("Unable to create renderer")?;
-		self.renderer = Some(renderer);
-
-		Ok(())
-	}
-
-	/// Destroys the window
-	#[expect(clippy::needless_pass_by_ref_mut, reason = "We'll use it in the future")]
-	pub fn destroy_window(&mut self) -> Result<(), AppError> {
-		// TODO: Handle destroying all tasks that use the window
-		todo!("Destroying windows isn't supported yet");
-	}
-
-	/// Handles a window event
-	pub fn handle_window_event(&mut self, event_loop: &ActiveEventLoop, event: &WindowEvent) -> Result<(), AppError> {
-		let Some(renderer) = &mut self.renderer else {
-			tracing::warn!(?event, "Got a window event before initializing a window");
-			return Ok(());
-		};
-
-		if renderer.forward_egui_window_event(event) {
-			return Ok(());
-		}
-
-		match *event {
-			WindowEvent::Resized(size) => renderer.queue_resize(euclid::vec2(size.width, size.height)),
-			WindowEvent::CloseRequested => event_loop.exit(),
-			WindowEvent::RedrawRequested => {
-				let frame = renderer.wait_frame()?;
-				renderer.render(&self.playlists, &self.profiles, &self.event_loop_proxy, frame)?;
-				renderer.window().request_redraw();
+impl WaylandApp for Zsw {
+	fn configure_layer(
+		&mut self,
+		_data: &mut WaylandData<Self>,
+		conn: &Connection,
+		layer: &LayerSurface,
+		surface_size: Vector2D<u32>,
+	) {
+		match &mut self.renderer {
+			Some(renderer) => {
+				tracing::info!(size=?surface_size, "Resizing renderer");
+				renderer.queue_resize(surface_size);
 			},
-			_ => (),
+			None => {
+				tracing::info!(size=?surface_size, "Creating renderer window");
+
+				let display_ptr = NonNull::new(conn.backend().display_ptr().cast()).expect("Display was null");
+				let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(display_ptr));
+				let surface_ptr = NonNull::new(layer.wl_surface().id().as_ptr().cast()).expect("Surface was null");
+				let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(surface_ptr));
+				let target = wgpu::SurfaceTargetUnsafe::RawHandle {
+					raw_display_handle: Some(raw_display_handle),
+					raw_window_handle,
+				};
+				// SAFETY: The window is only dropped after wgpu.
+				let target = unsafe { zsw_wgpu::SurfaceTarget::from_wgpu_unsafe(target) };
+
+				match WindowRenderer::new(
+					target,
+					surface_size,
+					&self.profiles,
+					&self.profile_name,
+					&self.playlists,
+				)
+				.block_on()
+				{
+					Ok(renderer) => {
+						self.egui_state.update_wgpu(renderer.wgpu_renderer());
+						self.renderer = Some(renderer);
+					},
+					Err(err) => {
+						tracing::error!("Unable to create window: {err:?}");
+					},
+				}
+			},
 		}
 
-		Ok(())
+		self.egui_state.update_surface_size(surface_size);
 	}
-}
 
+	fn on_keyboard_key(
+		&mut self,
+		data: &mut zsw_wayland::WaylandData<Self>,
+		keysym: xkeysym::Keysym,
+		raw: u32,
+		text: Option<String>,
+		state: zsw_wayland::KeyboardKeyState,
+	) {
+		self.egui_state.update_keyboard_key(data, keysym, raw, text, state);
+	}
 
-/// App event
-#[derive(Clone, Copy, Debug)]
-enum AppEvent {
-	/// Shutdown
-	Shutdown,
+	fn on_keyboard_focus(&mut self, _data: &mut zsw_wayland::WaylandData<Self>, focused: bool) {
+		self.egui_state.update_keyboard_focus(focused);
+	}
+
+	fn on_keyboard_modifiers(
+		&mut self,
+		_data: &mut zsw_wayland::WaylandData<Self>,
+		modifiers: smithay_client_toolkit::seat::keyboard::Modifiers,
+		raw_modifiers: smithay_client_toolkit::seat::keyboard::RawModifiers,
+	) {
+		self.egui_state.update_keyboard_modifiers(modifiers, raw_modifiers);
+	}
+
+	fn on_pointer(
+		&mut self,
+		_data: &mut zsw_wayland::WaylandData<Self>,
+		events: &[smithay_client_toolkit::seat::pointer::PointerEvent],
+	) {
+		self.egui_state.update_pointer(events);
+	}
 }

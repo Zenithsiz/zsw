@@ -1,7 +1,9 @@
 {
 	"cSpell.words": [
+		"accesskit",
 		"Bgra",
 		"bytemuck",
+		"calloop",
 		"cgmath",
 		"ctpp",
 		"dashmap",
@@ -35,6 +37,7 @@
 		"rwlock",
 		"rwlocks",
 		"smallvec",
+		"smithay",
 		"subsec",
 		"thiserror",
 		"turbofish",
@@ -43,6 +46,7 @@
 		"walkdir",
 		"Wgsl",
 		"winit",
+		"xkeysym",
 		"zenithsiz",
 		"zutil"
 	],

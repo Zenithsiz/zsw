@@ -6,15 +6,17 @@ edition = "2024"
 [dependencies]
 
 # Workspace
-zsw-wgpu = { workspace = true }
+zsw-wayland = { workspace = true }
+zsw-wgpu    = { workspace = true }
 
-derive_more = { workspace = true, features = ["full"] }
-egui        = { features = ["default_fonts"], workspace = true }
-egui-wgpu   = { workspace = true }
-egui-winit  = { workspace = true }
-tracing     = { workspace = true }
-wgpu        = { workspace = true }
-winit       = { workspace = true }
+derive_more            = { features = ["full"], workspace = true }
+egui                   = { features = ["default_fonts"], workspace = true }
+egui-wgpu              = { workspace = true }
+euclid                 = { workspace = true }
+smithay-client-toolkit = { workspace = true }
+tracing                = { workspace = true }
+wgpu                   = { workspace = true }
+xkeysym                = { workspace = true }
 
 [lints]
 workspace = true

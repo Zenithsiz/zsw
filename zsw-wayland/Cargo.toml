@@ -1,0 +1,22 @@
+[package]
+name    = "zsw-wayland"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+# Workspace
+zsw-util = { workspace = true }
+
+app-error              = { workspace = true }
+calloop                = { workspace = true }
+calloop-wayland-source = { workspace = true }
+derive_more            = { workspace = true }
+euclid                 = { workspace = true }
+smithay-client-toolkit = { workspace = true }
+smithay-clipboard      = { workspace = true }
+tracing                = { workspace = true }
+wayland-client         = { workspace = true }
+
+[lints]
+workspace = true

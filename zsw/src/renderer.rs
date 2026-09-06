@@ -2,7 +2,7 @@
 
 use {
 	crate::{
-		AppEvent,
+		Zsw,
 		menu::Menu,
 		panel::{PanelState, Panels, PanelsRenderer},
 		playlist::Playlists,
@@ -10,23 +10,16 @@ use {
 	},
 	app_error::Context,
 	chrono::TimeDelta,
-	core::clone::Share,
 	euclid::default::{Point2D, Vector2D},
-	std::sync::Arc,
-	winit::{
-		event::WindowEvent,
-		event_loop::{EventLoopProxy, OwnedDisplayHandle},
-		window::Window,
-	},
 	zsw_egui::Egui,
 	zsw_util::{AppError, Rect},
+	zsw_wayland::WaylandData,
 	zsw_wgpu::{FrameRender, WgpuRenderer},
 };
 
 #[derive(Debug)]
 pub struct WindowRenderer {
-	window:      Arc<Window>,
-	window_size: Vector2D<u32>,
+	surface_size: Vector2D<u32>,
 
 	wgpu_renderer:   WgpuRenderer,
 	panels:          Panels,
@@ -38,22 +31,22 @@ pub struct WindowRenderer {
 }
 
 impl WindowRenderer {
+	/// Creates the window renderer
 	pub async fn new(
-		display: OwnedDisplayHandle,
-		window: Window,
+		target: zsw_wgpu::SurfaceTarget,
+		surface_size: Vector2D<u32>,
 		profiles: &Profiles,
 		profile_name: &ProfileName,
 		playlists: &Playlists,
 	) -> Result<Self, AppError> {
-		let window = Arc::new(window);
-		let wgpu_renderer = WgpuRenderer::new(display, &window)
+		let wgpu_renderer = WgpuRenderer::new(target, surface_size)
 			.await
 			.context("Unable to create wgpu renderer")?;
 
 		let msaa_samples = 4;
 		let panels_renderer =
 			PanelsRenderer::new(&wgpu_renderer, msaa_samples).context("Unable to create panels renderer")?;
-		let egui = Egui::new(&wgpu_renderer, window.share());
+		let egui = Egui::new(&wgpu_renderer);
 
 		let mut panels = Panels::new();
 		let profile = profiles
@@ -64,10 +57,7 @@ impl WindowRenderer {
 			.context("Unable to set profile")?;
 
 		Ok(Self {
-			window,
-			// Note: We typically always get a resize event before the first
-			//       frame, so this size isn't ever visible.
-			window_size: Vector2D::new(0, 0),
+			surface_size,
 			wgpu_renderer,
 			panels,
 			panels_renderer,
@@ -77,19 +67,14 @@ impl WindowRenderer {
 		})
 	}
 
-	/// Returns the window this renderer is using
-	pub fn window(&self) -> &Window {
-		&self.window
+	/// Returns the wgpu renderer used to render this window
+	pub fn wgpu_renderer(&self) -> &WgpuRenderer {
+		&self.wgpu_renderer
 	}
 
-	/// Forwards a window event to egui.
+	/// Queues a resize to this renderer
 	///
-	/// Returns if egui wants exclusive use of that event
-	pub fn forward_egui_window_event(&mut self, event: &WindowEvent) -> bool {
-		self.egui.handle_event(event)
-	}
-
-	/// Queues a resize for the next render
+	/// This will stay queued for the next render
 	pub fn queue_resize(&mut self, size: Vector2D<u32>) {
 		self.queued_resize = Some(size);
 	}
@@ -102,7 +87,7 @@ impl WindowRenderer {
 		if let Some(size) = self.queued_resize.take() {
 			self.wgpu_renderer.resize(size).context("Unable to resize wgpu")?;
 			self.panels_renderer.resize(&self.wgpu_renderer, size);
-			self.window_size = size;
+			self.surface_size = size;
 		}
 
 		self.wgpu_renderer.start_render().context("Unable to start frame")
@@ -113,47 +98,56 @@ impl WindowRenderer {
 	/// You can get the current frame from [`wait_frame`](Self::wait_frame).
 	pub fn render(
 		&mut self,
+		wayland_data: &mut WaylandData<Zsw>,
 		playlists: &Playlists,
 		profiles: &Profiles,
-		event_loop_proxy: &EventLoopProxy<AppEvent>,
+		egui_input: egui::RawInput,
 		mut frame: FrameRender,
-	) -> Result<(), AppError> {
+	) -> Result<egui::PlatformOutput, AppError> {
 		let window_geometry = Rect {
 			pos:  euclid::point2(0, 0),
-			size: self.window_size,
+			size: self.surface_size,
 		};
 
 		self.panels_renderer
 			.render(&self.wgpu_renderer, window_geometry, &mut frame, &mut self.panels)
 			.context("Unable to render panels")?;
 
-		self.render_egui(window_geometry, playlists, profiles, event_loop_proxy, &mut frame);
+		let egui_output = self.render_egui(
+			wayland_data,
+			window_geometry,
+			playlists,
+			profiles,
+			egui_input,
+			&mut frame,
+		);
 
 		self.wgpu_renderer
 			.finish_render(frame)
 			.context("Unable to finish frame")?;
 
-		Ok(())
+		Ok(egui_output)
 	}
 
 	/// Renders egui
 	fn render_egui(
 		&mut self,
+		wayland_data: &mut WaylandData<Zsw>,
 		window_geometry: Rect<i32, u32>,
 		playlists: &Playlists,
 		profiles: &Profiles,
-		event_loop_proxy: &EventLoopProxy<AppEvent>,
+		egui_input: egui::RawInput,
 		frame: &mut FrameRender,
-	) {
-		self.egui.render(frame, &self.window, &self.wgpu_renderer, |ctx| {
+	) -> egui::PlatformOutput {
+		let output = self.egui.paint(egui_input, |ctx| {
 			// Draw the menu
 			self.menu.draw(
 				ctx,
+				wayland_data,
 				&self.wgpu_renderer,
 				playlists,
 				profiles,
 				&mut self.panels,
-				event_loop_proxy,
 				window_geometry,
 			);
 
@@ -235,6 +229,8 @@ impl WindowRenderer {
 					}
 				}
 			}
-		})
+		});
+
+		self.egui.render(frame, wayland_data, &self.wgpu_renderer, output)
 	}
 }

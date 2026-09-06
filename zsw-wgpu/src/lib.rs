@@ -1,15 +1,12 @@
 //! Wgpu wrapper
 
-#![feature(must_not_suspend, yeet_expr, share_trait)]
+#![feature(must_not_suspend, yeet_expr)]
 
 use {
 	app_error::{Context, bail},
-	core::clone::Share,
 	euclid::default::Vector2D,
 	image::DynamicImage,
-	std::sync::Arc,
 	wgpu::util::{self as wgpu_util, DeviceExt},
-	winit::{event_loop::OwnedDisplayHandle, window::Window},
 	zsw_util::AppError,
 };
 
@@ -54,9 +51,10 @@ pub struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-	pub async fn new(display: OwnedDisplayHandle, window: &Arc<Window>) -> Result<Self, AppError> {
-		let instance = self::create_instance(display).context("Unable to create instance")?;
-		let surface = self::create_surface(&instance, window.share())?;
+	/// Creates the wgpu renderer
+	pub async fn new(target: SurfaceTarget, surface_size: Vector2D<u32>) -> Result<Self, AppError> {
+		let instance = self::create_instance().context("Unable to create instance")?;
+		let surface = self::create_surface(&instance, target)?;
 
 		let adapter = self::create_adapter(&instance, &surface)
 			.await
@@ -67,8 +65,6 @@ impl WgpuRenderer {
 
 
 		// Configure the surface and get the preferred texture format and surface size
-		let surface_size = window.inner_size();
-		let surface_size = euclid::vec2(surface_size.width, surface_size.height);
 		let surface_config = self::configure_window_surface(&adapter, &device, &surface, surface_size)
 			.context("Unable to configure window surface")?;
 
@@ -281,19 +277,46 @@ fn configure_window_surface(
 	Ok(config)
 }
 
+/// Surface target kinds
+#[derive(Debug)]
+enum SurfaceTargetKind {
+	WpuUnsafe(wgpu::SurfaceTargetUnsafe),
+}
+
+/// Surface target
+#[derive(Debug)]
+pub struct SurfaceTarget(SurfaceTargetKind);
+
+impl SurfaceTarget {
+	/// Creates a surface target from a wgpu unsafe target.
+	///
+	/// # Safety
+	/// You must satisfy `SurfaceTargetUnsafe`'s safety requirements
+	#[must_use]
+	pub unsafe fn from_wgpu_unsafe(target: wgpu::SurfaceTargetUnsafe) -> Self {
+		Self(SurfaceTargetKind::WpuUnsafe(target))
+	}
+}
+
 /// Creates the surface
-fn create_surface(instance: &wgpu::Instance, window: Arc<Window>) -> Result<wgpu::Surface<'static>, AppError> {
+fn create_surface(instance: &wgpu::Instance, target: SurfaceTarget) -> Result<wgpu::Surface<'static>, AppError> {
 	// Create the surface
-	tracing::debug!(?window, "Requesting wgpu surface");
-	let surface = instance.create_surface(window).context("Unable to request surface")?;
+	tracing::debug!(?target, "Requesting wgpu surface");
+	let surface = match target.0 {
+		SurfaceTargetKind::WpuUnsafe(target) => {
+			// SAFETY: By creating a `SurfaceTargetKind::WgpuUnsafe` the caller has
+			//         satisfied the safety requirements for the surface.
+			unsafe { instance.create_surface_unsafe(target) }.context("Unable to request surface")?
+		},
+	};
 	tracing::debug!(?surface, "Created wgpu surface");
 
 	Ok(surface)
 }
 
 /// Creates the instance
-fn create_instance(display: OwnedDisplayHandle) -> Result<wgpu::Instance, AppError> {
-	let instance_desc = wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display));
+fn create_instance() -> Result<wgpu::Instance, AppError> {
+	let instance_desc = wgpu::InstanceDescriptor::new_without_display_handle();
 	tracing::debug!(?instance_desc, "Requesting wgpu instance");
 
 	let instance = wgpu::Instance::new(instance_desc);
