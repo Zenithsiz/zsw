@@ -3,10 +3,13 @@
 pub mod data;
 pub mod event_loop;
 
-pub use self::{data::WaylandData, event_loop::WaylandEventLoop};
+pub use self::{
+	data::{WaylandData, WaylandLayerData},
+	event_loop::WaylandEventLoop,
+};
 
 use {
-	self::data::OutputId,
+	self::data::{OutputId, SurfaceId},
 	app_error::Context,
 	core::iter,
 	euclid::default::Vector2D,
@@ -51,24 +54,42 @@ pub struct WaylandState<A> {
 
 impl<A: WaylandApp> WaylandState<A> {
 	fn on_new_output(&mut self, _conn: &Connection, qh: &QueueHandle<Self>, output: &WlOutput) -> Result<(), AppError> {
-		if let Some(layer) = self.data.layers.remove(&OutputId(output.id())) {
-			tracing::warn!(output=%output.id(), ?layer, "New output was created without destroying previous");
-		}
+		let output_id = OutputId(output.id());
+		self.data.layers.retain(|layer| {
+			if layer.output_id != output_id {
+				return true;
+			}
 
-		tracing::info!(output=%output.id(), "Creating layer on output");
+			tracing::warn!(%output_id, ?layer, "New output was created without destroying previous");
+			false
+		});
+
+		let output_info = self
+			.data
+			.output_state
+			.info(output)
+			.context("Unable to get output information")?;
+
+		tracing::info!(%output_id, "Creating layer on output");
 		let surface = self.data.compositor.create_surface(qh);
-		let layer = self.data.layer_shell.create_layer_surface(
+		let layer_surface = self.data.layer_shell.create_layer_surface(
 			qh,
 			surface,
 			wlr_layer::Layer::Background,
 			Some("zsw"),
 			Some(output),
 		);
-		layer.set_anchor(wlr_layer::Anchor::all());
-		layer.set_keyboard_interactivity(wlr_layer::KeyboardInteractivity::OnDemand);
-		layer.commit();
+		layer_surface.set_anchor(wlr_layer::Anchor::all());
+		layer_surface.set_keyboard_interactivity(wlr_layer::KeyboardInteractivity::OnDemand);
+		layer_surface.commit();
 
-		_ = self.data.layers.insert(OutputId(output.id()), layer);
+		let layer = WaylandLayerData {
+			output_id: OutputId(output.id()),
+			output_info,
+			surface_id: SurfaceId(layer_surface.wl_surface().id()),
+			layer_surface,
+		};
+		self.data.layers.push(layer);
 
 		Ok(())
 	}
@@ -79,9 +100,7 @@ impl<A: WaylandApp> WaylandState<A> {
 		_qh: &QueueHandle<Self>,
 		output: &WlOutput,
 	) -> Result<(), AppError> {
-		if self.data.layers.remove(&OutputId(output.id())).is_none() {
-			tracing::warn!(output=%output.id(), "Attempted to remove unknown output");
-		}
+		self.data.layers.retain(|layer| layer.output_id.0 != output.id());
 
 		Ok(())
 	}
@@ -161,7 +180,7 @@ impl<A: WaylandApp> OutputHandler for WaylandState<A> {
 	fn new_output(&mut self, conn: &Connection, qh: &QueueHandle<Self>, output: WlOutput) {
 		let output_id = output.id();
 		if let Err(err) = self.on_new_output(conn, qh, &output) {
-			tracing::warn!(output=%output_id,"Unable to process output: {err:?}");
+			tracing::warn!(%output_id,"Unable to process output: {err:?}");
 		}
 	}
 
@@ -169,17 +188,17 @@ impl<A: WaylandApp> OutputHandler for WaylandState<A> {
 		// TODO: Could we do better than this?
 		let output_id = output.id();
 		if let Err(err) = self.on_destroy_output(conn, qh, &output) {
-			tracing::warn!(output=%output_id,"Unable to destroy output: {err:?}");
+			tracing::warn!(%output_id,"Unable to destroy output: {err:?}");
 		}
 		if let Err(err) = self.on_new_output(conn, qh, &output) {
-			tracing::warn!(output=%output_id,"Unable to process output: {err:?}");
+			tracing::warn!(%output_id,"Unable to process output: {err:?}");
 		}
 	}
 
 	fn output_destroyed(&mut self, conn: &Connection, qh: &QueueHandle<Self>, output: WlOutput) {
 		let output_id = output.id();
 		if let Err(err) = self.on_destroy_output(conn, qh, &output) {
-			tracing::warn!(output=%output_id,"Unable to destroy output: {err:?}");
+			tracing::warn!(%output_id,"Unable to destroy output: {err:?}");
 		}
 	}
 }
@@ -330,6 +349,7 @@ impl<A: WaylandApp> PointerHandler for WaylandState<A> {
 
 impl<A: WaylandApp> LayerShellHandler for WaylandState<A> {
 	fn closed(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, layer: &LayerSurface) {
+		// TODO: We should maybe only close the specified layer instead of quitting everything?
 		tracing::info!(surface=%layer.wl_surface().id(), "Received close request for layer");
 		self.data.should_quit = true;
 	}

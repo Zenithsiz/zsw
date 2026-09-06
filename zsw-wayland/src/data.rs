@@ -1,32 +1,41 @@
 //! Wayland data
 
-#![expect(
-	clippy::mutable_key_type,
-	reason = "Object ids have inner mutability, but the equality can't change"
-)]
-
-
 use {
 	super::{WaylandApp, WaylandEventLoop, WaylandState},
 	app_error::Context,
 	calloop::LoopHandle,
 	smithay_client_toolkit::{
 		compositor::CompositorState,
-		output::OutputState,
+		output::{OutputInfo, OutputState},
 		registry::RegistryState,
 		seat::{SeatState, pointer::ThemedPointer},
 		shell::wlr_layer::{LayerShell, LayerSurface},
 		shm::Shm,
 	},
 	smithay_clipboard::Clipboard,
-	std::collections::HashMap,
 	wayland_client::{backend::ObjectId, protocol::wl_keyboard::WlKeyboard},
 	zsw_util::AppError,
 };
 
 /// Output Id
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
+#[derive(derive_more::Display)]
 pub struct OutputId(pub ObjectId);
+
+/// Surface Id
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
+#[derive(derive_more::Display)]
+pub struct SurfaceId(pub ObjectId);
+
+/// Wayland layer data
+#[derive(Debug)]
+pub struct WaylandLayerData {
+	pub output_id:   OutputId,
+	pub output_info: OutputInfo,
+
+	pub surface_id:    SurfaceId,
+	pub layer_surface: LayerSurface,
+}
 
 /// Wayland data
 #[derive(derive_more::Debug)]
@@ -47,7 +56,7 @@ pub struct WaylandData<A> {
 	#[debug("..")]
 	pub clipboard: Clipboard,
 
-	pub layers: HashMap<OutputId, LayerSurface>,
+	pub layers: Vec<WaylandLayerData>,
 
 	pub scale_factor: Option<i32>,
 
@@ -88,7 +97,7 @@ impl<A: WaylandApp> WaylandData<A> {
 
 			clipboard,
 
-			layers: HashMap::new(),
+			layers: vec![],
 			scale_factor: None,
 
 			should_quit: false,
