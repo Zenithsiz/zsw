@@ -152,6 +152,10 @@ impl EguiWaylandState {
 		text: Option<String>,
 		state: zsw_wayland::KeyboardKeyState,
 	) {
+		if !self.focused {
+			return;
+		}
+
 		let Some(key) = self::egui_key(keysym) else {
 			tracing::warn!(?keysym, raw, text, "Ignoring unknown key event");
 			return;
@@ -212,43 +216,41 @@ impl EguiWaylandState {
 	}
 
 	/// Updates the pointer state
-	pub fn update_pointer(&mut self, events: &[PointerEvent]) {
-		for event in events {
-			let pos = egui::pos2(event.position.0 as f32, event.position.1 as f32);
-			let event = match event.kind {
-				PointerEventKind::Enter { .. } => continue,
-				PointerEventKind::Leave { .. } => egui::Event::PointerGone,
-				PointerEventKind::Motion { .. } => egui::Event::PointerMoved(pos),
-				PointerEventKind::Press { button, .. } => egui::Event::PointerButton {
-					pos,
-					button: match self::egui_button(button) {
-						Some(value) => value,
-						None => continue,
-					},
-					pressed: true,
-					modifiers: self.current_modifiers,
+	pub fn update_pointer(&mut self, event: &PointerEvent) {
+		let pos = egui::pos2(event.position.0 as f32, event.position.1 as f32);
+		let event = match event.kind {
+			PointerEventKind::Enter { .. } => return,
+			PointerEventKind::Leave { .. } => egui::Event::PointerGone,
+			PointerEventKind::Motion { .. } => egui::Event::PointerMoved(pos),
+			PointerEventKind::Press { button, .. } => egui::Event::PointerButton {
+				pos,
+				button: match self::egui_button(button) {
+					Some(value) => value,
+					None => return,
 				},
-				PointerEventKind::Release { button, .. } => egui::Event::PointerButton {
-					pos,
-					button: match self::egui_button(button) {
-						Some(value) => value,
-						None => continue,
-					},
-					pressed: false,
-					modifiers: self.current_modifiers,
+				pressed: true,
+				modifiers: self.current_modifiers,
+			},
+			PointerEventKind::Release { button, .. } => egui::Event::PointerButton {
+				pos,
+				button: match self::egui_button(button) {
+					Some(value) => value,
+					None => return,
 				},
-				PointerEventKind::Axis {
-					horizontal, vertical, ..
-				} => egui::Event::MouseWheel {
-					unit:      egui::MouseWheelUnit::Line,
-					// TODO: Should we be inverting the y value here? Egui seems to expect it
-					delta:     egui::vec2(horizontal.value120 as f32, -vertical.value120 as f32) / 120.0,
-					phase:     egui::TouchPhase::Move,
-					modifiers: self.current_modifiers,
-				},
-			};
-			self.events.push(event);
-		}
+				pressed: false,
+				modifiers: self.current_modifiers,
+			},
+			PointerEventKind::Axis {
+				horizontal, vertical, ..
+			} => egui::Event::MouseWheel {
+				unit:      egui::MouseWheelUnit::Line,
+				// TODO: Should we be inverting the y value here? Egui seems to expect it
+				delta:     egui::vec2(horizontal.value120 as f32, -vertical.value120 as f32) / 120.0,
+				phase:     egui::TouchPhase::Move,
+				modifiers: self.current_modifiers,
+			},
+		};
+		self.events.push(event);
 	}
 }
 

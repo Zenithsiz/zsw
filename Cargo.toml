@@ -194,5 +194,8 @@ clippy.similar_names = "allow"
 # False positives with `zutil_cloned::cloned`
 clippy.semicolon_if_nothing_returned = "allow"
 
+# `.drain(..)` doesn't consume the vector, unlike `.into_iter`
+clippy.iter_with_drain = "allow"
+
 # We need to this to cfg out rust-analyzer
 rust.unexpected_cfgs = { check-cfg = ['cfg(rust_analyzer)'], level = "warn" }

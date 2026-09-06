@@ -1,5 +1,11 @@
 //! Wayland data
 
+#![expect(
+	clippy::mutable_key_type,
+	reason = "Object ids have inner mutability, but the equality can't change"
+)]
+
+
 use {
 	super::{WaylandApp, WaylandEventLoop, WaylandState},
 	app_error::Context,
@@ -13,9 +19,14 @@ use {
 		shm::Shm,
 	},
 	smithay_clipboard::Clipboard,
-	wayland_client::protocol::wl_keyboard::WlKeyboard,
+	std::collections::HashMap,
+	wayland_client::{backend::ObjectId, protocol::wl_keyboard::WlKeyboard},
 	zsw_util::AppError,
 };
+
+/// Output Id
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
+pub struct OutputId(pub ObjectId);
 
 /// Wayland data
 #[derive(derive_more::Debug)]
@@ -36,7 +47,7 @@ pub struct WaylandData<A> {
 	#[debug("..")]
 	pub clipboard: Clipboard,
 
-	pub layer: Option<LayerSurface>,
+	pub layers: HashMap<OutputId, LayerSurface>,
 
 	pub scale_factor: Option<i32>,
 
@@ -77,7 +88,7 @@ impl<A: WaylandApp> WaylandData<A> {
 
 			clipboard,
 
-			layer: None,
+			layers: HashMap::new(),
 			scale_factor: None,
 
 			should_quit: false,

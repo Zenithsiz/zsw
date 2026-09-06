@@ -6,6 +6,7 @@ pub mod event_loop;
 pub use self::{data::WaylandData, event_loop::WaylandEventLoop};
 
 use {
+	self::data::OutputId,
 	app_error::Context,
 	core::iter,
 	euclid::default::Vector2D,
@@ -50,9 +51,8 @@ pub struct WaylandState<A> {
 
 impl<A: WaylandApp> WaylandState<A> {
 	fn on_new_output(&mut self, _conn: &Connection, qh: &QueueHandle<Self>, output: &WlOutput) -> Result<(), AppError> {
-		if self.data.layer.is_some() {
-			tracing::info!(output=%output.id(), "Ignoring output");
-			return Ok(());
+		if let Some(layer) = self.data.layers.remove(&OutputId(output.id())) {
+			tracing::warn!(output=%output.id(), ?layer, "New output was created without destroying previous");
 		}
 
 		tracing::info!(output=%output.id(), "Creating layer on output");
@@ -64,15 +64,24 @@ impl<A: WaylandApp> WaylandState<A> {
 			Some("zsw"),
 			Some(output),
 		);
-		layer.set_anchor(
-			wlr_layer::Anchor::TOP | wlr_layer::Anchor::BOTTOM | wlr_layer::Anchor::LEFT | wlr_layer::Anchor::RIGHT,
-		);
-		layer.set_exclusive_zone(i32::MIN);
+		layer.set_anchor(wlr_layer::Anchor::all());
 		layer.set_keyboard_interactivity(wlr_layer::KeyboardInteractivity::OnDemand);
-		layer.set_size(0, 0);
 		layer.commit();
 
-		self.data.layer = Some(layer);
+		_ = self.data.layers.insert(OutputId(output.id()), layer);
+
+		Ok(())
+	}
+
+	fn on_destroy_output(
+		&mut self,
+		_conn: &Connection,
+		_qh: &QueueHandle<Self>,
+		output: &WlOutput,
+	) -> Result<(), AppError> {
+		if self.data.layers.remove(&OutputId(output.id())).is_none() {
+			tracing::warn!(output=%output.id(), "Attempted to remove unknown output");
+		}
 
 		Ok(())
 	}
@@ -152,15 +161,26 @@ impl<A: WaylandApp> OutputHandler for WaylandState<A> {
 	fn new_output(&mut self, conn: &Connection, qh: &QueueHandle<Self>, output: WlOutput) {
 		let output_id = output.id();
 		if let Err(err) = self.on_new_output(conn, qh, &output) {
-			tracing::warn!(output=%output_id,"Unable to process output, ignoring it: {err:?}");
-			output.release();
+			tracing::warn!(output=%output_id,"Unable to process output: {err:?}");
 		}
 	}
 
-	fn update_output(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _output: WlOutput) {}
+	fn update_output(&mut self, conn: &Connection, qh: &QueueHandle<Self>, output: WlOutput) {
+		// TODO: Could we do better than this?
+		let output_id = output.id();
+		if let Err(err) = self.on_destroy_output(conn, qh, &output) {
+			tracing::warn!(output=%output_id,"Unable to destroy output: {err:?}");
+		}
+		if let Err(err) = self.on_new_output(conn, qh, &output) {
+			tracing::warn!(output=%output_id,"Unable to process output: {err:?}");
+		}
+	}
 
-	fn output_destroyed(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _output: WlOutput) {
-		self.data.layer = None;
+	fn output_destroyed(&mut self, conn: &Connection, qh: &QueueHandle<Self>, output: WlOutput) {
+		let output_id = output.id();
+		if let Err(err) = self.on_destroy_output(conn, qh, &output) {
+			tracing::warn!(output=%output_id,"Unable to destroy output: {err:?}");
+		}
 	}
 }
 
@@ -206,7 +226,7 @@ impl<A: WaylandApp> KeyboardHandler for WaylandState<A> {
 		_conn: &Connection,
 		_qh: &QueueHandle<Self>,
 		_keyboard: &WlKeyboard,
-		_surface: &WlSurface,
+		surface: &WlSurface,
 		_serial: u32,
 		raw: &[u32],
 		key_syms: &[Keysym],
@@ -217,7 +237,7 @@ impl<A: WaylandApp> KeyboardHandler for WaylandState<A> {
 				.on_keyboard_key(&mut self.data, keysym, raw, None, KeyboardKeyState::Pressed);
 		}
 
-		self.app.on_keyboard_focus(&mut self.data, true);
+		self.app.on_keyboard_focus(&mut self.data, surface, true);
 	}
 
 	fn leave(
@@ -225,10 +245,10 @@ impl<A: WaylandApp> KeyboardHandler for WaylandState<A> {
 		_conn: &Connection,
 		_qh: &QueueHandle<Self>,
 		_keyboard: &WlKeyboard,
-		_surface: &WlSurface,
+		surface: &WlSurface,
 		_serial: u32,
 	) {
-		self.app.on_keyboard_focus(&mut self.data, false);
+		self.app.on_keyboard_focus(&mut self.data, surface, false);
 	}
 
 	fn press_key(
@@ -309,7 +329,8 @@ impl<A: WaylandApp> PointerHandler for WaylandState<A> {
 }
 
 impl<A: WaylandApp> LayerShellHandler for WaylandState<A> {
-	fn closed(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _layer: &LayerSurface) {
+	fn closed(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, layer: &LayerSurface) {
+		tracing::info!(surface=%layer.wl_surface().id(), "Received close request for layer");
 		self.data.should_quit = true;
 	}
 
@@ -368,7 +389,7 @@ pub trait WaylandApp: Sized + 'static {
 	);
 
 	/// Called on keyboard focus
-	fn on_keyboard_focus(&mut self, data: &mut WaylandData<Self>, focused: bool);
+	fn on_keyboard_focus(&mut self, data: &mut WaylandData<Self>, surface: &WlSurface, focused: bool);
 
 	/// Called on keyboard modifier update
 	fn on_keyboard_modifiers(

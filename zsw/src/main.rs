@@ -39,8 +39,13 @@ use {
 	euclid::default::Vector2D,
 	pollster::FutureExt,
 	smithay_client_toolkit::shell::{WaylandSurface, wlr_layer::LayerSurface},
-	std::{collections::BTreeMap, fs, process::ExitCode, sync::Arc},
-	wayland_client::{Connection, Proxy},
+	std::{
+		collections::{BTreeMap, HashMap},
+		fs,
+		process::ExitCode,
+		sync::Arc,
+	},
+	wayland_client::{Connection, Proxy, backend::ObjectId, protocol::wl_surface::WlSurface},
 	wgpu::rwh::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle},
 	zsw_egui::EguiWaylandState,
 	zsw_util::AppError,
@@ -98,9 +103,7 @@ fn run() -> Result<(), AppError> {
 		profiles,
 		profile_name: args.profile,
 
-		renderer: None,
-
-		egui_state: EguiWaylandState::new(),
+		layers: HashMap::new(),
 	};
 
 	let mut wayland_event_loop = WaylandEventLoop::new().context("Unable to create wayland event loop")?;
@@ -110,41 +113,61 @@ fn run() -> Result<(), AppError> {
 		data: wayland_data,
 	};
 
+	let mut surface_ids = vec![];
 	while !wayland_state.data.should_quit {
-		// Wait until the next frame
-		let frame = match &mut wayland_state.app.renderer {
-			Some(renderer) => Some(renderer.wait_frame().context("Unable to start new frame")?),
-			None => None,
-		};
-
-		// Dispatch any events
-		// Note: We do this now instead of before starting the frame to get the latest
-		//       events for this frame, instead of always being a frame late.
+		// Dispatch events before rendering
 		wayland_event_loop.dispatch(&mut wayland_state)?;
 
-		// Finally render
-		if let Some(renderer) = &mut wayland_state.app.renderer &&
-			let Some(frame) = frame
-		{
-			let egui_input = wayland_state.app.egui_state.take_input();
-			let egui_output = renderer
-				.render(
-					&mut wayland_state.data,
-					&wayland_state.app.playlists,
-					&wayland_state.app.profiles,
-					egui_input,
-					frame,
-				)
-				.context("Unable to render frame")?;
+		surface_ids.extend(wayland_state.app.layers.keys().cloned());
+		for surface_id in surface_ids.drain(..) {
+			// Wait until the next frame
+			// TODO: If we have two layers at different refresh rates, this will
+			//       cause us to be limited to the slowest one. We need to manually
+			//       sleep.
+			let Some(layer) = wayland_state.app.layers.get_mut(&surface_id) else {
+				continue;
+			};
+			let frame = match &mut layer.renderer {
+				Some(renderer) => Some(renderer.wait_frame().context("Unable to start new frame")?),
+				None => None,
+			};
 
-			wayland_state
-				.app
-				.egui_state
-				.update_output(&mut wayland_event_loop, &mut wayland_state.data, egui_output);
+			// Also dispatch events after waiting for the frame to start.
+			// Note: We do this now to ensure that the frame operates on the latest
+			//       data, instead of data that's potentially 1 frame late.
+			wayland_event_loop.dispatch(&mut wayland_state)?;
+
+			// Finally render
+			let Some(layer) = wayland_state.app.layers.get_mut(&surface_id) else {
+				continue;
+			};
+			if let Some(renderer) = &mut layer.renderer &&
+				let Some(frame) = frame
+			{
+				let egui_input = layer.egui_state.take_input();
+				let egui_output = renderer
+					.render(
+						&mut wayland_state.data,
+						&wayland_state.app.playlists,
+						&wayland_state.app.profiles,
+						egui_input,
+						frame,
+					)
+					.context("Unable to render frame")?;
+
+				layer
+					.egui_state
+					.update_output(&mut wayland_event_loop, &mut wayland_state.data, egui_output);
+			}
 		}
 	}
 
 	Ok(())
+}
+
+struct ZswLayer {
+	renderer:   Option<WindowRenderer>,
+	egui_state: EguiWaylandState,
 }
 
 struct Zsw {
@@ -152,9 +175,7 @@ struct Zsw {
 	profiles:     Profiles,
 	profile_name: ProfileName,
 
-	renderer: Option<WindowRenderer>,
-
-	egui_state: EguiWaylandState,
+	layers: HashMap<SurfaceId, ZswLayer>,
 }
 
 impl WaylandApp for Zsw {
@@ -165,7 +186,16 @@ impl WaylandApp for Zsw {
 		layer: &LayerSurface,
 		surface_size: Vector2D<u32>,
 	) {
-		match &mut self.renderer {
+		let surface_id = layer.wl_surface().id();
+		let layer = self
+			.layers
+			.entry(SurfaceId(surface_id.clone()))
+			.or_insert_with(|| ZswLayer {
+				renderer:   None,
+				egui_state: EguiWaylandState::new(),
+			});
+
+		match &mut layer.renderer {
 			Some(renderer) => {
 				tracing::info!(size=?surface_size, "Resizing renderer");
 				renderer.queue_resize(surface_size);
@@ -175,7 +205,7 @@ impl WaylandApp for Zsw {
 
 				let display_ptr = NonNull::new(conn.backend().display_ptr().cast()).expect("Display was null");
 				let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(display_ptr));
-				let surface_ptr = NonNull::new(layer.wl_surface().id().as_ptr().cast()).expect("Surface was null");
+				let surface_ptr = NonNull::new(surface_id.as_ptr().cast()).expect("Surface was null");
 				let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(surface_ptr));
 				let target = wgpu::SurfaceTargetUnsafe::RawHandle {
 					raw_display_handle: Some(raw_display_handle),
@@ -194,8 +224,8 @@ impl WaylandApp for Zsw {
 				.block_on()
 				{
 					Ok(renderer) => {
-						self.egui_state.update_wgpu(renderer.wgpu_renderer());
-						self.renderer = Some(renderer);
+						layer.egui_state.update_wgpu(renderer.wgpu_renderer());
+						layer.renderer = Some(renderer);
 					},
 					Err(err) => {
 						tracing::error!("Unable to create window: {err:?}");
@@ -204,7 +234,7 @@ impl WaylandApp for Zsw {
 			},
 		}
 
-		self.egui_state.update_surface_size(surface_size);
+		layer.egui_state.update_surface_size(surface_size);
 	}
 
 	fn on_keyboard_key(
@@ -215,11 +245,21 @@ impl WaylandApp for Zsw {
 		text: Option<String>,
 		state: zsw_wayland::KeyboardKeyState,
 	) {
-		self.egui_state.update_keyboard_key(data, keysym, raw, text, state);
+		#[expect(clippy::iter_over_hash_type, reason = "Order doesn't matter")]
+		for layer in self.layers.values_mut() {
+			layer
+				.egui_state
+				.update_keyboard_key(data, keysym, raw, text.clone(), state);
+		}
 	}
 
-	fn on_keyboard_focus(&mut self, _data: &mut zsw_wayland::WaylandData<Self>, focused: bool) {
-		self.egui_state.update_keyboard_focus(focused);
+	fn on_keyboard_focus(&mut self, _data: &mut zsw_wayland::WaylandData<Self>, surface: &WlSurface, focused: bool) {
+		let Some(layer) = self.layers.get_mut(&SurfaceId(surface.id())) else {
+			tracing::warn!(surface=%surface.id(), "Received keyboard focus for unknown surface");
+			return;
+		};
+
+		layer.egui_state.update_keyboard_focus(focused);
 	}
 
 	fn on_keyboard_modifiers(
@@ -228,7 +268,10 @@ impl WaylandApp for Zsw {
 		modifiers: smithay_client_toolkit::seat::keyboard::Modifiers,
 		raw_modifiers: smithay_client_toolkit::seat::keyboard::RawModifiers,
 	) {
-		self.egui_state.update_keyboard_modifiers(modifiers, raw_modifiers);
+		#[expect(clippy::iter_over_hash_type, reason = "Order doesn't matter")]
+		for layer in self.layers.values_mut() {
+			layer.egui_state.update_keyboard_modifiers(modifiers, raw_modifiers);
+		}
 	}
 
 	fn on_pointer(
@@ -236,6 +279,17 @@ impl WaylandApp for Zsw {
 		_data: &mut zsw_wayland::WaylandData<Self>,
 		events: &[smithay_client_toolkit::seat::pointer::PointerEvent],
 	) {
-		self.egui_state.update_pointer(events);
+		for event in events {
+			let Some(layer) = self.layers.get_mut(&SurfaceId(event.surface.id())) else {
+				tracing::warn!(?event, "Received event for unknown surface");
+				continue;
+			};
+
+			layer.egui_state.update_pointer(event);
+		}
 	}
 }
+
+/// Surface Id
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
+pub struct SurfaceId(pub ObjectId);
