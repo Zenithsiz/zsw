@@ -79,7 +79,7 @@ impl SurfaceRenderer {
 		self.queued_resize = Some(size);
 	}
 
-	/// Starts the next frame
+	/// Starts a frame
 	///
 	/// Performs any queued resize
 	pub fn start_frame(&mut self) -> Result<FrameRender, AppError> {
@@ -90,12 +90,12 @@ impl SurfaceRenderer {
 			self.surface_size = size;
 		}
 
-		self.wgpu_renderer.start_render().context("Unable to start frame")
+		self.wgpu_renderer.start_frame().context("Unable to start frame")
 	}
 
 	/// Renders the a frame.
 	///
-	/// You can get the current frame from [`wait_frame`](Self::wait_frame).
+	/// You can get the current frame from [`start_frame`](Self::start_frame).
 	pub fn render(
 		&mut self,
 		wayland_data: &mut WaylandData<Zsw>,
@@ -120,9 +120,7 @@ impl SurfaceRenderer {
 
 	/// Ends a frame
 	pub fn submit_frame(&mut self, frame: FrameRender) -> Result<RenderedFrame, AppError> {
-		self.wgpu_renderer
-			.submit_render(frame)
-			.context("Unable to finish frame")
+		self.wgpu_renderer.submit_frame(frame).context("Unable to finish frame")
 	}
 
 	/// Presents a frame

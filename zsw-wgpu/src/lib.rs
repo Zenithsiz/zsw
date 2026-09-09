@@ -140,7 +140,7 @@ impl WgpuRenderer {
 	///
 	/// Returns the encoder and surface view to render onto
 	// TODO: Ensure it's not called more than once?
-	pub fn start_render(&self) -> Result<FrameRender, AppError> {
+	pub fn start_frame(&self) -> Result<FrameRender, AppError> {
 		// And then get the surface texture
 		let surface_texture = self.surface.get_current_texture();
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
@@ -179,7 +179,7 @@ impl WgpuRenderer {
 	/// Submits all modifications of a frame.
 	///
 	/// Returns a rendered frame that can then be presented.
-	pub fn submit_render(&mut self, frame: FrameRender) -> Result<RenderedFrame, AppError> {
+	pub fn submit_frame(&mut self, frame: FrameRender) -> Result<RenderedFrame, AppError> {
 		_ = self.queue.submit([frame.encoder.finish()]);
 
 		Ok(RenderedFrame {
