@@ -9,7 +9,8 @@
 	share_trait,
 	duration_integer_division,
 	arbitrary_self_types,
-	thread_sleep_until
+	thread_sleep_until,
+	try_entry
 )]
 
 mod args;
@@ -43,6 +44,7 @@ use {
 		process::ExitCode,
 		sync::Arc,
 		thread,
+		time::Instant,
 	},
 	wayland_client::{Connection, Proxy, protocol::wl_surface::WlSurface},
 	wgpu::rwh::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle},
@@ -114,17 +116,11 @@ fn run() -> Result<(), AppError> {
 
 	while !wayland_state.data.should_quit {
 		// Get the surface we need to render next
-		let Some((surface_id, next_frame)) = wayland_state
+		let Some((surface_id, surface)) = wayland_state
 			.app
 			.surfaces
 			.iter()
-			.filter_map(|(surface_id, surface)| {
-				surface
-					.renderer
-					.as_ref()
-					.map(|renderer| (surface_id, renderer.next_frame()))
-			})
-			.min_by_key(|(_, next_frame)| *next_frame)
+			.min_by_key(|(_, surface)| surface.next_frame)
 		else {
 			// Note: If we have no surfaces, just spin on the dispatch loop until we do.
 			// TODO: This could spin at 100% CPU if the dispatch fails configuring the
@@ -141,7 +137,7 @@ fn run() -> Result<(), AppError> {
 		//       on the latest data, instead of data that's potentially 1 frame late.
 		//       The dispatch should be quick, so this doesn't cost us much time in the
 		//       frame.
-		thread::sleep_until(next_frame);
+		thread::sleep_until(surface.next_frame);
 		wayland_event_loop.dispatch(&mut wayland_state)?;
 
 		// Finally render
@@ -172,6 +168,15 @@ fn run() -> Result<(), AppError> {
 
 		let frame = renderer.submit_frame(frame).context("Unable to submit frame")?;
 		renderer.present_frame(frame).context("Unable to present frame")?;
+
+		let now = Instant::now();
+		tracing::trace!("Frame took {:?}", now - surface.last_frame);
+		surface.last_frame = now;
+		surface.next_frame += surface.frame_duration;
+		if let Some(late) = now.checked_duration_since(surface.next_frame) {
+			tracing::trace!("Frame was {late:?} late, skipping frames");
+			surface.next_frame = now;
+		}
 	}
 
 	Ok(())
@@ -180,6 +185,10 @@ fn run() -> Result<(), AppError> {
 struct ZswSurface {
 	renderer:   Option<SurfaceRenderer>,
 	egui_state: EguiWaylandState,
+
+	last_frame:     Instant,
+	next_frame:     Instant,
+	frame_duration: Duration,
 }
 
 struct Zsw {
@@ -199,10 +208,41 @@ impl WaylandApp for Zsw {
 		surface_size: Vector2D<u32>,
 	) {
 		let surface_id = SurfaceId(layer.wl_surface().id());
-		let surface = self.surfaces.entry(surface_id.clone()).or_insert_with(|| ZswSurface {
-			renderer:   None,
-			egui_state: EguiWaylandState::new(),
-		});
+		let Ok(surface) = self.surfaces.entry(surface_id.clone()).or_try_insert_with(|| {
+			let Some(layer_data) = data.layers.iter().find(|layer| layer.surface_id == surface_id) else {
+				tracing::warn!(%surface_id, "Unable to find layer data with surface id");
+				return Err(());
+			};
+
+			let Some(output_mode) = layer_data.output_info.modes.iter().find(|mode| mode.current) else {
+				tracing::warn!(modes=?layer_data.output_info.modes, "Unable to find current mode for layer");
+				return Err(());
+			};
+
+			tracing::info!(
+				"Found refresh rate for surface {surface_id}: {:.3}Hz",
+				output_mode.refresh_rate as f32 / 1000.0
+			);
+			let frame_duration = match u32::try_from(output_mode.refresh_rate) {
+				Ok(0) | Err(_) => {
+					tracing::warn!("Cannot use a non-positive refresh rate, using 60Hz instead");
+					Duration::from_secs_f32(1.0 / 60.0)
+				},
+				Ok(refresh_rate) => Duration::from_secs(1000) / refresh_rate,
+			};
+
+			let now = Instant::now();
+			Ok(ZswSurface {
+				renderer: None,
+				egui_state: EguiWaylandState::new(),
+
+				last_frame: now,
+				next_frame: now,
+				frame_duration,
+			})
+		}) else {
+			return;
+		};
 
 		match &mut surface.renderer {
 			Some(renderer) => {
@@ -211,28 +251,6 @@ impl WaylandApp for Zsw {
 			},
 			None => {
 				tracing::info!(size=?surface_size, "Creating renderer window");
-
-				let Some(layer_data) = data.layers.iter().find(|layer| layer.surface_id == surface_id) else {
-					tracing::warn!(%surface_id, "Unable to find layer data with surface id");
-					return;
-				};
-
-				let Some(output_mode) = layer_data.output_info.modes.iter().find(|mode| mode.current) else {
-					tracing::warn!(modes=?layer_data.output_info.modes, "Unable to find current mode for layer");
-					return;
-				};
-
-				tracing::info!(
-					"Found refresh rate for surface {surface_id}: {:.3}Hz",
-					output_mode.refresh_rate as f32 / 1000.0
-				);
-				let frame_duration = match u32::try_from(output_mode.refresh_rate) {
-					Ok(0) | Err(_) => {
-						tracing::warn!("Cannot use a non-positive refresh rate, using 60Hz instead");
-						Duration::from_secs_f32(1.0 / 60.0)
-					},
-					Ok(refresh_rate) => Duration::from_secs(1000) / refresh_rate,
-				};
 
 				let display_ptr = NonNull::new(conn.backend().display_ptr().cast()).expect("Display was null");
 				let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(display_ptr));
@@ -248,7 +266,6 @@ impl WaylandApp for Zsw {
 				match SurfaceRenderer::new(
 					target,
 					surface_size,
-					frame_duration,
 					&self.profiles,
 					&self.profile_name,
 					&self.playlists,
