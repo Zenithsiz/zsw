@@ -267,6 +267,9 @@ fn configure_surface(
 	surface: &wgpu::Surface<'static>,
 	size: Vector2D<u32>,
 ) -> Result<wgpu::SurfaceConfiguration, AppError> {
+	let capabilities = surface.get_capabilities(adapter);
+	tracing::debug!(?capabilities, "Found surface capabilities");
+
 	// Get the format
 	let mut config = surface
 		.get_default_config(adapter, size.x, size.y)
@@ -274,8 +277,16 @@ fn configure_surface(
 	tracing::debug!(?config, "Found surface configuration");
 
 	// Set some options
-	config.present_mode = wgpu::PresentMode::AutoVsync;
-	tracing::debug!(?config, "Updated surface configuration");
+	match capabilities.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+		true => {
+			config.present_mode = wgpu::PresentMode::Mailbox;
+			tracing::debug!("Using mailbox presentation for surface");
+		},
+		false => {
+			config.present_mode = wgpu::PresentMode::AutoVsync;
+			tracing::warn!("Mailbox presentation method is not supported, using fifo");
+		},
+	}
 
 	// Then configure it
 	surface.configure(device, &config);

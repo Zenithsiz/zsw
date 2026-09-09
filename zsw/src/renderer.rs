@@ -10,7 +10,9 @@ use {
 	},
 	app_error::Context,
 	chrono::TimeDelta,
+	core::time::Duration,
 	euclid::default::{Point2D, Vector2D},
+	std::time::Instant,
 	zsw_egui::Egui,
 	zsw_util::{AppError, Rect},
 	zsw_wayland::WaylandData,
@@ -27,6 +29,10 @@ pub struct SurfaceRenderer {
 	egui:            Egui,
 	menu:            Menu,
 
+	last_frame:     Instant,
+	next_frame:     Instant,
+	frame_duration: Duration,
+
 	queued_resize: Option<Vector2D<u32>>,
 }
 
@@ -35,6 +41,7 @@ impl SurfaceRenderer {
 	pub async fn new(
 		target: zsw_wgpu::SurfaceTarget,
 		surface_size: Vector2D<u32>,
+		frame_duration: Duration,
 		profiles: &Profiles,
 		profile_name: &ProfileName,
 		playlists: &Playlists,
@@ -56,6 +63,7 @@ impl SurfaceRenderer {
 			.set_profile(&wgpu_renderer, profile_name.clone(), profile, playlists)
 			.context("Unable to set profile")?;
 
+		let now = Instant::now();
 		Ok(Self {
 			surface_size,
 			wgpu_renderer,
@@ -63,6 +71,9 @@ impl SurfaceRenderer {
 			panels_renderer,
 			egui,
 			menu: Menu::new(),
+			last_frame: now,
+			next_frame: now,
+			frame_duration,
 			queued_resize: None,
 		})
 	}
@@ -70,6 +81,11 @@ impl SurfaceRenderer {
 	/// Returns the wgpu renderer for this surface
 	pub fn wgpu_renderer(&self) -> &WgpuRenderer {
 		&self.wgpu_renderer
+	}
+
+	/// Returns the next frame time
+	pub fn next_frame(&self) -> Instant {
+		self.next_frame
 	}
 
 	/// Queues a resize to this renderer
@@ -128,6 +144,15 @@ impl SurfaceRenderer {
 		self.wgpu_renderer
 			.present_frame(frame)
 			.context("Unable to finish frame")?;
+
+		let now = Instant::now();
+		tracing::trace!("Frame took {:?}", now - self.last_frame);
+		self.last_frame = now;
+		self.next_frame += self.frame_duration;
+		if let Some(late) = now.checked_duration_since(self.next_frame) {
+			tracing::trace!("Frame was {late:?} late, skipping frames");
+			self.next_frame = now;
+		}
 
 		Ok(())
 	}
