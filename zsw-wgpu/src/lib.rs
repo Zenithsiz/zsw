@@ -176,12 +176,22 @@ impl WgpuRenderer {
 		})
 	}
 
-	/// Finishes rendering a frame.
+	/// Submits all modifications of a frame.
 	///
-	/// Reconfigures if the frame as suboptimal
-	pub fn finish_render(&mut self, frame: FrameRender) -> Result<(), AppError> {
-		// Submit everything to the queue and present the surface's texture
+	/// Returns a rendered frame that can then be presented.
+	pub fn submit_render(&mut self, frame: FrameRender) -> Result<RenderedFrame, AppError> {
 		_ = self.queue.submit([frame.encoder.finish()]);
+
+		Ok(RenderedFrame {
+			surface_texture: frame.surface_texture,
+			suboptimal:      frame.suboptimal,
+		})
+	}
+
+	/// Presents a rendered frame.
+	///
+	/// Reconfigures if the frame is suboptimal
+	pub fn present_frame(&mut self, frame: RenderedFrame) -> Result<(), AppError> {
 		self.queue.present(frame.surface_texture);
 
 		if frame.suboptimal {
@@ -224,6 +234,7 @@ impl WgpuRenderer {
 
 /// A frame's rendering
 #[derive(Debug)]
+#[must_use = "You must finish a frame render"]
 pub struct FrameRender {
 	/// Encoder
 	pub encoder: wgpu::CommandEncoder,
@@ -233,6 +244,17 @@ pub struct FrameRender {
 
 	/// Surface view
 	pub surface_view: wgpu::TextureView,
+
+	/// Whether the surface was sub-optimal
+	pub suboptimal: bool,
+}
+
+/// A rendered frame
+#[derive(Debug)]
+#[must_use = "You must present a rendered frame"]
+pub struct RenderedFrame {
+	/// Surface texture
+	pub surface_texture: wgpu::SurfaceTexture,
 
 	/// Whether the surface was sub-optimal
 	pub suboptimal: bool,

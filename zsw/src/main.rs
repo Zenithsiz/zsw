@@ -125,7 +125,7 @@ fn run() -> Result<(), AppError> {
 				continue;
 			};
 			let frame = match &mut layer.renderer {
-				Some(renderer) => Some(renderer.wait_frame().context("Unable to start new frame")?),
+				Some(renderer) => Some(renderer.start_frame().context("Unable to start new frame")?),
 				None => None,
 			};
 
@@ -139,7 +139,7 @@ fn run() -> Result<(), AppError> {
 				continue;
 			};
 			if let Some(renderer) = &mut layer.renderer &&
-				let Some(frame) = frame
+				let Some(mut frame) = frame
 			{
 				let egui_input = layer.egui_state.take_input();
 				let egui_output = renderer
@@ -148,13 +148,16 @@ fn run() -> Result<(), AppError> {
 						&wayland_state.app.playlists,
 						&wayland_state.app.profiles,
 						egui_input,
-						frame,
+						&mut frame,
 					)
 					.context("Unable to render frame")?;
 
 				layer
 					.egui_state
 					.update_output(&mut wayland_event_loop, &mut wayland_state.data, egui_output);
+
+				let frame = renderer.submit_frame(frame).context("Unable to submit frame")?;
+				renderer.present_frame(frame).context("Unable to present frame")?;
 			}
 		}
 	}

@@ -14,7 +14,7 @@ use {
 	zsw_egui::Egui,
 	zsw_util::{AppError, Rect},
 	zsw_wayland::WaylandData,
-	zsw_wgpu::{FrameRender, WgpuRenderer},
+	zsw_wgpu::{FrameRender, RenderedFrame, WgpuRenderer},
 };
 
 #[derive(Debug)]
@@ -79,10 +79,10 @@ impl SurfaceRenderer {
 		self.queued_resize = Some(size);
 	}
 
-	/// Waits until the next frame.
+	/// Starts the next frame
 	///
 	/// Performs any queued resize
-	pub fn wait_frame(&mut self) -> Result<FrameRender, AppError> {
+	pub fn start_frame(&mut self) -> Result<FrameRender, AppError> {
 		// If we need to resize, do it now before starting the new frame
 		if let Some(size) = self.queued_resize.take() {
 			self.wgpu_renderer.resize(size).context("Unable to resize wgpu")?;
@@ -102,7 +102,7 @@ impl SurfaceRenderer {
 		playlists: &Playlists,
 		profiles: &Profiles,
 		egui_input: egui::RawInput,
-		mut frame: FrameRender,
+		frame: &mut FrameRender,
 	) -> Result<egui::PlatformOutput, AppError> {
 		let surface_geometry = Rect {
 			pos:  euclid::point2(0, 0),
@@ -110,23 +110,28 @@ impl SurfaceRenderer {
 		};
 
 		self.panels_renderer
-			.render(&self.wgpu_renderer, surface_geometry, &mut frame, &mut self.panels)
+			.render(&self.wgpu_renderer, surface_geometry, frame, &mut self.panels)
 			.context("Unable to render panels")?;
 
-		let egui_output = self.render_egui(
-			wayland_data,
-			surface_geometry,
-			playlists,
-			profiles,
-			egui_input,
-			&mut frame,
-		);
-
-		self.wgpu_renderer
-			.finish_render(frame)
-			.context("Unable to finish frame")?;
+		let egui_output = self.render_egui(wayland_data, surface_geometry, playlists, profiles, egui_input, frame);
 
 		Ok(egui_output)
+	}
+
+	/// Ends a frame
+	pub fn submit_frame(&mut self, frame: FrameRender) -> Result<RenderedFrame, AppError> {
+		self.wgpu_renderer
+			.submit_render(frame)
+			.context("Unable to finish frame")
+	}
+
+	/// Presents a frame
+	pub fn present_frame(&mut self, frame: RenderedFrame) -> Result<(), AppError> {
+		self.wgpu_renderer
+			.present_frame(frame)
+			.context("Unable to finish frame")?;
+
+		Ok(())
 	}
 
 	/// Renders egui
