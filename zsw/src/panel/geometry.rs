@@ -30,11 +30,6 @@ impl PanelGeometry {
 pub struct PanelGeometryRect(pub Rect<i32, u32>);
 
 impl PanelGeometryRect {
-	/// Returns if this geometry intersects a rect
-	pub fn intersects(&self, geometry: Rect<i32, u32>) -> bool {
-		self.0.intersection(geometry).is_some()
-	}
-
 	/// Returns this geometry's rectangle relative to another geometry
 	pub fn relative_to(&self, other: Rect<i32, u32>) -> Rect<i32, u32> {
 		let mut geometry = self.0;

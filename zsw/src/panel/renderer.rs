@@ -248,7 +248,7 @@ impl PanelsRenderer {
 		// Go through all geometries of the panel and render each one
 		for panel_geometry in &mut panel.geometries {
 			// If this geometry is outside our surface, we can safely ignore it
-			if !panel_geometry.rect.intersects(surface_geometry) {
+			if !panel_geometry.rect.0.intersects(surface_geometry) {
 				continue;
 			}
 

@@ -127,6 +127,12 @@ impl Rect<i32, u32> {
 
 		(min.x < max.x && min.y < max.y).then(|| Self::from_min_max(min, max))
 	}
+
+	/// Returns if this rectangle intersects another
+	#[must_use]
+	pub fn intersects(self, other: Self) -> bool {
+		self.intersection(other).is_some()
+	}
 }
 
 impl fmt::Display for Rect<i32, u32> {
