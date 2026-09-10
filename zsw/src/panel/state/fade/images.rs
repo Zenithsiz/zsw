@@ -3,7 +3,8 @@
 use {
 	crate::{panel::renderer::uniform, playlist::PlaylistPlayer},
 	app_error::Context,
-	image::{DynamicImage, imageops},
+	core::clone::Share,
+	image::imageops,
 	std::{
 		self,
 		mem,
@@ -11,8 +12,7 @@ use {
 		sync::{Arc, OnceLock},
 	},
 	zsw_util::{AppError, Loadable},
-	zsw_wgpu::WgpuRenderer,
-	zutil_cloned::cloned,
+	zsw_wgpu::{WgpuRenderer, WgpuShared},
 };
 
 /// Panel fade images shared
@@ -214,21 +214,6 @@ impl PanelFadeImages {
 		};
 
 		if let Some(slot) = slot {
-			let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
-			let texture_view = match wgpu_renderer.shared.create_texture_from_image(&texture_label, image) {
-				Ok((_, texture_view)) => texture_view,
-				Err(err) => {
-					tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
-					return;
-				},
-			};
-
-			let image = PanelFadeImage {
-				texture_view,
-				swap_dir: rand::random(),
-				path: res.path,
-			};
-
 			match slot {
 				PanelFadeImageSlot::Prev => self.prev = Some(image),
 				PanelFadeImageSlot::Cur => self.cur = Some(image),
@@ -277,8 +262,9 @@ impl PanelFadeImages {
 		let max_image_size = wgpu_renderer.shared.device.limits().max_texture_dimension_2d;
 
 		self.next_image.try_load(|tx| {
+			let wgpu_shared = wgpu_renderer.shared.share();
 			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
-				let image_res = self::load(&path, max_image_size);
+				let image_res = self::load(&wgpu_shared, &path, max_image_size);
 				_ = tx.send(ImageLoadRes {
 					path,
 					playlist_pos,
@@ -308,14 +294,13 @@ pub enum PanelFadeImageSlot {
 pub struct ImageLoadRes {
 	path:         Arc<Path>,
 	playlist_pos: usize,
-	image_res:    Result<DynamicImage, AppError>,
+	image_res:    Result<PanelFadeImage, AppError>,
 }
 
 /// Loads an image
-pub fn load(path: &Path, max_image_size: u32) -> Result<DynamicImage, AppError> {
+pub fn load(wgpu_shared: &WgpuShared, path: &Arc<Path>, max_image_size: u32) -> Result<PanelFadeImage, AppError> {
 	// Load the image
 	tracing::trace!("Loading image {:?}", path);
-	#[cloned(path)]
 	let mut image = image::open(path).context("Unable to open image")?;
 	tracing::trace!("Loaded image {:?} ({}x{})", path, image.width(), image.height());
 
@@ -330,6 +315,17 @@ pub fn load(path: &Path, max_image_size: u32) -> Result<DynamicImage, AppError> 
 		image = image.resize(max_image_size, max_image_size, imageops::FilterType::Nearest);
 		tracing::trace!("Resized image {:?} to {}x{}", path, image.width(), image.height());
 	}
+
+	let texture_label = format!("zsw-panel-fade-image-texture[path={path:?}]");
+	let (_texture, texture_view) = wgpu_shared
+		.create_texture_from_image(&texture_label, image)
+		.context("Unable to create texture for image")?;
+
+	let image = PanelFadeImage {
+		texture_view,
+		swap_dir: rand::random(),
+		path: path.share(),
+	};
 
 	Ok(image)
 }

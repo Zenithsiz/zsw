@@ -9,8 +9,8 @@ use {
 	},
 	app_error::Context,
 	chrono::TimeDelta,
-	core::time::Duration,
-	image::{DynamicImage, imageops},
+	core::{clone::Share, time::Duration},
+	image::imageops,
 	std::{
 		collections::VecDeque,
 		path::Path,
@@ -18,8 +18,7 @@ use {
 		time::Instant,
 	},
 	zsw_util::{AppError, Loadable},
-	zsw_wgpu::WgpuRenderer,
-	zutil_cloned::cloned,
+	zsw_wgpu::{WgpuRenderer, WgpuShared},
 };
 
 /// Panel slide state
@@ -135,8 +134,9 @@ impl PanelSlideState {
 		let max_image_size = wgpu_renderer.shared.device.limits().max_texture_dimension_2d;
 
 		self.prev_image.try_load(|tx| {
+			let wgpu_shared = wgpu_renderer.shared.share();
 			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
-				let image_res = self::load(&path, max_image_size);
+				let image_res = self::load(&wgpu_shared, &path, max_image_size);
 				_ = tx.send(ImageLoadRes { path, image_res });
 
 				Ok(())
@@ -157,8 +157,9 @@ impl PanelSlideState {
 		let max_image_size = wgpu_renderer.shared.device.limits().max_texture_dimension_2d;
 
 		self.next_image.try_load(|tx| {
+			let wgpu_shared = wgpu_renderer.shared.share();
 			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
-				let image_res = self::load(&path, max_image_size);
+				let image_res = self::load(&wgpu_shared, &path, max_image_size);
 				_ = tx.send(ImageLoadRes { path, image_res });
 
 				Ok(())
@@ -184,21 +185,7 @@ impl PanelSlideState {
 			None => match self.prev_image.take() {
 				Some(res) => match res.image_res {
 					Ok(image) => {
-						let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
-						let texture_view = match wgpu_renderer.shared.create_texture_from_image(&texture_label, image) {
-							Ok((_, texture_view)) => texture_view,
-							Err(err) => {
-								tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
-								return;
-							},
-						};
-
-						self.images.push_front(PanelSlideImage {
-							texture_view,
-							bind_group: OnceLock::new(),
-							_path: res.path,
-						});
-
+						self.images.push_front(image);
 						self.duration.saturating_sub(delta_abs)
 					},
 					Err(err) => {
@@ -224,22 +211,7 @@ impl PanelSlideState {
 		if let Some(res) = self.next_image.take() {
 			self.playlist_player.step_next();
 			match res.image_res {
-				Ok(image) => {
-					let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
-					let texture_view = match wgpu_renderer.shared.create_texture_from_image(&texture_label, image) {
-						Ok((_, texture_view)) => texture_view,
-						Err(err) => {
-							tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
-							return;
-						},
-					};
-
-					self.images.push_back(PanelSlideImage {
-						texture_view,
-						bind_group: OnceLock::new(),
-						_path: res.path,
-					});
-				},
+				Ok(image) => self.images.push_back(image),
 				Err(err) => {
 					tracing::warn!("Unable to load image {:?}, removing it from player: {err:?}", res.path);
 					_ = self.schedule_load_next_image(wgpu_renderer);
@@ -506,15 +478,13 @@ fn create_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> wgpu::BindGroupLayo
 #[derive(Debug)]
 pub struct ImageLoadRes {
 	path:      Arc<Path>,
-	image_res: Result<DynamicImage, AppError>,
+	image_res: Result<PanelSlideImage, AppError>,
 }
 
-
 /// Loads an image
-pub fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppError> {
+pub fn load(wgpu_shared: &WgpuShared, path: &Arc<Path>, max_image_size: u32) -> Result<PanelSlideImage, AppError> {
 	// Load the image
 	tracing::trace!("Loading image {:?}", path);
-	#[cloned(path)]
 	let mut image = image::open(path).context("Unable to open image")?;
 	tracing::trace!("Loaded image {:?} ({}x{})", path, image.width(), image.height());
 
@@ -529,6 +499,17 @@ pub fn load(path: &Arc<Path>, max_image_size: u32) -> Result<DynamicImage, AppEr
 		image = image.resize(max_image_size, max_image_size, imageops::FilterType::Nearest);
 		tracing::trace!("Resized image {:?} to {}x{}", path, image.width(), image.height());
 	}
+
+	let texture_label = format!("zsw-panel-slide-image-texture[path={path:?}]");
+	let (_texture, texture_view) = wgpu_shared
+		.create_texture_from_image(&texture_label, image)
+		.context("Unable to create texture for image")?;
+
+	let image = PanelSlideImage {
+		texture_view,
+		bind_group: OnceLock::new(),
+		_path: path.share(),
+	};
 
 	Ok(image)
 }

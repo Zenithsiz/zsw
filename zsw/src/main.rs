@@ -1,7 +1,6 @@
 //! Zenithsiz's scrolling wallpaper
 
 #![feature(
-	proc_macro_hygiene,
 	stmt_expr_attributes,
 	oneshot_channel,
 	str_as_str,
@@ -12,6 +11,7 @@
 	thread_sleep_until,
 	try_entry
 )]
+#![recursion_limit = "256"]
 
 mod args;
 mod config;

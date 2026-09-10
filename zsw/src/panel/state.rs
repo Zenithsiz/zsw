@@ -14,7 +14,6 @@ use {
 
 /// Panel state
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant, reason = "Indirections are more costly")]
 pub enum PanelState {
 	/// None shader
 	None(PanelNoneState),
