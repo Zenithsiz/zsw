@@ -105,14 +105,6 @@ pub struct WgpuRenderer {
 	/// Surface config
 	// Note: This is here instead of in shared because it needs
 	pub surface_config: wgpu::SurfaceConfiguration,
-
-	// TODO: Move these out of here elsewhere? They're not necessary for wgpu, just
-	//       for the panels.
-	/// Empty texture
-	pub empty_texture: wgpu::Texture,
-
-	/// Empty texture view
-	pub empty_texture_view: wgpu::TextureView,
 }
 
 impl WgpuRenderer {
@@ -125,9 +117,6 @@ impl WgpuRenderer {
 			.await
 			.context("Unable to create adaptor")?;
 		let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
-
-		let (empty_texture, empty_texture_view) = self::create_empty_image_texture(&device);
-
 
 		// Configure the surface and get the preferred texture format and surface size
 		let surface_config = self::configure_surface(&adapter, &device, &surface, surface_size)
@@ -144,8 +133,6 @@ impl WgpuRenderer {
 		Ok(Self {
 			shared: Arc::new(shared),
 			surface_config,
-			empty_texture,
-			empty_texture_view,
 		})
 	}
 
@@ -407,32 +394,4 @@ async fn create_adapter(
 	tracing::debug!(?adapter, "Created wgpu adapter");
 
 	Ok(adapter)
-}
-
-/// Gets an empty texture
-fn create_empty_image_texture(device: &wgpu::Device) -> (wgpu::Texture, wgpu::TextureView) {
-	// TODO: Pass some view formats?
-	let texture_descriptor = wgpu::TextureDescriptor {
-		label:           Some("zsw-texture-empty"),
-		size:            wgpu::Extent3d {
-			width:                 1,
-			height:                1,
-			depth_or_array_layers: 1,
-		},
-		mip_level_count: 1,
-		sample_count:    1,
-		dimension:       wgpu::TextureDimension::D2,
-		format:          wgpu::TextureFormat::Rgba8UnormSrgb,
-		usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-		view_formats:    &[],
-	};
-
-	let texture = device.create_texture(&texture_descriptor);
-	let texture_view_descriptor = wgpu::TextureViewDescriptor {
-		label: Some("zsw-texture-empty-view"),
-		..Default::default()
-	};
-	let texture_view = texture.create_view(&texture_view_descriptor);
-
-	(texture, texture_view)
 }

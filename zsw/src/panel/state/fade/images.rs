@@ -80,6 +80,9 @@ pub struct PanelFadeImages {
 	/// Bind group
 	pub bind_group: OnceLock<wgpu::BindGroup>,
 
+	/// Empty texture
+	pub empty_texture_view: OnceLock<wgpu::TextureView>,
+
 	/// Next image
 	pub next_image: Loadable<ImageLoadRes>,
 }
@@ -102,12 +105,13 @@ impl PanelFadeImages {
 	#[must_use]
 	pub fn new() -> Self {
 		Self {
-			prev:          None,
-			cur:           None,
-			next:          None,
-			image_sampler: OnceLock::new(),
-			bind_group:    OnceLock::new(),
-			next_image:    Loadable::new(),
+			prev:               None,
+			cur:                None,
+			next:               None,
+			image_sampler:      OnceLock::new(),
+			bind_group:         OnceLock::new(),
+			empty_texture_view: OnceLock::new(),
+			next_image:         Loadable::new(),
 		}
 	}
 
@@ -161,9 +165,14 @@ impl PanelFadeImages {
 		shared: &PanelFadeImagesShared,
 	) -> &wgpu::BindGroup {
 		self.bind_group.get_or_init(|| {
-			let [prev, cur, next] = [&self.prev, &self.cur, &self.next].map(|img| {
-				img.as_ref()
-					.map_or(&wgpu_renderer.empty_texture_view, |img| &img.texture_view)
+			let [prev, cur, next] = [&self.prev, &self.cur, &self.next].map(|img| match img {
+				Some(img) => &img.texture_view,
+				None => self
+					.empty_texture_view
+					.get_or_init(|| {
+						let (_texture, texture_view) = self::create_empty_image_texture(&wgpu_renderer.shared.device);
+						texture_view
+					}),
 			});
 
 			let layout = shared.image_bind_group_layout(wgpu_renderer);
@@ -469,4 +478,32 @@ fn create_image_sampler(wgpu_renderer: &WgpuRenderer) -> wgpu::Sampler {
 		..wgpu::SamplerDescriptor::default()
 	};
 	wgpu_renderer.shared.device.create_sampler(&descriptor)
+}
+
+/// Gets an empty texture
+fn create_empty_image_texture(device: &wgpu::Device) -> (wgpu::Texture, wgpu::TextureView) {
+	// TODO: Pass some view formats?
+	let texture_descriptor = wgpu::TextureDescriptor {
+		label:           Some("zsw-panel-fade-empty-image"),
+		size:            wgpu::Extent3d {
+			width:                 1,
+			height:                1,
+			depth_or_array_layers: 1,
+		},
+		mip_level_count: 1,
+		sample_count:    1,
+		dimension:       wgpu::TextureDimension::D2,
+		format:          wgpu::TextureFormat::Rgba8UnormSrgb,
+		usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		view_formats:    &[],
+	};
+
+	let texture = device.create_texture(&texture_descriptor);
+	let texture_view_descriptor = wgpu::TextureViewDescriptor {
+		label: Some("zsw-texture-empty-view"),
+		..Default::default()
+	};
+	let texture_view = texture.create_view(&texture_view_descriptor);
+
+	(texture, texture_view)
 }

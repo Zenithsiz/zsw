@@ -14,6 +14,10 @@ use {
 
 /// Panel state
 #[derive(Debug)]
+#[expect(
+	clippy::large_enum_variant,
+	reason = "This enum is only stored once per panel geometry"
+)]
 pub enum PanelState {
 	/// None shader
 	None(PanelNoneState),
