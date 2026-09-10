@@ -49,7 +49,7 @@ use {
 	wayland_client::{Connection, Proxy, protocol::wl_surface::WlSurface},
 	wgpu::rwh::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle},
 	zsw_egui::EguiWaylandState,
-	zsw_util::AppError,
+	zsw_util::{AppError, Rect},
 	zsw_wayland::{WaylandApp, WaylandData, WaylandEventLoop, WaylandState, data::SurfaceId},
 	zutil_logger::Logger,
 };
@@ -208,12 +208,12 @@ impl WaylandApp for Zsw {
 		surface_size: Vector2D<u32>,
 	) {
 		let surface_id = SurfaceId(layer.wl_surface().id());
-		let Ok(surface) = self.surfaces.entry(surface_id.clone()).or_try_insert_with(|| {
-			let Some(layer_data) = data.layers.iter().find(|layer| layer.surface_id == surface_id) else {
-				tracing::warn!(%surface_id, "Unable to find layer data with surface id");
-				return Err(());
-			};
+		let Some(layer_data) = data.layers.iter().find(|layer| layer.surface_id == surface_id) else {
+			tracing::warn!(%surface_id, "Unable to find layer data with surface id");
+			return;
+		};
 
+		let Ok(surface) = self.surfaces.entry(surface_id.clone()).or_try_insert_with(|| {
 			let Some(output_mode) = layer_data.output_info.modes.iter().find(|mode| mode.current) else {
 				tracing::warn!(modes=?layer_data.output_info.modes, "Unable to find current mode for layer");
 				return Err(());
@@ -263,9 +263,14 @@ impl WaylandApp for Zsw {
 				// SAFETY: The window is only dropped after wgpu.
 				let target = unsafe { zsw_wgpu::SurfaceTarget::from_wgpu_unsafe(target) };
 
+				let surface_geometry = Rect {
+					pos:  layer_data.output_info.location.into(),
+					size: surface_size,
+				};
+
 				match SurfaceRenderer::new(
 					target,
-					surface_size,
+					surface_geometry,
 					&self.profiles,
 					&self.profile_name,
 					&self.playlists,

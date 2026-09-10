@@ -19,7 +19,7 @@ use {
 
 #[derive(Debug)]
 pub struct SurfaceRenderer {
-	surface_size: Vector2D<u32>,
+	surface_geometry: Rect<i32, u32>,
 
 	wgpu_renderer:   WgpuRenderer,
 	panels:          Panels,
@@ -34,12 +34,12 @@ impl SurfaceRenderer {
 	/// Creates the surface renderer
 	pub async fn new(
 		target: zsw_wgpu::SurfaceTarget,
-		surface_size: Vector2D<u32>,
+		surface_geometry: Rect<i32, u32>,
 		profiles: &Profiles,
 		profile_name: &ProfileName,
 		playlists: &Playlists,
 	) -> Result<Self, AppError> {
-		let wgpu_renderer = WgpuRenderer::new(target, surface_size)
+		let wgpu_renderer = WgpuRenderer::new(target, surface_geometry.size)
 			.await
 			.context("Unable to create wgpu renderer")?;
 
@@ -57,7 +57,7 @@ impl SurfaceRenderer {
 			.context("Unable to set profile")?;
 
 		Ok(Self {
-			surface_size,
+			surface_geometry,
 			wgpu_renderer,
 			panels,
 			panels_renderer,
@@ -87,7 +87,7 @@ impl SurfaceRenderer {
 		if let Some(size) = self.queued_resize.take() {
 			self.wgpu_renderer.resize(size).context("Unable to resize wgpu")?;
 			self.panels_renderer.resize(&self.wgpu_renderer, size);
-			self.surface_size = size;
+			self.surface_geometry.size = size;
 		}
 
 		self.wgpu_renderer.start_frame().context("Unable to start frame")
@@ -104,16 +104,18 @@ impl SurfaceRenderer {
 		egui_input: egui::RawInput,
 		frame: &mut FrameRender,
 	) -> Result<egui::PlatformOutput, AppError> {
-		let surface_geometry = Rect {
-			pos:  euclid::point2(0, 0),
-			size: self.surface_size,
-		};
-
 		self.panels_renderer
-			.render(&self.wgpu_renderer, surface_geometry, frame, &mut self.panels)
+			.render(&self.wgpu_renderer, self.surface_geometry, frame, &mut self.panels)
 			.context("Unable to render panels")?;
 
-		let egui_output = self.render_egui(wayland_data, surface_geometry, playlists, profiles, egui_input, frame);
+		let egui_output = self.render_egui(
+			wayland_data,
+			self.surface_geometry,
+			playlists,
+			profiles,
+			egui_input,
+			frame,
+		);
 
 		Ok(egui_output)
 	}
