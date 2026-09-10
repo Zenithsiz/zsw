@@ -90,7 +90,7 @@ impl EguiWaylandState {
 
 	/// Updates this state when wgpu is created
 	pub fn update_wgpu(&mut self, wgpu: &WgpuRenderer) {
-		self.max_texture_side = Some(wgpu.device.limits().max_texture_dimension_2d as usize);
+		self.max_texture_side = Some(wgpu.shared.device.limits().max_texture_dimension_2d as usize);
 	}
 
 	/// Updates this state with the egui output

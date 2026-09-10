@@ -526,6 +526,7 @@ impl PanelsRenderer {
 		T: bytemuck::NoUninit,
 	{
 		wgpu_renderer
+			.shared
 			.queue
 			.write_buffer(buffer, 0, bytemuck::bytes_of(&uniforms));
 	}
@@ -539,7 +540,7 @@ fn create_vertices(wgpu_renderer: &WgpuRenderer) -> wgpu::Buffer {
 		usage:    wgpu::BufferUsages::VERTEX,
 	};
 
-	wgpu_renderer.device.create_buffer_init(&descriptor)
+	wgpu_renderer.shared.device.create_buffer_init(&descriptor)
 }
 
 /// Creates the indices
@@ -551,7 +552,7 @@ fn create_indices(wgpu_renderer: &WgpuRenderer) -> wgpu::Buffer {
 		usage:    wgpu::BufferUsages::INDEX,
 	};
 
-	wgpu_renderer.device.create_buffer_init(&descriptor)
+	wgpu_renderer.shared.device.create_buffer_init(&descriptor)
 }
 
 /// Render pipeline id
@@ -631,7 +632,7 @@ fn create_render_pipeline(
 		label:  Some(&format!("zsw-panel-shader[name={shader_name:?}]")),
 		source: wgpu::ShaderSource::Naga(Cow::Owned(shader_module)),
 	};
-	let shader = wgpu_renderer.device.create_shader_module(shader_descriptor);
+	let shader = wgpu_renderer.shared.device.create_shader_module(shader_descriptor);
 
 	// Create the pipeline layout
 	let render_pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
@@ -642,6 +643,7 @@ fn create_render_pipeline(
 		immediate_size: 0,
 	};
 	let render_pipeline_layout = wgpu_renderer
+		.shared
 		.device
 		.create_pipeline_layout(&render_pipeline_layout_descriptor);
 
@@ -685,7 +687,10 @@ fn create_render_pipeline(
 		cache:          None,
 	};
 
-	Ok(wgpu_renderer.device.create_render_pipeline(&render_pipeline_descriptor))
+	Ok(wgpu_renderer
+		.shared
+		.device
+		.create_render_pipeline(&render_pipeline_descriptor))
 }
 
 /// Creates the msaa framebuffer
@@ -708,6 +713,7 @@ fn create_msaa_framebuffer(wgpu_renderer: &WgpuRenderer, size: Vector2D<u32>, ms
 	};
 
 	wgpu_renderer
+		.shared
 		.device
 		.create_texture(&msaa_frame_descriptor)
 		.create_view(&wgpu::TextureViewDescriptor {

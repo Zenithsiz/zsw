@@ -132,7 +132,7 @@ impl PanelSlideState {
 
 		let (_, path) = self.playlist_player.get(-self.images.len().cast_signed() - 1)?;
 
-		let max_image_size = wgpu_renderer.device.limits().max_texture_dimension_2d;
+		let max_image_size = wgpu_renderer.shared.device.limits().max_texture_dimension_2d;
 
 		self.prev_image.try_load(|tx| {
 			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
@@ -154,7 +154,7 @@ impl PanelSlideState {
 
 		let (_, path) = self.playlist_player.get(0)?;
 
-		let max_image_size = wgpu_renderer.device.limits().max_texture_dimension_2d;
+		let max_image_size = wgpu_renderer.shared.device.limits().max_texture_dimension_2d;
 
 		self.next_image.try_load(|tx| {
 			zsw_util::spawn_task(format!("Load image {path:?}"), move || {
@@ -185,7 +185,7 @@ impl PanelSlideState {
 				Some(res) => match res.image_res {
 					Ok(image) => {
 						let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
-						let texture_view = match wgpu_renderer.create_texture_from_image(&texture_label, image) {
+						let texture_view = match wgpu_renderer.shared.create_texture_from_image(&texture_label, image) {
 							Ok((_, texture_view)) => texture_view,
 							Err(err) => {
 								tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
@@ -226,7 +226,7 @@ impl PanelSlideState {
 			match res.image_res {
 				Ok(image) => {
 					let texture_label = format!("zsw-panel-fade-image-texture[path={:?}]", res.path);
-					let texture_view = match wgpu_renderer.create_texture_from_image(&texture_label, image) {
+					let texture_view = match wgpu_renderer.shared.create_texture_from_image(&texture_label, image) {
 						Ok((_, texture_view)) => texture_view,
 						Err(err) => {
 							tracing::warn!("Unable to create texture for image {:?}: {err:?}", res.path);
@@ -406,7 +406,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> w
 		}],
 	};
 
-	wgpu_renderer.device.create_bind_group_layout(&descriptor)
+	wgpu_renderer.shared.device.create_bind_group_layout(&descriptor)
 }
 
 /// Creates the panel none geometry uniforms
@@ -421,7 +421,7 @@ fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelSlideSha
 		.expect("Maximum uniform size didn't fit into a `u64`"),
 		mapped_at_creation: false,
 	};
-	let buffer = wgpu_renderer.device.create_buffer(&buffer_descriptor);
+	let buffer = wgpu_renderer.shared.device.create_buffer(&buffer_descriptor);
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
@@ -432,7 +432,7 @@ fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelSlideSha
 			resource: buffer.as_entire_binding(),
 		}],
 	};
-	let bind_group = wgpu_renderer.device.create_bind_group(&bind_group_descriptor);
+	let bind_group = wgpu_renderer.shared.device.create_bind_group(&bind_group_descriptor);
 
 	PanelSlideGeometryUniforms { buffer, bind_group }
 }
@@ -449,7 +449,7 @@ fn create_image_sampler(wgpu_renderer: &WgpuRenderer) -> wgpu::Sampler {
 		mipmap_filter: wgpu::MipmapFilterMode::Linear,
 		..wgpu::SamplerDescriptor::default()
 	};
-	wgpu_renderer.device.create_sampler(&descriptor)
+	wgpu_renderer.shared.device.create_sampler(&descriptor)
 }
 
 /// Creates the image bind group
@@ -473,7 +473,7 @@ fn create_image_bind_group(
 			},
 		],
 	};
-	wgpu_renderer.device.create_bind_group(&descriptor)
+	wgpu_renderer.shared.device.create_bind_group(&descriptor)
 }
 
 /// Creates the slide image bind group layout
@@ -500,7 +500,7 @@ fn create_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> wgpu::BindGroupLayo
 		],
 	};
 
-	wgpu_renderer.device.create_bind_group_layout(&descriptor)
+	wgpu_renderer.shared.device.create_bind_group_layout(&descriptor)
 }
 
 #[derive(Debug)]

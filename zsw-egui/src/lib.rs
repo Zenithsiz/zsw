@@ -26,7 +26,7 @@ impl Egui {
 	#[must_use]
 	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
 		let renderer = egui_wgpu::Renderer::new(
-			&wgpu_renderer.device,
+			&wgpu_renderer.shared.device,
 			wgpu_renderer.surface_config.format,
 			egui_wgpu::RendererOptions::default(),
 		);
@@ -56,7 +56,7 @@ impl Egui {
 		for (&id, deltas) in &full_output.textures_delta.set {
 			for delta in deltas {
 				self.renderer
-					.update_texture(&wgpu_renderer.device, &wgpu_renderer.queue, id, delta);
+					.update_texture(&wgpu_renderer.shared.device, &wgpu_renderer.shared.queue, id, delta);
 			}
 		}
 		#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
@@ -78,13 +78,13 @@ impl Egui {
 			},
 		};
 		let buffers = self.renderer.update_buffers(
-			&wgpu_renderer.device,
-			&wgpu_renderer.queue,
+			&wgpu_renderer.shared.device,
+			&wgpu_renderer.shared.queue,
 			&mut frame.encoder,
 			&paint_jobs,
 			&screen_descriptor,
 		);
-		let _: wgpu::SubmissionIndex = wgpu_renderer.queue.submit(buffers);
+		let _: wgpu::SubmissionIndex = wgpu_renderer.shared.queue.submit(buffers);
 
 		// Record all render passes.
 		let render_pass_color_attachment = wgpu::RenderPassColorAttachment {

@@ -6,13 +6,16 @@ use {
 	app_error::{Context, bail},
 	euclid::default::Vector2D,
 	image::DynamicImage,
+	std::sync::Arc,
 	wgpu::util::{self as wgpu_util, DeviceExt},
 	zsw_util::AppError,
 };
 
-/// Wgpu renderer
+/// Wgpu shared
+///
+/// Wgpu data that can be shared.
 #[derive(Debug)]
-pub struct WgpuRenderer {
+pub struct WgpuShared {
 	/// Instance
 	pub instance: wgpu::Instance,
 
@@ -25,56 +28,11 @@ pub struct WgpuRenderer {
 	/// Queue
 	pub queue: wgpu::Queue,
 
-	// TODO: Move these out of here elsewhere? They're not necessary for wgpu, just
-	//       for the panels.
-	/// Empty texture
-	pub empty_texture: wgpu::Texture,
-
-	/// Empty texture view
-	pub empty_texture_view: wgpu::TextureView,
-
 	/// Surface
 	pub surface: wgpu::Surface<'static>,
-
-	/// Surface config
-	pub surface_config: wgpu::SurfaceConfiguration,
 }
 
-impl WgpuRenderer {
-	/// Creates the wgpu renderer
-	pub async fn new(target: SurfaceTarget, surface_size: Vector2D<u32>) -> Result<Self, AppError> {
-		let instance = self::create_instance().context("Unable to create instance")?;
-		let surface = self::create_surface(&instance, target)?;
-
-		let adapter = self::create_adapter(&instance, &surface)
-			.await
-			.context("Unable to create adaptor")?;
-		let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
-
-		let (empty_texture, empty_texture_view) = self::create_empty_image_texture(&device);
-
-
-		// Configure the surface and get the preferred texture format and surface size
-		let surface_config = self::configure_surface(&adapter, &device, &surface, surface_size)
-			.context("Unable to configure surface")?;
-
-		Ok(Self {
-			instance,
-			adapter,
-			device,
-			queue,
-			empty_texture,
-			empty_texture_view,
-			surface,
-			surface_config,
-		})
-	}
-
-	/// Returns the surface size
-	pub fn surface_size(&self) -> Vector2D<u32> {
-		euclid::vec2(self.surface_config.width, self.surface_config.height)
-	}
-
+impl WgpuShared {
 	/// Creates a texture from an image.
 	pub fn create_texture_from_image(
 		&self,
@@ -135,6 +93,66 @@ impl WgpuRenderer {
 
 		Ok((texture, texture_view))
 	}
+}
+
+/// Wgpu renderer
+#[derive(Debug)]
+pub struct WgpuRenderer {
+	/// Wgpu shared
+	pub shared: Arc<WgpuShared>,
+
+	/// Surface config
+	// Note: This is here instead of in shared because it needs
+	pub surface_config: wgpu::SurfaceConfiguration,
+
+	// TODO: Move these out of here elsewhere? They're not necessary for wgpu, just
+	//       for the panels.
+	/// Empty texture
+	pub empty_texture: wgpu::Texture,
+
+	/// Empty texture view
+	pub empty_texture_view: wgpu::TextureView,
+}
+
+impl WgpuRenderer {
+	/// Creates the wgpu renderer
+	pub async fn new(target: SurfaceTarget, surface_size: Vector2D<u32>) -> Result<Self, AppError> {
+		let instance = self::create_instance().context("Unable to create instance")?;
+		let surface = self::create_surface(&instance, target)?;
+
+		let adapter = self::create_adapter(&instance, &surface)
+			.await
+			.context("Unable to create adaptor")?;
+		let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
+
+		let (empty_texture, empty_texture_view) = self::create_empty_image_texture(&device);
+
+
+		// Configure the surface and get the preferred texture format and surface size
+		let surface_config = self::configure_surface(&adapter, &device, &surface, surface_size)
+			.context("Unable to configure surface")?;
+
+		let shared = WgpuShared {
+			instance,
+			adapter,
+			device,
+			queue,
+			surface,
+		};
+
+		Ok(Self {
+			shared: Arc::new(shared),
+			surface_config,
+			empty_texture,
+			empty_texture_view,
+		})
+	}
+
+	/// Returns the surface size
+	#[must_use]
+	pub fn surface_size(&self) -> Vector2D<u32> {
+		euclid::vec2(self.surface_config.width, self.surface_config.height)
+	}
 
 	/// Starts rendering a frame.
 	///
@@ -142,7 +160,7 @@ impl WgpuRenderer {
 	// TODO: Ensure it's not called more than once?
 	pub fn start_frame(&self) -> Result<FrameRender, AppError> {
 		// And then get the surface texture
-		let surface_texture = self.surface.get_current_texture();
+		let surface_texture = self.shared.surface.get_current_texture();
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
 			label: Some("zsw-frame-surface-texture-view"),
 			..wgpu::TextureViewDescriptor::default()
@@ -166,7 +184,7 @@ impl WgpuRenderer {
 		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
 			label: Some("zsw-frame-command-encoder"),
 		};
-		let encoder = self.device.create_command_encoder(&encoder_descriptor);
+		let encoder = self.shared.device.create_command_encoder(&encoder_descriptor);
 
 		Ok(FrameRender {
 			encoder,
@@ -180,7 +198,7 @@ impl WgpuRenderer {
 	///
 	/// Returns a rendered frame that can then be presented.
 	pub fn submit_frame(&mut self, frame: FrameRender) -> Result<RenderedFrame, AppError> {
-		_ = self.queue.submit([frame.encoder.finish()]);
+		_ = self.shared.queue.submit([frame.encoder.finish()]);
 
 		Ok(RenderedFrame {
 			surface_texture: frame.surface_texture,
@@ -192,7 +210,7 @@ impl WgpuRenderer {
 	///
 	/// Reconfigures if the frame is suboptimal
 	pub fn present_frame(&mut self, frame: RenderedFrame) -> Result<(), AppError> {
-		self.queue.present(frame.surface_texture);
+		self.shared.queue.present(frame.surface_texture);
 
 		if frame.suboptimal {
 			self.reconfigure()
@@ -211,8 +229,13 @@ impl WgpuRenderer {
 		);
 
 		// Update our surface
-		self.surface_config = self::configure_surface(&self.adapter, &self.device, &self.surface, self.surface_size())
-			.context("Unable to configure surface")?;
+		self.surface_config = self::configure_surface(
+			&self.shared.adapter,
+			&self.shared.device,
+			&self.shared.surface,
+			self.surface_size(),
+		)
+		.context("Unable to configure surface")?;
 
 		Ok(())
 	}
@@ -224,8 +247,9 @@ impl WgpuRenderer {
 		// TODO: Don't ignore resizes to the same size?
 		if size.x > 0 && size.y > 0 && size != self.surface_size() {
 			// Update our surface
-			self.surface_config = self::configure_surface(&self.adapter, &self.device, &self.surface, size)
-				.context("Unable to configure surface")?;
+			self.surface_config =
+				self::configure_surface(&self.shared.adapter, &self.shared.device, &self.shared.surface, size)
+					.context("Unable to configure surface")?;
 		}
 
 		Ok(())

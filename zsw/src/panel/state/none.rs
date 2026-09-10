@@ -79,7 +79,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> w
 		}],
 	};
 
-	wgpu_renderer.device.create_bind_group_layout(&descriptor)
+	wgpu_renderer.shared.device.create_bind_group_layout(&descriptor)
 }
 
 /// Creates the panel none geometry uniforms
@@ -94,7 +94,7 @@ fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelNoneShar
 		.expect("Maximum uniform size didn't fit into a `u64`"),
 		mapped_at_creation: false,
 	};
-	let buffer = wgpu_renderer.device.create_buffer(&buffer_descriptor);
+	let buffer = wgpu_renderer.shared.device.create_buffer(&buffer_descriptor);
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
@@ -105,7 +105,7 @@ fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelNoneShar
 			resource: buffer.as_entire_binding(),
 		}],
 	};
-	let bind_group = wgpu_renderer.device.create_bind_group(&bind_group_descriptor);
+	let bind_group = wgpu_renderer.shared.device.create_bind_group(&bind_group_descriptor);
 
 	PanelNoneGeometryUniforms { buffer, bind_group }
 }
