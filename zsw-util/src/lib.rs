@@ -1,7 +1,6 @@
 //! Utility
 
 #![feature(
-	decl_macro,
 	const_trait_impl,
 	unboxed_closures,
 	proc_macro_hygiene,
@@ -23,7 +22,6 @@ pub use {
 use {
 	app_error::Context,
 	core::str::FromStr,
-	image::DynamicImage,
 	serde::de::DeserializeOwned,
 	std::{ffi::OsStr, fs, path::Path, thread},
 	zutil_cloned::cloned,
@@ -31,59 +29,6 @@ use {
 
 /// App error export with our data
 pub type AppError = app_error::AppError<()>;
-
-/// Parses json from a file
-pub fn parse_json_from_file<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, AppError> {
-	// Open the file
-	let file = fs::File::open(path).context("Unable to open file")?;
-
-	// Then parse it
-	serde_json::from_reader(file).context("Unable to parse file")
-}
-
-/// Serializes json to a file
-pub fn serialize_json_to_file<T: serde::Serialize>(path: impl AsRef<Path>, value: &T) -> Result<(), AppError> {
-	// Open the file
-	let file = fs::File::create(path).context("Unable to create file")?;
-
-	// Then serialize it
-	serde_json::to_writer_pretty(file, value).context("Unable to serialize to file")
-}
-
-/// Returns the image format string of an image (for logging)
-#[must_use]
-pub fn image_format(image: &DynamicImage) -> &'static str {
-	match image {
-		DynamicImage::ImageLuma8(_) => "Luma8",
-		DynamicImage::ImageLumaA8(_) => "LumaA8",
-		DynamicImage::ImageRgb8(_) => "Rgb8",
-		DynamicImage::ImageRgba8(_) => "Rgba8",
-		DynamicImage::ImageLuma16(_) => "Luma16",
-		DynamicImage::ImageLumaA16(_) => "LumaA16",
-		DynamicImage::ImageRgb16(_) => "Rgb16",
-		DynamicImage::ImageRgba16(_) => "Rgba16",
-		_ => "<unknown>",
-	}
-}
-
-/// Ensures `cond` is true in a `where` clause
-pub macro where_assert($cond:expr) {
-	// Note: If `true`, this expands to `[(); 0]`, which is valid
-	//       If `false`, it expands to `[(); -1]`, which is invalid
-	[(); ($cond as usize) - 1]
-}
-
-/// Logs an error and panics with the error message
-pub macro log_error_panic( $($rest:tt)* ) {{
-	::tracing::warn!( $($rest)* );
-
-	// TODO: Better way of getting the message as the last argument?
-	let (.., msg) = ( $( stringify!($rest) ),* );
-	let msg = &msg[1..];
-	let msg = &msg[..msg.len() - 1];
-
-	::std::panic!("{msg}");
-}}
 
 /// Returns the maximum value in an array as a `const fn`
 #[must_use]
@@ -131,17 +76,6 @@ where
 		let err = AppError::new(&err);
 		tracing::warn!("Unable to spawn task {name:?}: {err:?}");
 	}
-}
-
-/// Iterator chain
-pub macro iter_chain {
-	($only:expr $(,)?) => {
-		$only
-	},
-
-	($first:expr, $($rest:expr),* $(,)?) => {
-		std::iter::chain($first, $crate::iter_chain!($($rest,)*))
-	},
 }
 
 /// Reads all toml files in a directory as values.
