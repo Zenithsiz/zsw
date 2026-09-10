@@ -1,48 +1,23 @@
 //! Project directories
 
-use std::{
-	path::{Path, PathBuf},
-	sync::OnceLock,
-};
+use std::path::{Path, PathBuf};
 
 /// Directories
 #[derive(Debug)]
 pub struct Dirs {
-	/// Root config directory
-	config_dir: PathBuf,
-
 	/// Playlist directory
-	playlists: OnceLock<PathBuf>,
+	pub playlists: PathBuf,
 
 	/// Profiles directory
-	profiles: OnceLock<PathBuf>,
+	pub profiles: PathBuf,
 }
 
 impl Dirs {
 	/// Creates new directories from a few root paths
-	pub fn new(config_dir: PathBuf) -> Self {
+	pub fn new(config_dir: &Path) -> Self {
 		Self {
-			config_dir,
-			playlists: OnceLock::new(),
-			profiles: OnceLock::new(),
+			playlists: config_dir.join("playlists"),
+			profiles:  config_dir.join("profiles"),
 		}
-	}
-
-	/// Returns the playlists directory
-	pub fn playlists(&self) -> &Path {
-		self.playlists.get_or_init(|| {
-			let path = self.config_dir.join("playlists");
-			tracing::info!("Playlists path: {path:?}");
-			path
-		})
-	}
-
-	/// Returns the profiles directory
-	pub fn profiles(&self) -> &Path {
-		self.profiles.get_or_init(|| {
-			let path = self.config_dir.join("profiles");
-			tracing::info!("Playlists path: {path:?}");
-			path
-		})
 	}
 }

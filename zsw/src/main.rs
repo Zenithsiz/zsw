@@ -85,18 +85,15 @@ fn run() -> Result<(), AppError> {
 	let default_config_path = LazyCell::new(|| dirs.data_dir().join("config.toml"));
 	let config_path = args.config.as_ref().unwrap_or_else(|| &*default_config_path);
 	let config = Config::get_or_create_default(config_path);
-	let dirs = Dirs::new(
-		config_path
-			.parent()
-			.expect("Config file had no parent directory")
-			.to_path_buf(),
-	);
 	tracing::debug!("Loaded config: {config:?}");
+	let config_dir = config_path.parent().context("Config file had no parent directory")?;
+	let dirs = Dirs::new(config_dir);
+	tracing::debug!("Configured directories: {dirs:?}");
 
 	logger.set_file(args.log_file.as_deref().or(config.log_file.as_deref()));
 
-	let playlists = zsw_util::read_dir_all_toml(dirs.playlists()).context("Unable to create playlists")?;
-	let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(dirs.profiles())
+	let playlists = zsw_util::read_dir_all_toml(&dirs.playlists).context("Unable to create playlists")?;
+	let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(&dirs.profiles)
 		.context("Unable to create profiles")?;
 
 	let zsw = Zsw {
