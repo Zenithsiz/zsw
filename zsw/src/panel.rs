@@ -1,6 +1,6 @@
 //! Panel
 
-mod geometry;
+pub mod geometry;
 mod panels;
 mod renderer;
 pub mod state;

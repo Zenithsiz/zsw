@@ -4,7 +4,7 @@ use {
 	crate::{
 		Zsw,
 		menu::Menu,
-		panel::{PanelState, Panels, PanelsRenderer},
+		panel::{self, PanelState, Panels, PanelsRenderer},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
 	},
@@ -165,11 +165,9 @@ impl SurfaceRenderer {
 			for panel in self.panels.get_all() {
 				// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 				if ctx.is_pointer_over_egui() ||
-					!panel
-						.geometries
-						.iter()
-						.any(|geometry| geometry.rect.relative_to(surface_geometry).contains(pointer_pos))
-				{
+					!panel.geometries.iter().any(|geometry| {
+						panel::geometry::relative_to(geometry.rect, surface_geometry).contains(pointer_pos)
+					}) {
 					continue;
 				}
 

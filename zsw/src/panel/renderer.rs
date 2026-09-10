@@ -11,6 +11,7 @@ use {
 		PanelGeometry,
 		PanelState,
 		Panels,
+		geometry,
 		state::{
 			PanelFadeState,
 			PanelNoneState,
@@ -248,7 +249,7 @@ impl PanelsRenderer {
 		// Go through all geometries of the panel and render each one
 		for panel_geometry in &mut panel.geometries {
 			// If this geometry is outside our surface, we can safely ignore it
-			if !panel_geometry.rect.0.intersects(surface_geometry) {
+			if !panel_geometry.rect.intersects(surface_geometry) {
 				continue;
 			}
 
@@ -274,28 +275,14 @@ impl PanelsRenderer {
 		panel_geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
+		let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry, surface_size);
 		match state {
-			PanelState::None(state) => self.render_panel_none_geometry(
-				wgpu_renderer,
-				render_pass,
-				panel_geometry,
-				panel_geometry.rect.pos_matrix(surface_geometry, surface_size),
-				state,
-			),
-			PanelState::Fade(state) => self.render_panel_fade_geometry(
-				wgpu_renderer,
-				render_pass,
-				panel_geometry,
-				panel_geometry.rect.pos_matrix(surface_geometry, surface_size),
-				state,
-			),
-			PanelState::Slide(state) => self.render_panel_slide_geometry(
-				wgpu_renderer,
-				render_pass,
-				panel_geometry,
-				panel_geometry.rect.pos_matrix(surface_geometry, surface_size),
-				state,
-			),
+			PanelState::None(state) =>
+				self.render_panel_none_geometry(wgpu_renderer, render_pass, panel_geometry, pos_matrix, state),
+			PanelState::Fade(state) =>
+				self.render_panel_fade_geometry(wgpu_renderer, render_pass, panel_geometry, pos_matrix, state),
+			PanelState::Slide(state) =>
+				self.render_panel_slide_geometry(wgpu_renderer, render_pass, panel_geometry, pos_matrix, state),
 		}
 	}
 
@@ -384,7 +371,7 @@ impl PanelsRenderer {
 			// Calculate the position matrix for the panel
 			let image_size = image.texture_view.texture().size();
 			let image_size = Vector2D::new(image_size.width, image_size.height);
-			let image_ratio = panel_geometry.rect.image_ratio(image_size);
+			let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
 
 			uniform::fade::Image {
 				image_ratio: uniform::Vec2(image_ratio.into()),
@@ -455,7 +442,7 @@ impl PanelsRenderer {
 			Some(image) => {
 				let image_size = image.texture_view.texture().size();
 				let image_size = Vector2D::new(image_size.width, image_size.height);
-				let image_ratio = panel_geometry.rect.image_ratio(image_size);
+				let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
 
 				let ratio = match state.dir().is_horizontal() {
 					true => image_ratio.y / image_ratio.x,
@@ -472,7 +459,7 @@ impl PanelsRenderer {
 			// Calculate the position matrix for the panel
 			let image_size = image.texture_view.texture().size();
 			let image_size = Vector2D::new(image_size.width, image_size.height);
-			let image_ratio = panel_geometry.rect.image_ratio(image_size);
+			let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
 
 			let offset_abs = cur_global_offset - local_offset;
 			if offset_abs > 2.0 {

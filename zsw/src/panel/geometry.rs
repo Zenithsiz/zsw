@@ -10,7 +10,7 @@ use {
 #[derive(Debug)]
 pub struct PanelGeometry {
 	/// Inner geometry
-	pub rect: PanelGeometryRect,
+	pub rect: Rect<i32, u32>,
 
 	/// Shared data
 	pub shared: PanelGeometryShared,
@@ -18,76 +18,72 @@ pub struct PanelGeometry {
 
 impl PanelGeometry {
 	/// Creates a new panel geometry from it's geometry
-	pub fn new(geometry: Rect<i32, u32>) -> Self {
+	pub fn new(rect: Rect<i32, u32>) -> Self {
 		Self {
-			rect:   PanelGeometryRect(geometry),
+			rect,
 			shared: PanelGeometryShared::default(),
 		}
 	}
 }
 
-#[derive(Debug)]
-pub struct PanelGeometryRect(pub Rect<i32, u32>);
+/// Returns this geometry's rectangle relative to another geometry
+pub fn relative_to(mut geometry: Rect<i32, u32>, other: Rect<i32, u32>) -> Rect<i32, u32> {
+	geometry.pos -= Vector2D::new(other.pos.x, other.pos.y);
+	geometry
+}
 
-impl PanelGeometryRect {
-	/// Returns this geometry's rectangle relative to another geometry
-	pub fn relative_to(&self, other: Rect<i32, u32>) -> Rect<i32, u32> {
-		let mut geometry = self.0;
-		geometry.pos -= Vector2D::new(other.pos.x, other.pos.y);
+/// Calculates this panel's position matrix
+// Note: This matrix simply goes from a geometry in physical units
+//       onto shader coordinates.
+#[must_use]
+pub fn pos_matrix(
+	geometry: Rect<i32, u32>,
+	surface_geometry: Rect<i32, u32>,
+	surface_size: Vector2D<u32>,
+) -> Transform3D<f32> {
+	let geometry = self::relative_to(geometry, surface_geometry);
 
-		geometry
+	let x_scale = geometry.size.x as f32 / surface_size.x as f32;
+	let y_scale = geometry.size.y as f32 / surface_size.y as f32;
+
+	let x_offset = geometry.pos.x as f32 / surface_size.x as f32;
+	let y_offset = geometry.pos.y as f32 / surface_size.y as f32;
+
+	let translation = Transform3D::translation(-1.0 + x_scale + 2.0 * x_offset, 1.0 - y_scale - 2.0 * y_offset, 0.0);
+	translation.pre_scale(x_scale, -y_scale, 1.0)
+}
+
+/// Calculates an image's ratio for this panel geometry
+///
+/// This ratio is multiplied by the base uvs to fix the stretching
+/// that comes from having a square coordinate system [0.0 .. 1.0] x [0.0 .. 1.0]
+pub fn image_ratio(geometry: Rect<i32, u32>, image_size: Vector2D<u32>) -> Vector2D<f32> {
+	let image_size = image_size.cast();
+	let panel_size = geometry.size.cast();
+
+	// If either the image or our panel have a side with 0, return a square ratio
+	// TODO: Check if this is the right thing to do
+	if panel_size.x == 0 || panel_size.y == 0 || image_size.x == 0 || image_size.y == 0 {
+		return Vector2D::new(0.0, 0.0);
 	}
 
-	/// Calculates this panel's position matrix
-	// Note: This matrix simply goes from a geometry in physical units
-	//       onto shader coordinates.
-	#[must_use]
-	pub fn pos_matrix(&self, surface_geometry: Rect<i32, u32>, surface_size: Vector2D<u32>) -> Transform3D<f32> {
-		let geometry = self.relative_to(surface_geometry);
+	// Image and panel ratios
+	let image_ratio = Rational32::new(image_size.x, image_size.y);
+	let panel_ratio = Rational32::new(panel_size.x, panel_size.y);
 
-		let x_scale = geometry.size.x as f32 / surface_size.x as f32;
-		let y_scale = geometry.size.y as f32 / surface_size.y as f32;
+	// Ratios between the image and panel
+	let width_ratio = Rational32::new(panel_size.x, image_size.x);
+	let height_ratio = Rational32::new(panel_size.y, image_size.y);
 
-		let x_offset = geometry.pos.x as f32 / surface_size.x as f32;
-		let y_offset = geometry.pos.y as f32 / surface_size.y as f32;
+	// X-axis ratio, if image scrolls horizontally
+	let x_ratio = self::ratio_as_f32(width_ratio / height_ratio);
 
-		let translation =
-			Transform3D::translation(-1.0 + x_scale + 2.0 * x_offset, 1.0 - y_scale - 2.0 * y_offset, 0.0);
-		translation.pre_scale(x_scale, -y_scale, 1.0)
-	}
+	// Y-axis ratio, if image scrolls vertically
+	let y_ratio = self::ratio_as_f32(height_ratio / width_ratio);
 
-	/// Calculates an image's ratio for this panel geometry
-	///
-	/// This ratio is multiplied by the base uvs to fix the stretching
-	/// that comes from having a square coordinate system [0.0 .. 1.0] x [0.0 .. 1.0]
-	pub fn image_ratio(&self, image_size: Vector2D<u32>) -> Vector2D<f32> {
-		let image_size = image_size.cast();
-		let panel_size = self.0.size.cast();
-
-		// If either the image or our panel have a side with 0, return a square ratio
-		// TODO: Check if this is the right thing to do
-		if panel_size.x == 0 || panel_size.y == 0 || image_size.x == 0 || image_size.y == 0 {
-			return Vector2D::new(0.0, 0.0);
-		}
-
-		// Image and panel ratios
-		let image_ratio = Rational32::new(image_size.x, image_size.y);
-		let panel_ratio = Rational32::new(panel_size.x, panel_size.y);
-
-		// Ratios between the image and panel
-		let width_ratio = Rational32::new(panel_size.x, image_size.x);
-		let height_ratio = Rational32::new(panel_size.y, image_size.y);
-
-		// X-axis ratio, if image scrolls horizontally
-		let x_ratio = self::ratio_as_f32(width_ratio / height_ratio);
-
-		// Y-axis ratio, if image scrolls vertically
-		let y_ratio = self::ratio_as_f32(height_ratio / width_ratio);
-
-		match image_ratio >= panel_ratio {
-			true => Vector2D::new(x_ratio, 1.0),
-			false => Vector2D::new(1.0, y_ratio),
-		}
+	match image_ratio >= panel_ratio {
+		true => Vector2D::new(x_ratio, 1.0),
+		false => Vector2D::new(1.0, y_ratio),
 	}
 }
 

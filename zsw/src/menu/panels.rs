@@ -43,7 +43,7 @@ fn draw_panels_editor(
 		if panel
 			.geometries
 			.iter()
-			.all(|geometry| !geometry.rect.0.intersects(surface_geometry))
+			.all(|geometry| !geometry.rect.intersects(surface_geometry))
 		{
 			name = name.weak();
 		}
@@ -80,12 +80,12 @@ fn draw_fade_panel_editor(
 		for (geometry_idx, panel_geometry) in geometries.iter().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
-				if !panel_geometry.rect.0.intersects(surface_geometry) {
+				if !panel_geometry.rect.intersects(surface_geometry) {
 					name = name.weak();
 				}
 
 				ui.label(name);
-				super::draw_rect(ui, panel_geometry.rect.0);
+				super::draw_rect(ui, panel_geometry.rect);
 			});
 		}
 	});
