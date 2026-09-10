@@ -38,7 +38,7 @@ impl PanelFadeImagesGeometryShared {
 #[derive(Debug)]
 pub struct PanelFadeImagesShared {
 	/// Geometry uniforms bind group layout
-	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
+	pub geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 
 	/// Image bind group layout
 	pub image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
@@ -46,13 +46,17 @@ pub struct PanelFadeImagesShared {
 
 impl PanelFadeImagesShared {
 	/// Creates the shared
-	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
-		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu_renderer);
-
+	pub fn new() -> Self {
 		Self {
-			geometry_uniforms_bind_group_layout,
-			image_bind_group_layout: OnceLock::new(),
+			geometry_uniforms_bind_group_layout: OnceLock::new(),
+			image_bind_group_layout:             OnceLock::new(),
 		}
+	}
+
+	/// Gets the geometry uniforms bind group layout, or initializes it, if uninitialized
+	pub fn geometry_uniforms_bind_group_layout(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::BindGroupLayout {
+		self.geometry_uniforms_bind_group_layout
+			.get_or_init(|| self::create_geometry_uniforms_bind_group_layout(wgpu_renderer))
 	}
 
 	/// Gets the image bind group layout, or initializes it, if uninitialized
@@ -167,12 +171,10 @@ impl PanelFadeImages {
 		self.bind_group.get_or_init(|| {
 			let [prev, cur, next] = [&self.prev, &self.cur, &self.next].map(|img| match img {
 				Some(img) => &img.texture_view,
-				None => self
-					.empty_texture_view
-					.get_or_init(|| {
-						let (_texture, texture_view) = self::create_empty_image_texture(&wgpu_renderer.shared.device);
-						texture_view
-					}),
+				None => self.empty_texture_view.get_or_init(|| {
+					let (_texture, texture_view) = self::create_empty_image_texture(&wgpu_renderer.shared.device);
+					texture_view
+				}),
 			});
 
 			let layout = shared.image_bind_group_layout(wgpu_renderer);
@@ -454,7 +456,7 @@ fn create_image_geometry_uniforms(
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
 		label:   Some("zsw-panel-fade-geometry-uniforms-bind-group"),
-		layout:  &shared.geometry_uniforms_bind_group_layout,
+		layout:  shared.geometry_uniforms_bind_group_layout(wgpu_renderer),
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),

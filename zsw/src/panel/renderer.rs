@@ -84,9 +84,9 @@ impl PanelsRenderer {
 			render_pipelines: HashMap::new(),
 			vertices,
 			indices,
-			none_shared: PanelNoneShared::new(wgpu_renderer),
-			fade_shared: PanelFadeShared::new(wgpu_renderer),
-			slide_shared: PanelSlideShared::new(wgpu_renderer),
+			none_shared: PanelNoneShared::new(),
+			fade_shared: PanelFadeShared::new(),
+			slide_shared: PanelSlideShared::new(),
 		})
 	}
 
@@ -204,13 +204,19 @@ impl PanelsRenderer {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => {
 				let bind_group_layouts = match panel.state {
-					PanelState::None(_) => &[Some(&self.none_shared.geometry_uniforms_bind_group_layout)] as &[_],
+					PanelState::None(_) => &[Some(
+						self.none_shared.geometry_uniforms_bind_group_layout(wgpu_renderer),
+					)] as &[_],
 					PanelState::Fade(_) => &[
-						Some(&self.fade_shared.images.geometry_uniforms_bind_group_layout),
+						Some(
+							self.fade_shared
+								.images
+								.geometry_uniforms_bind_group_layout(wgpu_renderer),
+						),
 						Some(self.fade_shared.images.image_bind_group_layout(wgpu_renderer)),
 					],
 					PanelState::Slide(_) => &[
-						Some(&self.slide_shared.geometry_uniforms_bind_group_layout),
+						Some(self.slide_shared.geometry_uniforms_bind_group_layout(wgpu_renderer)),
 						Some(self.slide_shared.image_bind_group_layout(wgpu_renderer)),
 					],
 				};

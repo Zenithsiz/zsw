@@ -1,6 +1,6 @@
 //! Panel none state
 
-use {crate::panel::renderer::uniform, zsw_wgpu::WgpuRenderer};
+use {crate::panel::renderer::uniform, std::sync::OnceLock, zsw_wgpu::WgpuRenderer};
 
 /// Panel none state
 #[derive(Debug)]
@@ -39,17 +39,20 @@ impl PanelNoneGeometryShared {
 #[derive(Debug)]
 pub struct PanelNoneShared {
 	/// Geometry uniforms bind group layout
-	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
+	pub geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 }
 
 impl PanelNoneShared {
 	/// Creates the shared
-	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
-		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu_renderer);
-
+	pub fn new() -> Self {
 		Self {
-			geometry_uniforms_bind_group_layout,
+			geometry_uniforms_bind_group_layout: OnceLock::new(),
 		}
+	}
+
+	pub fn geometry_uniforms_bind_group_layout(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::BindGroupLayout {
+		self.geometry_uniforms_bind_group_layout
+			.get_or_init(|| self::create_geometry_uniforms_bind_group_layout(wgpu_renderer))
 	}
 }
 
@@ -99,7 +102,7 @@ fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelNoneShar
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
 		label:   Some("zsw-panel-none-geometry-uniforms-bind-group"),
-		layout:  &shared.geometry_uniforms_bind_group_layout,
+		layout:  shared.geometry_uniforms_bind_group_layout(wgpu_renderer),
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),

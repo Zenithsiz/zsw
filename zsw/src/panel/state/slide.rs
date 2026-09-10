@@ -279,7 +279,7 @@ impl PanelSlideGeometryShared {
 #[derive(Debug)]
 pub struct PanelSlideShared {
 	/// Geometry uniforms bind group layout
-	pub geometry_uniforms_bind_group_layout: wgpu::BindGroupLayout,
+	pub geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 
 	/// Image bind group layout
 	pub image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
@@ -287,13 +287,16 @@ pub struct PanelSlideShared {
 
 impl PanelSlideShared {
 	/// Creates the shared
-	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
-		let geometry_uniforms_bind_group_layout = self::create_geometry_uniforms_bind_group_layout(wgpu_renderer);
-
+	pub fn new() -> Self {
 		Self {
-			geometry_uniforms_bind_group_layout,
-			image_bind_group_layout: OnceLock::new(),
+			geometry_uniforms_bind_group_layout: OnceLock::new(),
+			image_bind_group_layout:             OnceLock::new(),
 		}
+	}
+
+	pub fn geometry_uniforms_bind_group_layout(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::BindGroupLayout {
+		self.geometry_uniforms_bind_group_layout
+			.get_or_init(|| self::create_geometry_uniforms_bind_group_layout(wgpu_renderer))
 	}
 
 	/// Gets the image bind group layout, or initializes it, if uninitialized
@@ -398,7 +401,7 @@ fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelSlideSha
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
 		label:   Some("zsw-panel-none-geometry-uniforms-bind-group"),
-		layout:  &shared.geometry_uniforms_bind_group_layout,
+		layout:  shared.geometry_uniforms_bind_group_layout(wgpu_renderer),
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),

@@ -269,9 +269,9 @@ pub struct PanelFadeShared {
 
 impl PanelFadeShared {
 	/// Creates the shared
-	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
+	pub fn new() -> Self {
 		Self {
-			images: PanelFadeImagesShared::new(wgpu_renderer),
+			images: PanelFadeImagesShared::new(),
 		}
 	}
 }
