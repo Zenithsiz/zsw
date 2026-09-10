@@ -1,6 +1,7 @@
 //! Wgpu wrapper
 
 #![feature(yeet_expr)]
+#![recursion_limit = "256"]
 
 use {
 	app_error::{Context, bail},
