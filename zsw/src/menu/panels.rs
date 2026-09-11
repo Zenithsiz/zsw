@@ -1,7 +1,7 @@
 //! Panels tab
 
 use {
-	crate::panel::{self, Panel, Panels},
+	crate::panel::{Panel, Panels, shader},
 	core::time::Duration,
 	std::{ptr, sync::Arc},
 	zsw_util::Rect,
@@ -47,7 +47,7 @@ fn draw_fade_panel_editor(
 	ui: &mut egui::Ui,
 	wgpu: &Arc<Wgpu>,
 	surface_geometry: Rect<i32, u32>,
-	state: &mut panel::shader::fade::Shader,
+	state: &mut shader::fade::Shader,
 ) {
 	{
 		let mut is_paused = state.is_paused();
@@ -114,7 +114,7 @@ fn draw_fade_panel_editor(
 }
 
 /// Draws a fade panel image
-fn draw_fade_panel_image(ui: &mut egui::Ui, name: &str, image: &mut Option<panel::shader::fade::Image>) {
+fn draw_fade_panel_image(ui: &mut egui::Ui, name: &str, image: &mut Option<shader::fade::Image>) {
 	ui.horizontal(|ui| {
 		ui.weak(name);
 

@@ -7,7 +7,6 @@ pub use self::vertex::PanelVertex;
 
 use {
 	super::{Panel, PanelKind, Panels, shader},
-	crate::panel,
 	app_error::Context,
 	euclid::default::Vector2D,
 	std::{
@@ -176,11 +175,11 @@ impl Renderer {
 		let render_pipeline_id = match panel {
 			Panel::None(_) => RenderPipelineId::None,
 			Panel::Fade(state) => RenderPipelineId::Fade(match state.kind() {
-				panel::shader::fade::Kind::Basic => RenderPipelineFadeId::Basic,
-				panel::shader::fade::Kind::Out { .. } => RenderPipelineFadeId::Out,
+				shader::fade::Kind::Basic => RenderPipelineFadeId::Basic,
+				shader::fade::Kind::Out { .. } => RenderPipelineFadeId::Out,
 			}),
 			Panel::Slide(state) => RenderPipelineId::Slide(match state.kind() {
-				panel::shader::slide::Kind::Basic => RenderPipelineSlideId::Basic,
+				shader::slide::Kind::Basic => RenderPipelineSlideId::Basic,
 			}),
 		};
 
