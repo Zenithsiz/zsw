@@ -49,7 +49,7 @@ impl Shader {
 	/// Renders a geometry of this panel
 	pub fn render(
 		&mut self,
-		shared: &PanelNoneShared,
+		shared: &Shared,
 		wgpu: &Wgpu,
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
@@ -88,12 +88,11 @@ impl Geometry {
 
 /// Panel none shared
 #[derive(Debug)]
-pub struct PanelNoneShared {
-	/// Geometry uniforms bind group layout
-	pub geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
+pub struct Shared {
+	geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 }
 
-impl PanelNoneShared {
+impl Shared {
 	/// Creates the shared
 	pub fn new() -> Self {
 		Self {
@@ -109,12 +108,12 @@ impl PanelNoneShared {
 
 /// Panel geometry none uniforms
 #[derive(Debug)]
-pub struct GeometryUniforms {
+struct GeometryUniforms {
 	/// Buffer
-	pub buffer: wgpu::Buffer,
+	buffer: wgpu::Buffer,
 
 	/// Bind group
-	pub bind_group: wgpu::BindGroup,
+	bind_group: wgpu::BindGroup,
 }
 
 
@@ -161,7 +160,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 }
 
 /// Creates the panel none geometry uniforms
-fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> GeometryUniforms {
+fn create_geometry_uniforms(wgpu: &Wgpu, shared: &Shared) -> GeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),

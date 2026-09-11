@@ -49,7 +49,7 @@ pub struct Renderer {
 	/// Index buffer
 	indices: wgpu::Buffer,
 
-	none_shared:  shader::none::PanelNoneShared,
+	none_shared:  shader::none::Shared,
 	fade_shared:  shader::fade::Shared,
 	slide_shared: shader::slide::Shared,
 }
@@ -71,7 +71,7 @@ impl Renderer {
 			render_pipelines: HashMap::new(),
 			vertices,
 			indices,
-			none_shared: shader::none::PanelNoneShared::new(),
+			none_shared: shader::none::Shared::new(),
 			fade_shared: shader::fade::Shared::new(),
 			slide_shared: shader::slide::Shared::new(),
 		})
@@ -186,6 +186,7 @@ impl Renderer {
 		let render_pipeline = match self.render_pipelines.entry(render_pipeline_id) {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => {
+				// TODO: Wrap this into functions that return an array/slice already
 				let bind_group_layouts = match panel {
 					Panel::None(_) => &[Some(self.none_shared.geometry_uniforms_bind_group_layout(wgpu))] as &[_],
 					Panel::Fade(_) => &[

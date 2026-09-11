@@ -354,10 +354,10 @@ impl Geometry {
 #[derive(Debug)]
 pub struct Shared {
 	/// Geometry uniforms bind group layout
-	pub geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
+	geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 
 	/// Image bind group layout
-	pub image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
+	image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 }
 
 impl Shared {
@@ -383,20 +383,20 @@ impl Shared {
 
 /// Image
 #[derive(Debug)]
-pub struct Image {
+struct Image {
 	/// Texture view
-	pub texture_view: wgpu::TextureView,
+	texture_view: wgpu::TextureView,
 
 	/// Bind group
-	pub bind_group: OnceLock<wgpu::BindGroup>,
+	bind_group: OnceLock<wgpu::BindGroup>,
 
 	/// Path
-	pub _path: Arc<Path>,
+	_path: Arc<Path>,
 }
 
 impl Image {
 	/// Gets the bind group, or initializes it, if uninitialized
-	pub fn bind_group(&self, wgpu: &Arc<Wgpu>, sampler: &wgpu::Sampler, shared: &Shared) -> &wgpu::BindGroup {
+	fn bind_group(&self, wgpu: &Arc<Wgpu>, sampler: &wgpu::Sampler, shared: &Shared) -> &wgpu::BindGroup {
 		self.bind_group.get_or_init(|| {
 			let layout = shared.image_bind_group_layout(wgpu);
 			self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
@@ -406,12 +406,12 @@ impl Image {
 
 /// Panel geometry slide uniforms
 #[derive(Debug)]
-pub struct GeometryUniforms {
+struct GeometryUniforms {
 	/// Buffer
-	pub buffer: wgpu::Buffer,
+	buffer: wgpu::Buffer,
 
 	/// Bind group
-	pub bind_group: wgpu::BindGroup,
+	bind_group: wgpu::BindGroup,
 }
 
 /// Direction
@@ -579,7 +579,7 @@ pub struct ImageLoadRes {
 }
 
 /// Loads an image
-pub fn load(wgpu: &Wgpu, path: &Arc<Path>, max_image_size: u32) -> Result<Image, AppError> {
+fn load(wgpu: &Wgpu, path: &Arc<Path>, max_image_size: u32) -> Result<Image, AppError> {
 	// Load the image
 	tracing::trace!("Loading image {:?}", path);
 	let mut image = image::open(path).context("Unable to open image")?;
