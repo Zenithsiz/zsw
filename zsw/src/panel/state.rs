@@ -34,7 +34,7 @@ impl PanelState {
 	pub fn shader(&self) -> PanelShader {
 		match self {
 			Self::None(state) => PanelShader::None {
-				background_color: state.background_color,
+				background_color: state.background_color(),
 			},
 			Self::Fade(state) => PanelShader::Fade(state.shader()),
 			Self::Slide(state) => PanelShader::Slide(state.shader()),

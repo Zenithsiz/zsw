@@ -8,10 +8,8 @@ pub use self::vertex::PanelVertex;
 use {
 	super::{
 		Panel,
-		PanelGeometry,
 		PanelState,
 		Panels,
-		geometry,
 		state::{fade::PanelFadeShared, none::PanelNoneShared, slide::PanelSlideShared},
 	},
 	app_error::Context,
@@ -224,45 +222,23 @@ impl PanelsRenderer {
 		render_pass.set_pipeline(render_pipeline);
 
 		// Then render the panel
-		self.render_panel_geometries(wgpu, surface_geometry, render_pass, panel);
+		self.render_panel_geometries(wgpu, surface_geometry, render_pass, &mut panel.state);
 
 		Ok(())
 	}
 
 	/// Renders a panel's geometries
-	fn render_panel_geometries(
+	pub fn render_panel_geometries(
 		&self,
 		wgpu: &Arc<Wgpu>,
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		panel: &mut Panel,
-	) {
-		// Go through all geometries of the panel and render each one
-		for panel_geometry in &mut panel.geometries {
-			// If this geometry is outside our surface, we can safely ignore it
-			if !panel_geometry.rect.intersects(surface_geometry) {
-				continue;
-			}
-
-			// Render the panel geometry
-			self.render_panel_geometry(wgpu, &mut panel.state, surface_geometry, panel_geometry, render_pass);
-		}
-	}
-
-	/// Renders a panel's geometry
-	pub fn render_panel_geometry(
-		&self,
-		wgpu: &Arc<Wgpu>,
 		state: &mut PanelState,
-		surface_geometry: Rect<i32, u32>,
-		panel_geometry: &mut PanelGeometry,
-		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
-		let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
 		match state {
-			PanelState::None(state) => state.render(&self.none_shared, wgpu, render_pass, panel_geometry, pos_matrix),
-			PanelState::Fade(state) => state.render(&self.fade_shared, wgpu, render_pass, panel_geometry, pos_matrix),
-			PanelState::Slide(state) => state.render(&self.slide_shared, wgpu, render_pass, panel_geometry, pos_matrix),
+			PanelState::None(state) => state.render(&self.none_shared, wgpu, surface_geometry, render_pass),
+			PanelState::Fade(state) => state.render(&self.fade_shared, wgpu, surface_geometry, render_pass),
+			PanelState::Slide(state) => state.render(&self.slide_shared, wgpu, surface_geometry, render_pass),
 		}
 	}
 }

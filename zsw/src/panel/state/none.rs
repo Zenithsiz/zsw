@@ -1,45 +1,69 @@
 //! Panel none state
 
 use {
-	crate::panel::{PanelGeometry, renderer::uniform},
-	euclid::default::Transform3D,
+	crate::panel::{PanelGeometry, geometry, renderer::uniform},
+	euclid::default::Point2D,
 	std::sync::OnceLock,
+	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
 
 /// Panel none state
 #[derive(Debug)]
 pub struct PanelNoneState {
+	/// Geometries
+	geometries: Vec<PanelGeometry>,
+
 	/// Background color
-	pub background_color: [f32; 4],
+	background_color: [f32; 4],
 }
 
 impl PanelNoneState {
 	/// Creates new state
-	pub fn new(background_color: [f32; 4]) -> Self {
-		Self { background_color }
+	pub fn new(geometries: Vec<PanelGeometry>, background_color: [f32; 4]) -> Self {
+		Self {
+			geometries,
+			background_color,
+		}
+	}
+
+	/// Returns if any geometries in this panel intersects `rect`
+	pub fn any_intersects(&self, rect: Rect<i32, u32>) -> bool {
+		self.geometries.iter().any(|geometry| geometry.rect.intersects(rect))
+	}
+
+	/// Returns if any geometries in this panel contain `pos`
+	pub fn any_contain(&self, pos: Point2D<i32>) -> bool {
+		self.geometries.iter().any(|geometry| geometry.rect.contains(pos))
+	}
+
+	/// Returns the background color
+	pub fn background_color(&self) -> [f32; 4] {
+		self.background_color
 	}
 
 	/// Renders a geometry of this panel
 	pub fn render(
-		&self,
+		&mut self,
 		shared: &PanelNoneShared,
 		wgpu: &Wgpu,
+		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		panel_geometry: &mut PanelGeometry,
-		pos_matrix: Transform3D<f32>,
 	) {
-		let geometry_uniforms = panel_geometry.shared.none_or_insert_default().uniforms(wgpu, shared);
+		for panel_geometry in &mut self.geometries {
+			let geometry_uniforms = panel_geometry.shared.none_or_insert_default().uniforms(wgpu, shared);
 
-		wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::None {
-			pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
-			background_color: uniform::Vec4(self.background_color),
-		});
+			let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
+			wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::None {
+				pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
+				background_color: uniform::Vec4(self.background_color),
+			});
 
-		// Bind the geometry uniforms
-		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+			// Bind the geometry uniforms
+			render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 
-		render_pass.draw_indexed(0..6, 0, 0..1);
+			render_pass.draw_indexed(0..6, 0, 0..1);
+		}
 	}
 }
 

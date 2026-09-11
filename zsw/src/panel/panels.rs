@@ -59,13 +59,21 @@ impl Panels {
 		self.profile_name = Some(profile_name);
 		self.panels.clear();
 		for profile_panel in &profile.panels {
+			let geometries = profile_panel
+				.geometries
+				.iter()
+				.map(|geometry| PanelGeometry::new(geometry.geometry))
+				.collect();
+
 			let state = match &profile_panel.shader {
-				ProfilePanelShader::None(shader) => PanelState::None(PanelNoneState::new(shader.background_color)),
+				ProfilePanelShader::None(shader) =>
+					PanelState::None(PanelNoneState::new(geometries, shader.background_color)),
 				ProfilePanelShader::Fade(shader) => {
 					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
 						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
 					let state = PanelFadeState::new(
+						geometries,
 						shader.duration,
 						shader.fade_duration,
 						playlist_player,
@@ -88,22 +96,16 @@ impl Panels {
 						ProfilePanelSlideDir::DownUp => PanelSlideDir::DownUp,
 					};
 
-					let state = PanelSlideState::new(shader.duration, playlist_player, dir, match shader.inner {
-						ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
-					});
+					let state =
+						PanelSlideState::new(geometries, shader.duration, playlist_player, dir, match shader.inner {
+							ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
+						});
 
 					PanelState::Slide(state)
 				},
 			};
 
-			self.panels.push(Panel {
-				geometries: profile_panel
-					.geometries
-					.iter()
-					.map(|geometry| PanelGeometry::new(geometry.geometry))
-					.collect(),
-				state,
-			});
+			self.panels.push(Panel { state });
 		}
 
 		Ok(())

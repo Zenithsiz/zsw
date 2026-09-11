@@ -10,7 +10,7 @@ use {
 	app_error::Context,
 	chrono::TimeDelta,
 	core::{clone::Share, time::Duration},
-	euclid::default::{Transform3D, Vector2D},
+	euclid::default::{Point2D, Vector2D},
 	image::imageops,
 	std::{
 		collections::VecDeque,
@@ -18,13 +18,16 @@ use {
 		sync::{Arc, OnceLock},
 		time::Instant,
 	},
-	zsw_util::{AppError, Loadable},
+	zsw_util::{AppError, Loadable, Rect},
 	zsw_wgpu::Wgpu,
 };
 
 /// Panel slide state
 #[derive(Debug)]
 pub struct PanelSlideState {
+	/// Geometries
+	geometries: Vec<PanelGeometry>,
+
 	/// If paused
 	paused: bool,
 
@@ -69,12 +72,14 @@ pub struct PanelSlideState {
 impl PanelSlideState {
 	/// Creates new state
 	pub fn new(
+		geometries: Vec<PanelGeometry>,
 		duration: Duration,
 		playlist_player: PlaylistPlayer,
 		dir: PanelSlideDir,
 		shader: PanelSlideShader,
 	) -> Self {
 		Self {
+			geometries,
 			paused: false,
 			shader,
 			dir,
@@ -91,34 +96,24 @@ impl PanelSlideState {
 		}
 	}
 
+	/// Returns if any geometries in this panel intersects `rect`
+	pub fn any_intersects(&self, rect: Rect<i32, u32>) -> bool {
+		self.geometries.iter().any(|geometry| geometry.rect.intersects(rect))
+	}
+
+	/// Returns if any geometries in this panel contain `pos`
+	pub fn any_contain(&self, pos: Point2D<i32>) -> bool {
+		self.geometries.iter().any(|geometry| geometry.rect.contains(pos))
+	}
+
 	/// Returns the panel shader
 	pub fn shader(&self) -> PanelSlideShader {
 		self.shader
 	}
 
-	/// Returns the direction
-	pub fn dir(&self) -> PanelSlideDir {
-		self.dir
-	}
-
 	/// Returns the image duration
 	pub fn duration(&self) -> Duration {
 		self.duration
-	}
-
-	/// Returns the image progress
-	pub fn progress(&self) -> Duration {
-		self.progress
-	}
-
-	/// Returns all loaded images
-	pub fn images(&self) -> impl Iterator<Item = &PanelSlideImage> {
-		self.images.iter()
-	}
-
-	/// Returns the sampler
-	pub fn image_sampler(&self, wgpu: &Arc<Wgpu>) -> &wgpu::Sampler {
-		self.image_sampler.get_or_init(|| self::create_image_sampler(wgpu))
 	}
 
 	/// Schedules a previous next image.
@@ -252,80 +247,85 @@ impl PanelSlideState {
 		&mut self,
 		shared: &PanelSlideShared,
 		wgpu: &Arc<Wgpu>,
+		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		panel_geometry: &mut PanelGeometry,
-		pos_matrix: Transform3D<f32>,
 	) {
-		let mut missing_images = true;
-		let mut cur_global_offset = 0.0;
+		let img_offset = self.progress.div_duration_floor(self.duration) as usize;
 
-		let img_offset = self.progress().div_duration_floor(self.duration()) as usize;
-		// TODO: Deduplicate this with below
-		let local_offset = match self.images().nth(img_offset) {
-			Some(image) => {
+		// Note: We iterate like this because we need `&mut self` later.
+		for panel_geometry_idx in 0..self.geometries.len() {
+			let panel_geometry = &mut self.geometries[panel_geometry_idx];
+			let mut missing_images = true;
+			let mut cur_global_offset = 0.0;
+
+			// TODO: Deduplicate this with below
+			let local_offset = match self.images.get(img_offset) {
+				Some(image) => {
+					let image_size = image.texture_view.texture().size();
+					let image_size = Vector2D::new(image_size.width, image_size.height);
+					let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
+
+					let ratio = match self.dir.is_horizontal() {
+						true => image_ratio.y / image_ratio.x,
+						false => image_ratio.x / image_ratio.y,
+					};
+
+					let offset_abs = self.progress.as_secs_f32() / self.duration.as_secs_f32() - img_offset as f32;
+					offset_abs * ratio * 2.0
+				},
+				None => 0.0,
+			};
+
+			for (image_idx, image) in self.images.iter().enumerate().skip(img_offset) {
+				// Calculate the position matrix for the panel
 				let image_size = image.texture_view.texture().size();
 				let image_size = Vector2D::new(image_size.width, image_size.height);
 				let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
 
-				let ratio = match self.dir().is_horizontal() {
+				let offset_abs = cur_global_offset - local_offset;
+				if offset_abs > 2.0 {
+					missing_images = false;
+					break;
+				}
+
+				// Bind the geometry uniforms
+				let geometry_uniforms = panel_geometry
+					.shared
+					.slide_or_insert_default()
+					.uniforms(wgpu, shared, image_idx);
+				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+				let ratio = match self.dir.is_horizontal() {
 					true => image_ratio.y / image_ratio.x,
 					false => image_ratio.x / image_ratio.y,
 				};
 
-				let offset_abs = self.progress().as_secs_f32() / self.duration().as_secs_f32() - img_offset as f32;
-				offset_abs * ratio * 2.0
-			},
-			None => 0.0,
-		};
+				// TODO: This should be baked into the position matrix instead.
+				let offset: Vector2D<f32> = match self.dir {
+					PanelSlideDir::LeftRight => euclid::vec2(offset_abs, 0.0),
+					PanelSlideDir::RightLeft => euclid::vec2(2.0 * (1.0 - ratio) - offset_abs, 0.0),
+					PanelSlideDir::UpDown => euclid::vec2(0.0, offset_abs),
+					PanelSlideDir::DownUp => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
+				};
 
-		for (image_idx, image) in self.images().enumerate().skip(img_offset) {
-			// Calculate the position matrix for the panel
-			let image_size = image.texture_view.texture().size();
-			let image_size = Vector2D::new(image_size.width, image_size.height);
-			let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
+				let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
+				wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::Slide {
+					pos_matrix:  uniform::Matrix4x4(pos_matrix.to_arrays()),
+					image_ratio: uniform::Vec2(image_ratio.into()),
+					offset:      uniform::Vec2(offset.to_array()),
+				});
 
-			let offset_abs = cur_global_offset - local_offset;
-			if offset_abs > 2.0 {
-				missing_images = false;
-				break;
+				cur_global_offset += ratio * 2.0;
+
+				let sampler = self.image_sampler.get_or_init(|| self::create_image_sampler(wgpu));
+				render_pass.set_bind_group(1, image.bind_group(wgpu, sampler, shared), &[]);
+
+				render_pass.draw_indexed(0..6, 0, 0..1);
 			}
 
-			// Bind the geometry uniforms
-			let geometry_uniforms = panel_geometry
-				.shared
-				.slide_or_insert_default()
-				.uniforms(wgpu, shared, image_idx);
-			render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
-
-			let ratio = match self.dir().is_horizontal() {
-				true => image_ratio.y / image_ratio.x,
-				false => image_ratio.x / image_ratio.y,
-			};
-
-			// TODO: This should be baked into the position matrix instead.
-			let offset: Vector2D<f32> = match self.dir() {
-				PanelSlideDir::LeftRight => euclid::vec2(offset_abs, 0.0),
-				PanelSlideDir::RightLeft => euclid::vec2(2.0 * (1.0 - ratio) - offset_abs, 0.0),
-				PanelSlideDir::UpDown => euclid::vec2(0.0, offset_abs),
-				PanelSlideDir::DownUp => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
-			};
-
-			wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::Slide {
-				pos_matrix:  uniform::Matrix4x4(pos_matrix.to_arrays()),
-				image_ratio: uniform::Vec2(image_ratio.into()),
-				offset:      uniform::Vec2(offset.to_array()),
-			});
-
-			cur_global_offset += ratio * 2.0;
-
-			let sampler = self.image_sampler(wgpu);
-			render_pass.set_bind_group(1, image.bind_group(wgpu, sampler, shared), &[]);
-
-			render_pass.draw_indexed(0..6, 0, 0..1);
-		}
-
-		if missing_images {
-			self.load_next(wgpu);
+			if missing_images {
+				self.load_next(wgpu);
+			}
 		}
 	}
 }

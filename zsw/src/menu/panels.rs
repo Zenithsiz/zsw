@@ -2,7 +2,6 @@
 
 use {
 	crate::panel::{
-		PanelGeometry,
 		PanelState,
 		Panels,
 		state::{PanelFadeState, fade::PanelFadeImage},
@@ -30,11 +29,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Arc<Wgpu>, panels: &mut Panels, 
 
 	for (panel_idx, panel) in panels.iter_mut().enumerate() {
 		let mut name = egui::WidgetText::from(format!("Panel #{panel_idx}"));
-		if panel
-			.geometries
-			.iter()
-			.all(|geometry| !geometry.rect.intersects(surface_geometry))
-		{
+		if !panel.any_intersects(surface_geometry) {
 			name = name.weak();
 		}
 
@@ -44,8 +39,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Arc<Wgpu>, panels: &mut Panels, 
 				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 				match &mut panel.state {
 					PanelState::None(_) => (),
-					PanelState::Fade(state) =>
-						self::draw_fade_panel_editor(ui, wgpu, surface_geometry, state, &panel.geometries),
+					PanelState::Fade(state) => self::draw_fade_panel_editor(ui, wgpu, surface_geometry, state),
 					PanelState::Slide(_) => (),
 				}
 			});
@@ -58,7 +52,6 @@ fn draw_fade_panel_editor(
 	wgpu: &Arc<Wgpu>,
 	surface_geometry: Rect<i32, u32>,
 	state: &mut PanelFadeState,
-	geometries: &[PanelGeometry],
 ) {
 	{
 		let mut is_paused = state.is_paused();
@@ -67,7 +60,7 @@ fn draw_fade_panel_editor(
 	}
 
 	ui.collapsing("Geometries", |ui| {
-		for (geometry_idx, panel_geometry) in geometries.iter().enumerate() {
+		for (geometry_idx, panel_geometry) in state.geometries().iter().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
 				if !panel_geometry.rect.intersects(surface_geometry) {
