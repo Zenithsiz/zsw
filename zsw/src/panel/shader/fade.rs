@@ -6,6 +6,7 @@ pub use self::images::{Image, ImageSlot, Images};
 
 use {
 	crate::{
+		menu,
 		panel::{geometry, renderer::uniform},
 		playlist::PlaylistPlayer,
 	},
@@ -88,11 +89,6 @@ impl Shader {
 		self.geometries.iter().any(|geometry| geometry.rect.contains(pos))
 	}
 
-	/// Returns the image progress
-	pub fn progress(&self) -> Duration {
-		self.progress
-	}
-
 	/// Sets the image progress
 	pub fn set_progress(&mut self, progress: Duration) {
 		self.progress = progress.clamp(self.min_progress(), self.max_progress());
@@ -112,7 +108,7 @@ impl Shader {
 
 	/// Sets the fade duration
 	pub fn set_fade_duration(&mut self, fade_duration: Duration) {
-		self.fade_duration = fade_duration.min(self.duration() / 2);
+		self.fade_duration = fade_duration.min(self.duration / 2);
 		self.set_progress(self.progress);
 	}
 
@@ -163,16 +159,8 @@ impl Shader {
 		self.kind
 	}
 
-	pub fn geometries(&self) -> &[Geometry] {
-		&self.geometries
-	}
-
 	pub fn images(&self) -> &Images {
 		&self.images
-	}
-
-	pub fn images_mut(&mut self) -> &mut Images {
-		&mut self.images
 	}
 
 	/// Returns if paused
@@ -384,13 +372,101 @@ impl Shader {
 			render_pass.draw_indexed(0..6, 0, 0..1);
 		}
 	}
+
+	#[expect(unused_results, reason = "egui")]
+	pub fn draw_editor(&mut self, ui: &mut egui::Ui, wgpu: &Arc<Wgpu>, surface_geometry: Rect<i32, u32>) {
+		{
+			let mut is_paused = self.is_paused();
+			ui.checkbox(&mut is_paused, "Paused");
+			self.set_paused(is_paused);
+		}
+
+		ui.collapsing("Geometries", |ui| {
+			for (geometry_idx, geometry) in self.geometries.iter().enumerate() {
+				ui.horizontal(|ui| {
+					let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
+					if !geometry.rect.intersects(surface_geometry) {
+						name = name.weak();
+					}
+
+					ui.label(name);
+					menu::draw_rect(ui, geometry.rect);
+				});
+			}
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Cur progress");
+
+			// Note: We only allow up until the duration - 1 so that you don't get stuck
+			//       skipping images when you hold it at the max value
+			// TODO: This max needs to be `duration - min_frame_duration` to not skip ahead.
+			let max = self.duration.mul_f32(0.99);
+			let mut progress = self.progress;
+			menu::draw_duration(ui, &mut progress, Duration::ZERO..=max);
+			self.set_progress(progress);
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Fade Duration");
+			let min = Duration::ZERO;
+			let max = self.duration / 2;
+
+			let mut fade_duration = self.fade_duration();
+			menu::draw_duration(ui, &mut fade_duration, min..=max);
+			self.set_fade_duration(fade_duration);
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Duration");
+
+			let mut duration = self.duration;
+			menu::draw_duration(ui, &mut duration, Duration::ZERO..=Duration::from_secs_f32(180.0));
+			self.set_duration(duration);
+		});
+
+		ui.horizontal(|ui| {
+			ui.label("Skip");
+			if ui.button("🔄").clicked() {
+				self.skip(wgpu);
+			}
+		});
+
+		ui.collapsing("Images", |ui| {
+			self.draw_image_editor(ui, ImageSlot::Prev);
+			self.draw_image_editor(ui, ImageSlot::Cur);
+			self.draw_image_editor(ui, ImageSlot::Next);
+		});
+	}
+
+	#[expect(unused_results, reason = "egui")]
+	fn draw_image_editor(&mut self, ui: &mut egui::Ui, slot: ImageSlot) {
+		ui.horizontal(|ui| {
+			_ = match slot {
+				ImageSlot::Prev => ui.weak("Previous"),
+				ImageSlot::Cur => ui.weak("Current"),
+				ImageSlot::Next => ui.weak("Next"),
+			};
+
+			let image = match slot {
+				ImageSlot::Prev => &mut self.images.prev,
+				ImageSlot::Cur => &mut self.images.cur,
+				ImageSlot::Next => &mut self.images.next,
+			};
+
+			match image {
+				Some(image) => image.draw_editor(ui),
+				None => _ = ui.weak("[Unloaded]"),
+			}
+		});
+	}
 }
 
 /// Geometry
 #[derive(Debug)]
 pub struct Geometry {
-	pub rect:   Rect<i32, u32>,
-	pub images: images::Geometry,
+	rect:   Rect<i32, u32>,
+	images: images::Geometry,
 }
 
 impl Geometry {

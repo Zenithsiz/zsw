@@ -1,7 +1,7 @@
 //! Panel fade images
 
 use {
-	crate::{panel::renderer::uniform, playlist::PlaylistPlayer},
+	crate::{menu, panel::renderer::uniform, playlist::PlaylistPlayer},
 	app_error::Context,
 	core::clone::Share,
 	image::imageops,
@@ -84,19 +84,6 @@ pub struct Images {
 
 	/// Next image
 	pub next_image: Loadable<ImageLoadRes>,
-}
-
-/// Panel's fade image
-#[derive(Debug)]
-pub struct Image {
-	/// Texture view
-	pub texture_view: wgpu::TextureView,
-
-	/// Swap direction
-	pub swap_dir: bool,
-
-	/// Path
-	pub path: Arc<Path>,
 }
 
 impl Images {
@@ -275,6 +262,38 @@ impl Images {
 	/// Returns if all images are empty
 	pub fn is_empty(&self) -> bool {
 		self.prev.is_none() && self.cur.is_none() && self.next.is_none()
+	}
+}
+
+
+/// Panel's fade image
+#[derive(Debug)]
+pub struct Image {
+	/// Texture view
+	pub texture_view: wgpu::TextureView,
+
+	/// Swap direction
+	pub swap_dir: bool,
+
+	/// Path
+	pub path: Arc<Path>,
+}
+
+impl Image {
+	/// Draws the editor for this image
+	#[expect(unused_results, reason = "egui")]
+	pub fn draw_editor(&mut self, ui: &mut egui::Ui) {
+		menu::draw_openable_path(ui, &self.path);
+		let texture = self.texture_view.texture();
+		ui.label(format!("{}x{}", texture.width(), texture.height()));
+
+		let swap_icon = match self.swap_dir {
+			true => "⏪",
+			false => "⏩",
+		};
+		if ui.button(swap_icon).clicked() {
+			self.swap_dir.toggle();
+		}
 	}
 }
 

@@ -84,7 +84,7 @@ fn draw_settings_tab(ui: &mut egui::Ui, wayland_data: &mut WaylandData<Zsw>) {
 }
 
 /// Draws an openable path
-fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
+pub fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 	ui.horizontal(|ui| {
 		// TODO: Not use lossy conversion to display it?
 		if ui.link(path.to_string_lossy()).clicked() &&
@@ -97,7 +97,7 @@ fn draw_openable_path(ui: &mut egui::Ui, path: &Path) {
 }
 
 /// Draws a geometry rectangle
-fn draw_rect(ui: &mut egui::Ui, geometry: Rect<i32, u32>) {
+pub fn draw_rect(ui: &mut egui::Ui, geometry: Rect<i32, u32>) {
 	ui.label(format!(
 		"{}x{}+{}+{}",
 		geometry.size.x, geometry.size.y, geometry.pos.x, geometry.pos.y
@@ -107,7 +107,7 @@ fn draw_rect(ui: &mut egui::Ui, geometry: Rect<i32, u32>) {
 /// Draws a duration slider
 // TODO: Allow setting the clamping mode by using a builder instead
 // TODO: This always modifies the value each frame and rounds it.
-fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusive<Duration>) {
+pub fn draw_duration(ui: &mut egui::Ui, duration: &mut Duration, range: RangeInclusive<Duration>) {
 	let mut secs = duration.as_secs_f32();
 
 	let start = range.start().as_secs_f32();
