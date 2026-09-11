@@ -51,6 +51,7 @@ use {
 	zsw_egui::EguiWaylandState,
 	zsw_util::{AppError, Rect},
 	zsw_wayland::{WaylandApp, WaylandData, WaylandEventLoop, WaylandState, data::SurfaceId},
+	zsw_wgpu::Wgpu,
 	zutil_logger::Logger,
 };
 
@@ -96,7 +97,10 @@ fn run() -> Result<(), AppError> {
 	let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(&dirs.profiles)
 		.context("Unable to create profiles")?;
 
+	let wgpu = Wgpu::new().block_on().context("Unable to create wgpu")?;
 	let zsw = Zsw {
+		wgpu: Arc::new(wgpu),
+
 		playlists,
 		profiles,
 		profile_name: args.profile,
@@ -147,10 +151,13 @@ fn run() -> Result<(), AppError> {
 			continue;
 		};
 
-		let mut frame = renderer.start_frame().context("Unable to start new frame")?;
+		let mut frame = renderer
+			.start_frame(&wayland_state.app.wgpu)
+			.context("Unable to start new frame")?;
 		let egui_input = surface.egui_state.take_input();
 		let egui_output = renderer
 			.render(
+				&wayland_state.app.wgpu,
 				&mut wayland_state.data,
 				&wayland_state.app.playlists,
 				&wayland_state.app.profiles,
@@ -163,8 +170,12 @@ fn run() -> Result<(), AppError> {
 			.egui_state
 			.update_output(&mut wayland_event_loop, &mut wayland_state.data, egui_output);
 
-		let frame = renderer.submit_frame(frame).context("Unable to submit frame")?;
-		renderer.present_frame(frame).context("Unable to present frame")?;
+		let frame = renderer
+			.submit_frame(&wayland_state.app.wgpu, frame)
+			.context("Unable to submit frame")?;
+		renderer
+			.present_frame(&wayland_state.app.wgpu, frame)
+			.context("Unable to present frame")?;
 
 		let now = Instant::now();
 		tracing::trace!("Frame took {:?}", now - surface.last_frame);
@@ -189,6 +200,8 @@ struct ZswSurface {
 }
 
 struct Zsw {
+	wgpu: Arc<Wgpu>,
+
 	playlists:    Playlists,
 	profiles:     Profiles,
 	profile_name: ProfileName,
@@ -197,6 +210,8 @@ struct Zsw {
 }
 
 impl WaylandApp for Zsw {
+	// TODO: Split the inside into a fallible function and log
+	//       warning outside to be less verbose
 	fn configure_layer(
 		&mut self,
 		data: &mut WaylandData<Self>,
@@ -266,16 +281,15 @@ impl WaylandApp for Zsw {
 				};
 
 				match SurfaceRenderer::new(
+					&self.wgpu,
 					target,
 					surface_geometry,
 					&self.profiles,
 					&self.profile_name,
 					&self.playlists,
-				)
-				.block_on()
-				{
+				) {
 					Ok(renderer) => {
-						surface.egui_state.update_wgpu(renderer.wgpu_renderer());
+						surface.egui_state.update_wgpu(&self.wgpu);
 						surface.renderer = Some(renderer);
 					},
 					Err(err) => tracing::error!("Unable to create surface renderer: {err:?}"),

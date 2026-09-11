@@ -7,16 +7,15 @@ use {
 	app_error::{Context, bail},
 	euclid::default::Vector2D,
 	image::DynamicImage,
-	std::sync::Arc,
 	wgpu::util::{self as wgpu_util, DeviceExt},
 	zsw_util::AppError,
 };
 
-/// Wgpu shared
+/// Global wgpu data.
 ///
-/// Wgpu data that can be shared.
+/// This is wgpu data that can be used for all surfaces.
 #[derive(Debug)]
-pub struct WgpuShared {
+pub struct Wgpu {
 	/// Instance
 	pub instance: wgpu::Instance,
 
@@ -28,12 +27,25 @@ pub struct WgpuShared {
 
 	/// Queue
 	pub queue: wgpu::Queue,
-
-	/// Surface
-	pub surface: wgpu::Surface<'static>,
 }
 
-impl WgpuShared {
+impl Wgpu {
+	pub async fn new() -> Result<Self, AppError> {
+		let instance = self::create_instance().context("Unable to create instance")?;
+
+		let adapter = self::create_adapter(&instance)
+			.await
+			.context("Unable to create adaptor")?;
+		let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
+
+		Ok(Self {
+			instance,
+			adapter,
+			device,
+			queue,
+		})
+	}
+
 	/// Creates a texture from an image.
 	pub fn create_texture_from_image(
 		&self,
@@ -107,8 +119,8 @@ impl WgpuShared {
 /// Wgpu renderer
 #[derive(Debug)]
 pub struct WgpuRenderer {
-	/// Wgpu shared
-	pub shared: Arc<WgpuShared>,
+	/// Surface
+	pub surface: wgpu::Surface<'static>,
 
 	/// Surface config
 	// Note: This is here instead of in shared because it needs
@@ -117,29 +129,15 @@ pub struct WgpuRenderer {
 
 impl WgpuRenderer {
 	/// Creates the wgpu renderer
-	pub async fn new(target: SurfaceTarget, surface_size: Vector2D<u32>) -> Result<Self, AppError> {
-		let instance = self::create_instance().context("Unable to create instance")?;
-		let surface = self::create_surface(&instance, target)?;
-
-		let adapter = self::create_adapter(&instance, &surface)
-			.await
-			.context("Unable to create adaptor")?;
-		let (device, queue) = self::create_device(&adapter).await.context("Unable to create device")?;
+	pub fn new(wgpu: &Wgpu, target: SurfaceTarget, surface_size: Vector2D<u32>) -> Result<Self, AppError> {
+		let surface = self::create_surface(&wgpu.instance, target)?;
 
 		// Configure the surface and get the preferred texture format and surface size
-		let surface_config = self::configure_surface(&adapter, &device, &surface, surface_size)
+		let surface_config = self::configure_surface(&wgpu.adapter, &wgpu.device, &surface, surface_size)
 			.context("Unable to configure surface")?;
 
-		let shared = WgpuShared {
-			instance,
-			adapter,
-			device,
-			queue,
-			surface,
-		};
-
 		Ok(Self {
-			shared: Arc::new(shared),
+			surface,
 			surface_config,
 		})
 	}
@@ -154,9 +152,9 @@ impl WgpuRenderer {
 	///
 	/// Returns the encoder and surface view to render onto
 	// TODO: Ensure it's not called more than once?
-	pub fn start_frame(&self) -> Result<FrameRender, AppError> {
+	pub fn start_frame(&self, wgpu: &Wgpu) -> Result<FrameRender, AppError> {
 		// And then get the surface texture
-		let surface_texture = self.shared.surface.get_current_texture();
+		let surface_texture = self.surface.get_current_texture();
 		let surface_view_descriptor = wgpu::TextureViewDescriptor {
 			label: Some("zsw-frame-surface-texture-view"),
 			..wgpu::TextureViewDescriptor::default()
@@ -180,7 +178,7 @@ impl WgpuRenderer {
 		let encoder_descriptor = wgpu::CommandEncoderDescriptor {
 			label: Some("zsw-frame-command-encoder"),
 		};
-		let encoder = self.shared.device.create_command_encoder(&encoder_descriptor);
+		let encoder = wgpu.device.create_command_encoder(&encoder_descriptor);
 
 		Ok(FrameRender {
 			encoder,
@@ -193,8 +191,8 @@ impl WgpuRenderer {
 	/// Submits all modifications of a frame.
 	///
 	/// Returns a rendered frame that can then be presented.
-	pub fn submit_frame(&mut self, frame: FrameRender) -> Result<RenderedFrame, AppError> {
-		_ = self.shared.queue.submit([frame.encoder.finish()]);
+	pub fn submit_frame(&mut self, wgpu: &Wgpu, frame: FrameRender) -> Result<RenderedFrame, AppError> {
+		_ = wgpu.queue.submit([frame.encoder.finish()]);
 
 		Ok(RenderedFrame {
 			surface_texture: frame.surface_texture,
@@ -205,11 +203,11 @@ impl WgpuRenderer {
 	/// Presents a rendered frame.
 	///
 	/// Reconfigures if the frame is suboptimal
-	pub fn present_frame(&mut self, frame: RenderedFrame) -> Result<(), AppError> {
-		self.shared.queue.present(frame.surface_texture);
+	pub fn present_frame(&mut self, wgpu: &Wgpu, frame: RenderedFrame) -> Result<(), AppError> {
+		wgpu.queue.present(frame.surface_texture);
 
 		if frame.suboptimal {
-			self.reconfigure()
+			self.reconfigure(wgpu)
 				.context("Unable to reconfigure wgpu after a suboptimal frame")?;
 		}
 
@@ -217,7 +215,7 @@ impl WgpuRenderer {
 	}
 
 	/// Re-configures the surface
-	pub fn reconfigure(&mut self) -> Result<(), AppError> {
+	pub fn reconfigure(&mut self, wgpu: &Wgpu) -> Result<(), AppError> {
 		tracing::info!(
 			"Reconfiguring wgpu surface to {}x{}",
 			self.surface_config.width,
@@ -225,27 +223,21 @@ impl WgpuRenderer {
 		);
 
 		// Update our surface
-		self.surface_config = self::configure_surface(
-			&self.shared.adapter,
-			&self.shared.device,
-			&self.shared.surface,
-			self.surface_size(),
-		)
-		.context("Unable to configure surface")?;
+		self.surface_config = self::configure_surface(&wgpu.adapter, &wgpu.device, &self.surface, self.surface_size())
+			.context("Unable to configure surface")?;
 
 		Ok(())
 	}
 
 	/// Performs a resize
-	pub fn resize(&mut self, size: Vector2D<u32>) -> Result<(), AppError> {
+	pub fn resize(&mut self, wgpu: &Wgpu, size: Vector2D<u32>) -> Result<(), AppError> {
 		tracing::info!("Resizing wgpu surface to {}x{}", size.x, size.y);
 
 		// TODO: Don't ignore resizes to the same size?
 		if size.x > 0 && size.y > 0 && size != self.surface_size() {
 			// Update our surface
-			self.surface_config =
-				self::configure_surface(&self.shared.adapter, &self.shared.device, &self.shared.surface, size)
-					.context("Unable to configure surface")?;
+			self.surface_config = self::configure_surface(&wgpu.adapter, &wgpu.device, &self.surface, size)
+				.context("Unable to configure surface")?;
 		}
 
 		Ok(())
@@ -383,15 +375,14 @@ async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Q
 }
 
 /// Creates the adapter
-async fn create_adapter(
-	instance: &wgpu::Instance,
-	surface: &wgpu::Surface<'static>,
-) -> Result<wgpu::Adapter, AppError> {
+async fn create_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, AppError> {
 	// Then request the adapter
 	let adapter_options = wgpu::RequestAdapterOptions {
 		power_preference:       wgpu::PowerPreference::default(),
 		force_fallback_adapter: false,
-		compatible_surface:     Some(surface),
+		// TODO: Create the adapter on the first surface creation to
+		//       ensure we are is compatible with the surface?
+		compatible_surface:     None,
 		apply_limit_buckets:    false,
 	};
 	tracing::debug!(?adapter_options, "Requesting wgpu adapter");

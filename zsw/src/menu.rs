@@ -9,11 +9,11 @@ use {
 	crate::{Zsw, panel::Panels, playlist::Playlists, profile::Profiles},
 	core::{ops::RangeInclusive, time::Duration},
 	egui::Widget,
-	std::path::Path,
+	std::{path::Path, sync::Arc},
 	strum::IntoEnumIterator,
 	zsw_util::{AppError, Rect},
 	zsw_wayland::WaylandData,
-	zsw_wgpu::WgpuRenderer,
+	zsw_wgpu::Wgpu,
 };
 
 /// Menu
@@ -41,7 +41,7 @@ impl Menu {
 		&mut self,
 		ctx: &egui::Context,
 		wayland_data: &mut WaylandData<Zsw>,
-		wgpu_renderer: &WgpuRenderer,
+		wgpu: &Arc<Wgpu>,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		panels: &mut Panels,
@@ -67,7 +67,7 @@ impl Menu {
 			ui.separator();
 
 			match self.cur_tab {
-				Tab::Panels => panels::draw_panels_tab(ui, wgpu_renderer, panels, surface_geometry),
+				Tab::Panels => panels::draw_panels_tab(ui, wgpu, panels, surface_geometry),
 				Tab::Profiles => profiles::draw_profiles_tab(ui, playlists, profiles, panels),
 				Tab::Settings => self::draw_settings_tab(ui, wayland_data),
 			}

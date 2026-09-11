@@ -7,7 +7,7 @@ pub use self::wayland::EguiWaylandState;
 use {
 	tracing as _,
 	zsw_wayland::WaylandData,
-	zsw_wgpu::{FrameRender, WgpuRenderer},
+	zsw_wgpu::{FrameRender, Wgpu, WgpuRenderer},
 };
 
 /// Egui
@@ -24,9 +24,9 @@ pub struct Egui {
 impl Egui {
 	/// Creates a new egui
 	#[must_use]
-	pub fn new(wgpu_renderer: &WgpuRenderer) -> Self {
+	pub fn new(wgpu: &Wgpu, wgpu_renderer: &WgpuRenderer) -> Self {
 		let renderer = egui_wgpu::Renderer::new(
-			&wgpu_renderer.shared.device,
+			&wgpu.device,
 			wgpu_renderer.surface_config.format,
 			egui_wgpu::RendererOptions::default(),
 		);
@@ -46,7 +46,7 @@ impl Egui {
 		&mut self,
 		frame: &mut FrameRender,
 		wayland_data: &mut WaylandData<A>,
-		wgpu_renderer: &WgpuRenderer,
+		wgpu: &Wgpu,
 		mut full_output: egui::FullOutput,
 	) -> egui::PlatformOutput {
 		let paint_jobs = self.ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
@@ -55,8 +55,7 @@ impl Egui {
 		#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
 		for (&id, deltas) in &full_output.textures_delta.set {
 			for delta in deltas {
-				self.renderer
-					.update_texture(&wgpu_renderer.shared.device, &wgpu_renderer.shared.queue, id, delta);
+				self.renderer.update_texture(&wgpu.device, &wgpu.queue, id, delta);
 			}
 		}
 		#[expect(clippy::iter_over_hash_type, reason = "We receive it like that")]
@@ -78,13 +77,13 @@ impl Egui {
 			},
 		};
 		let buffers = self.renderer.update_buffers(
-			&wgpu_renderer.shared.device,
-			&wgpu_renderer.shared.queue,
+			&wgpu.device,
+			&wgpu.queue,
 			&mut frame.encoder,
 			&paint_jobs,
 			&screen_descriptor,
 		);
-		let _: wgpu::SubmissionIndex = wgpu_renderer.shared.queue.submit(buffers);
+		let _: wgpu::SubmissionIndex = wgpu.queue.submit(buffers);
 
 		// Record all render passes.
 		let render_pass_color_attachment = wgpu::RenderPassColorAttachment {

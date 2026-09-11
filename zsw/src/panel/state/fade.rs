@@ -13,8 +13,8 @@ use {
 	chrono::TimeDelta,
 	core::{cmp, time::Duration},
 	euclid::default::{Transform3D, Vector2D},
-	std::time::Instant,
-	zsw_wgpu::WgpuRenderer,
+	std::{sync::Arc, time::Instant},
+	zsw_wgpu::Wgpu,
 };
 
 /// Panel fade state
@@ -172,15 +172,15 @@ impl PanelFadeState {
 	}
 
 	/// Skips to the next image.
-	pub fn skip(&mut self, wgpu_renderer: &WgpuRenderer) {
-		self.progress = match self.images.step_next(&mut self.playlist_player, wgpu_renderer) {
+	pub fn skip(&mut self, wgpu: &Arc<Wgpu>) {
+		self.progress = match self.images.step_next(&mut self.playlist_player, wgpu) {
 			Ok(()) => self.fade_duration,
 			Err(()) => self.max_progress(),
 		}
 	}
 
 	/// Steps this panel's state by a certain number of frames (potentially negative).
-	pub fn step(&mut self, wgpu_renderer: &WgpuRenderer, delta: TimeDelta) {
+	pub fn step(&mut self, wgpu: &Arc<Wgpu>, delta: TimeDelta) {
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
 			true => Some(self.progress.saturating_add(delta_abs)),
@@ -193,7 +193,7 @@ impl PanelFadeState {
 			Some(next_progress) => match next_progress.checked_sub(self.duration) {
 				// If we did, `next_progress` is our progress at the next image, so try
 				// to step to it.
-				Some(next_progress) => match self.images.step_next(&mut self.playlist_player, wgpu_renderer) {
+				Some(next_progress) => match self.images.step_next(&mut self.playlist_player, wgpu) {
 					// If we successfully stepped to the next image, start at the next progress
 					// Note: If delta was big enough to overflow 2 durations, then cap it at the
 					//       max duration of the next image.
@@ -209,7 +209,7 @@ impl PanelFadeState {
 			},
 
 			// Otherwise, we underflowed, so try to step back
-			None => match self.images.step_prev(&mut self.playlist_player, wgpu_renderer) {
+			None => match self.images.step_prev(&mut self.playlist_player, wgpu) {
 				// If we successfully stepped backwards, start at where we're supposed to:
 				Ok(()) => {
 					// Note: This branch is only taken when `delta` is negative, so we can always
@@ -231,10 +231,10 @@ impl PanelFadeState {
 	}
 
 	/// Updates this panel's state using the current time as a delta
-	pub fn update(&mut self, wgpu_renderer: &WgpuRenderer) {
+	pub fn update(&mut self, wgpu: &Arc<Wgpu>) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
-		self.images.load_missing(&mut self.playlist_player, wgpu_renderer);
+		self.images.load_missing(&mut self.playlist_player, wgpu);
 
 		// If we're paused, don't update anything
 		if self.paused {
@@ -253,13 +253,13 @@ impl PanelFadeState {
 		}
 		self.last_update = now;
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
-		self.step(wgpu_renderer, delta);
+		self.step(wgpu, delta);
 	}
 
 	pub fn render(
 		&self,
 		shared: &PanelFadeShared,
-		wgpu_renderer: &WgpuRenderer,
+		wgpu: &Arc<Wgpu>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel_geometry: &mut PanelGeometry,
 		pos_matrix: Transform3D<f32>,
@@ -335,34 +335,28 @@ impl PanelFadeState {
 			.shared
 			.fade_or_insert_default()
 			.images
-			.uniforms(wgpu_renderer, &shared.images);
+			.uniforms(wgpu, &shared.images);
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 		match self.shader() {
-			PanelFadeShader::Basic =>
-				wgpu_renderer
-					.shared
-					.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
-						pos_matrix,
-						images,
-						_unused: [0; _],
-					}),
-			PanelFadeShader::Out { strength } =>
-				wgpu_renderer
-					.shared
-					.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Out {
-						pos_matrix,
-						images,
-						strength,
-						_unused: [0; _],
-					}),
+			PanelFadeShader::Basic => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
+				pos_matrix,
+				images,
+				_unused: [0; _],
+			}),
+			PanelFadeShader::Out { strength } => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Out {
+				pos_matrix,
+				images,
+				strength,
+				_unused: [0; _],
+			}),
 		}
 
 		// Bind the geometry uniforms
 		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 
 		// Bind the image uniforms
-		let sampler = self.images().image_sampler(wgpu_renderer);
-		render_pass.set_bind_group(1, self.images().bind_group(wgpu_renderer, sampler, &shared.images), &[]);
+		let sampler = self.images().image_sampler(wgpu);
+		render_pass.set_bind_group(1, self.images().bind_group(wgpu, sampler, &shared.images), &[]);
 
 		render_pass.draw_indexed(0..6, 0, 0..1);
 	}

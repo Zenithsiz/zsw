@@ -4,7 +4,7 @@ use {
 	crate::panel::{PanelGeometry, renderer::uniform},
 	euclid::default::Transform3D,
 	std::sync::OnceLock,
-	zsw_wgpu::WgpuRenderer,
+	zsw_wgpu::Wgpu,
 };
 
 /// Panel none state
@@ -24,22 +24,17 @@ impl PanelNoneState {
 	pub fn render(
 		&self,
 		shared: &PanelNoneShared,
-		wgpu_renderer: &WgpuRenderer,
+		wgpu: &Wgpu,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel_geometry: &mut PanelGeometry,
 		pos_matrix: Transform3D<f32>,
 	) {
-		let geometry_uniforms = panel_geometry
-			.shared
-			.none_or_insert_default()
-			.uniforms(wgpu_renderer, shared);
+		let geometry_uniforms = panel_geometry.shared.none_or_insert_default().uniforms(wgpu, shared);
 
-		wgpu_renderer
-			.shared
-			.write_buffer(&geometry_uniforms.buffer, &uniform::None {
-				pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
-				background_color: uniform::Vec4(self.background_color),
-			});
+		wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::None {
+			pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
+			background_color: uniform::Vec4(self.background_color),
+		});
 
 		// Bind the geometry uniforms
 		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
@@ -57,13 +52,9 @@ pub struct PanelNoneGeometryShared {
 
 impl PanelNoneGeometryShared {
 	/// Returns this geometry's uniforms
-	pub fn uniforms(
-		&mut self,
-		wgpu_renderer: &WgpuRenderer,
-		shared: &PanelNoneShared,
-	) -> &mut PanelNoneGeometryUniforms {
+	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelNoneShared) -> &mut PanelNoneGeometryUniforms {
 		self.uniforms
-			.get_or_insert_with(|| self::create_geometry_uniforms(wgpu_renderer, shared))
+			.get_or_insert_with(|| self::create_geometry_uniforms(wgpu, shared))
 	}
 }
 
@@ -82,9 +73,9 @@ impl PanelNoneShared {
 		}
 	}
 
-	pub fn geometry_uniforms_bind_group_layout(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::BindGroupLayout {
+	pub fn geometry_uniforms_bind_group_layout(&self, wgpu: &Wgpu) -> &wgpu::BindGroupLayout {
 		self.geometry_uniforms_bind_group_layout
-			.get_or_init(|| self::create_geometry_uniforms_bind_group_layout(wgpu_renderer))
+			.get_or_init(|| self::create_geometry_uniforms_bind_group_layout(wgpu))
 	}
 }
 
@@ -99,7 +90,7 @@ pub struct PanelNoneGeometryUniforms {
 }
 
 /// Creates the geometry uniforms bind group layout
-fn create_geometry_uniforms_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> wgpu::BindGroupLayout {
+fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("zsw-panel-none-geometry-uniforms-bind-group-layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
@@ -114,11 +105,11 @@ fn create_geometry_uniforms_bind_group_layout(wgpu_renderer: &WgpuRenderer) -> w
 		}],
 	};
 
-	wgpu_renderer.shared.device.create_bind_group_layout(&descriptor)
+	wgpu.device.create_bind_group_layout(&descriptor)
 }
 
 /// Creates the panel none geometry uniforms
-fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelNoneShared) -> PanelNoneGeometryUniforms {
+fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> PanelNoneGeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),
@@ -129,18 +120,18 @@ fn create_geometry_uniforms(wgpu_renderer: &WgpuRenderer, shared: &PanelNoneShar
 		.expect("Maximum uniform size didn't fit into a `u64`"),
 		mapped_at_creation: false,
 	};
-	let buffer = wgpu_renderer.shared.device.create_buffer(&buffer_descriptor);
+	let buffer = wgpu.device.create_buffer(&buffer_descriptor);
 
 	// Create the uniform bind group
 	let bind_group_descriptor = wgpu::BindGroupDescriptor {
 		label:   Some("zsw-panel-none-geometry-uniforms-bind-group"),
-		layout:  shared.geometry_uniforms_bind_group_layout(wgpu_renderer),
+		layout:  shared.geometry_uniforms_bind_group_layout(wgpu),
 		entries: &[wgpu::BindGroupEntry {
 			binding:  0,
 			resource: buffer.as_entire_binding(),
 		}],
 	};
-	let bind_group = wgpu_renderer.shared.device.create_bind_group(&bind_group_descriptor);
+	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
 	PanelNoneGeometryUniforms { buffer, bind_group }
 }
