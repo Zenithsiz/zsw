@@ -1,6 +1,11 @@
 //! Panel none state
 
-use {crate::panel::renderer::uniform, std::sync::OnceLock, zsw_wgpu::WgpuRenderer};
+use {
+	crate::panel::{PanelGeometry, renderer::uniform},
+	euclid::default::Transform3D,
+	std::sync::OnceLock,
+	zsw_wgpu::WgpuRenderer,
+};
 
 /// Panel none state
 #[derive(Debug)]
@@ -13,6 +18,33 @@ impl PanelNoneState {
 	/// Creates new state
 	pub fn new(background_color: [f32; 4]) -> Self {
 		Self { background_color }
+	}
+
+	/// Renders a geometry of this panel
+	pub fn render(
+		&self,
+		shared: &PanelNoneShared,
+		wgpu_renderer: &WgpuRenderer,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		panel_geometry: &mut PanelGeometry,
+		pos_matrix: Transform3D<f32>,
+	) {
+		let geometry_uniforms = panel_geometry
+			.shared
+			.none_or_insert_default()
+			.uniforms(wgpu_renderer, shared);
+
+		wgpu_renderer
+			.shared
+			.write_buffer(&geometry_uniforms.buffer, &uniform::None {
+				pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
+				background_color: uniform::Vec4(self.background_color),
+			});
+
+		// Bind the geometry uniforms
+		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+		render_pass.draw_indexed(0..6, 0, 0..1);
 	}
 }
 

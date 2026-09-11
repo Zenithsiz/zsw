@@ -4,12 +4,13 @@
 
 use {
 	crate::{
-		panel::{PanelSlideShader, renderer::uniform},
+		panel::{PanelGeometry, PanelSlideShader, geometry, renderer::uniform},
 		playlist::PlaylistPlayer,
 	},
 	app_error::Context,
 	chrono::TimeDelta,
 	core::{clone::Share, time::Duration},
+	euclid::default::{Transform3D, Vector2D},
 	image::imageops,
 	std::{
 		collections::VecDeque,
@@ -245,6 +246,91 @@ impl PanelSlideState {
 		self.last_update = now;
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
 		self.step(wgpu_renderer, delta);
+	}
+
+	/// Renders a panel slide's geometry
+	pub fn render(
+		&mut self,
+		shared: &PanelSlideShared,
+		wgpu_renderer: &WgpuRenderer,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		panel_geometry: &mut PanelGeometry,
+		pos_matrix: Transform3D<f32>,
+	) {
+		let mut missing_images = true;
+		let mut cur_global_offset = 0.0;
+
+		let img_offset = self.progress().div_duration_floor(self.duration()) as usize;
+		// TODO: Deduplicate this with below
+		let local_offset = match self.images().nth(img_offset) {
+			Some(image) => {
+				let image_size = image.texture_view.texture().size();
+				let image_size = Vector2D::new(image_size.width, image_size.height);
+				let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
+
+				let ratio = match self.dir().is_horizontal() {
+					true => image_ratio.y / image_ratio.x,
+					false => image_ratio.x / image_ratio.y,
+				};
+
+				let offset_abs = self.progress().as_secs_f32() / self.duration().as_secs_f32() - img_offset as f32;
+				offset_abs * ratio * 2.0
+			},
+			None => 0.0,
+		};
+
+		for (image_idx, image) in self.images().enumerate().skip(img_offset) {
+			// Calculate the position matrix for the panel
+			let image_size = image.texture_view.texture().size();
+			let image_size = Vector2D::new(image_size.width, image_size.height);
+			let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
+
+			let offset_abs = cur_global_offset - local_offset;
+			if offset_abs > 2.0 {
+				missing_images = false;
+				break;
+			}
+
+			// Bind the geometry uniforms
+			let geometry_uniforms =
+				panel_geometry
+					.shared
+					.slide_or_insert_default()
+					.uniforms(wgpu_renderer, shared, image_idx);
+			render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+			let ratio = match self.dir().is_horizontal() {
+				true => image_ratio.y / image_ratio.x,
+				false => image_ratio.x / image_ratio.y,
+			};
+
+			// TODO: This should be baked into the position matrix instead.
+			let offset: Vector2D<f32> = match self.dir() {
+				PanelSlideDir::LeftRight => euclid::vec2(offset_abs, 0.0),
+				PanelSlideDir::RightLeft => euclid::vec2(2.0 * (1.0 - ratio) - offset_abs, 0.0),
+				PanelSlideDir::UpDown => euclid::vec2(0.0, offset_abs),
+				PanelSlideDir::DownUp => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
+			};
+
+			wgpu_renderer
+				.shared
+				.write_buffer(&geometry_uniforms.buffer, &uniform::Slide {
+					pos_matrix:  uniform::Matrix4x4(pos_matrix.to_arrays()),
+					image_ratio: uniform::Vec2(image_ratio.into()),
+					offset:      uniform::Vec2(offset.to_array()),
+				});
+
+			cur_global_offset += ratio * 2.0;
+
+			let sampler = self.image_sampler(wgpu_renderer);
+			render_pass.set_bind_group(1, image.bind_group(wgpu_renderer, sampler, shared), &[]);
+
+			render_pass.draw_indexed(0..6, 0, 0..1);
+		}
+
+		if missing_images {
+			self.load_next(wgpu_renderer);
+		}
 	}
 }
 

@@ -6,9 +6,13 @@ pub use self::images::{PanelFadeImage, PanelFadeImageSlot, PanelFadeImages, Pane
 
 use {
 	self::images::PanelFadeImagesGeometryShared,
-	crate::{panel::PanelFadeShader, playlist::PlaylistPlayer},
+	crate::{
+		panel::{PanelFadeShader, PanelGeometry, geometry, renderer::uniform},
+		playlist::PlaylistPlayer,
+	},
 	chrono::TimeDelta,
-	core::time::Duration,
+	core::{cmp, time::Duration},
+	euclid::default::{Transform3D, Vector2D},
 	std::time::Instant,
 	zsw_wgpu::WgpuRenderer,
 };
@@ -250,6 +254,117 @@ impl PanelFadeState {
 		self.last_update = now;
 		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
 		self.step(wgpu_renderer, delta);
+	}
+
+	pub fn render(
+		&self,
+		shared: &PanelFadeShared,
+		wgpu_renderer: &WgpuRenderer,
+		render_pass: &mut wgpu::RenderPass<'_>,
+		panel_geometry: &mut PanelGeometry,
+		pos_matrix: Transform3D<f32>,
+	) {
+		let p = self.progress_norm();
+		let f = self.fade_duration_norm();
+
+		// Full duration an image is on screen (including the fades)
+		let d = 1.0 + 2.0 * f;
+
+		let image_uniforms = |image: Option<&PanelFadeImage>, image_slot| -> uniform::fade::Image {
+			let Some(image) = image else {
+				return uniform::fade::Image {
+					image_ratio: uniform::Vec2([1.0, 1.0]),
+					progress:    0.0,
+					alpha:       0.0,
+				};
+			};
+
+			let progress = match image_slot {
+				PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
+				PanelFadeImageSlot::Cur => (p + f) / d,
+				PanelFadeImageSlot::Next => f32::max((p - 1.0 + f) / d, 0.0),
+			};
+			let progress = match image.swap_dir {
+				true => 1.0 - progress,
+				false => progress,
+			};
+
+			let p_stage = zsw_util::cmp_interval(p, f, 1.0 - f);
+			let alpha = match p_stage {
+				cmp::Ordering::Less => {
+					let a = 0.5 + p / (2.0 * f);
+					match image_slot {
+						PanelFadeImageSlot::Prev => 1.0 - a,
+						PanelFadeImageSlot::Cur => a,
+						PanelFadeImageSlot::Next => 0.0,
+					}
+				},
+				cmp::Ordering::Equal => match image_slot {
+					PanelFadeImageSlot::Prev | PanelFadeImageSlot::Next => 0.0,
+					PanelFadeImageSlot::Cur => 1.0,
+				},
+				cmp::Ordering::Greater => {
+					let a = (p - (1.0 - f)) / (2.0 * f);
+					match image_slot {
+						PanelFadeImageSlot::Prev => 0.0,
+						PanelFadeImageSlot::Cur => 1.0 - a,
+						PanelFadeImageSlot::Next => a,
+					}
+				},
+			};
+
+			// Calculate the position matrix for the panel
+			let image_size = image.texture_view.texture().size();
+			let image_size = Vector2D::new(image_size.width, image_size.height);
+			let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
+
+			uniform::fade::Image {
+				image_ratio: uniform::Vec2(image_ratio.into()),
+				progress,
+				alpha,
+			}
+		};
+
+		let images = uniform::fade::Images {
+			prev: image_uniforms(self.images().prev.as_ref(), PanelFadeImageSlot::Prev),
+			cur:  image_uniforms(self.images().cur.as_ref(), PanelFadeImageSlot::Cur),
+			next: image_uniforms(self.images().next.as_ref(), PanelFadeImageSlot::Next),
+		};
+
+		let geometry_uniforms = panel_geometry
+			.shared
+			.fade_or_insert_default()
+			.images
+			.uniforms(wgpu_renderer, &shared.images);
+		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
+		match self.shader() {
+			PanelFadeShader::Basic =>
+				wgpu_renderer
+					.shared
+					.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
+						pos_matrix,
+						images,
+						_unused: [0; _],
+					}),
+			PanelFadeShader::Out { strength } =>
+				wgpu_renderer
+					.shared
+					.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Out {
+						pos_matrix,
+						images,
+						strength,
+						_unused: [0; _],
+					}),
+		}
+
+		// Bind the geometry uniforms
+		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
+
+		// Bind the image uniforms
+		let sampler = self.images().image_sampler(wgpu_renderer);
+		render_pass.set_bind_group(1, self.images().bind_group(wgpu_renderer, sampler, &shared.images), &[]);
+
+		render_pass.draw_indexed(0..6, 0, 0..1);
 	}
 }
 

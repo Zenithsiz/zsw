@@ -21,7 +21,7 @@ pub use {
 
 use {
 	app_error::Context,
-	core::str::FromStr,
+	core::{cmp, str::FromStr},
 	serde::de::DeserializeOwned,
 	std::{ffi::OsStr, fs, path::Path, thread},
 	zutil_cloned::cloned,
@@ -122,4 +122,17 @@ where
 	}
 
 	Ok(values)
+}
+
+/// Compares `value` to the interval `lhs..rhs`
+#[must_use]
+pub fn cmp_interval(value: f32, lhs: f32, rhs: f32) -> cmp::Ordering {
+	if value < lhs {
+		return cmp::Ordering::Less;
+	}
+	if value > rhs {
+		return cmp::Ordering::Greater;
+	}
+
+	cmp::Ordering::Equal
 }
