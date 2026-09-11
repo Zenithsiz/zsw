@@ -1,7 +1,7 @@
 //! Panel geometry
 
 use {
-	super::state::PanelGeometryShared,
+	super::state::{fade::PanelFadeGeometryShared, none::PanelNoneGeometryShared, slide::PanelSlideGeometryShared},
 	euclid::default::{Transform3D, Vector2D},
 	num_rational::Rational32,
 	zsw_util::Rect,
@@ -24,6 +24,17 @@ impl PanelGeometry {
 			shared: PanelGeometryShared::default(),
 		}
 	}
+}
+
+/// Panel geometry
+#[derive(Default, Debug)]
+#[derive(zsw_util::GetOrInsert)]
+pub enum PanelGeometryShared {
+	#[default]
+	Empty,
+	None(PanelNoneGeometryShared),
+	Fade(PanelFadeGeometryShared),
+	Slide(PanelSlideGeometryShared),
 }
 
 /// Returns this geometry's rectangle relative to another geometry
