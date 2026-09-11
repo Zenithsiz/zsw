@@ -35,7 +35,7 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Arc<Wgpu>, panels: &mut Panels, 
 				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 				match panel {
 					Panel::None(_) => (),
-					Panel::Fade(state) => self::draw_fade_panel_editor(ui, wgpu, surface_geometry, state),
+					Panel::Fade(shader) => self::draw_fade_panel_editor(ui, wgpu, surface_geometry, shader),
 					Panel::Slide(_) => (),
 				}
 			});
@@ -47,16 +47,16 @@ fn draw_fade_panel_editor(
 	ui: &mut egui::Ui,
 	wgpu: &Arc<Wgpu>,
 	surface_geometry: Rect<i32, u32>,
-	state: &mut shader::fade::Shader,
+	shader: &mut shader::fade::Shader,
 ) {
 	{
-		let mut is_paused = state.is_paused();
+		let mut is_paused = shader.is_paused();
 		ui.checkbox(&mut is_paused, "Paused");
-		state.set_paused(is_paused);
+		shader.set_paused(is_paused);
 	}
 
 	ui.collapsing("Geometries", |ui| {
-		for (geometry_idx, panel_geometry) in state.geometries().iter().enumerate() {
+		for (geometry_idx, panel_geometry) in shader.geometries().iter().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
 				if !panel_geometry.rect.intersects(surface_geometry) {
@@ -75,41 +75,41 @@ fn draw_fade_panel_editor(
 		// Note: We only allow up until the duration - 1 so that you don't get stuck
 		//       skipping images when you hold it at the max value
 		// TODO: This max needs to be `duration - min_frame_duration` to not skip ahead.
-		let max = state.duration().mul_f32(0.99);
-		let mut progress = state.progress();
+		let max = shader.duration().mul_f32(0.99);
+		let mut progress = shader.progress();
 		super::draw_duration(ui, &mut progress, Duration::ZERO..=max);
-		state.set_progress(progress);
+		shader.set_progress(progress);
 	});
 
 	ui.horizontal(|ui| {
 		ui.label("Fade Duration");
 		let min = Duration::ZERO;
-		let max = state.duration() / 2;
+		let max = shader.duration() / 2;
 
-		let mut fade_duration = state.fade_duration();
+		let mut fade_duration = shader.fade_duration();
 		super::draw_duration(ui, &mut fade_duration, min..=max);
-		state.set_fade_duration(fade_duration);
+		shader.set_fade_duration(fade_duration);
 	});
 
 	ui.horizontal(|ui| {
 		ui.label("Duration");
 
-		let mut duration = state.duration();
+		let mut duration = shader.duration();
 		super::draw_duration(ui, &mut duration, Duration::ZERO..=Duration::from_secs_f32(180.0));
-		state.set_duration(duration);
+		shader.set_duration(duration);
 	});
 
 	ui.horizontal(|ui| {
 		ui.label("Skip");
 		if ui.button("🔄").clicked() {
-			state.skip(wgpu);
+			shader.skip(wgpu);
 		}
 	});
 
 	ui.collapsing("Images", |ui| {
-		self::draw_fade_panel_image(ui, "Previous", &mut state.images_mut().prev);
-		self::draw_fade_panel_image(ui, "Current", &mut state.images_mut().cur);
-		self::draw_fade_panel_image(ui, "Next", &mut state.images_mut().next);
+		self::draw_fade_panel_image(ui, "Previous", &mut shader.images_mut().prev);
+		self::draw_fade_panel_image(ui, "Current", &mut shader.images_mut().cur);
+		self::draw_fade_panel_image(ui, "Next", &mut shader.images_mut().next);
 	});
 }
 

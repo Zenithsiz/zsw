@@ -182,7 +182,7 @@ impl SurfaceRenderer {
 					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 					match panel {
 						Panel::None(_) => (),
-						Panel::Fade(state) => state.toggle_paused(),
+						Panel::Fade(shader) => shader.toggle_paused(),
 						Panel::Slide(_) => (),
 					}
 				}
@@ -195,7 +195,7 @@ impl SurfaceRenderer {
 					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 					match panel {
 						Panel::None(_) => (),
-						Panel::Fade(state) => state.skip(wgpu),
+						Panel::Fade(shader) => shader.skip(wgpu),
 						Panel::Slide(_) => (),
 					}
 				}
@@ -205,11 +205,11 @@ impl SurfaceRenderer {
 				if scroll_delta != 0.0 {
 					let time_delta = match panel {
 						Panel::None(_) => TimeDelta::zero(),
-						Panel::Fade(state) => {
+						Panel::Fade(shader) => {
 							// TODO: Make this "speed" configurable
 							// TODO: Perform the conversion better without going through nanos
 							let speed = 1.0 / 1000.0;
-							let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
+							let time_delta_abs = shader.duration().mul_f32(scroll_delta.abs() * speed);
 							let time_delta_abs =
 								TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
 							match scroll_delta.is_sign_positive() {
@@ -217,11 +217,11 @@ impl SurfaceRenderer {
 								false => time_delta_abs,
 							}
 						},
-						Panel::Slide(state) => {
+						Panel::Slide(shader) => {
 							// TODO: Make this "speed" configurable
 							// TODO: Perform the conversion better without going through nanos
 							let speed = 1.0 / 1000.0;
-							let time_delta_abs = state.duration().mul_f32(scroll_delta.abs() * speed);
+							let time_delta_abs = shader.duration().mul_f32(scroll_delta.abs() * speed);
 							let time_delta_abs =
 								TimeDelta::from_std(time_delta_abs).expect("Offset didn't fit into time delta");
 							match scroll_delta.is_sign_positive() {
@@ -233,8 +233,8 @@ impl SurfaceRenderer {
 
 					match panel {
 						Panel::None(_) => (),
-						Panel::Fade(state) => state.step(wgpu, time_delta),
-						Panel::Slide(state) => state.step(wgpu, time_delta),
+						Panel::Fade(shader) => shader.step(wgpu, time_delta),
+						Panel::Slide(shader) => shader.step(wgpu, time_delta),
 					}
 				}
 			}

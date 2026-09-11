@@ -157,15 +157,15 @@ impl Renderer {
 		// Update the panel before drawing it
 		match panel {
 			Panel::None(_) => (),
-			Panel::Fade(state) => state.update(wgpu),
-			Panel::Slide(state) => state.update(wgpu),
+			Panel::Fade(shader) => shader.update(wgpu),
+			Panel::Slide(shader) => shader.update(wgpu),
 		}
 
 		// If the panel images are empty, there's no sense in rendering it either
 		#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
 		let are_images_empty = match panel {
 			Panel::None(_) => false,
-			Panel::Fade(state) => state.images().is_empty(),
+			Panel::Fade(shader) => shader.images().is_empty(),
 			Panel::Slide(_) => false,
 		};
 		if are_images_empty {
@@ -174,11 +174,11 @@ impl Renderer {
 
 		let render_pipeline_id = match panel {
 			Panel::None(_) => RenderPipelineId::None,
-			Panel::Fade(state) => RenderPipelineId::Fade(match state.kind() {
+			Panel::Fade(shader) => RenderPipelineId::Fade(match shader.kind() {
 				shader::fade::Kind::Basic => RenderPipelineFadeId::Basic,
 				shader::fade::Kind::Out { .. } => RenderPipelineFadeId::Out,
 			}),
-			Panel::Slide(state) => RenderPipelineId::Slide(match state.kind() {
+			Panel::Slide(shader) => RenderPipelineId::Slide(match shader.kind() {
 				shader::slide::Kind::Basic => RenderPipelineSlideId::Basic,
 			}),
 		};
@@ -224,9 +224,9 @@ impl Renderer {
 		panel: &mut Panel,
 	) {
 		match panel {
-			Panel::None(state) => state.render(&self.none_shared, wgpu, surface_geometry, render_pass),
-			Panel::Fade(state) => state.render(&self.fade_shared, wgpu, surface_geometry, render_pass),
-			Panel::Slide(state) => state.render(&self.slide_shared, wgpu, surface_geometry, render_pass),
+			Panel::None(shader) => shader.render(&self.none_shared, wgpu, surface_geometry, render_pass),
+			Panel::Fade(shader) => shader.render(&self.fade_shared, wgpu, surface_geometry, render_pass),
+			Panel::Slide(shader) => shader.render(&self.slide_shared, wgpu, surface_geometry, render_pass),
 		}
 	}
 }

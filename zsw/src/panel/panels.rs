@@ -73,7 +73,7 @@ impl Panels {
 							.map(|geometry| shader::fade::Geometry::new(geometry.geometry))
 							.collect();
 
-						let state = shader::fade::Shader::new(
+						let shader = shader::fade::Shader::new(
 							geometries,
 							shader.duration,
 							shader.fade_duration,
@@ -84,7 +84,7 @@ impl Panels {
 							},
 						);
 
-						Panel::Fade(state)
+						Panel::Fade(shader)
 					},
 					ProfilePanelShader::Slide(shader) => {
 						let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
@@ -103,14 +103,14 @@ impl Panels {
 							.map(|geometry| shader::slide::Geometry::new(geometry.geometry))
 							.collect();
 
-						let state =
+						let shader =
 							shader::slide::Shader::new(geometries, shader.duration, playlist_player, dir, match shader
 								.kind
 							{
 								ProfilePanelSlideShaderKind::Basic => shader::slide::Kind::Basic,
 							});
 
-						Panel::Slide(state)
+						Panel::Slide(shader)
 					},
 				};
 

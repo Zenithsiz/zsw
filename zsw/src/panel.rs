@@ -25,27 +25,27 @@ impl Panel {
 	/// Returns the kind of this panel
 	pub fn kind(&self) -> PanelKind {
 		match self {
-			Self::None(state) => PanelKind::None(state.kind()),
-			Self::Fade(state) => PanelKind::Fade(state.kind()),
-			Self::Slide(state) => PanelKind::Slide(state.kind()),
+			Self::None(shader) => PanelKind::None(shader.kind()),
+			Self::Fade(shader) => PanelKind::Fade(shader.kind()),
+			Self::Slide(shader) => PanelKind::Slide(shader.kind()),
 		}
 	}
 
 	/// Returns if any geometries in this panel intersects `rect`
 	pub fn any_intersects(&self, rect: Rect<i32, u32>) -> bool {
 		match self {
-			Self::None(state) => state.any_intersects(rect),
-			Self::Fade(state) => state.any_intersects(rect),
-			Self::Slide(state) => state.any_intersects(rect),
+			Self::None(shader) => shader.any_intersects(rect),
+			Self::Fade(shader) => shader.any_intersects(rect),
+			Self::Slide(shader) => shader.any_intersects(rect),
 		}
 	}
 
 	/// Returns if any geometries in this panel contain `pos`
 	pub fn any_contain(&self, pos: Point2D<i32>) -> bool {
 		match self {
-			Self::None(state) => state.any_contain(pos),
-			Self::Fade(state) => state.any_contain(pos),
-			Self::Slide(state) => state.any_contain(pos),
+			Self::None(shader) => shader.any_contain(pos),
+			Self::Fade(shader) => shader.any_contain(pos),
+			Self::Slide(shader) => shader.any_contain(pos),
 		}
 	}
 }
