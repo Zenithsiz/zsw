@@ -13,7 +13,7 @@ use {
 	chrono::TimeDelta,
 	core::{cmp, time::Duration},
 	euclid::default::{Point2D, Vector2D},
-	std::sync::Arc,
+	std::sync::{Arc, OnceLock},
 	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
@@ -403,7 +403,9 @@ impl Geometry {
 	pub fn new(rect: Rect<i32, u32>) -> Self {
 		Self {
 			rect,
-			images: images::Geometry { uniforms: None },
+			images: images::Geometry {
+				uniforms: OnceLock::new(),
+			},
 		}
 	}
 }

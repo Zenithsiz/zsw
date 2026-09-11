@@ -54,16 +54,16 @@ impl Shader {
 
 	/// Renders a geometry of this panel
 	pub fn render(
-		&mut self,
+		&self,
 		shared: &Shared,
 		wgpu: &Wgpu,
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
-		for geometry in &mut self.geometries {
+		for geometry in &self.geometries {
 			let geometry_uniforms = geometry
 				.uniforms
-				.get_or_insert_with(|| self::create_geometry_uniforms(wgpu, shared));
+				.get_or_init(|| self::create_geometry_uniforms(wgpu, shared));
 
 			let pos_matrix = geometry::pos_matrix(geometry.rect, surface_geometry);
 			wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::None {
@@ -83,12 +83,15 @@ impl Shader {
 #[derive(Debug)]
 pub struct Geometry {
 	rect:     Rect<i32, u32>,
-	uniforms: Option<GeometryUniforms>,
+	uniforms: OnceLock<GeometryUniforms>,
 }
 
 impl Geometry {
 	pub fn new(rect: Rect<i32, u32>) -> Self {
-		Self { rect, uniforms: None }
+		Self {
+			rect,
+			uniforms: OnceLock::new(),
+		}
 	}
 }
 

@@ -18,14 +18,14 @@ use {
 /// Geometry data
 #[derive(Debug)]
 pub struct Geometry {
-	pub uniforms: Option<GeometryUniforms>,
+	pub uniforms: OnceLock<GeometryUniforms>,
 }
 
 impl Geometry {
 	/// Returns the geometry uniforms
-	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &Shared) -> &mut GeometryUniforms {
+	pub fn uniforms(&self, wgpu: &Wgpu, shared: &Shared) -> &GeometryUniforms {
 		self.uniforms
-			.get_or_insert_with(|| self::create_image_geometry_uniforms(wgpu, shared))
+			.get_or_init(|| self::create_image_geometry_uniforms(wgpu, shared))
 	}
 }
 
