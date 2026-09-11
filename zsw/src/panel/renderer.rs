@@ -8,6 +8,7 @@ pub use self::vertex::PanelVertex;
 use {
 	super::{Panel, PanelKind, Panels, shader},
 	app_error::Context,
+	core::time::Duration,
 	euclid::default::Vector2D,
 	std::{
 		borrow::Cow,
@@ -91,6 +92,7 @@ impl Renderer {
 		surface_geometry: Rect<i32, u32>,
 		frame: &mut FrameRender,
 		panels: &mut Panels,
+		delta: Duration,
 	) -> Result<(), AppError> {
 		// Create the render pass for all panels
 		let render_pass_color_attachment = match self.msaa_samples {
@@ -139,7 +141,7 @@ impl Renderer {
 
 		// Then render all panels simultaneously
 		for panel in panels.get_all() {
-			self.render_panel(wgpu, wgpu_renderer, surface_geometry, &mut render_pass, panel)?;
+			self.render_panel(wgpu, wgpu_renderer, surface_geometry, &mut render_pass, panel, delta)?;
 		}
 
 		Ok(())
@@ -153,12 +155,13 @@ impl Renderer {
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &mut Panel,
+		delta: Duration,
 	) -> Result<(), app_error::AppError> {
 		// Update the panel before drawing it
 		match panel {
 			Panel::None(_) => (),
-			Panel::Fade(shader) => shader.update(wgpu),
-			Panel::Slide(shader) => shader.update(wgpu),
+			Panel::Fade(shader) => shader.update(wgpu, delta),
+			Panel::Slide(shader) => shader.update(wgpu, delta),
 		}
 
 		// If the panel images are empty, there's no sense in rendering it either

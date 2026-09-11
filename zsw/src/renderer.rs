@@ -10,6 +10,7 @@ use {
 	},
 	app_error::Context,
 	chrono::TimeDelta,
+	core::time::Duration,
 	euclid::default::{Point2D, Vector2D},
 	std::sync::Arc,
 	zsw_egui::Egui,
@@ -92,6 +93,7 @@ impl SurfaceRenderer {
 	/// Renders the a frame.
 	///
 	/// You can get the current frame from [`start_frame`](Self::start_frame).
+	#[expect(clippy::too_many_arguments, reason = "TODO: Package some together")]
 	pub fn render(
 		&mut self,
 		wgpu: &Arc<Wgpu>,
@@ -100,6 +102,7 @@ impl SurfaceRenderer {
 		profiles: &Profiles,
 		egui_input: egui::RawInput,
 		frame: &mut FrameRender,
+		delta: Duration,
 	) -> Result<egui::PlatformOutput, AppError> {
 		self.panels_renderer
 			.render(
@@ -108,6 +111,7 @@ impl SurfaceRenderer {
 				self.surface_geometry,
 				frame,
 				&mut self.panels,
+				delta,
 			)
 			.context("Unable to render panels")?;
 

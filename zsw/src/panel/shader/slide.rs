@@ -16,7 +16,6 @@ use {
 		collections::VecDeque,
 		path::Path,
 		sync::{Arc, OnceLock},
-		time::Instant,
 	},
 	zsw_util::{AppError, Loadable, Rect},
 	zsw_wgpu::Wgpu,
@@ -39,9 +38,6 @@ pub struct Shader {
 
 	/// Duration of each image
 	duration: Duration,
-
-	/// Last time we were updated
-	last_update: Instant,
 
 	/// Images
 	images: VecDeque<Image>,
@@ -74,7 +70,6 @@ impl Shader {
 			kind,
 			progress: Duration::ZERO,
 			duration,
-			last_update: Instant::now(),
 			images: VecDeque::new(),
 			// TODO: Adjust this?
 			max_images: 3,
@@ -214,8 +209,8 @@ impl Shader {
 		}
 	}
 
-	/// Updates this shader using the current time as a delta
-	pub fn update(&mut self, wgpu: &Arc<Wgpu>) {
+	/// Updates this shader with a delta
+	pub fn update(&mut self, wgpu: &Arc<Wgpu>, delta: Duration) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.
 		//self.images.load_missing(&mut self.playlist_player, wgpu);
@@ -225,18 +220,7 @@ impl Shader {
 			return;
 		}
 
-		// Calculate the delta since the last update and step through it.
-		// Note: If the delta would be pretty small (sub-millisecond), we
-		//       instead skip it.
-		// TODO: Revisit this and get the minimum from the lowest refresh rate or something,
-		//       since eventually we might want to update at 1000 Hz
-		let now = Instant::now();
-		let delta = now.duration_since(self.last_update);
-		if delta.as_millis() < 1 {
-			return;
-		}
-		self.last_update = now;
-		let delta = TimeDelta::from_std(delta).expect("Last update duration didn't fit into a delta");
+		let delta = TimeDelta::from_std(delta).expect("Duration since last update didn't fit into a time delta");
 		self.step(wgpu, delta);
 	}
 

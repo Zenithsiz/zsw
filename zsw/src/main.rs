@@ -155,6 +155,11 @@ fn run() -> Result<(), AppError> {
 			.start_frame(&wayland_state.app.wgpu)
 			.context("Unable to start new frame")?;
 		let egui_input = surface.egui_state.take_input();
+
+		let render_start = Instant::now();
+		let frame_delta = render_start - surface.last_update;
+		surface.last_update = render_start;
+
 		let egui_output = renderer
 			.render(
 				&wayland_state.app.wgpu,
@@ -163,6 +168,7 @@ fn run() -> Result<(), AppError> {
 				&wayland_state.app.profiles,
 				egui_input,
 				&mut frame,
+				frame_delta,
 			)
 			.context("Unable to render frame")?;
 
@@ -178,7 +184,8 @@ fn run() -> Result<(), AppError> {
 			.context("Unable to present frame")?;
 
 		let now = Instant::now();
-		tracing::trace!("Frame took {:?}", now - surface.last_frame);
+		let frame_duration = now - surface.last_frame;
+		tracing::trace!("Frame took {frame_duration:?}");
 		surface.last_frame = now;
 		surface.next_frame += surface.frame_duration;
 		if let Some(late) = now.checked_duration_since(surface.next_frame) {
@@ -194,6 +201,7 @@ struct ZswSurface {
 	renderer:   Option<SurfaceRenderer>,
 	egui_state: EguiWaylandState,
 
+	last_update:    Instant,
 	last_frame:     Instant,
 	next_frame:     Instant,
 	frame_duration: Duration,
@@ -248,6 +256,7 @@ impl WaylandApp for Zsw {
 				renderer: None,
 				egui_state: EguiWaylandState::new(),
 
+				last_update: now,
 				last_frame: now,
 				next_frame: now,
 				frame_duration,
