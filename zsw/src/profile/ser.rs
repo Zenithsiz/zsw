@@ -12,23 +12,9 @@ pub struct Profile {
 /// Profile panel
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct ProfilePanel {
-	pub geometries: Vec<PanelGeometry>,
-	pub shader:     ProfilePanelShader,
-}
-
-/// Panel geometry
-#[derive(Debug)]
-#[serde_with::serde_as]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
-pub enum PanelGeometry {
-	Full {
-		#[serde_as(as = "serde_with::DisplayFromStr")]
-		geometry: Rect<i32, u32>,
-	},
-
-	Short(Rect<i32, u32>),
+	pub shader: ProfilePanelShader,
 }
 
 /// Panel shader
@@ -50,14 +36,32 @@ pub enum ProfilePanelShader {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanelNoneShader {
+	pub geometries: Vec<ProfilePanelNoneGeometry>,
+
 	#[serde(default)]
 	pub background_color: [f32; 4],
+}
+
+/// Panel shader none geometry
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum ProfilePanelNoneGeometry {
+	Full {
+		#[serde_as(as = "serde_with::DisplayFromStr")]
+		geometry: Rect<i32, u32>,
+	},
+
+	Short(Rect<i32, u32>),
 }
 
 /// Panel fade shader
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanelFadeShader {
+	pub geometries: Vec<ProfilePanelFadeGeometry>,
+
 	pub playlist:      String,
 	#[serde(with = "humantime_serde")]
 	pub duration:      Duration,
@@ -67,6 +71,20 @@ pub struct ProfilePanelFadeShader {
 	/// Kind
 	#[serde(flatten)]
 	pub kind: ProfilePanelFadeShaderKind,
+}
+
+/// Panel shader fade geometry
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum ProfilePanelFadeGeometry {
+	Full {
+		#[serde_as(as = "serde_with::DisplayFromStr")]
+		geometry: Rect<i32, u32>,
+	},
+
+	Short(Rect<i32, u32>),
 }
 
 /// Panel fade shader kind
@@ -85,6 +103,8 @@ pub enum ProfilePanelFadeShaderKind {
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProfilePanelSlideShader {
+	pub geometries: Vec<ProfilePanelSlideGeometry>,
+
 	pub playlist: String,
 
 	#[serde(with = "humantime_serde")]
@@ -95,6 +115,20 @@ pub struct ProfilePanelSlideShader {
 	/// Kind
 	#[serde(flatten)]
 	pub kind: ProfilePanelSlideShaderKind,
+}
+
+/// Panel shader fade geometry
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum ProfilePanelSlideGeometry {
+	Full {
+		#[serde_as(as = "serde_with::DisplayFromStr")]
+		geometry: Rect<i32, u32>,
+	},
+
+	Short(Rect<i32, u32>),
 }
 
 /// Panel shader slide kind

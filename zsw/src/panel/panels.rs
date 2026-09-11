@@ -56,7 +56,7 @@ impl Panels {
 			let panel =
 				match &profile_panel.shader {
 					ProfilePanelShader::None(shader) => {
-						let geometries = profile_panel
+						let geometries = shader
 							.geometries
 							.iter()
 							.map(|geometry| shader::none::Geometry::new(geometry.geometry))
@@ -67,7 +67,7 @@ impl Panels {
 						let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
 							.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
-						let geometries = profile_panel
+						let geometries = shader
 							.geometries
 							.iter()
 							.map(|geometry| shader::fade::Geometry::new(geometry.geometry))
@@ -97,7 +97,7 @@ impl Panels {
 							ProfilePanelSlideDir::DownUp => shader::slide::Dir::DownUp,
 						};
 
-						let geometries = profile_panel
+						let geometries = shader
 							.geometries
 							.iter()
 							.map(|geometry| shader::slide::Geometry::new(geometry.geometry))

@@ -1,14 +1,12 @@
 //! Profile
 
-mod geometry;
 mod ser;
-
-pub use self::geometry::ProfilePanelGeometry;
 
 use {
 	crate::playlist::PlaylistName,
 	core::{str::FromStr, time::Duration},
 	std::{borrow::Borrow, collections::BTreeMap, fmt, sync::Arc},
+	zsw_util::Rect,
 };
 
 /// Profiles
@@ -26,8 +24,7 @@ pub struct Profile {
 /// Profile panel
 #[derive(Debug)]
 pub struct ProfilePanel {
-	pub geometries: Vec<ProfilePanelGeometry>,
-	pub shader:     ProfilePanelShader,
+	pub shader: ProfilePanelShader,
 }
 
 /// Profile panel shader
@@ -41,16 +38,32 @@ pub enum ProfilePanelShader {
 /// Profile panel shader none
 #[derive(Debug)]
 pub struct ProfilePanelNoneShader {
+	pub geometries:       Vec<ProfilePanelNoneGeometry>,
 	pub background_color: [f32; 4],
+}
+
+/// Profile panel shader none geometry
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub struct ProfilePanelNoneGeometry {
+	/// Inner geometry
+	pub geometry: Rect<i32, u32>,
 }
 
 /// Profile panel fade shader
 #[derive(Debug)]
 pub struct ProfilePanelFadeShader {
+	pub geometries:    Vec<ProfilePanelFadeGeometry>,
 	pub playlist:      PlaylistName,
 	pub duration:      Duration,
 	pub fade_duration: Duration,
 	pub kind:          ProfilePanelFadeShaderKind,
+}
+
+/// Profile panel shader fade geometry
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub struct ProfilePanelFadeGeometry {
+	/// Inner geometry
+	pub geometry: Rect<i32, u32>,
 }
 
 /// Profile panel fade shader kind
@@ -63,10 +76,18 @@ pub enum ProfilePanelFadeShaderKind {
 /// Profile slide panel shader
 #[derive(Debug)]
 pub struct ProfilePanelSlideShader {
-	pub playlist: PlaylistName,
-	pub duration: Duration,
-	pub dir:      ProfilePanelSlideDir,
-	pub kind:     ProfilePanelSlideShaderKind,
+	pub geometries: Vec<ProfilePanelSlideGeometry>,
+	pub playlist:   PlaylistName,
+	pub duration:   Duration,
+	pub dir:        ProfilePanelSlideDir,
+	pub kind:       ProfilePanelSlideShaderKind,
+}
+
+/// Profile panel shader slide geometry
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub struct ProfilePanelSlideGeometry {
+	/// Inner geometry
+	pub geometry: Rect<i32, u32>,
 }
 
 /// Profile panel slide shader kind
@@ -91,19 +112,27 @@ impl From<ser::Profile> for Profile {
 				.panels
 				.into_iter()
 				.map(|panel| ProfilePanel {
-					geometries: panel
-						.geometries
-						.into_iter()
-						.map(|geometry| match geometry {
-							ser::PanelGeometry::Full { geometry } | ser::PanelGeometry::Short(geometry) =>
-								ProfilePanelGeometry { geometry },
-						})
-						.collect(),
-					shader:     match panel.shader {
+					shader: match panel.shader {
 						ser::ProfilePanelShader::None(shader) => ProfilePanelShader::None(ProfilePanelNoneShader {
+							geometries:       shader
+								.geometries
+								.into_iter()
+								.map(|geometry| match geometry {
+									ser::ProfilePanelNoneGeometry::Full { geometry } |
+									ser::ProfilePanelNoneGeometry::Short(geometry) => ProfilePanelNoneGeometry { geometry },
+								})
+								.collect(),
 							background_color: shader.background_color,
 						}),
 						ser::ProfilePanelShader::Fade(shader) => ProfilePanelShader::Fade(ProfilePanelFadeShader {
+							geometries:    shader
+								.geometries
+								.into_iter()
+								.map(|geometry| match geometry {
+									ser::ProfilePanelFadeGeometry::Full { geometry } |
+									ser::ProfilePanelFadeGeometry::Short(geometry) => ProfilePanelFadeGeometry { geometry },
+								})
+								.collect(),
 							playlist:      PlaylistName::from_str(&shader.playlist).into_ok(),
 							duration:      shader.duration,
 							fade_duration: shader.fade_duration,
@@ -114,15 +143,23 @@ impl From<ser::Profile> for Profile {
 							},
 						}),
 						ser::ProfilePanelShader::Slide(shader) => ProfilePanelShader::Slide(ProfilePanelSlideShader {
-							playlist: PlaylistName::from_str(&shader.playlist).into_ok(),
-							duration: shader.duration,
-							dir:      match shader.dir {
+							geometries: shader
+								.geometries
+								.into_iter()
+								.map(|geometry| match geometry {
+									ser::ProfilePanelSlideGeometry::Full { geometry } |
+									ser::ProfilePanelSlideGeometry::Short(geometry) => ProfilePanelSlideGeometry { geometry },
+								})
+								.collect(),
+							playlist:   PlaylistName::from_str(&shader.playlist).into_ok(),
+							duration:   shader.duration,
+							dir:        match shader.dir {
 								ser::ProfilePanelSlideDir::LeftRight => ProfilePanelSlideDir::LeftRight,
 								ser::ProfilePanelSlideDir::RightLeft => ProfilePanelSlideDir::RightLeft,
 								ser::ProfilePanelSlideDir::UpDown => ProfilePanelSlideDir::UpDown,
 								ser::ProfilePanelSlideDir::DownUp => ProfilePanelSlideDir::DownUp,
 							},
-							kind:     match shader.kind {
+							kind:       match shader.kind {
 								ser::ProfilePanelSlideShaderKind::Basic => ProfilePanelSlideShaderKind::Basic,
 							},
 						}),
