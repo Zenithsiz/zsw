@@ -265,7 +265,7 @@ fn egui_key(key: Keysym) -> Option<egui::Key> {
 		Keysym::Escape => egui::Key::Escape,
 		Keysym::Tab => egui::Key::Tab,
 		Keysym::BackSpace => egui::Key::Backspace,
-		Keysym::Return => egui::Key::Enter,
+		Keysym::Return | Keysym::KP_Enter => egui::Key::Enter,
 		Keysym::space => egui::Key::Space,
 		Keysym::Insert => egui::Key::Insert,
 		Keysym::Delete => egui::Key::Delete,
