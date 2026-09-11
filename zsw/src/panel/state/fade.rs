@@ -27,8 +27,8 @@ pub struct PanelFadeState {
 	/// If paused
 	paused: bool,
 
-	/// Shader
-	shader: PanelFadeShader,
+	/// Kind
+	kind: PanelFadeKind,
 
 	/// Last update
 	last_update: Instant,
@@ -55,12 +55,12 @@ impl PanelFadeState {
 		duration: Duration,
 		fade_duration: Duration,
 		playlist_player: PlaylistPlayer,
-		shader: PanelFadeShader,
+		kind: PanelFadeKind,
 	) -> Self {
 		Self {
 			geometries,
 			paused: false,
-			shader,
+			kind,
 			last_update: Instant::now(),
 			progress: Duration::ZERO,
 			duration,
@@ -150,9 +150,9 @@ impl PanelFadeState {
 		self.set_fade_duration(self.fade_duration);
 	}
 
-	/// Returns the panel shader
-	pub fn shader(&self) -> PanelFadeShader {
-		self.shader
+	/// Returns the panel kind
+	pub fn kind(&self) -> PanelFadeKind {
+		self.kind
 	}
 
 	pub fn geometries(&self) -> &[PanelGeometry] {
@@ -356,19 +356,18 @@ impl PanelFadeState {
 				.uniforms(wgpu, &shared.images);
 			let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
 			let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
-			match self.shader {
-				PanelFadeShader::Basic => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
+			match self.kind {
+				PanelFadeKind::Basic => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
 					pos_matrix,
 					images,
 					_unused: [0; _],
 				}),
-				PanelFadeShader::Out { strength } =>
-					wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Out {
-						pos_matrix,
-						images,
-						strength,
-						_unused: [0; _],
-					}),
+				PanelFadeKind::Out { strength } => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Out {
+					pos_matrix,
+					images,
+					strength,
+					_unused: [0; _],
+				}),
 			}
 
 			// Bind the geometry uniforms
@@ -406,15 +405,15 @@ impl PanelFadeShared {
 	}
 }
 
-/// Panel fade shader
+/// Panel fade kind
 #[derive(PartialEq, Clone, Copy, Debug)]
-pub enum PanelFadeShader {
+pub enum PanelFadeKind {
 	Basic,
 	Out { strength: f32 },
 }
 
-impl PanelFadeShader {
-	/// Returns this shader's name
+impl PanelFadeKind {
+	/// Returns this kind's name
 	pub fn name(self) -> &'static str {
 		match self {
 			Self::Basic => "Fade",
@@ -422,7 +421,7 @@ impl PanelFadeShader {
 		}
 	}
 
-	/// Returns this shader's module as json
+	/// Returns this kind's module as json
 	pub fn module_json(self) -> &'static str {
 		match self {
 			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade.json")),

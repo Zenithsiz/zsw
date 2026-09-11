@@ -8,7 +8,7 @@ pub mod state;
 pub use self::{
 	geometry::PanelGeometry,
 	panels::Panels,
-	renderer::{PanelShader, PanelsRenderer},
+	renderer::{PanelKind, PanelsRenderer},
 };
 
 use {
@@ -35,12 +35,12 @@ pub enum Panel {
 }
 
 impl Panel {
-	/// Returns the shader of this panel
-	pub fn shader(&self) -> PanelShader {
+	/// Returns the kind of this panel
+	pub fn kind(&self) -> PanelKind {
 		match self {
-			Self::None(state) => PanelShader::None(state.shader()),
-			Self::Fade(state) => PanelShader::Fade(state.shader()),
-			Self::Slide(state) => PanelShader::Slide(state.shader()),
+			Self::None(state) => PanelKind::None(state.kind()),
+			Self::Fade(state) => PanelKind::Fade(state.kind()),
+			Self::Slide(state) => PanelKind::Slide(state.kind()),
 		}
 	}
 

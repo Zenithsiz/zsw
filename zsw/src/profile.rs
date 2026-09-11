@@ -50,12 +50,12 @@ pub struct ProfilePanelFadeShader {
 	pub playlist:      PlaylistName,
 	pub duration:      Duration,
 	pub fade_duration: Duration,
-	pub inner:         ProfilePanelFadeShaderInner,
+	pub kind:          ProfilePanelFadeShaderKind,
 }
 
-/// Profile panel fade shader inner
+/// Profile panel fade shader kind
 #[derive(Debug)]
-pub enum ProfilePanelFadeShaderInner {
+pub enum ProfilePanelFadeShaderKind {
 	Basic,
 	Out { strength: f32 },
 }
@@ -66,12 +66,12 @@ pub struct ProfilePanelSlideShader {
 	pub playlist: PlaylistName,
 	pub duration: Duration,
 	pub dir:      ProfilePanelSlideDir,
-	pub inner:    ProfilePanelSlideShaderInner,
+	pub kind:     ProfilePanelSlideShaderKind,
 }
 
-/// Profile panel slide shader inner
+/// Profile panel slide shader kind
 #[derive(Debug)]
-pub enum ProfilePanelSlideShaderInner {
+pub enum ProfilePanelSlideShaderKind {
 	Basic,
 }
 
@@ -107,10 +107,10 @@ impl From<ser::Profile> for Profile {
 							playlist:      PlaylistName::from_str(&shader.playlist).into_ok(),
 							duration:      shader.duration,
 							fade_duration: shader.fade_duration,
-							inner:         match shader.inner {
-								ser::ProfilePanelFadeShaderInner::Basic => ProfilePanelFadeShaderInner::Basic,
-								ser::ProfilePanelFadeShaderInner::Out { strength } =>
-									ProfilePanelFadeShaderInner::Out { strength },
+							kind:          match shader.kind {
+								ser::ProfilePanelFadeShaderKind::Basic => ProfilePanelFadeShaderKind::Basic,
+								ser::ProfilePanelFadeShaderKind::Out { strength } =>
+									ProfilePanelFadeShaderKind::Out { strength },
 							},
 						}),
 						ser::ProfilePanelShader::Slide(shader) => ProfilePanelShader::Slide(ProfilePanelSlideShader {
@@ -122,8 +122,8 @@ impl From<ser::Profile> for Profile {
 								ser::ProfilePanelSlideDir::UpDown => ProfilePanelSlideDir::UpDown,
 								ser::ProfilePanelSlideDir::DownUp => ProfilePanelSlideDir::DownUp,
 							},
-							inner:    match shader.inner {
-								ser::ProfilePanelSlideShaderInner::Basic => ProfilePanelSlideShaderInner::Basic,
+							kind:     match shader.kind {
+								ser::ProfilePanelSlideShaderKind::Basic => ProfilePanelSlideShaderKind::Basic,
 							},
 						}),
 					},

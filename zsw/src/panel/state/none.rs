@@ -17,8 +17,8 @@ pub struct PanelNoneState {
 	/// Background color
 	background_color: [f32; 4],
 
-	/// Shader
-	shader: PanelNoneShader,
+	/// Kind
+	kind: PanelNoneKind,
 }
 
 impl PanelNoneState {
@@ -27,13 +27,13 @@ impl PanelNoneState {
 		Self {
 			geometries,
 			background_color,
-			shader: PanelNoneShader::Basic,
+			kind: PanelNoneKind::Basic,
 		}
 	}
 
-	/// Returns the shader of this state
-	pub fn shader(&self) -> PanelNoneShader {
-		self.shader
+	/// Returns the kind of this state
+	pub fn kind(&self) -> PanelNoneKind {
+		self.kind
 	}
 
 	/// Returns if any geometries in this panel intersects `rect`
@@ -118,21 +118,21 @@ pub struct PanelNoneGeometryUniforms {
 }
 
 
-/// Panel none shader
+/// Panel none kind
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum PanelNoneShader {
+pub enum PanelNoneKind {
 	Basic,
 }
 
-impl PanelNoneShader {
-	/// Returns this shader's name
+impl PanelNoneKind {
+	/// Returns this kind's name
 	pub fn name(self) -> &'static str {
 		match self {
 			Self::Basic => "None",
 		}
 	}
 
-	/// Returns this shader's module as json
+	/// Returns this kind's module as json
 	pub fn module_json(self) -> &'static str {
 		match self {
 			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/none.json")),

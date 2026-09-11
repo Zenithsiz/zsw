@@ -4,7 +4,7 @@ use {
 	super::{
 		Panel,
 		PanelGeometry,
-		state::{PanelFadeShader, PanelSlideShader, slide::PanelSlideDir},
+		state::{PanelFadeKind, PanelSlideKind, slide::PanelSlideDir},
 	},
 	crate::{
 		panel::state::{PanelFadeState, PanelNoneState, PanelSlideState},
@@ -12,10 +12,10 @@ use {
 		profile::{
 			Profile,
 			ProfileName,
-			ProfilePanelFadeShaderInner,
+			ProfilePanelFadeShaderKind,
 			ProfilePanelShader,
 			ProfilePanelSlideDir,
-			ProfilePanelSlideShaderInner,
+			ProfilePanelSlideShaderKind,
 		},
 	},
 	app_error::Context,
@@ -76,9 +76,9 @@ impl Panels {
 						shader.duration,
 						shader.fade_duration,
 						playlist_player,
-						match shader.inner {
-							ProfilePanelFadeShaderInner::Basic => PanelFadeShader::Basic,
-							ProfilePanelFadeShaderInner::Out { strength } => PanelFadeShader::Out { strength },
+						match shader.kind {
+							ProfilePanelFadeShaderKind::Basic => PanelFadeKind::Basic,
+							ProfilePanelFadeShaderKind::Out { strength } => PanelFadeKind::Out { strength },
 						},
 					);
 
@@ -96,8 +96,8 @@ impl Panels {
 					};
 
 					let state =
-						PanelSlideState::new(geometries, shader.duration, playlist_player, dir, match shader.inner {
-							ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
+						PanelSlideState::new(geometries, shader.duration, playlist_player, dir, match shader.kind {
+							ProfilePanelSlideShaderKind::Basic => PanelSlideKind::Basic,
 						});
 
 					Panel::Slide(state)

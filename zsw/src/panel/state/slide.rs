@@ -31,8 +31,8 @@ pub struct PanelSlideState {
 	/// If paused
 	paused: bool,
 
-	/// Shader
-	shader: PanelSlideShader,
+	/// Kind
+	kind: PanelSlideKind,
 
 	/// Direction
 	// TODO: This should be per-geometry
@@ -76,12 +76,12 @@ impl PanelSlideState {
 		duration: Duration,
 		playlist_player: PlaylistPlayer,
 		dir: PanelSlideDir,
-		shader: PanelSlideShader,
+		kind: PanelSlideKind,
 	) -> Self {
 		Self {
 			geometries,
 			paused: false,
-			shader,
+			kind,
 			dir,
 			progress: Duration::ZERO,
 			duration,
@@ -106,9 +106,9 @@ impl PanelSlideState {
 		self.geometries.iter().any(|geometry| geometry.rect.contains(pos))
 	}
 
-	/// Returns the panel shader
-	pub fn shader(&self) -> PanelSlideShader {
-		self.shader
+	/// Returns the panel kind
+	pub fn kind(&self) -> PanelSlideKind {
+		self.kind
 	}
 
 	/// Returns the image duration
@@ -443,21 +443,21 @@ impl PanelSlideDir {
 }
 
 
-/// Panel slide shader
+/// Panel slide kind
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum PanelSlideShader {
+pub enum PanelSlideKind {
 	Basic,
 }
 
-impl PanelSlideShader {
-	/// Returns this shader's name
+impl PanelSlideKind {
+	/// Returns this kind's name
 	pub fn name(self) -> &'static str {
 		match self {
 			Self::Basic => "Slide",
 		}
 	}
 
-	/// Returns this shader's module as json
+	/// Returns this kind's module as json
 	pub fn module_json(self) -> &'static str {
 		match self {
 			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/slide.json")),

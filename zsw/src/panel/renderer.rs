@@ -10,9 +10,9 @@ use {
 		Panel,
 		Panels,
 		state::{
-			PanelFadeShader,
-			PanelNoneShader,
-			PanelSlideShader,
+			PanelFadeKind,
+			PanelNoneKind,
+			PanelSlideKind,
 			fade::PanelFadeShared,
 			none::PanelNoneShared,
 			slide::PanelSlideShared,
@@ -185,12 +185,12 @@ impl PanelsRenderer {
 
 		let render_pipeline_id = match panel {
 			Panel::None(_) => RenderPipelineId::None,
-			Panel::Fade(state) => RenderPipelineId::Fade(match state.shader() {
-				PanelFadeShader::Basic => RenderPipelineFadeId::Basic,
-				PanelFadeShader::Out { .. } => RenderPipelineFadeId::Out,
+			Panel::Fade(state) => RenderPipelineId::Fade(match state.kind() {
+				PanelFadeKind::Basic => RenderPipelineFadeId::Basic,
+				PanelFadeKind::Out { .. } => RenderPipelineFadeId::Out,
 			}),
-			Panel::Slide(state) => RenderPipelineId::Slide(match state.shader() {
-				PanelSlideShader::Basic => RenderPipelineSlideId::Basic,
+			Panel::Slide(state) => RenderPipelineId::Slide(match state.kind() {
+				PanelSlideKind::Basic => RenderPipelineSlideId::Basic,
 			}),
 		};
 
@@ -214,7 +214,7 @@ impl PanelsRenderer {
 					wgpu_renderer,
 					render_pipeline_id,
 					bind_group_layouts,
-					panel.shader(),
+					panel.kind(),
 					self.msaa_samples,
 				)
 				.context("Unable to create render pipeline")?;
@@ -333,16 +333,16 @@ fn create_render_pipeline(
 	wgpu_renderer: &WgpuRenderer,
 	id: RenderPipelineId,
 	bind_group_layouts: &[Option<&wgpu::BindGroupLayout>],
-	shader: PanelShader,
+	kind: PanelKind,
 	msaa_samples: u32,
 ) -> Result<wgpu::RenderPipeline, AppError> {
 	let render_pipeline_name = id.name();
-	let shader_name = shader.name();
+	let shader_name = kind.name();
 	tracing::debug!("Creating render pipeline {render_pipeline_name:?} for shader {shader_name:?}");
 
 	// Parse the shader from the build script
 	let shader_module =
-		serde_json::from_str::<naga::Module>(shader.module_json()).context("Serialized shader module was invalid")?;
+		serde_json::from_str::<naga::Module>(kind.module_json()).context("Serialized shader module was invalid")?;
 
 	// Load the shader
 	let shader_descriptor = wgpu::ShaderModuleDescriptor {
@@ -436,35 +436,30 @@ fn create_msaa_framebuffer(
 		})
 }
 
-/// Shader
+/// Panel kind
 #[derive(PartialEq, Clone, Copy, Debug)]
-pub enum PanelShader {
-	/// None shader
-	None(PanelNoneShader),
-
-	/// Fade shader
-	Fade(PanelFadeShader),
-
-	/// Slide shader
-	Slide(PanelSlideShader),
+pub enum PanelKind {
+	None(PanelNoneKind),
+	Fade(PanelFadeKind),
+	Slide(PanelSlideKind),
 }
 
-impl PanelShader {
-	/// Returns this shader's name
+impl PanelKind {
+	/// Returns this kind's name
 	pub fn name(self) -> &'static str {
 		match self {
-			Self::None(shader) => shader.name(),
-			Self::Fade(shader) => shader.name(),
-			Self::Slide(shader) => shader.name(),
+			Self::None(kind) => kind.name(),
+			Self::Fade(kind) => kind.name(),
+			Self::Slide(kind) => kind.name(),
 		}
 	}
 
-	/// Returns this shader's module as json
+	/// Returns this kind's module as json
 	pub fn module_json(self) -> &'static str {
 		match self {
-			Self::None(shader) => shader.module_json(),
-			Self::Fade(shader) => shader.module_json(),
-			Self::Slide(shader) => shader.module_json(),
+			Self::None(kind) => kind.module_json(),
+			Self::Fade(kind) => kind.module_json(),
+			Self::Slide(kind) => kind.module_json(),
 		}
 	}
 }

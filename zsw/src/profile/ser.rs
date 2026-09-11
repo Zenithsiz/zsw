@@ -64,16 +64,16 @@ pub struct ProfilePanelFadeShader {
 	#[serde(with = "humantime_serde")]
 	pub fade_duration: Duration,
 
-	/// Inner
+	/// Kind
 	#[serde(flatten)]
-	pub inner: ProfilePanelFadeShaderInner,
+	pub kind: ProfilePanelFadeShaderKind,
 }
 
-/// Panel fade shader inner
+/// Panel fade shader kind
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "fade")]
-pub enum ProfilePanelFadeShaderInner {
+pub enum ProfilePanelFadeShaderKind {
 	#[serde(rename = "basic")]
 	Basic,
 
@@ -92,16 +92,16 @@ pub struct ProfilePanelSlideShader {
 
 	pub dir: ProfilePanelSlideDir,
 
-	/// Inner
+	/// Kind
 	#[serde(flatten)]
-	pub inner: ProfilePanelSlideShaderInner,
+	pub kind: ProfilePanelSlideShaderKind,
 }
 
-/// Panel shader slide inner
+/// Panel shader slide kind
 #[derive(Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "slide")]
-pub enum ProfilePanelSlideShaderInner {
+pub enum ProfilePanelSlideShaderKind {
 	#[serde(rename = "basic")]
 	Basic,
 }
