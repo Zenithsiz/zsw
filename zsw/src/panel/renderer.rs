@@ -149,14 +149,9 @@ impl PanelsRenderer {
 		render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
 		render_pass.set_vertex_buffer(0, self.vertices.slice(..));
 
-		let surface_size = euclid::vec2(
-			frame.surface_texture.texture.width(),
-			frame.surface_texture.texture.height(),
-		);
-
 		// Then render all panels simultaneously
 		for panel in panels.get_all() {
-			self.render_panel(wgpu_renderer, surface_size, surface_geometry, &mut render_pass, panel)?;
+			self.render_panel(wgpu_renderer, surface_geometry, &mut render_pass, panel)?;
 		}
 
 		Ok(())
@@ -166,7 +161,6 @@ impl PanelsRenderer {
 	fn render_panel(
 		&mut self,
 		wgpu_renderer: &WgpuRenderer,
-		surface_size: Vector2D<u32>,
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &mut Panel,
@@ -238,7 +232,7 @@ impl PanelsRenderer {
 		render_pass.set_pipeline(render_pipeline);
 
 		// Then render the panel
-		self.render_panel_geometries(wgpu_renderer, surface_size, surface_geometry, render_pass, panel);
+		self.render_panel_geometries(wgpu_renderer, surface_geometry, render_pass, panel);
 
 		Ok(())
 	}
@@ -247,7 +241,6 @@ impl PanelsRenderer {
 	fn render_panel_geometries(
 		&self,
 		wgpu_renderer: &WgpuRenderer,
-		surface_size: Vector2D<u32>,
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 		panel: &mut Panel,
@@ -262,7 +255,6 @@ impl PanelsRenderer {
 			// Render the panel geometry
 			self.render_panel_geometry(
 				wgpu_renderer,
-				surface_size,
 				&mut panel.state,
 				surface_geometry,
 				panel_geometry,
@@ -275,13 +267,12 @@ impl PanelsRenderer {
 	pub fn render_panel_geometry(
 		&self,
 		wgpu_renderer: &WgpuRenderer,
-		surface_size: Vector2D<u32>,
 		state: &mut PanelState,
 		surface_geometry: Rect<i32, u32>,
 		panel_geometry: &mut PanelGeometry,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
-		let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry, surface_size);
+		let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
 		match state {
 			PanelState::None(state) =>
 				self.render_panel_none_geometry(wgpu_renderer, render_pass, panel_geometry, pos_matrix, state),

@@ -36,18 +36,14 @@ pub fn relative_to(mut geometry: Rect<i32, u32>, other: Rect<i32, u32>) -> Rect<
 // Note: This matrix simply goes from a geometry in physical units
 //       onto shader coordinates.
 #[must_use]
-pub fn pos_matrix(
-	geometry: Rect<i32, u32>,
-	surface_geometry: Rect<i32, u32>,
-	surface_size: Vector2D<u32>,
-) -> Transform3D<f32> {
+pub fn pos_matrix(geometry: Rect<i32, u32>, surface_geometry: Rect<i32, u32>) -> Transform3D<f32> {
 	let geometry = self::relative_to(geometry, surface_geometry);
 
-	let x_scale = geometry.size.x as f32 / surface_size.x as f32;
-	let y_scale = geometry.size.y as f32 / surface_size.y as f32;
+	let x_scale = geometry.size.x as f32 / surface_geometry.size.x as f32;
+	let y_scale = geometry.size.y as f32 / surface_geometry.size.y as f32;
 
-	let x_offset = geometry.pos.x as f32 / surface_size.x as f32;
-	let y_offset = geometry.pos.y as f32 / surface_size.y as f32;
+	let x_offset = geometry.pos.x as f32 / surface_geometry.size.x as f32;
+	let y_offset = geometry.pos.y as f32 / surface_geometry.size.y as f32;
 
 	let translation = Transform3D::translation(-1.0 + x_scale + 2.0 * x_offset, 1.0 - y_scale - 2.0 * y_offset, 0.0);
 	translation.pre_scale(x_scale, -y_scale, 1.0)
