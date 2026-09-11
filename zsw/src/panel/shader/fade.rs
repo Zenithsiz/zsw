@@ -85,37 +85,21 @@ impl Shader {
 		self.geometries.iter().any(|geometry| geometry.rect.contains(pos))
 	}
 
-	/// Sets the image progress
-	pub fn set_progress(&mut self, progress: Duration) {
-		self.progress = progress.clamp(self.min_progress(), self.max_progress());
-	}
-
 	/// Returns the normalized image progress
 	#[must_use]
-	pub fn progress_norm(&self) -> f32 {
+	fn progress_norm(&self) -> f32 {
 		// Note: Image progress is linear throughout the full cycle
 		self.progress.div_duration_f32(self.duration)
 	}
 
-	/// Returns the image fade duration
-	pub fn fade_duration(&self) -> Duration {
-		self.fade_duration
-	}
-
-	/// Sets the fade duration
-	pub fn set_fade_duration(&mut self, fade_duration: Duration) {
-		self.fade_duration = fade_duration.min(self.duration / 2);
-		self.set_progress(self.progress);
-	}
-
 	/// Returns the fade duration normalized
-	pub fn fade_duration_norm(&self) -> f32 {
+	fn fade_duration_norm(&self) -> f32 {
 		// Note: Image progress is linear throughout the full cycle
 		self.fade_duration.div_duration_f32(self.duration)
 	}
 
 	/// Returns the min progress for the current image
-	pub fn min_progress(&self) -> Duration {
+	fn min_progress(&self) -> Duration {
 		match self.images.prev.is_some() {
 			// If we have a previous image, we can go until the very beginning
 			true => Duration::ZERO,
@@ -126,7 +110,7 @@ impl Shader {
 	}
 
 	/// Returns the max progress for the current image
-	pub fn max_progress(&self) -> Duration {
+	fn max_progress(&self) -> Duration {
 		match (self.images.cur.is_some(), self.images.next.is_some()) {
 			// If we have a next image, we can go until the full duration
 			(_, true) => self.duration,
@@ -142,12 +126,6 @@ impl Shader {
 	/// Returns the image duration
 	pub fn duration(&self) -> Duration {
 		self.duration
-	}
-
-	/// Sets the duration
-	pub fn set_duration(&mut self, duration: Duration) {
-		self.duration = duration;
-		self.set_fade_duration(self.fade_duration);
 	}
 
 	/// Returns the panel kind
@@ -365,9 +343,7 @@ impl Shader {
 			//       skipping images when you hold it at the max value
 			// TODO: This max needs to be `duration - min_frame_duration` to not skip ahead.
 			let max = self.duration.mul_f32(0.99);
-			let mut progress = self.progress;
-			menu::draw_duration(ui, &mut progress, Duration::ZERO..=max);
-			self.set_progress(progress);
+			menu::draw_duration(ui, &mut self.progress, Duration::ZERO..=max);
 		});
 
 		ui.horizontal(|ui| {
@@ -375,17 +351,12 @@ impl Shader {
 			let min = Duration::ZERO;
 			let max = self.duration / 2;
 
-			let mut fade_duration = self.fade_duration();
-			menu::draw_duration(ui, &mut fade_duration, min..=max);
-			self.set_fade_duration(fade_duration);
+			menu::draw_duration(ui, &mut self.fade_duration, min..=max);
 		});
 
 		ui.horizontal(|ui| {
 			ui.label("Duration");
-
-			let mut duration = self.duration;
-			menu::draw_duration(ui, &mut duration, Duration::ZERO..=Duration::from_secs_f32(180.0));
-			self.set_duration(duration);
+			menu::draw_duration(ui, &mut self.duration, Duration::ZERO..=Duration::from_secs_f32(180.0));
 		});
 
 		ui.horizontal(|ui| {
