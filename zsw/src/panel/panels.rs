@@ -1,13 +1,9 @@
 //! Panels
 
 use {
-	super::{
-		Panel,
-		PanelGeometry,
-		state::{PanelFadeKind, PanelSlideKind, slide::PanelSlideDir},
-	},
+	super::{Panel, state},
 	crate::{
-		panel::state::{PanelFadeState, PanelNoneState, PanelSlideState},
+		panel,
 		playlist::{PlaylistPlayer, Playlists},
 		profile::{
 			Profile,
@@ -61,24 +57,24 @@ impl Panels {
 			let geometries = profile_panel
 				.geometries
 				.iter()
-				.map(|geometry| PanelGeometry::new(geometry.geometry))
+				.map(|geometry| panel::Geometry::new(geometry.geometry))
 				.collect();
 
 			let panel = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) =>
-					Panel::None(PanelNoneState::new(geometries, shader.background_color)),
+					Panel::None(panel::state::none::State::new(geometries, shader.background_color)),
 				ProfilePanelShader::Fade(shader) => {
 					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
 						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
-					let state = PanelFadeState::new(
+					let state = panel::state::fade::State::new(
 						geometries,
 						shader.duration,
 						shader.fade_duration,
 						playlist_player,
 						match shader.kind {
-							ProfilePanelFadeShaderKind::Basic => PanelFadeKind::Basic,
-							ProfilePanelFadeShaderKind::Out { strength } => PanelFadeKind::Out { strength },
+							ProfilePanelFadeShaderKind::Basic => panel::state::fade::Kind::Basic,
+							ProfilePanelFadeShaderKind::Out { strength } => panel::state::fade::Kind::Out { strength },
 						},
 					);
 
@@ -89,16 +85,21 @@ impl Panels {
 						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
 					let dir = match shader.dir {
-						ProfilePanelSlideDir::LeftRight => PanelSlideDir::LeftRight,
-						ProfilePanelSlideDir::RightLeft => PanelSlideDir::RightLeft,
-						ProfilePanelSlideDir::UpDown => PanelSlideDir::UpDown,
-						ProfilePanelSlideDir::DownUp => PanelSlideDir::DownUp,
+						ProfilePanelSlideDir::LeftRight => state::slide::Dir::LeftRight,
+						ProfilePanelSlideDir::RightLeft => state::slide::Dir::RightLeft,
+						ProfilePanelSlideDir::UpDown => state::slide::Dir::UpDown,
+						ProfilePanelSlideDir::DownUp => state::slide::Dir::DownUp,
 					};
 
-					let state =
-						PanelSlideState::new(geometries, shader.duration, playlist_player, dir, match shader.kind {
-							ProfilePanelSlideShaderKind::Basic => PanelSlideKind::Basic,
-						});
+					let state = panel::state::slide::State::new(
+						geometries,
+						shader.duration,
+						playlist_player,
+						dir,
+						match shader.kind {
+							ProfilePanelSlideShaderKind::Basic => panel::state::slide::Kind::Basic,
+						},
+					);
 
 					Panel::Slide(state)
 				},

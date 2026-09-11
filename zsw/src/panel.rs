@@ -5,19 +5,9 @@ mod panels;
 mod renderer;
 pub mod state;
 
-pub use self::{
-	geometry::PanelGeometry,
-	panels::Panels,
-	renderer::PanelsRenderer,
-	state::{PanelFadeKind, PanelNoneKind, PanelSlideKind},
-};
+pub use self::{geometry::Geometry, panels::Panels, renderer::Renderer};
 
-
-use {
-	self::state::{PanelFadeState, PanelNoneState, PanelSlideState},
-	euclid::default::Point2D,
-	zsw_util::Rect,
-};
+use {euclid::default::Point2D, zsw_util::Rect};
 
 /// Panel
 #[derive(Debug)]
@@ -27,13 +17,13 @@ use {
 )]
 pub enum Panel {
 	/// None shader
-	None(PanelNoneState),
+	None(state::none::State),
 
 	/// Fade shader
-	Fade(PanelFadeState),
+	Fade(state::fade::State),
 
 	/// Slide shader
-	Slide(PanelSlideState),
+	Slide(state::slide::State),
 }
 
 impl Panel {
@@ -68,9 +58,9 @@ impl Panel {
 /// Panel kind
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum PanelKind {
-	None(PanelNoneKind),
-	Fade(PanelFadeKind),
-	Slide(PanelSlideKind),
+	None(state::none::Kind),
+	Fade(state::fade::Kind),
+	Slide(state::slide::Kind),
 }
 
 impl PanelKind {

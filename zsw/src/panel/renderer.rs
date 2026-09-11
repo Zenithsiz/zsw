@@ -6,12 +6,8 @@ mod vertex;
 pub use self::vertex::PanelVertex;
 
 use {
-	super::{
-		Panel,
-		PanelKind,
-		Panels,
-		state::{PanelFadeKind, PanelSlideKind, fade::PanelFadeShared, none::PanelNoneShared, slide::PanelSlideShared},
-	},
+	super::{Panel, PanelKind, Panels, state},
+	crate::panel,
 	app_error::Context,
 	euclid::default::Vector2D,
 	std::{
@@ -36,7 +32,7 @@ use {
 //       the matrix sent in the uniform. Their UVs are also determined
 //       via the uniforms.
 #[derive(Debug)]
-pub struct PanelsRenderer {
+pub struct Renderer {
 	/// Msaa frame-buffer
 	msaa_framebuffer: wgpu::TextureView,
 
@@ -54,12 +50,12 @@ pub struct PanelsRenderer {
 	/// Index buffer
 	indices: wgpu::Buffer,
 
-	none_shared:  PanelNoneShared,
-	fade_shared:  PanelFadeShared,
-	slide_shared: PanelSlideShared,
+	none_shared:  state::none::PanelNoneShared,
+	fade_shared:  state::fade::Shared,
+	slide_shared: state::slide::Shared,
 }
 
-impl PanelsRenderer {
+impl Renderer {
 	/// Creates a new renderer for the panels
 	pub fn new(wgpu: &Wgpu, wgpu_renderer: &WgpuRenderer, msaa_samples: u32) -> Result<Self, AppError> {
 		// Create the framebuffer
@@ -76,9 +72,9 @@ impl PanelsRenderer {
 			render_pipelines: HashMap::new(),
 			vertices,
 			indices,
-			none_shared: PanelNoneShared::new(),
-			fade_shared: PanelFadeShared::new(),
-			slide_shared: PanelSlideShared::new(),
+			none_shared: state::none::PanelNoneShared::new(),
+			fade_shared: state::fade::Shared::new(),
+			slide_shared: state::slide::Shared::new(),
 		})
 	}
 
@@ -180,11 +176,11 @@ impl PanelsRenderer {
 		let render_pipeline_id = match panel {
 			Panel::None(_) => RenderPipelineId::None,
 			Panel::Fade(state) => RenderPipelineId::Fade(match state.kind() {
-				PanelFadeKind::Basic => RenderPipelineFadeId::Basic,
-				PanelFadeKind::Out { .. } => RenderPipelineFadeId::Out,
+				panel::state::fade::Kind::Basic => RenderPipelineFadeId::Basic,
+				panel::state::fade::Kind::Out { .. } => RenderPipelineFadeId::Out,
 			}),
 			Panel::Slide(state) => RenderPipelineId::Slide(match state.kind() {
-				PanelSlideKind::Basic => RenderPipelineSlideId::Basic,
+				panel::state::slide::Kind::Basic => RenderPipelineSlideId::Basic,
 			}),
 		};
 

@@ -4,7 +4,7 @@ use {
 	crate::{
 		Zsw,
 		menu::Menu,
-		panel::{Panel, Panels, PanelsRenderer},
+		panel::{self, Panel, Panels},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
 	},
@@ -24,7 +24,7 @@ pub struct SurfaceRenderer {
 
 	wgpu_renderer:   WgpuRenderer,
 	panels:          Panels,
-	panels_renderer: PanelsRenderer,
+	panels_renderer: panel::Renderer,
 	egui:            Egui,
 	menu:            Menu,
 
@@ -46,7 +46,7 @@ impl SurfaceRenderer {
 
 		let msaa_samples = 4;
 		let panels_renderer =
-			PanelsRenderer::new(wgpu, &wgpu_renderer, msaa_samples).context("Unable to create panels renderer")?;
+			panel::Renderer::new(wgpu, &wgpu_renderer, msaa_samples).context("Unable to create panels renderer")?;
 		let egui = Egui::new(wgpu, &wgpu_renderer);
 
 		let mut panels = Panels::new();

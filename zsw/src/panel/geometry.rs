@@ -1,27 +1,27 @@
 //! Panel geometry
 
 use {
-	super::state::{fade::PanelFadeGeometryShared, none::PanelNoneGeometryShared, slide::PanelSlideGeometryShared},
+	super::state,
 	euclid::default::{Transform3D, Vector2D},
 	num_rational::Rational32,
 	zsw_util::Rect,
 };
 
 #[derive(Debug)]
-pub struct PanelGeometry {
+pub struct Geometry {
 	/// Inner geometry
 	pub rect: Rect<i32, u32>,
 
 	/// Shared data
-	pub shared: PanelGeometryShared,
+	pub shared: Shared,
 }
 
-impl PanelGeometry {
+impl Geometry {
 	/// Creates a new panel geometry from it's geometry
 	pub fn new(rect: Rect<i32, u32>) -> Self {
 		Self {
 			rect,
-			shared: PanelGeometryShared::default(),
+			shared: Shared::default(),
 		}
 	}
 }
@@ -29,12 +29,12 @@ impl PanelGeometry {
 /// Panel geometry
 #[derive(Default, Debug)]
 #[derive(zsw_util::GetOrInsert)]
-pub enum PanelGeometryShared {
+pub enum Shared {
 	#[default]
 	Empty,
-	None(PanelNoneGeometryShared),
-	Fade(PanelFadeGeometryShared),
-	Slide(PanelSlideGeometryShared),
+	None(state::none::GeometryShared),
+	Fade(state::fade::GeometryShared),
+	Slide(state::slide::GeometryShared),
 }
 
 /// Returns this geometry's rectangle relative to another geometry

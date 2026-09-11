@@ -2,12 +2,11 @@
 
 pub mod images;
 
-pub use self::images::{PanelFadeImage, PanelFadeImageSlot, PanelFadeImages, PanelFadeImagesShared};
+pub use self::images::{Image, ImageSlot, Images};
 
 use {
-	self::images::PanelFadeImagesGeometryShared,
 	crate::{
-		panel::{PanelGeometry, geometry, renderer::uniform},
+		panel::{self, geometry, renderer::uniform},
 		playlist::PlaylistPlayer,
 	},
 	chrono::TimeDelta,
@@ -18,17 +17,17 @@ use {
 	zsw_wgpu::Wgpu,
 };
 
-/// Panel fade state
+/// State
 #[derive(Debug)]
-pub struct PanelFadeState {
+pub struct State {
 	/// Geometries
-	geometries: Vec<PanelGeometry>,
+	geometries: Vec<panel::Geometry>,
 
 	/// If paused
 	paused: bool,
 
 	/// Kind
-	kind: PanelFadeKind,
+	kind: Kind,
 
 	/// Last update
 	last_update: Instant,
@@ -43,19 +42,19 @@ pub struct PanelFadeState {
 	fade_duration: Duration,
 
 	/// Images
-	images: PanelFadeImages,
+	images: Images,
 
 	/// Playlist player
 	playlist_player: PlaylistPlayer,
 }
 
-impl PanelFadeState {
+impl State {
 	pub fn new(
-		geometries: Vec<PanelGeometry>,
+		geometries: Vec<panel::Geometry>,
 		duration: Duration,
 		fade_duration: Duration,
 		playlist_player: PlaylistPlayer,
-		kind: PanelFadeKind,
+		kind: Kind,
 	) -> Self {
 		Self {
 			geometries,
@@ -65,7 +64,7 @@ impl PanelFadeState {
 			progress: Duration::ZERO,
 			duration,
 			fade_duration,
-			images: PanelFadeImages::new(),
+			images: Images::new(),
 			playlist_player,
 		}
 	}
@@ -151,19 +150,19 @@ impl PanelFadeState {
 	}
 
 	/// Returns the panel kind
-	pub fn kind(&self) -> PanelFadeKind {
+	pub fn kind(&self) -> Kind {
 		self.kind
 	}
 
-	pub fn geometries(&self) -> &[PanelGeometry] {
+	pub fn geometries(&self) -> &[panel::Geometry] {
 		&self.geometries
 	}
 
-	pub fn images(&self) -> &PanelFadeImages {
+	pub fn images(&self) -> &Images {
 		&self.images
 	}
 
-	pub fn images_mut(&mut self) -> &mut PanelFadeImages {
+	pub fn images_mut(&mut self) -> &mut Images {
 		&mut self.images
 	}
 
@@ -276,7 +275,7 @@ impl PanelFadeState {
 
 	pub fn render(
 		&mut self,
-		shared: &PanelFadeShared,
+		shared: &Shared,
 		wgpu: &Arc<Wgpu>,
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
@@ -288,7 +287,7 @@ impl PanelFadeState {
 		let d = 1.0 + 2.0 * f;
 
 		for panel_geometry in &mut self.geometries {
-			let image_uniforms = |image: Option<&PanelFadeImage>, image_slot| -> uniform::fade::Image {
+			let image_uniforms = |image: Option<&Image>, image_slot| -> uniform::fade::Image {
 				let Some(image) = image else {
 					return uniform::fade::Image {
 						image_ratio: uniform::Vec2([1.0, 1.0]),
@@ -298,9 +297,9 @@ impl PanelFadeState {
 				};
 
 				let progress = match image_slot {
-					PanelFadeImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
-					PanelFadeImageSlot::Cur => (p + f) / d,
-					PanelFadeImageSlot::Next => f32::max((p - 1.0 + f) / d, 0.0),
+					ImageSlot::Prev => 1.0 - f32::max((f - p) / d, 0.0),
+					ImageSlot::Cur => (p + f) / d,
+					ImageSlot::Next => f32::max((p - 1.0 + f) / d, 0.0),
 				};
 				let progress = match image.swap_dir {
 					true => 1.0 - progress,
@@ -312,21 +311,21 @@ impl PanelFadeState {
 					cmp::Ordering::Less => {
 						let a = 0.5 + p / (2.0 * f);
 						match image_slot {
-							PanelFadeImageSlot::Prev => 1.0 - a,
-							PanelFadeImageSlot::Cur => a,
-							PanelFadeImageSlot::Next => 0.0,
+							ImageSlot::Prev => 1.0 - a,
+							ImageSlot::Cur => a,
+							ImageSlot::Next => 0.0,
 						}
 					},
 					cmp::Ordering::Equal => match image_slot {
-						PanelFadeImageSlot::Prev | PanelFadeImageSlot::Next => 0.0,
-						PanelFadeImageSlot::Cur => 1.0,
+						ImageSlot::Prev | ImageSlot::Next => 0.0,
+						ImageSlot::Cur => 1.0,
 					},
 					cmp::Ordering::Greater => {
 						let a = (p - (1.0 - f)) / (2.0 * f);
 						match image_slot {
-							PanelFadeImageSlot::Prev => 0.0,
-							PanelFadeImageSlot::Cur => 1.0 - a,
-							PanelFadeImageSlot::Next => a,
+							ImageSlot::Prev => 0.0,
+							ImageSlot::Cur => 1.0 - a,
+							ImageSlot::Next => a,
 						}
 					},
 				};
@@ -344,9 +343,9 @@ impl PanelFadeState {
 			};
 
 			let images = uniform::fade::Images {
-				prev: image_uniforms(self.images.prev.as_ref(), PanelFadeImageSlot::Prev),
-				cur:  image_uniforms(self.images.cur.as_ref(), PanelFadeImageSlot::Cur),
-				next: image_uniforms(self.images.next.as_ref(), PanelFadeImageSlot::Next),
+				prev: image_uniforms(self.images.prev.as_ref(), ImageSlot::Prev),
+				cur:  image_uniforms(self.images.cur.as_ref(), ImageSlot::Cur),
+				next: image_uniforms(self.images.next.as_ref(), ImageSlot::Next),
 			};
 
 			let geometry_uniforms = panel_geometry
@@ -357,12 +356,12 @@ impl PanelFadeState {
 			let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
 			let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 			match self.kind {
-				PanelFadeKind::Basic => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
+				Kind::Basic => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
 					pos_matrix,
 					images,
 					_unused: [0; _],
 				}),
-				PanelFadeKind::Out { strength } => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Out {
+				Kind::Out { strength } => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Out {
 					pos_matrix,
 					images,
 					strength,
@@ -382,37 +381,37 @@ impl PanelFadeState {
 	}
 }
 
-/// Panel fade geometry shared
+/// Geometry shared
 #[derive(Default, Debug)]
-pub struct PanelFadeGeometryShared {
+pub struct GeometryShared {
 	/// Images
-	pub images: PanelFadeImagesGeometryShared,
+	pub images: images::GeometryShared,
 }
 
-/// Panel fade shared
+/// Shared
 #[derive(Debug)]
-pub struct PanelFadeShared {
+pub struct Shared {
 	/// Images
-	pub images: PanelFadeImagesShared,
+	pub images: images::Shared,
 }
 
-impl PanelFadeShared {
+impl Shared {
 	/// Creates the shared
 	pub fn new() -> Self {
 		Self {
-			images: PanelFadeImagesShared::new(),
+			images: images::Shared::new(),
 		}
 	}
 }
 
-/// Panel fade kind
+/// Kind
 #[derive(PartialEq, Clone, Copy, Debug)]
-pub enum PanelFadeKind {
+pub enum Kind {
 	Basic,
 	Out { strength: f32 },
 }
 
-impl PanelFadeKind {
+impl Kind {
 	/// Returns this kind's name
 	pub fn name(self) -> &'static str {
 		match self {

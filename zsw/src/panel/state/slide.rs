@@ -4,7 +4,7 @@
 
 use {
 	crate::{
-		panel::{PanelGeometry, geometry, renderer::uniform},
+		panel::{self, geometry, renderer::uniform},
 		playlist::PlaylistPlayer,
 	},
 	app_error::Context,
@@ -22,21 +22,21 @@ use {
 	zsw_wgpu::Wgpu,
 };
 
-/// Panel slide state
+/// State
 #[derive(Debug)]
-pub struct PanelSlideState {
+pub struct State {
 	/// Geometries
-	geometries: Vec<PanelGeometry>,
+	geometries: Vec<panel::Geometry>,
 
 	/// If paused
 	paused: bool,
 
 	/// Kind
-	kind: PanelSlideKind,
+	kind: Kind,
 
 	/// Direction
 	// TODO: This should be per-geometry
-	dir: PanelSlideDir,
+	dir: Dir,
 
 	/// Progress in the first image
 	progress: Duration,
@@ -48,7 +48,7 @@ pub struct PanelSlideState {
 	last_update: Instant,
 
 	/// Images
-	images: VecDeque<PanelSlideImage>,
+	images: VecDeque<Image>,
 
 	/// Max images
 	// TODO: This isn't actually enforced, maybe
@@ -69,14 +69,14 @@ pub struct PanelSlideState {
 	next_image: Loadable<ImageLoadRes>,
 }
 
-impl PanelSlideState {
+impl State {
 	/// Creates new state
 	pub fn new(
-		geometries: Vec<PanelGeometry>,
+		geometries: Vec<panel::Geometry>,
 		duration: Duration,
 		playlist_player: PlaylistPlayer,
-		dir: PanelSlideDir,
-		kind: PanelSlideKind,
+		dir: Dir,
+		kind: Kind,
 	) -> Self {
 		Self {
 			geometries,
@@ -107,7 +107,7 @@ impl PanelSlideState {
 	}
 
 	/// Returns the panel kind
-	pub fn kind(&self) -> PanelSlideKind {
+	pub fn kind(&self) -> Kind {
 		self.kind
 	}
 
@@ -245,7 +245,7 @@ impl PanelSlideState {
 	/// Renders a panel slide's geometry
 	pub fn render(
 		&mut self,
-		shared: &PanelSlideShared,
+		shared: &Shared,
 		wgpu: &Arc<Wgpu>,
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
@@ -302,10 +302,10 @@ impl PanelSlideState {
 
 				// TODO: This should be baked into the position matrix instead.
 				let offset: Vector2D<f32> = match self.dir {
-					PanelSlideDir::LeftRight => euclid::vec2(offset_abs, 0.0),
-					PanelSlideDir::RightLeft => euclid::vec2(2.0 * (1.0 - ratio) - offset_abs, 0.0),
-					PanelSlideDir::UpDown => euclid::vec2(0.0, offset_abs),
-					PanelSlideDir::DownUp => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
+					Dir::LeftRight => euclid::vec2(offset_abs, 0.0),
+					Dir::RightLeft => euclid::vec2(2.0 * (1.0 - ratio) - offset_abs, 0.0),
+					Dir::UpDown => euclid::vec2(0.0, offset_abs),
+					Dir::DownUp => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
 				};
 
 				let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
@@ -331,21 +331,16 @@ impl PanelSlideState {
 }
 
 
-/// Panel slide geometry shared
+/// Geometry shared
 #[derive(Default, Debug)]
-pub struct PanelSlideGeometryShared {
+pub struct GeometryShared {
 	/// Uniforms
-	pub uniforms: Vec<PanelSlideGeometryUniforms>,
+	pub uniforms: Vec<GeometryUniforms>,
 }
 
-impl PanelSlideGeometryShared {
+impl GeometryShared {
 	/// Returns this geometry's uniforms
-	pub fn uniforms(
-		&mut self,
-		wgpu: &Arc<Wgpu>,
-		shared: &PanelSlideShared,
-		image_idx: usize,
-	) -> &mut PanelSlideGeometryUniforms {
+	pub fn uniforms(&mut self, wgpu: &Arc<Wgpu>, shared: &Shared, image_idx: usize) -> &mut GeometryUniforms {
 		if let Some(uniforms) = self.uniforms.get_mut(image_idx) {
 			return uniforms;
 		}
@@ -357,9 +352,9 @@ impl PanelSlideGeometryShared {
 }
 
 
-/// Panel slide shared
+/// Shared
 #[derive(Debug)]
-pub struct PanelSlideShared {
+pub struct Shared {
 	/// Geometry uniforms bind group layout
 	pub geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 
@@ -367,7 +362,7 @@ pub struct PanelSlideShared {
 	pub image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 }
 
-impl PanelSlideShared {
+impl Shared {
 	/// Creates the shared
 	pub fn new() -> Self {
 		Self {
@@ -388,9 +383,9 @@ impl PanelSlideShared {
 	}
 }
 
-/// Panel slide image
+/// Image
 #[derive(Debug)]
-pub struct PanelSlideImage {
+pub struct Image {
 	/// Texture view
 	pub texture_view: wgpu::TextureView,
 
@@ -401,9 +396,9 @@ pub struct PanelSlideImage {
 	pub _path: Arc<Path>,
 }
 
-impl PanelSlideImage {
+impl Image {
 	/// Gets the bind group, or initializes it, if uninitialized
-	pub fn bind_group(&self, wgpu: &Arc<Wgpu>, sampler: &wgpu::Sampler, shared: &PanelSlideShared) -> &wgpu::BindGroup {
+	pub fn bind_group(&self, wgpu: &Arc<Wgpu>, sampler: &wgpu::Sampler, shared: &Shared) -> &wgpu::BindGroup {
 		self.bind_group.get_or_init(|| {
 			let layout = shared.image_bind_group_layout(wgpu);
 			self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
@@ -413,7 +408,7 @@ impl PanelSlideImage {
 
 /// Panel geometry slide uniforms
 #[derive(Debug)]
-pub struct PanelSlideGeometryUniforms {
+pub struct GeometryUniforms {
 	/// Buffer
 	pub buffer: wgpu::Buffer,
 
@@ -421,16 +416,16 @@ pub struct PanelSlideGeometryUniforms {
 	pub bind_group: wgpu::BindGroup,
 }
 
-/// Panel slide direction
+/// Direction
 #[derive(Clone, Copy, Debug)]
-pub enum PanelSlideDir {
+pub enum Dir {
 	LeftRight,
 	RightLeft,
 	UpDown,
 	DownUp,
 }
 
-impl PanelSlideDir {
+impl Dir {
 	/// Returns if this direction is horizontal.
 	pub fn is_horizontal(self) -> bool {
 		matches!(self, Self::LeftRight | Self::RightLeft)
@@ -443,13 +438,13 @@ impl PanelSlideDir {
 }
 
 
-/// Panel slide kind
+/// Kind
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum PanelSlideKind {
+pub enum Kind {
 	Basic,
 }
 
-impl PanelSlideKind {
+impl Kind {
 	/// Returns this kind's name
 	pub fn name(self) -> &'static str {
 		match self {
@@ -486,7 +481,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Arc<Wgpu>) -> wgpu::BindGro
 }
 
 /// Creates the panel none geometry uniforms
-fn create_geometry_uniforms(wgpu: &Arc<Wgpu>, shared: &PanelSlideShared) -> PanelSlideGeometryUniforms {
+fn create_geometry_uniforms(wgpu: &Arc<Wgpu>, shared: &Shared) -> GeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),
@@ -510,7 +505,7 @@ fn create_geometry_uniforms(wgpu: &Arc<Wgpu>, shared: &PanelSlideShared) -> Pane
 	};
 	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
-	PanelSlideGeometryUniforms { buffer, bind_group }
+	GeometryUniforms { buffer, bind_group }
 }
 
 /// Creates the image sampler
@@ -582,11 +577,11 @@ fn create_bind_group_layout(wgpu: &Arc<Wgpu>) -> wgpu::BindGroupLayout {
 #[derive(Debug)]
 pub struct ImageLoadRes {
 	path:      Arc<Path>,
-	image_res: Result<PanelSlideImage, AppError>,
+	image_res: Result<Image, AppError>,
 }
 
 /// Loads an image
-pub fn load(wgpu: &Wgpu, path: &Arc<Path>, max_image_size: u32) -> Result<PanelSlideImage, AppError> {
+pub fn load(wgpu: &Wgpu, path: &Arc<Path>, max_image_size: u32) -> Result<Image, AppError> {
 	// Load the image
 	tracing::trace!("Loading image {:?}", path);
 	let mut image = image::open(path).context("Unable to open image")?;
@@ -609,7 +604,7 @@ pub fn load(wgpu: &Wgpu, path: &Arc<Path>, max_image_size: u32) -> Result<PanelS
 		.create_texture_from_image(&texture_label, image)
 		.context("Unable to create texture for image")?;
 
-	let image = PanelSlideImage {
+	let image = Image {
 		texture_view,
 		bind_group: OnceLock::new(),
 		_path: path.share(),

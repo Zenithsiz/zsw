@@ -17,14 +17,14 @@ use {
 
 /// Panel fade images shared
 #[derive(Default, Debug)]
-pub struct PanelFadeImagesGeometryShared {
+pub struct GeometryShared {
 	/// Uniforms
-	pub uniforms: Option<PanelFadeImageGeometryUniforms>,
+	pub uniforms: Option<GeometryUniforms>,
 }
 
-impl PanelFadeImagesGeometryShared {
+impl GeometryShared {
 	/// Returns the geometry uniforms
-	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> &mut PanelFadeImageGeometryUniforms {
+	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &Shared) -> &mut GeometryUniforms {
 		self.uniforms
 			.get_or_insert_with(|| self::create_image_geometry_uniforms(wgpu, shared))
 	}
@@ -32,7 +32,7 @@ impl PanelFadeImagesGeometryShared {
 
 /// Panel fade images shared
 #[derive(Debug)]
-pub struct PanelFadeImagesShared {
+pub struct Shared {
 	/// Geometry uniforms bind group layout
 	pub geometry_uniforms_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 
@@ -40,7 +40,7 @@ pub struct PanelFadeImagesShared {
 	pub image_bind_group_layout: OnceLock<wgpu::BindGroupLayout>,
 }
 
-impl PanelFadeImagesShared {
+impl Shared {
 	/// Creates the shared
 	pub fn new() -> Self {
 		Self {
@@ -64,15 +64,15 @@ impl PanelFadeImagesShared {
 
 /// Panel fade images
 #[derive(Debug)]
-pub struct PanelFadeImages {
+pub struct Images {
 	/// Previous image
-	pub prev: Option<PanelFadeImage>,
+	pub prev: Option<Image>,
 
 	/// Current image
-	pub cur: Option<PanelFadeImage>,
+	pub cur: Option<Image>,
 
 	/// Next image
-	pub next: Option<PanelFadeImage>,
+	pub next: Option<Image>,
 
 	/// Image sampler
 	pub image_sampler: OnceLock<wgpu::Sampler>,
@@ -89,7 +89,7 @@ pub struct PanelFadeImages {
 
 /// Panel's fade image
 #[derive(Debug)]
-pub struct PanelFadeImage {
+pub struct Image {
 	/// Texture view
 	pub texture_view: wgpu::TextureView,
 
@@ -100,7 +100,7 @@ pub struct PanelFadeImage {
 	pub path: Arc<Path>,
 }
 
-impl PanelFadeImages {
+impl Images {
 	/// Creates a new panel
 	#[must_use]
 	pub fn new() -> Self {
@@ -157,7 +157,7 @@ impl PanelFadeImages {
 	}
 
 	/// Gets the bind group, or initializes it, if uninitialized
-	pub fn bind_group(&self, wgpu: &Wgpu, sampler: &wgpu::Sampler, shared: &PanelFadeImagesShared) -> &wgpu::BindGroup {
+	pub fn bind_group(&self, wgpu: &Wgpu, sampler: &wgpu::Sampler, shared: &Shared) -> &wgpu::BindGroup {
 		self.bind_group.get_or_init(|| {
 			let [prev, cur, next] = [&self.prev, &self.cur, &self.next].map(|img| match img {
 				Some(img) => &img.texture_view,
@@ -200,9 +200,9 @@ impl PanelFadeImages {
 		let slot = {
 			let playlist_pos = playlist_player.cur_pos();
 			match res.playlist_pos {
-				pos if pos + 1 == playlist_pos => Some(PanelFadeImageSlot::Prev),
-				pos if pos == playlist_pos => Some(PanelFadeImageSlot::Cur),
-				pos if pos == playlist_pos + 1 => Some(PanelFadeImageSlot::Next),
+				pos if pos + 1 == playlist_pos => Some(ImageSlot::Prev),
+				pos if pos == playlist_pos => Some(ImageSlot::Cur),
+				pos if pos == playlist_pos + 1 => Some(ImageSlot::Next),
 				pos => {
 					tracing::warn!(
 						pos,
@@ -216,9 +216,9 @@ impl PanelFadeImages {
 
 		if let Some(slot) = slot {
 			match slot {
-				PanelFadeImageSlot::Prev => self.prev = Some(image),
-				PanelFadeImageSlot::Cur => self.cur = Some(image),
-				PanelFadeImageSlot::Next => self.next = Some(image),
+				ImageSlot::Prev => self.prev = Some(image),
+				ImageSlot::Cur => self.cur = Some(image),
+				ImageSlot::Next => self.next = Some(image),
 			}
 			self.bind_group = OnceLock::new();
 		}
@@ -281,7 +281,7 @@ impl PanelFadeImages {
 
 /// Image slot
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
-pub enum PanelFadeImageSlot {
+pub enum ImageSlot {
 	Prev,
 	Cur,
 	Next,
@@ -291,11 +291,11 @@ pub enum PanelFadeImageSlot {
 pub struct ImageLoadRes {
 	path:         Arc<Path>,
 	playlist_pos: usize,
-	image_res:    Result<PanelFadeImage, AppError>,
+	image_res:    Result<Image, AppError>,
 }
 
 /// Loads an image
-pub fn load(wgpu: &Wgpu, path: &Arc<Path>, max_image_size: u32) -> Result<PanelFadeImage, AppError> {
+pub fn load(wgpu: &Wgpu, path: &Arc<Path>, max_image_size: u32) -> Result<Image, AppError> {
 	// Load the image
 	tracing::trace!("Loading image {:?}", path);
 	let mut image = image::open(path).context("Unable to open image")?;
@@ -318,7 +318,7 @@ pub fn load(wgpu: &Wgpu, path: &Arc<Path>, max_image_size: u32) -> Result<PanelF
 		.create_texture_from_image(&texture_label, image)
 		.context("Unable to create texture for image")?;
 
-	let image = PanelFadeImage {
+	let image = Image {
 		texture_view,
 		swap_dir: rand::random(),
 		path: path.share(),
@@ -413,7 +413,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 
 /// Panel fade geometry image uniforms
 #[derive(Debug)]
-pub struct PanelFadeImageGeometryUniforms {
+pub struct GeometryUniforms {
 	/// Buffer
 	pub buffer: wgpu::Buffer,
 
@@ -422,7 +422,7 @@ pub struct PanelFadeImageGeometryUniforms {
 }
 
 /// Creates the image geometry uniforms
-fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -> PanelFadeImageGeometryUniforms {
+fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &Shared) -> GeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-fade-geometry-uniforms-buffer"),
@@ -447,7 +447,7 @@ fn create_image_geometry_uniforms(wgpu: &Wgpu, shared: &PanelFadeImagesShared) -
 	};
 	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
-	PanelFadeImageGeometryUniforms { buffer, bind_group }
+	GeometryUniforms { buffer, bind_group }
 }
 
 /// Creates the image sampler

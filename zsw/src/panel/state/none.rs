@@ -1,38 +1,38 @@
 //! Panel none state
 
 use {
-	crate::panel::{PanelGeometry, geometry, renderer::uniform},
+	crate::panel::{self, geometry, renderer::uniform},
 	euclid::default::Point2D,
 	std::sync::OnceLock,
 	zsw_util::Rect,
 	zsw_wgpu::Wgpu,
 };
 
-/// Panel none state
+/// State
 #[derive(Debug)]
-pub struct PanelNoneState {
+pub struct State {
 	/// Geometries
-	geometries: Vec<PanelGeometry>,
+	geometries: Vec<panel::Geometry>,
 
 	/// Background color
 	background_color: [f32; 4],
 
 	/// Kind
-	kind: PanelNoneKind,
+	kind: Kind,
 }
 
-impl PanelNoneState {
+impl State {
 	/// Creates new state
-	pub fn new(geometries: Vec<PanelGeometry>, background_color: [f32; 4]) -> Self {
+	pub fn new(geometries: Vec<panel::Geometry>, background_color: [f32; 4]) -> Self {
 		Self {
 			geometries,
 			background_color,
-			kind: PanelNoneKind::Basic,
+			kind: Kind::Basic,
 		}
 	}
 
 	/// Returns the kind of this state
-	pub fn kind(&self) -> PanelNoneKind {
+	pub fn kind(&self) -> Kind {
 		self.kind
 	}
 
@@ -73,14 +73,14 @@ impl PanelNoneState {
 
 /// Panel none geometry shared
 #[derive(Default, Debug)]
-pub struct PanelNoneGeometryShared {
+pub struct GeometryShared {
 	/// Uniforms
-	pub uniforms: Option<PanelNoneGeometryUniforms>,
+	pub uniforms: Option<GeometryUniforms>,
 }
 
-impl PanelNoneGeometryShared {
+impl GeometryShared {
 	/// Returns this geometry's uniforms
-	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelNoneShared) -> &mut PanelNoneGeometryUniforms {
+	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelNoneShared) -> &mut GeometryUniforms {
 		self.uniforms
 			.get_or_insert_with(|| self::create_geometry_uniforms(wgpu, shared))
 	}
@@ -109,7 +109,7 @@ impl PanelNoneShared {
 
 /// Panel geometry none uniforms
 #[derive(Debug)]
-pub struct PanelNoneGeometryUniforms {
+pub struct GeometryUniforms {
 	/// Buffer
 	pub buffer: wgpu::Buffer,
 
@@ -120,11 +120,11 @@ pub struct PanelNoneGeometryUniforms {
 
 /// Panel none kind
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum PanelNoneKind {
+pub enum Kind {
 	Basic,
 }
 
-impl PanelNoneKind {
+impl Kind {
 	/// Returns this kind's name
 	pub fn name(self) -> &'static str {
 		match self {
@@ -161,7 +161,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLay
 }
 
 /// Creates the panel none geometry uniforms
-fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> PanelNoneGeometryUniforms {
+fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> GeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),
@@ -185,5 +185,5 @@ fn create_geometry_uniforms(wgpu: &Wgpu, shared: &PanelNoneShared) -> PanelNoneG
 	};
 	let bind_group = wgpu.device.create_bind_group(&bind_group_descriptor);
 
-	PanelNoneGeometryUniforms { buffer, bind_group }
+	GeometryUniforms { buffer, bind_group }
 }
