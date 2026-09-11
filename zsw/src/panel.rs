@@ -3,7 +3,7 @@
 pub mod geometry;
 mod panels;
 mod renderer;
-pub mod state;
+pub mod shader;
 
 pub use self::{geometry::Geometry, panels::Panels, renderer::Renderer};
 
@@ -16,14 +16,9 @@ use {euclid::default::Point2D, zsw_util::Rect};
 	reason = "This enum is only stored once per panel geometry"
 )]
 pub enum Panel {
-	/// None shader
-	None(state::none::State),
-
-	/// Fade shader
-	Fade(state::fade::State),
-
-	/// Slide shader
-	Slide(state::slide::State),
+	None(shader::none::Shader),
+	Fade(shader::fade::Shader),
+	Slide(shader::slide::Shader),
 }
 
 impl Panel {
@@ -58,9 +53,9 @@ impl Panel {
 /// Panel kind
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum PanelKind {
-	None(state::none::Kind),
-	Fade(state::fade::Kind),
-	Slide(state::slide::Kind),
+	None(shader::none::Kind),
+	Fade(shader::fade::Kind),
+	Slide(shader::slide::Kind),
 }
 
 impl PanelKind {

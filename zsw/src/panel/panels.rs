@@ -1,7 +1,7 @@
 //! Panels
 
 use {
-	super::{Panel, state},
+	super::{Panel, shader},
 	crate::{
 		panel,
 		playlist::{PlaylistPlayer, Playlists},
@@ -62,19 +62,19 @@ impl Panels {
 
 			let panel = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) =>
-					Panel::None(panel::state::none::State::new(geometries, shader.background_color)),
+					Panel::None(panel::shader::none::Shader::new(geometries, shader.background_color)),
 				ProfilePanelShader::Fade(shader) => {
 					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
 						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
-					let state = panel::state::fade::State::new(
+					let state = panel::shader::fade::Shader::new(
 						geometries,
 						shader.duration,
 						shader.fade_duration,
 						playlist_player,
 						match shader.kind {
-							ProfilePanelFadeShaderKind::Basic => panel::state::fade::Kind::Basic,
-							ProfilePanelFadeShaderKind::Out { strength } => panel::state::fade::Kind::Out { strength },
+							ProfilePanelFadeShaderKind::Basic => panel::shader::fade::Kind::Basic,
+							ProfilePanelFadeShaderKind::Out { strength } => panel::shader::fade::Kind::Out { strength },
 						},
 					);
 
@@ -85,19 +85,19 @@ impl Panels {
 						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
 					let dir = match shader.dir {
-						ProfilePanelSlideDir::LeftRight => state::slide::Dir::LeftRight,
-						ProfilePanelSlideDir::RightLeft => state::slide::Dir::RightLeft,
-						ProfilePanelSlideDir::UpDown => state::slide::Dir::UpDown,
-						ProfilePanelSlideDir::DownUp => state::slide::Dir::DownUp,
+						ProfilePanelSlideDir::LeftRight => shader::slide::Dir::LeftRight,
+						ProfilePanelSlideDir::RightLeft => shader::slide::Dir::RightLeft,
+						ProfilePanelSlideDir::UpDown => shader::slide::Dir::UpDown,
+						ProfilePanelSlideDir::DownUp => shader::slide::Dir::DownUp,
 					};
 
-					let state = panel::state::slide::State::new(
+					let state = panel::shader::slide::Shader::new(
 						geometries,
 						shader.duration,
 						playlist_player,
 						dir,
 						match shader.kind {
-							ProfilePanelSlideShaderKind::Basic => panel::state::slide::Kind::Basic,
+							ProfilePanelSlideShaderKind::Basic => panel::shader::slide::Kind::Basic,
 						},
 					);
 

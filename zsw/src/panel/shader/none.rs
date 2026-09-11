@@ -1,4 +1,4 @@
-//! Panel none state
+//! None shader
 
 use {
 	crate::panel::{self, geometry, renderer::uniform},
@@ -8,9 +8,9 @@ use {
 	zsw_wgpu::Wgpu,
 };
 
-/// State
+/// Shader
 #[derive(Debug)]
-pub struct State {
+pub struct Shader {
 	/// Geometries
 	geometries: Vec<panel::Geometry>,
 
@@ -21,8 +21,8 @@ pub struct State {
 	kind: Kind,
 }
 
-impl State {
-	/// Creates new state
+impl Shader {
+	/// Creates a new shader
 	pub fn new(geometries: Vec<panel::Geometry>, background_color: [f32; 4]) -> Self {
 		Self {
 			geometries,
@@ -31,7 +31,7 @@ impl State {
 		}
 	}
 
-	/// Returns the kind of this state
+	/// Returns the kind of this shader
 	pub fn kind(&self) -> Kind {
 		self.kind
 	}

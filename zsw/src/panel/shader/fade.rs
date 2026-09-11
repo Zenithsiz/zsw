@@ -1,4 +1,4 @@
-//! Panel fade state
+//! Fade shader
 
 pub mod images;
 
@@ -17,9 +17,9 @@ use {
 	zsw_wgpu::Wgpu,
 };
 
-/// State
+/// Shader
 #[derive(Debug)]
-pub struct State {
+pub struct Shader {
 	/// Geometries
 	geometries: Vec<panel::Geometry>,
 
@@ -48,7 +48,7 @@ pub struct State {
 	playlist_player: PlaylistPlayer,
 }
 
-impl State {
+impl Shader {
 	pub fn new(
 		geometries: Vec<panel::Geometry>,
 		duration: Duration,
@@ -171,7 +171,7 @@ impl State {
 		self.paused
 	}
 
-	/// Sets the pause state
+	/// Sets this shader as paused
 	pub fn set_paused(&mut self, paused: bool) {
 		self.paused = paused;
 
@@ -183,7 +183,7 @@ impl State {
 		}
 	}
 
-	/// Toggles pause of this state
+	/// Toggles pause of this shader
 	pub fn toggle_paused(&mut self) {
 		self.set_paused(!self.paused);
 	}
@@ -196,7 +196,7 @@ impl State {
 		}
 	}
 
-	/// Steps this panel's state by a certain number of frames (potentially negative).
+	/// Steps this shader by a certain number of frames (potentially negative).
 	pub fn step(&mut self, wgpu: &Arc<Wgpu>, delta: TimeDelta) {
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
@@ -247,7 +247,7 @@ impl State {
 		}
 	}
 
-	/// Updates this panel's state using the current time as a delta
+	/// Updates this shader using the current time as a delta
 	pub fn update(&mut self, wgpu: &Arc<Wgpu>) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.

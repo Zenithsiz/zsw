@@ -1,4 +1,4 @@
-//! Panel slide state
+//! Slide shader
 
 // TODO: Many functions here need to be de-duplicated with `./fade.rs`.
 
@@ -22,9 +22,9 @@ use {
 	zsw_wgpu::Wgpu,
 };
 
-/// State
+/// Shader
 #[derive(Debug)]
-pub struct State {
+pub struct Shader {
 	/// Geometries
 	geometries: Vec<panel::Geometry>,
 
@@ -69,8 +69,8 @@ pub struct State {
 	next_image: Loadable<ImageLoadRes>,
 }
 
-impl State {
-	/// Creates new state
+impl Shader {
+	/// Creates a new shader
 	pub fn new(
 		geometries: Vec<panel::Geometry>,
 		duration: Duration,
@@ -167,7 +167,7 @@ impl State {
 		_ = self.schedule_load_next_image(wgpu);
 	}
 
-	/// Steps this panel's state by a certain number of frames (potentially negative).
+	/// Steps this shader by a certain number of frames (potentially negative).
 	pub fn step(&mut self, wgpu: &Arc<Wgpu>, delta: TimeDelta) {
 		let (delta_abs, delta_is_positive) = self::time_delta_to_duration(delta);
 		let next_progress = match delta_is_positive {
@@ -216,7 +216,7 @@ impl State {
 		}
 	}
 
-	/// Updates this panel's state using the current time as a delta
+	/// Updates this shader using the current time as a delta
 	pub fn update(&mut self, wgpu: &Arc<Wgpu>) {
 		// Note: We always load images, even if we're paused, since the user might be
 		//       moving around manually.

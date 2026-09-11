@@ -6,7 +6,7 @@ mod vertex;
 pub use self::vertex::PanelVertex;
 
 use {
-	super::{Panel, PanelKind, Panels, state},
+	super::{Panel, PanelKind, Panels, shader},
 	crate::panel,
 	app_error::Context,
 	euclid::default::Vector2D,
@@ -50,9 +50,9 @@ pub struct Renderer {
 	/// Index buffer
 	indices: wgpu::Buffer,
 
-	none_shared:  state::none::PanelNoneShared,
-	fade_shared:  state::fade::Shared,
-	slide_shared: state::slide::Shared,
+	none_shared:  shader::none::PanelNoneShared,
+	fade_shared:  shader::fade::Shared,
+	slide_shared: shader::slide::Shared,
 }
 
 impl Renderer {
@@ -72,9 +72,9 @@ impl Renderer {
 			render_pipelines: HashMap::new(),
 			vertices,
 			indices,
-			none_shared: state::none::PanelNoneShared::new(),
-			fade_shared: state::fade::Shared::new(),
-			slide_shared: state::slide::Shared::new(),
+			none_shared: shader::none::PanelNoneShared::new(),
+			fade_shared: shader::fade::Shared::new(),
+			slide_shared: shader::slide::Shared::new(),
 		})
 	}
 
@@ -176,11 +176,11 @@ impl Renderer {
 		let render_pipeline_id = match panel {
 			Panel::None(_) => RenderPipelineId::None,
 			Panel::Fade(state) => RenderPipelineId::Fade(match state.kind() {
-				panel::state::fade::Kind::Basic => RenderPipelineFadeId::Basic,
-				panel::state::fade::Kind::Out { .. } => RenderPipelineFadeId::Out,
+				panel::shader::fade::Kind::Basic => RenderPipelineFadeId::Basic,
+				panel::shader::fade::Kind::Out { .. } => RenderPipelineFadeId::Out,
 			}),
 			Panel::Slide(state) => RenderPipelineId::Slide(match state.kind() {
-				panel::state::slide::Kind::Basic => RenderPipelineSlideId::Basic,
+				panel::shader::slide::Kind::Basic => RenderPipelineSlideId::Basic,
 			}),
 		};
 

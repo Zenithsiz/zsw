@@ -1,7 +1,7 @@
 //! Panel geometry
 
 use {
-	super::state,
+	super::shader,
 	euclid::default::{Transform3D, Vector2D},
 	num_rational::Rational32,
 	zsw_util::Rect,
@@ -32,9 +32,9 @@ impl Geometry {
 pub enum Shared {
 	#[default]
 	Empty,
-	None(state::none::GeometryShared),
-	Fade(state::fade::GeometryShared),
-	Slide(state::slide::GeometryShared),
+	None(shader::none::GeometryShared),
+	Fade(shader::fade::GeometryShared),
+	Slide(shader::slide::GeometryShared),
 }
 
 /// Returns this geometry's rectangle relative to another geometry
