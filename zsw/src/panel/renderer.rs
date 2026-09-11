@@ -186,17 +186,10 @@ impl Renderer {
 		let render_pipeline = match self.render_pipelines.entry(render_pipeline_id) {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => {
-				// TODO: Wrap this into functions that return an array/slice already
 				let bind_group_layouts = match panel {
-					Panel::None(_) => &[Some(self.none_shared.geometry_uniforms_bind_group_layout(wgpu))] as &[_],
-					Panel::Fade(_) => &[
-						Some(self.fade_shared.images.geometry_uniforms_bind_group_layout(wgpu)),
-						Some(self.fade_shared.images.image_bind_group_layout(wgpu)),
-					],
-					Panel::Slide(_) => &[
-						Some(self.slide_shared.geometry_uniforms_bind_group_layout(wgpu)),
-						Some(self.slide_shared.image_bind_group_layout(wgpu)),
-					],
+					Panel::None(shader) => &shader.bind_group_layouts(&self.none_shared, wgpu) as &[_],
+					Panel::Fade(shader) => &shader.bind_group_layouts(&self.fade_shared, wgpu),
+					Panel::Slide(shader) => &shader.bind_group_layouts(&self.slide_shared, wgpu),
 				};
 
 				let render_pipeline = self::create_render_pipeline(

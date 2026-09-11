@@ -69,6 +69,15 @@ impl Shader {
 		}
 	}
 
+	/// Returns the bind group layouts for this shader
+	#[expect(clippy::unused_self, reason = "We want to make sure the user has a shader")]
+	pub fn bind_group_layouts<'a>(&self, shared: &'a Shared, wgpu: &Wgpu) -> [Option<&'a wgpu::BindGroupLayout>; 2] {
+		[
+			Some(shared.images.geometry_uniforms_bind_group_layout(wgpu)),
+			Some(shared.images.image_bind_group_layout(wgpu)),
+		]
+	}
+
 	/// Returns if any geometries in this panel intersects `rect`
 	pub fn any_intersects(&self, rect: Rect<i32, u32>) -> bool {
 		self.geometries.iter().any(|geometry| geometry.rect.intersects(rect))

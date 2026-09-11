@@ -96,6 +96,15 @@ impl Shader {
 		}
 	}
 
+	/// Returns the bind group layouts for this shader
+	#[expect(clippy::unused_self, reason = "We want to make sure the user has a shader")]
+	pub fn bind_group_layouts<'a>(&self, shared: &'a Shared, wgpu: &Wgpu) -> [Option<&'a wgpu::BindGroupLayout>; 2] {
+		[
+			Some(shared.geometry_uniforms_bind_group_layout(wgpu)),
+			Some(shared.image_bind_group_layout(wgpu)),
+		]
+	}
+
 	/// Returns if any geometries in this panel intersects `rect`
 	pub fn any_intersects(&self, rect: Rect<i32, u32>) -> bool {
 		self.geometries.iter().any(|geometry| geometry.rect.intersects(rect))
@@ -369,13 +378,13 @@ impl Shared {
 		}
 	}
 
-	pub fn geometry_uniforms_bind_group_layout(&self, wgpu: &Arc<Wgpu>) -> &wgpu::BindGroupLayout {
+	pub fn geometry_uniforms_bind_group_layout(&self, wgpu: &Wgpu) -> &wgpu::BindGroupLayout {
 		self.geometry_uniforms_bind_group_layout
 			.get_or_init(|| self::create_geometry_uniforms_bind_group_layout(wgpu))
 	}
 
 	/// Gets the image bind group layout, or initializes it, if uninitialized
-	pub fn image_bind_group_layout(&self, wgpu: &Arc<Wgpu>) -> &wgpu::BindGroupLayout {
+	pub fn image_bind_group_layout(&self, wgpu: &Wgpu) -> &wgpu::BindGroupLayout {
 		self.image_bind_group_layout
 			.get_or_init(|| self::create_bind_group_layout(wgpu))
 	}
@@ -396,7 +405,7 @@ struct Image {
 
 impl Image {
 	/// Gets the bind group, or initializes it, if uninitialized
-	fn bind_group(&self, wgpu: &Arc<Wgpu>, sampler: &wgpu::Sampler, shared: &Shared) -> &wgpu::BindGroup {
+	fn bind_group(&self, wgpu: &Wgpu, sampler: &wgpu::Sampler, shared: &Shared) -> &wgpu::BindGroup {
 		self.bind_group.get_or_init(|| {
 			let layout = shared.image_bind_group_layout(wgpu);
 			self::create_image_bind_group(wgpu, layout, &self.texture_view, sampler)
@@ -460,7 +469,7 @@ impl Kind {
 
 
 /// Creates the geometry uniforms bind group layout
-fn create_geometry_uniforms_bind_group_layout(wgpu: &Arc<Wgpu>) -> wgpu::BindGroupLayout {
+fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("zsw-panel-slide-geometry-uniforms-bind-group-layout"),
 		entries: &[wgpu::BindGroupLayoutEntry {
@@ -479,7 +488,7 @@ fn create_geometry_uniforms_bind_group_layout(wgpu: &Arc<Wgpu>) -> wgpu::BindGro
 }
 
 /// Creates the panel none geometry uniforms
-fn create_geometry_uniforms(wgpu: &Arc<Wgpu>, shared: &Shared) -> GeometryUniforms {
+fn create_geometry_uniforms(wgpu: &Wgpu, shared: &Shared) -> GeometryUniforms {
 	// Create the uniforms
 	let buffer_descriptor = wgpu::BufferDescriptor {
 		label:              Some("zsw-panel-none-geometry-uniforms-buffer"),
@@ -507,7 +516,7 @@ fn create_geometry_uniforms(wgpu: &Arc<Wgpu>, shared: &Shared) -> GeometryUnifor
 }
 
 /// Creates the image sampler
-fn create_image_sampler(wgpu: &Arc<Wgpu>) -> wgpu::Sampler {
+fn create_image_sampler(wgpu: &Wgpu) -> wgpu::Sampler {
 	let descriptor = wgpu::SamplerDescriptor {
 		label: Some("zsw-panel-slide-image-sampler"),
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -523,7 +532,7 @@ fn create_image_sampler(wgpu: &Arc<Wgpu>) -> wgpu::Sampler {
 
 /// Creates the image bind group
 fn create_image_bind_group(
-	wgpu: &Arc<Wgpu>,
+	wgpu: &Wgpu,
 	bind_group_layout: &wgpu::BindGroupLayout,
 	view: &wgpu::TextureView,
 	sampler: &wgpu::Sampler,
@@ -546,7 +555,7 @@ fn create_image_bind_group(
 }
 
 /// Creates the slide image bind group layout
-fn create_bind_group_layout(wgpu: &Arc<Wgpu>) -> wgpu::BindGroupLayout {
+fn create_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {
 	let descriptor = wgpu::BindGroupLayoutDescriptor {
 		label:   Some("zsw-panel-slide-image-bind-group-layout"),
 		entries: &[

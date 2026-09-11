@@ -31,6 +31,12 @@ impl Shader {
 		}
 	}
 
+	/// Returns the bind group layouts for this shader
+	#[expect(clippy::unused_self, reason = "We want to make sure the user has a shader")]
+	pub fn bind_group_layouts<'a>(&self, shared: &'a Shared, wgpu: &Wgpu) -> [Option<&'a wgpu::BindGroupLayout>; 1] {
+		[Some(shared.geometry_uniforms_bind_group_layout(wgpu))]
+	}
+
 	/// Returns the kind of this shader
 	pub fn kind(&self) -> Kind {
 		self.kind
