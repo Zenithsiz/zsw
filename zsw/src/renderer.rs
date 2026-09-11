@@ -4,7 +4,7 @@ use {
 	crate::{
 		Zsw,
 		menu::Menu,
-		panel::{PanelState, Panels, PanelsRenderer},
+		panel::{Panel, Panels, PanelsRenderer},
 		playlist::Playlists,
 		profile::{ProfileName, Profiles},
 	},
@@ -180,10 +180,10 @@ impl SurfaceRenderer {
 				// Pause any double-clicked panels
 				if ctx.input(|input| input.pointer.button_double_clicked(egui::PointerButton::Primary)) {
 					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-					match &mut panel.state {
-						PanelState::None(_) => (),
-						PanelState::Fade(state) => state.toggle_paused(),
-						PanelState::Slide(_) => (),
+					match panel {
+						Panel::None(_) => (),
+						Panel::Fade(state) => state.toggle_paused(),
+						Panel::Slide(_) => (),
 					}
 				}
 
@@ -193,19 +193,19 @@ impl SurfaceRenderer {
 						input.pointer.button_clicked(egui::PointerButton::Middle)
 				}) {
 					#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-					match &mut panel.state {
-						PanelState::None(_) => (),
-						PanelState::Fade(state) => state.skip(wgpu),
-						PanelState::Slide(_) => (),
+					match panel {
+						Panel::None(_) => (),
+						Panel::Fade(state) => state.skip(wgpu),
+						Panel::Slide(_) => (),
 					}
 				}
 
 				// Scroll panels
 				let scroll_delta = ctx.input(|input| input.smooth_scroll_delta.y);
 				if scroll_delta != 0.0 {
-					let time_delta = match &panel.state {
-						PanelState::None(_) => TimeDelta::zero(),
-						PanelState::Fade(state) => {
+					let time_delta = match panel {
+						Panel::None(_) => TimeDelta::zero(),
+						Panel::Fade(state) => {
 							// TODO: Make this "speed" configurable
 							// TODO: Perform the conversion better without going through nanos
 							let speed = 1.0 / 1000.0;
@@ -217,7 +217,7 @@ impl SurfaceRenderer {
 								false => time_delta_abs,
 							}
 						},
-						PanelState::Slide(state) => {
+						Panel::Slide(state) => {
 							// TODO: Make this "speed" configurable
 							// TODO: Perform the conversion better without going through nanos
 							let speed = 1.0 / 1000.0;
@@ -231,10 +231,10 @@ impl SurfaceRenderer {
 						},
 					};
 
-					match &mut panel.state {
-						PanelState::None(_) => (),
-						PanelState::Fade(state) => state.step(wgpu, time_delta),
-						PanelState::Slide(state) => state.step(wgpu, time_delta),
+					match panel {
+						Panel::None(_) => (),
+						Panel::Fade(state) => state.step(wgpu, time_delta),
+						Panel::Slide(state) => state.step(wgpu, time_delta),
 					}
 				}
 			}

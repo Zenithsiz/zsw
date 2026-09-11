@@ -8,7 +8,6 @@ pub use self::vertex::PanelVertex;
 use {
 	super::{
 		Panel,
-		PanelState,
 		Panels,
 		state::{fade::PanelFadeShared, none::PanelNoneShared, slide::PanelSlideShared},
 	},
@@ -160,30 +159,30 @@ impl PanelsRenderer {
 		panel: &mut Panel,
 	) -> Result<(), app_error::AppError> {
 		// Update the panel before drawing it
-		match &mut panel.state {
-			PanelState::None(_) => (),
-			PanelState::Fade(state) => state.update(wgpu),
-			PanelState::Slide(state) => state.update(wgpu),
+		match panel {
+			Panel::None(_) => (),
+			Panel::Fade(state) => state.update(wgpu),
+			Panel::Slide(state) => state.update(wgpu),
 		}
 
 		// If the panel images are empty, there's no sense in rendering it either
 		#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-		let are_images_empty = match &panel.state {
-			PanelState::None(_) => false,
-			PanelState::Fade(state) => state.images().is_empty(),
-			PanelState::Slide(_) => false,
+		let are_images_empty = match panel {
+			Panel::None(_) => false,
+			Panel::Fade(state) => state.images().is_empty(),
+			Panel::Slide(_) => false,
 		};
 		if are_images_empty {
 			return Ok(());
 		}
 
-		let render_pipeline_id = match &panel.state {
-			PanelState::None(_) => RenderPipelineId::None,
-			PanelState::Fade(state) => RenderPipelineId::Fade(match state.shader() {
+		let render_pipeline_id = match panel {
+			Panel::None(_) => RenderPipelineId::None,
+			Panel::Fade(state) => RenderPipelineId::Fade(match state.shader() {
 				PanelFadeShader::Basic => RenderPipelineFadeId::Basic,
 				PanelFadeShader::Out { .. } => RenderPipelineFadeId::Out,
 			}),
-			PanelState::Slide(state) => RenderPipelineId::Slide(match state.shader() {
+			Panel::Slide(state) => RenderPipelineId::Slide(match state.shader() {
 				PanelSlideShader::Basic => RenderPipelineSlideId::Basic,
 			}),
 		};
@@ -191,14 +190,13 @@ impl PanelsRenderer {
 		let render_pipeline = match self.render_pipelines.entry(render_pipeline_id) {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => {
-				let bind_group_layouts = match panel.state {
-					PanelState::None(_) =>
-						&[Some(self.none_shared.geometry_uniforms_bind_group_layout(wgpu))] as &[_],
-					PanelState::Fade(_) => &[
+				let bind_group_layouts = match panel {
+					Panel::None(_) => &[Some(self.none_shared.geometry_uniforms_bind_group_layout(wgpu))] as &[_],
+					Panel::Fade(_) => &[
 						Some(self.fade_shared.images.geometry_uniforms_bind_group_layout(wgpu)),
 						Some(self.fade_shared.images.image_bind_group_layout(wgpu)),
 					],
-					PanelState::Slide(_) => &[
+					Panel::Slide(_) => &[
 						Some(self.slide_shared.geometry_uniforms_bind_group_layout(wgpu)),
 						Some(self.slide_shared.image_bind_group_layout(wgpu)),
 					],
@@ -209,7 +207,7 @@ impl PanelsRenderer {
 					wgpu_renderer,
 					render_pipeline_id,
 					bind_group_layouts,
-					panel.state.shader(),
+					panel.shader(),
 					self.msaa_samples,
 				)
 				.context("Unable to create render pipeline")?;
@@ -222,7 +220,7 @@ impl PanelsRenderer {
 		render_pass.set_pipeline(render_pipeline);
 
 		// Then render the panel
-		self.render_panel_geometries(wgpu, surface_geometry, render_pass, &mut panel.state);
+		self.render_panel_geometries(wgpu, surface_geometry, render_pass, panel);
 
 		Ok(())
 	}
@@ -233,12 +231,12 @@ impl PanelsRenderer {
 		wgpu: &Arc<Wgpu>,
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
-		state: &mut PanelState,
+		panel: &mut Panel,
 	) {
-		match state {
-			PanelState::None(state) => state.render(&self.none_shared, wgpu, surface_geometry, render_pass),
-			PanelState::Fade(state) => state.render(&self.fade_shared, wgpu, surface_geometry, render_pass),
-			PanelState::Slide(state) => state.render(&self.slide_shared, wgpu, surface_geometry, render_pass),
+		match panel {
+			Panel::None(state) => state.render(&self.none_shared, wgpu, surface_geometry, render_pass),
+			Panel::Fade(state) => state.render(&self.fade_shared, wgpu, surface_geometry, render_pass),
+			Panel::Slide(state) => state.render(&self.slide_shared, wgpu, surface_geometry, render_pass),
 		}
 	}
 }

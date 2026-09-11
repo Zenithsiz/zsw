@@ -2,7 +2,7 @@
 
 use {
 	crate::panel::{
-		PanelState,
+		Panel,
 		Panels,
 		state::{PanelFadeState, fade::PanelFadeImage},
 	},
@@ -37,10 +37,10 @@ fn draw_panels_editor(ui: &mut egui::Ui, wgpu: &Arc<Wgpu>, panels: &mut Panels, 
 			.id_salt(ptr::from_ref(panel))
 			.show(&mut *ui, |ui| {
 				#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-				match &mut panel.state {
-					PanelState::None(_) => (),
-					PanelState::Fade(state) => self::draw_fade_panel_editor(ui, wgpu, surface_geometry, state),
-					PanelState::Slide(_) => (),
+				match panel {
+					Panel::None(_) => (),
+					Panel::Fade(state) => self::draw_fade_panel_editor(ui, wgpu, surface_geometry, state),
+					Panel::Slide(_) => (),
 				}
 			});
 	}

@@ -6,7 +6,6 @@ use {
 		panel::{
 			PanelFadeShader,
 			PanelSlideShader,
-			PanelState,
 			state::{PanelFadeState, PanelNoneState, PanelSlideState},
 		},
 		playlist::{PlaylistPlayer, Playlists},
@@ -65,9 +64,9 @@ impl Panels {
 				.map(|geometry| PanelGeometry::new(geometry.geometry))
 				.collect();
 
-			let state = match &profile_panel.shader {
+			let panel = match &profile_panel.shader {
 				ProfilePanelShader::None(shader) =>
-					PanelState::None(PanelNoneState::new(geometries, shader.background_color)),
+					Panel::None(PanelNoneState::new(geometries, shader.background_color)),
 				ProfilePanelShader::Fade(shader) => {
 					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
 						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
@@ -83,7 +82,7 @@ impl Panels {
 						},
 					);
 
-					PanelState::Fade(state)
+					Panel::Fade(state)
 				},
 				ProfilePanelShader::Slide(shader) => {
 					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
@@ -101,11 +100,11 @@ impl Panels {
 							ProfilePanelSlideShaderInner::Basic => PanelSlideShader::Basic,
 						});
 
-					PanelState::Slide(state)
+					Panel::Slide(state)
 				},
 			};
 
-			self.panels.push(Panel { state });
+			self.panels.push(panel);
 		}
 
 		Ok(())
