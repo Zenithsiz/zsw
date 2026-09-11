@@ -12,15 +12,15 @@ use {
 	std::{path::Path, sync::Arc},
 	strum::IntoEnumIterator,
 	zsw_util::{AppError, Rect},
-	zsw_wayland::WaylandData,
+	zsw_wayland::{WaylandData, data::SurfaceId},
 	zsw_wgpu::Wgpu,
 };
 
 /// Menu
 #[derive(Debug)]
 pub struct Menu {
-	/// If open
-	open: bool,
+	/// Surface we're open on
+	open_at: Option<SurfaceId>,
 
 	/// Current tab
 	cur_tab: Tab,
@@ -30,7 +30,7 @@ impl Menu {
 	/// Creates the menu
 	pub fn new() -> Self {
 		Self {
-			open:    false,
+			open_at: None,
 			cur_tab: Tab::Panels,
 		}
 	}
@@ -40,6 +40,7 @@ impl Menu {
 	pub fn draw(
 		&mut self,
 		ctx: &egui::Context,
+		surface_id: &SurfaceId,
 		wayland_data: &mut WaylandData<Zsw>,
 		wgpu: &Arc<Wgpu>,
 		playlists: &Playlists,
@@ -55,10 +56,15 @@ impl Menu {
 			let Some(pointer_pos) = ctx.input(|input| input.pointer.latest_pos())
 		{
 			egui_window = egui_window.fixed_pos(pointer_pos);
-			self.open = true;
+			self.open_at = Some(surface_id.clone());
 		}
 
-		egui_window.open(&mut self.open).show(ctx, |ui| {
+		let mut is_open = match &self.open_at {
+			Some(open_surface_id) if open_surface_id == surface_id => true,
+			Some(_) => return,
+			None => false,
+		};
+		egui_window.open(&mut is_open).show(ctx, |ui| {
 			ui.horizontal(|ui| {
 				for tab in Tab::iter() {
 					ui.selectable_value(&mut self.cur_tab, tab, tab.to_string());
@@ -72,6 +78,10 @@ impl Menu {
 				Tab::Settings => self::draw_settings_tab(ui, wayland_data),
 			}
 		});
+
+		if !is_open {
+			self.open_at = None;
+		}
 	}
 }
 

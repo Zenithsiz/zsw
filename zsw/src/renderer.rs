@@ -15,7 +15,7 @@ use {
 	std::sync::Arc,
 	zsw_egui::Egui,
 	zsw_util::{AppError, Rect},
-	zsw_wayland::WaylandData,
+	zsw_wayland::{WaylandData, data::SurfaceId},
 	zsw_wgpu::{FrameRender, RenderedFrame, Wgpu, WgpuRenderer},
 };
 
@@ -26,7 +26,6 @@ pub struct SurfaceRenderer {
 	wgpu_renderer:   WgpuRenderer,
 	panels_renderer: panel::Renderer,
 	egui:            Egui,
-	menu:            Menu,
 
 	queued_resize: Option<Vector2D<u32>>,
 }
@@ -51,7 +50,6 @@ impl SurfaceRenderer {
 			wgpu_renderer,
 			panels_renderer,
 			egui,
-			menu: Menu::new(),
 			queued_resize: None,
 		})
 	}
@@ -84,10 +82,12 @@ impl SurfaceRenderer {
 	pub fn render(
 		&mut self,
 		wgpu: &Arc<Wgpu>,
+		surface_id: &SurfaceId,
 		wayland_data: &mut WaylandData<Zsw>,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		panels: &mut Panels,
+		menu: &mut Menu,
 		egui_input: egui::RawInput,
 		frame: &mut FrameRender,
 		delta: Duration,
@@ -98,11 +98,13 @@ impl SurfaceRenderer {
 
 		let egui_output = self.render_egui(
 			wgpu,
+			surface_id,
 			wayland_data,
 			self.surface_geometry,
 			playlists,
 			profiles,
 			panels,
+			menu,
 			egui_input,
 			frame,
 		);
@@ -131,18 +133,28 @@ impl SurfaceRenderer {
 	fn render_egui(
 		&mut self,
 		wgpu: &Arc<Wgpu>,
+		surface_id: &SurfaceId,
 		wayland_data: &mut WaylandData<Zsw>,
 		surface_geometry: Rect<i32, u32>,
 		playlists: &Playlists,
 		profiles: &Profiles,
 		panels: &mut Panels,
+		menu: &mut Menu,
 		egui_input: egui::RawInput,
 		frame: &mut FrameRender,
 	) -> egui::PlatformOutput {
 		let output = self.egui.paint(egui_input, |ctx| {
 			// Draw the menu
-			self.menu
-				.draw(ctx, wayland_data, wgpu, playlists, profiles, panels, surface_geometry);
+			menu.draw(
+				ctx,
+				surface_id,
+				wayland_data,
+				wgpu,
+				playlists,
+				profiles,
+				panels,
+				surface_geometry,
+			);
 
 			// Then go through all panels checking for interactions with their geometries
 			// TODO: Should this be done here and not somewhere else?

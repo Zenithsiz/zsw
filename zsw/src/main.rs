@@ -27,6 +27,7 @@ use {
 		args::Args,
 		config::Config,
 		dirs::Dirs,
+		menu::Menu,
 		panel::Panels,
 		playlist::Playlists,
 		profile::{Profile, Profiles},
@@ -108,6 +109,7 @@ fn run() -> Result<(), AppError> {
 		.context("Unable to set profile")?;
 
 	let wgpu = Wgpu::new().block_on().context("Unable to create wgpu")?;
+	let menu = Menu::new();
 	let zsw = Zsw {
 		wgpu: Arc::new(wgpu),
 
@@ -115,6 +117,8 @@ fn run() -> Result<(), AppError> {
 		profiles,
 
 		panels,
+
+		menu,
 
 		surfaces: HashMap::new(),
 	};
@@ -174,10 +178,12 @@ fn run() -> Result<(), AppError> {
 		let egui_output = renderer
 			.render(
 				&wayland_state.app.wgpu,
+				&surface_id,
 				&mut wayland_state.data,
 				&wayland_state.app.playlists,
 				&wayland_state.app.profiles,
 				&mut wayland_state.app.panels,
+				&mut wayland_state.app.menu,
 				egui_input,
 				&mut frame,
 				frame_delta,
@@ -226,6 +232,8 @@ struct Zsw {
 	profiles:  Profiles,
 
 	panels: Panels,
+
+	menu: Menu,
 
 	surfaces: HashMap<SurfaceId, ZswSurface>,
 }
