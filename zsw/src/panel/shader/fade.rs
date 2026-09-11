@@ -159,19 +159,9 @@ impl Shader {
 		&self.images
 	}
 
-	/// Returns if paused
-	pub fn is_paused(&self) -> bool {
-		self.paused
-	}
-
-	/// Sets this shader as paused
-	pub fn set_paused(&mut self, paused: bool) {
-		self.paused = paused;
-	}
-
 	/// Toggles pause of this shader
 	pub fn toggle_paused(&mut self) {
-		self.set_paused(!self.paused);
+		self.paused.toggle();
 	}
 
 	/// Skips to the next image.
@@ -353,12 +343,7 @@ impl Shader {
 
 	#[expect(unused_results, reason = "egui")]
 	pub fn draw_editor(&mut self, ui: &mut egui::Ui, wgpu: &Arc<Wgpu>, surface_geometry: Rect<i32, u32>) {
-		{
-			let mut is_paused = self.is_paused();
-			ui.checkbox(&mut is_paused, "Paused");
-			self.set_paused(is_paused);
-		}
-
+		ui.checkbox(&mut self.paused, "Paused");
 		ui.collapsing("Geometries", |ui| {
 			for (geometry_idx, geometry) in self.geometries.iter().enumerate() {
 				ui.horizontal(|ui| {
