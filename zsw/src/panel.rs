@@ -8,8 +8,10 @@ pub mod state;
 pub use self::{
 	geometry::PanelGeometry,
 	panels::Panels,
-	renderer::{PanelKind, PanelsRenderer},
+	renderer::PanelsRenderer,
+	state::{PanelFadeKind, PanelNoneKind, PanelSlideKind},
 };
+
 
 use {
 	self::state::{PanelFadeState, PanelNoneState, PanelSlideState},
@@ -59,6 +61,34 @@ impl Panel {
 			Self::None(state) => state.any_contain(pos),
 			Self::Fade(state) => state.any_contain(pos),
 			Self::Slide(state) => state.any_contain(pos),
+		}
+	}
+}
+
+/// Panel kind
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum PanelKind {
+	None(PanelNoneKind),
+	Fade(PanelFadeKind),
+	Slide(PanelSlideKind),
+}
+
+impl PanelKind {
+	/// Returns this kind's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::None(kind) => kind.name(),
+			Self::Fade(kind) => kind.name(),
+			Self::Slide(kind) => kind.name(),
+		}
+	}
+
+	/// Returns this kind's module as json
+	pub fn module_json(self) -> &'static str {
+		match self {
+			Self::None(kind) => kind.module_json(),
+			Self::Fade(kind) => kind.module_json(),
+			Self::Slide(kind) => kind.module_json(),
 		}
 	}
 }

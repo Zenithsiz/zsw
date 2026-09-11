@@ -8,15 +8,9 @@ pub use self::vertex::PanelVertex;
 use {
 	super::{
 		Panel,
+		PanelKind,
 		Panels,
-		state::{
-			PanelFadeKind,
-			PanelNoneKind,
-			PanelSlideKind,
-			fade::PanelFadeShared,
-			none::PanelNoneShared,
-			slide::PanelSlideShared,
-		},
+		state::{PanelFadeKind, PanelSlideKind, fade::PanelFadeShared, none::PanelNoneShared, slide::PanelSlideShared},
 	},
 	app_error::Context,
 	euclid::default::Vector2D,
@@ -434,32 +428,4 @@ fn create_msaa_framebuffer(
 			label: Some("zsw-panel-framebuffer-msaa-view"),
 			..Default::default()
 		})
-}
-
-/// Panel kind
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub enum PanelKind {
-	None(PanelNoneKind),
-	Fade(PanelFadeKind),
-	Slide(PanelSlideKind),
-}
-
-impl PanelKind {
-	/// Returns this kind's name
-	pub fn name(self) -> &'static str {
-		match self {
-			Self::None(kind) => kind.name(),
-			Self::Fade(kind) => kind.name(),
-			Self::Slide(kind) => kind.name(),
-		}
-	}
-
-	/// Returns this kind's module as json
-	pub fn module_json(self) -> &'static str {
-		match self {
-			Self::None(kind) => kind.module_json(),
-			Self::Fade(kind) => kind.module_json(),
-			Self::Slide(kind) => kind.module_json(),
-		}
-	}
 }
