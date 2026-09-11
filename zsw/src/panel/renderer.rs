@@ -297,10 +297,12 @@ impl PanelsRenderer {
 			.none_or_insert_default()
 			.uniforms(wgpu_renderer, &self.none_shared);
 
-		Self::write_uniforms(wgpu_renderer, &geometry_uniforms.buffer, uniform::None {
-			pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
-			background_color: uniform::Vec4(state.background_color),
-		});
+		wgpu_renderer
+			.shared
+			.write_buffer(&geometry_uniforms.buffer, &uniform::None {
+				pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
+				background_color: uniform::Vec4(state.background_color),
+			});
 
 		// Bind the geometry uniforms
 		render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
@@ -391,18 +393,22 @@ impl PanelsRenderer {
 		let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 		match state.shader() {
 			PanelFadeShader::Basic =>
-				Self::write_uniforms(wgpu_renderer, &geometry_uniforms.buffer, uniform::fade::Basic {
-					pos_matrix,
-					images,
-					_unused: [0; _],
-				}),
+				wgpu_renderer
+					.shared
+					.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
+						pos_matrix,
+						images,
+						_unused: [0; _],
+					}),
 			PanelFadeShader::Out { strength } =>
-				Self::write_uniforms(wgpu_renderer, &geometry_uniforms.buffer, uniform::fade::Out {
-					pos_matrix,
-					images,
-					strength,
-					_unused: [0; _],
-				}),
+				wgpu_renderer
+					.shared
+					.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Out {
+						pos_matrix,
+						images,
+						strength,
+						_unused: [0; _],
+					}),
 		}
 
 		// Bind the geometry uniforms
@@ -485,11 +491,13 @@ impl PanelsRenderer {
 				PanelSlideDir::DownUp => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
 			};
 
-			Self::write_uniforms(wgpu_renderer, &geometry_uniforms.buffer, uniform::Slide {
-				pos_matrix:  uniform::Matrix4x4(pos_matrix.to_arrays()),
-				image_ratio: uniform::Vec2(image_ratio.into()),
-				offset:      uniform::Vec2(offset.to_array()),
-			});
+			wgpu_renderer
+				.shared
+				.write_buffer(&geometry_uniforms.buffer, &uniform::Slide {
+					pos_matrix:  uniform::Matrix4x4(pos_matrix.to_arrays()),
+					image_ratio: uniform::Vec2(image_ratio.into()),
+					offset:      uniform::Vec2(offset.to_array()),
+				});
 
 			cur_global_offset += ratio * 2.0;
 
@@ -502,17 +510,6 @@ impl PanelsRenderer {
 		if missing_images {
 			state.load_next(wgpu_renderer);
 		}
-	}
-
-	/// Writes `uniforms` into `buffer`.
-	fn write_uniforms<T>(wgpu_renderer: &WgpuRenderer, buffer: &wgpu::Buffer, uniforms: T)
-	where
-		T: bytemuck::NoUninit,
-	{
-		wgpu_renderer
-			.shared
-			.queue
-			.write_buffer(buffer, 0, bytemuck::bytes_of(&uniforms));
 	}
 }
 

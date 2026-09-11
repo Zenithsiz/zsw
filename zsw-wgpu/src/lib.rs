@@ -94,6 +94,14 @@ impl WgpuShared {
 
 		Ok((texture, texture_view))
 	}
+
+	/// Writes `value` into `buffer`.
+	pub fn write_buffer<T>(&self, buffer: &wgpu::Buffer, value: &T)
+	where
+		T: bytemuck::NoUninit,
+	{
+		self.queue.write_buffer(buffer, 0, bytemuck::bytes_of(value));
+	}
 }
 
 /// Wgpu renderer

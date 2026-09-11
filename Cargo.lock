@@ -3823,6 +3823,7 @@ name = "zsw-wgpu"
 version = "0.1.0"
 dependencies = [
  "app-error",
+ "bytemuck",
  "euclid",
  "image",
  "tracing",
