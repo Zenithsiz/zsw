@@ -251,8 +251,8 @@ impl Shader {
 		let img_offset = self.progress.div_duration_floor(self.duration) as usize;
 
 		// Note: We iterate like this because we need `&mut self` later.
-		for panel_geometry_idx in 0..self.geometries.len() {
-			let panel_geometry = &mut self.geometries[panel_geometry_idx];
+		for geometry_idx in 0..self.geometries.len() {
+			let geometry = &mut self.geometries[geometry_idx];
 			let mut missing_images = true;
 			let mut cur_global_offset = 0.0;
 
@@ -261,9 +261,9 @@ impl Shader {
 				Some(image) => {
 					let image_size = image.texture_view.texture().size();
 					let image_size = Vector2D::new(image_size.width, image_size.height);
-					let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
+					let image_ratio = geometry::image_ratio(geometry.rect, image_size);
 
-					let ratio = match panel_geometry.dir.is_horizontal() {
+					let ratio = match geometry.dir.is_horizontal() {
 						true => image_ratio.y / image_ratio.x,
 						false => image_ratio.x / image_ratio.y,
 					};
@@ -278,7 +278,7 @@ impl Shader {
 				// Calculate the position matrix for the panel
 				let image_size = image.texture_view.texture().size();
 				let image_size = Vector2D::new(image_size.width, image_size.height);
-				let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
+				let image_ratio = geometry::image_ratio(geometry.rect, image_size);
 
 				let offset_abs = cur_global_offset - local_offset;
 				if offset_abs > 2.0 {
@@ -287,31 +287,31 @@ impl Shader {
 				}
 
 				// Bind the geometry uniforms
-				let geometry_uniforms = match panel_geometry.uniforms.get_mut(image_idx) {
+				let geometry_uniforms = match geometry.uniforms.get_mut(image_idx) {
 					Some(uniforms) => uniforms,
 					None => {
-						panel_geometry
+						geometry
 							.uniforms
 							.resize_with(image_idx + 1, || self::create_geometry_uniforms(wgpu, shared));
-						&mut panel_geometry.uniforms[image_idx]
+						&mut geometry.uniforms[image_idx]
 					},
 				};
 				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 
-				let ratio = match panel_geometry.dir.is_horizontal() {
+				let ratio = match geometry.dir.is_horizontal() {
 					true => image_ratio.y / image_ratio.x,
 					false => image_ratio.x / image_ratio.y,
 				};
 
 				// TODO: This should be baked into the position matrix instead.
-				let offset: Vector2D<f32> = match panel_geometry.dir {
+				let offset: Vector2D<f32> = match geometry.dir {
 					Dir::LeftRight => euclid::vec2(offset_abs, 0.0),
 					Dir::RightLeft => euclid::vec2(2.0 * (1.0 - ratio) - offset_abs, 0.0),
 					Dir::DownUp => euclid::vec2(0.0, offset_abs),
 					Dir::UpDown => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
 				};
 
-				let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
+				let pos_matrix = geometry::pos_matrix(geometry.rect, surface_geometry);
 				wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::Slide {
 					pos_matrix:  uniform::Matrix4x4(pos_matrix.to_arrays()),
 					image_ratio: uniform::Vec2(image_ratio.into()),

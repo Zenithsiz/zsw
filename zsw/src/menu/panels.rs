@@ -56,15 +56,15 @@ fn draw_fade_panel_editor(
 	}
 
 	ui.collapsing("Geometries", |ui| {
-		for (geometry_idx, panel_geometry) in shader.geometries().iter().enumerate() {
+		for (geometry_idx, geometry) in shader.geometries().iter().enumerate() {
 			ui.horizontal(|ui| {
 				let mut name = egui::WidgetText::from(format!("#{}: ", geometry_idx + 1));
-				if !panel_geometry.rect.intersects(surface_geometry) {
+				if !geometry.rect.intersects(surface_geometry) {
 					name = name.weak();
 				}
 
 				ui.label(name);
-				super::draw_rect(ui, panel_geometry.rect);
+				super::draw_rect(ui, geometry.rect);
 			});
 		}
 	});

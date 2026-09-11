@@ -295,7 +295,7 @@ impl Shader {
 		// Full duration an image is on screen (including the fades)
 		let d = 1.0 + 2.0 * f;
 
-		for panel_geometry in &mut self.geometries {
+		for geometry in &mut self.geometries {
 			let image_uniforms = |image: Option<&Image>, image_slot| -> uniform::fade::Image {
 				let Some(image) = image else {
 					return uniform::fade::Image {
@@ -342,7 +342,7 @@ impl Shader {
 				// Calculate the position matrix for the panel
 				let image_size = image.texture_view.texture().size();
 				let image_size = Vector2D::new(image_size.width, image_size.height);
-				let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
+				let image_ratio = geometry::image_ratio(geometry.rect, image_size);
 
 				uniform::fade::Image {
 					image_ratio: uniform::Vec2(image_ratio.into()),
@@ -357,8 +357,8 @@ impl Shader {
 				next: image_uniforms(self.images.next.as_ref(), ImageSlot::Next),
 			};
 
-			let geometry_uniforms = panel_geometry.images.uniforms(wgpu, &shared.images);
-			let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
+			let geometry_uniforms = geometry.images.uniforms(wgpu, &shared.images);
+			let pos_matrix = geometry::pos_matrix(geometry.rect, surface_geometry);
 			let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 			match self.kind {
 				Kind::Basic => wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::fade::Basic {
