@@ -79,15 +79,14 @@ pub struct ProfilePanelSlideShader {
 	pub geometries: Vec<ProfilePanelSlideGeometry>,
 	pub playlist:   PlaylistName,
 	pub duration:   Duration,
-	pub dir:        ProfilePanelSlideDir,
 	pub kind:       ProfilePanelSlideShaderKind,
 }
 
 /// Profile panel shader slide geometry
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct ProfilePanelSlideGeometry {
-	/// Inner geometry
 	pub geometry: Rect<i32, u32>,
+	pub dir:      ProfilePanelSlideDir,
 }
 
 /// Profile panel slide shader kind
@@ -97,7 +96,7 @@ pub enum ProfilePanelSlideShaderKind {
 }
 
 /// Profile panel slide direction
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum ProfilePanelSlideDir {
 	LeftRight,
 	RightLeft,
@@ -147,18 +146,28 @@ impl From<ser::Profile> for Profile {
 								.geometries
 								.into_iter()
 								.map(|geometry| match geometry {
-									ser::ProfilePanelSlideGeometry::Full { geometry } |
-									ser::ProfilePanelSlideGeometry::Short(geometry) => ProfilePanelSlideGeometry { geometry },
+									ser::ProfilePanelSlideGeometry::Full { geometry, dir } =>
+										ProfilePanelSlideGeometry {
+											geometry,
+											dir: match dir {
+												ser::ProfilePanelSlideDir::LeftRight => ProfilePanelSlideDir::LeftRight,
+												ser::ProfilePanelSlideDir::RightLeft => ProfilePanelSlideDir::RightLeft,
+												ser::ProfilePanelSlideDir::UpDown => ProfilePanelSlideDir::UpDown,
+												ser::ProfilePanelSlideDir::DownUp => ProfilePanelSlideDir::DownUp,
+											},
+										},
+									ser::ProfilePanelSlideGeometry::Short(geometry) => ProfilePanelSlideGeometry {
+										geometry,
+										// TODO: Is this a fine default?
+										dir: match geometry.width() > geometry.height() {
+											true => ProfilePanelSlideDir::LeftRight,
+											false => ProfilePanelSlideDir::UpDown,
+										},
+									},
 								})
 								.collect(),
 							playlist:   PlaylistName::from_str(&shader.playlist).into_ok(),
 							duration:   shader.duration,
-							dir:        match shader.dir {
-								ser::ProfilePanelSlideDir::LeftRight => ProfilePanelSlideDir::LeftRight,
-								ser::ProfilePanelSlideDir::RightLeft => ProfilePanelSlideDir::RightLeft,
-								ser::ProfilePanelSlideDir::UpDown => ProfilePanelSlideDir::UpDown,
-								ser::ProfilePanelSlideDir::DownUp => ProfilePanelSlideDir::DownUp,
-							},
 							kind:       match shader.kind {
 								ser::ProfilePanelSlideShaderKind::Basic => ProfilePanelSlideShaderKind::Basic,
 							},

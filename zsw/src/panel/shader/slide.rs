@@ -34,10 +34,6 @@ pub struct Shader {
 	/// Kind
 	kind: Kind,
 
-	/// Direction
-	// TODO: This should be per-geometry
-	dir: Dir,
-
 	/// Progress in the first image
 	progress: Duration,
 
@@ -71,18 +67,11 @@ pub struct Shader {
 
 impl Shader {
 	/// Creates a new shader
-	pub fn new(
-		geometries: Vec<Geometry>,
-		duration: Duration,
-		playlist_player: PlaylistPlayer,
-		dir: Dir,
-		kind: Kind,
-	) -> Self {
+	pub fn new(geometries: Vec<Geometry>, duration: Duration, playlist_player: PlaylistPlayer, kind: Kind) -> Self {
 		Self {
 			geometries,
 			paused: false,
 			kind,
-			dir,
 			progress: Duration::ZERO,
 			duration,
 			last_update: Instant::now(),
@@ -274,7 +263,7 @@ impl Shader {
 					let image_size = Vector2D::new(image_size.width, image_size.height);
 					let image_ratio = geometry::image_ratio(panel_geometry.rect, image_size);
 
-					let ratio = match self.dir.is_horizontal() {
+					let ratio = match panel_geometry.dir.is_horizontal() {
 						true => image_ratio.y / image_ratio.x,
 						false => image_ratio.x / image_ratio.y,
 					};
@@ -309,17 +298,17 @@ impl Shader {
 				};
 				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 
-				let ratio = match self.dir.is_horizontal() {
+				let ratio = match panel_geometry.dir.is_horizontal() {
 					true => image_ratio.y / image_ratio.x,
 					false => image_ratio.x / image_ratio.y,
 				};
 
 				// TODO: This should be baked into the position matrix instead.
-				let offset: Vector2D<f32> = match self.dir {
+				let offset: Vector2D<f32> = match panel_geometry.dir {
 					Dir::LeftRight => euclid::vec2(offset_abs, 0.0),
 					Dir::RightLeft => euclid::vec2(2.0 * (1.0 - ratio) - offset_abs, 0.0),
-					Dir::UpDown => euclid::vec2(0.0, offset_abs),
-					Dir::DownUp => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
+					Dir::DownUp => euclid::vec2(0.0, offset_abs),
+					Dir::UpDown => euclid::vec2(0.0, 2.0 * (1.0 - ratio) - offset_abs),
 				};
 
 				let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
@@ -349,12 +338,17 @@ impl Shader {
 #[derive(Debug)]
 pub struct Geometry {
 	rect:     Rect<i32, u32>,
+	dir:      Dir,
 	uniforms: Vec<GeometryUniforms>,
 }
 
 impl Geometry {
-	pub fn new(rect: Rect<i32, u32>) -> Self {
-		Self { rect, uniforms: vec![] }
+	pub fn new(rect: Rect<i32, u32>, dir: Dir) -> Self {
+		Self {
+			rect,
+			dir,
+			uniforms: vec![],
+		}
 	}
 }
 

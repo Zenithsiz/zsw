@@ -53,66 +53,64 @@ impl Panels {
 		self.profile_name = Some(profile_name);
 		self.panels.clear();
 		for profile_panel in &profile.panels {
-			let panel =
-				match &profile_panel.shader {
-					ProfilePanelShader::None(shader) => {
-						let geometries = shader
-							.geometries
-							.iter()
-							.map(|geometry| shader::none::Geometry::new(geometry.geometry))
-							.collect();
-						Panel::None(shader::none::Shader::new(geometries, shader.background_color))
-					},
-					ProfilePanelShader::Fade(shader) => {
-						let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
-							.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
+			let panel = match &profile_panel.shader {
+				ProfilePanelShader::None(shader) => {
+					let geometries = shader
+						.geometries
+						.iter()
+						.map(|geometry| shader::none::Geometry::new(geometry.geometry))
+						.collect();
+					Panel::None(shader::none::Shader::new(geometries, shader.background_color))
+				},
+				ProfilePanelShader::Fade(shader) => {
+					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
+						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
-						let geometries = shader
-							.geometries
-							.iter()
-							.map(|geometry| shader::fade::Geometry::new(geometry.geometry))
-							.collect();
+					let geometries = shader
+						.geometries
+						.iter()
+						.map(|geometry| shader::fade::Geometry::new(geometry.geometry))
+						.collect();
 
-						let shader = shader::fade::Shader::new(
-							geometries,
-							shader.duration,
-							shader.fade_duration,
-							playlist_player,
-							match shader.kind {
-								ProfilePanelFadeShaderKind::Basic => shader::fade::Kind::Basic,
-								ProfilePanelFadeShaderKind::Out { strength } => shader::fade::Kind::Out { strength },
-							},
-						);
+					let shader = shader::fade::Shader::new(
+						geometries,
+						shader.duration,
+						shader.fade_duration,
+						playlist_player,
+						match shader.kind {
+							ProfilePanelFadeShaderKind::Basic => shader::fade::Kind::Basic,
+							ProfilePanelFadeShaderKind::Out { strength } => shader::fade::Kind::Out { strength },
+						},
+					);
 
-						Panel::Fade(shader)
-					},
-					ProfilePanelShader::Slide(shader) => {
-						let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
-							.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
+					Panel::Fade(shader)
+				},
+				ProfilePanelShader::Slide(shader) => {
+					let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
+						.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
 
-						let dir = match shader.dir {
-							ProfilePanelSlideDir::LeftRight => shader::slide::Dir::LeftRight,
-							ProfilePanelSlideDir::RightLeft => shader::slide::Dir::RightLeft,
-							ProfilePanelSlideDir::UpDown => shader::slide::Dir::UpDown,
-							ProfilePanelSlideDir::DownUp => shader::slide::Dir::DownUp,
-						};
+					let geometries = shader
+						.geometries
+						.iter()
+						.map(|geometry| {
+							let dir = match geometry.dir {
+								ProfilePanelSlideDir::LeftRight => shader::slide::Dir::LeftRight,
+								ProfilePanelSlideDir::RightLeft => shader::slide::Dir::RightLeft,
+								ProfilePanelSlideDir::UpDown => shader::slide::Dir::UpDown,
+								ProfilePanelSlideDir::DownUp => shader::slide::Dir::DownUp,
+							};
+							shader::slide::Geometry::new(geometry.geometry, dir)
+						})
+						.collect();
 
-						let geometries = shader
-							.geometries
-							.iter()
-							.map(|geometry| shader::slide::Geometry::new(geometry.geometry))
-							.collect();
+					let shader =
+						shader::slide::Shader::new(geometries, shader.duration, playlist_player, match shader.kind {
+							ProfilePanelSlideShaderKind::Basic => shader::slide::Kind::Basic,
+						});
 
-						let shader =
-							shader::slide::Shader::new(geometries, shader.duration, playlist_player, dir, match shader
-								.kind
-							{
-								ProfilePanelSlideShaderKind::Basic => shader::slide::Kind::Basic,
-							});
-
-						Panel::Slide(shader)
-					},
-				};
+					Panel::Slide(shader)
+				},
+			};
 
 			self.panels.push(panel);
 		}

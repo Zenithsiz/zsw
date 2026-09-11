@@ -110,8 +110,6 @@ pub struct ProfilePanelSlideShader {
 	#[serde(with = "humantime_serde")]
 	pub duration: Duration,
 
-	pub dir: ProfilePanelSlideDir,
-
 	/// Kind
 	#[serde(flatten)]
 	pub kind: ProfilePanelSlideShaderKind,
@@ -126,6 +124,7 @@ pub enum ProfilePanelSlideGeometry {
 	Full {
 		#[serde_as(as = "serde_with::DisplayFromStr")]
 		geometry: Rect<i32, u32>,
+		dir:      ProfilePanelSlideDir,
 	},
 
 	Short(Rect<i32, u32>),
