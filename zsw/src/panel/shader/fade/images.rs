@@ -258,11 +258,6 @@ impl Images {
 			});
 		})
 	}
-
-	/// Returns if all images are empty
-	pub fn is_empty(&self) -> bool {
-		self.prev.is_none() && self.cur.is_none() && self.next.is_none()
-	}
 }
 
 

@@ -164,18 +164,6 @@ impl Renderer {
 			Panel::Slide(shader) => shader.update(wgpu, delta),
 		}
 
-		// If the panel images are empty, there's no sense in rendering it either
-		// TODO: Remove this branch, it doesn't really matter
-		#[expect(clippy::match_same_arms, reason = "We'll be changing them soon")]
-		let are_images_empty = match panel {
-			Panel::None(_) => false,
-			Panel::Fade(shader) => shader.images().is_empty(),
-			Panel::Slide(_) => false,
-		};
-		if are_images_empty {
-			return Ok(());
-		}
-
 		let render_pipeline_id = match panel {
 			Panel::None(_) => RenderPipelineId::None,
 			Panel::Fade(shader) => RenderPipelineId::Fade(match shader.kind() {

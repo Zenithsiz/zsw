@@ -133,10 +133,6 @@ impl Shader {
 		self.kind
 	}
 
-	pub fn images(&self) -> &Images {
-		&self.images
-	}
-
 	/// Toggles pause of this shader
 	pub fn toggle_paused(&mut self) {
 		self.paused.toggle();
