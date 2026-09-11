@@ -6,7 +6,7 @@ pub use self::images::{Image, ImageSlot, Images};
 
 use {
 	crate::{
-		panel::{self, geometry, renderer::uniform},
+		panel::{geometry, renderer::uniform},
 		playlist::PlaylistPlayer,
 	},
 	chrono::TimeDelta,
@@ -21,7 +21,7 @@ use {
 #[derive(Debug)]
 pub struct Shader {
 	/// Geometries
-	geometries: Vec<panel::Geometry>,
+	geometries: Vec<Geometry>,
 
 	/// If paused
 	paused: bool,
@@ -50,7 +50,7 @@ pub struct Shader {
 
 impl Shader {
 	pub fn new(
-		geometries: Vec<panel::Geometry>,
+		geometries: Vec<Geometry>,
 		duration: Duration,
 		fade_duration: Duration,
 		playlist_player: PlaylistPlayer,
@@ -154,7 +154,7 @@ impl Shader {
 		self.kind
 	}
 
-	pub fn geometries(&self) -> &[panel::Geometry] {
+	pub fn geometries(&self) -> &[Geometry] {
 		&self.geometries
 	}
 
@@ -348,11 +348,7 @@ impl Shader {
 				next: image_uniforms(self.images.next.as_ref(), ImageSlot::Next),
 			};
 
-			let geometry_uniforms = panel_geometry
-				.shared
-				.fade_or_insert_default()
-				.images
-				.uniforms(wgpu, &shared.images);
+			let geometry_uniforms = panel_geometry.images.uniforms(wgpu, &shared.images);
 			let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
 			let pos_matrix = uniform::Matrix4x4(pos_matrix.to_arrays());
 			match self.kind {
@@ -381,11 +377,20 @@ impl Shader {
 	}
 }
 
-/// Geometry shared
-#[derive(Default, Debug)]
-pub struct GeometryShared {
-	/// Images
-	pub images: images::GeometryShared,
+/// Geometry
+#[derive(Debug)]
+pub struct Geometry {
+	pub rect:   Rect<i32, u32>,
+	pub images: images::Geometry,
+}
+
+impl Geometry {
+	pub fn new(rect: Rect<i32, u32>) -> Self {
+		Self {
+			rect,
+			images: images::Geometry { uniforms: None },
+		}
+	}
 }
 
 /// Shared

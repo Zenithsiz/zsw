@@ -5,7 +5,7 @@ mod panels;
 mod renderer;
 pub mod shader;
 
-pub use self::{geometry::Geometry, panels::Panels, renderer::Renderer};
+pub use self::{panels::Panels, renderer::Renderer};
 
 use {euclid::default::Point2D, zsw_util::Rect};
 

@@ -4,7 +4,7 @@
 
 use {
 	crate::{
-		panel::{self, geometry, renderer::uniform},
+		panel::{geometry, renderer::uniform},
 		playlist::PlaylistPlayer,
 	},
 	app_error::Context,
@@ -26,7 +26,7 @@ use {
 #[derive(Debug)]
 pub struct Shader {
 	/// Geometries
-	geometries: Vec<panel::Geometry>,
+	geometries: Vec<Geometry>,
 
 	/// If paused
 	paused: bool,
@@ -72,7 +72,7 @@ pub struct Shader {
 impl Shader {
 	/// Creates a new shader
 	pub fn new(
-		geometries: Vec<panel::Geometry>,
+		geometries: Vec<Geometry>,
 		duration: Duration,
 		playlist_player: PlaylistPlayer,
 		dir: Dir,
@@ -289,10 +289,15 @@ impl Shader {
 				}
 
 				// Bind the geometry uniforms
-				let geometry_uniforms = panel_geometry
-					.shared
-					.slide_or_insert_default()
-					.uniforms(wgpu, shared, image_idx);
+				let geometry_uniforms = match panel_geometry.uniforms.get_mut(image_idx) {
+					Some(uniforms) => uniforms,
+					None => {
+						panel_geometry
+							.uniforms
+							.resize_with(image_idx + 1, || self::create_geometry_uniforms(wgpu, shared));
+						&mut panel_geometry.uniforms[image_idx]
+					},
+				};
 				render_pass.set_bind_group(0, &geometry_uniforms.bind_group, &[]);
 
 				let ratio = match self.dir.is_horizontal() {
@@ -332,22 +337,15 @@ impl Shader {
 
 
 /// Geometry shared
-#[derive(Default, Debug)]
-pub struct GeometryShared {
-	/// Uniforms
-	pub uniforms: Vec<GeometryUniforms>,
+#[derive(Debug)]
+pub struct Geometry {
+	rect:     Rect<i32, u32>,
+	uniforms: Vec<GeometryUniforms>,
 }
 
-impl GeometryShared {
-	/// Returns this geometry's uniforms
-	pub fn uniforms(&mut self, wgpu: &Arc<Wgpu>, shared: &Shared, image_idx: usize) -> &mut GeometryUniforms {
-		if let Some(uniforms) = self.uniforms.get_mut(image_idx) {
-			return uniforms;
-		}
-
-		self.uniforms
-			.resize_with(image_idx + 1, || self::create_geometry_uniforms(wgpu, shared));
-		&mut self.uniforms[image_idx]
+impl Geometry {
+	pub fn new(rect: Rect<i32, u32>) -> Self {
+		Self { rect, uniforms: vec![] }
 	}
 }
 

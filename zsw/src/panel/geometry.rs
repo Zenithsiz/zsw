@@ -1,41 +1,12 @@
 //! Panel geometry
 
+// TODO: Move these out of here elsewhere. Some are generic, but some are shader specific
+
 use {
-	super::shader,
 	euclid::default::{Transform3D, Vector2D},
 	num_rational::Rational32,
 	zsw_util::Rect,
 };
-
-#[derive(Debug)]
-pub struct Geometry {
-	/// Inner geometry
-	pub rect: Rect<i32, u32>,
-
-	/// Shared data
-	pub shared: Shared,
-}
-
-impl Geometry {
-	/// Creates a new panel geometry from it's geometry
-	pub fn new(rect: Rect<i32, u32>) -> Self {
-		Self {
-			rect,
-			shared: Shared::default(),
-		}
-	}
-}
-
-/// Panel geometry
-#[derive(Default, Debug)]
-#[derive(zsw_util::GetOrInsert)]
-pub enum Shared {
-	#[default]
-	Empty,
-	None(shader::none::GeometryShared),
-	Fade(shader::fade::GeometryShared),
-	Slide(shader::slide::GeometryShared),
-}
 
 /// Returns this geometry's rectangle relative to another geometry
 pub fn relative_to(mut geometry: Rect<i32, u32>, other: Rect<i32, u32>) -> Rect<i32, u32> {

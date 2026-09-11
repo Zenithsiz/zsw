@@ -15,14 +15,13 @@ use {
 	zsw_wgpu::Wgpu,
 };
 
-/// Panel fade images shared
-#[derive(Default, Debug)]
-pub struct GeometryShared {
-	/// Uniforms
+/// Geometry data
+#[derive(Debug)]
+pub struct Geometry {
 	pub uniforms: Option<GeometryUniforms>,
 }
 
-impl GeometryShared {
+impl Geometry {
 	/// Returns the geometry uniforms
 	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &Shared) -> &mut GeometryUniforms {
 		self.uniforms

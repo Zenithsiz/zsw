@@ -3,7 +3,6 @@
 use {
 	super::{Panel, shader},
 	crate::{
-		panel,
 		playlist::{PlaylistPlayer, Playlists},
 		profile::{
 			Profile,
@@ -54,19 +53,25 @@ impl Panels {
 		self.profile_name = Some(profile_name);
 		self.panels.clear();
 		for profile_panel in &profile.panels {
-			let geometries = profile_panel
-				.geometries
-				.iter()
-				.map(|geometry| panel::Geometry::new(geometry.geometry))
-				.collect();
-
 			let panel =
 				match &profile_panel.shader {
-					ProfilePanelShader::None(shader) =>
-						Panel::None(shader::none::Shader::new(geometries, shader.background_color)),
+					ProfilePanelShader::None(shader) => {
+						let geometries = profile_panel
+							.geometries
+							.iter()
+							.map(|geometry| shader::none::Geometry::new(geometry.geometry))
+							.collect();
+						Panel::None(shader::none::Shader::new(geometries, shader.background_color))
+					},
 					ProfilePanelShader::Fade(shader) => {
 						let playlist_player = PlaylistPlayer::new(&playlists[&shader.playlist])
 							.with_context(|| format!("Unable to load playlist {:?}", shader.playlist))?;
+
+						let geometries = profile_panel
+							.geometries
+							.iter()
+							.map(|geometry| shader::fade::Geometry::new(geometry.geometry))
+							.collect();
 
 						let state = shader::fade::Shader::new(
 							geometries,
@@ -91,6 +96,12 @@ impl Panels {
 							ProfilePanelSlideDir::UpDown => shader::slide::Dir::UpDown,
 							ProfilePanelSlideDir::DownUp => shader::slide::Dir::DownUp,
 						};
+
+						let geometries = profile_panel
+							.geometries
+							.iter()
+							.map(|geometry| shader::slide::Geometry::new(geometry.geometry))
+							.collect();
 
 						let state =
 							shader::slide::Shader::new(geometries, shader.duration, playlist_player, dir, match shader

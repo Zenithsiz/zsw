@@ -1,7 +1,7 @@
 //! None shader
 
 use {
-	crate::panel::{self, geometry, renderer::uniform},
+	crate::panel::{geometry, renderer::uniform},
 	euclid::default::Point2D,
 	std::sync::OnceLock,
 	zsw_util::Rect,
@@ -12,7 +12,7 @@ use {
 #[derive(Debug)]
 pub struct Shader {
 	/// Geometries
-	geometries: Vec<panel::Geometry>,
+	geometries: Vec<Geometry>,
 
 	/// Background color
 	background_color: [f32; 4],
@@ -23,7 +23,7 @@ pub struct Shader {
 
 impl Shader {
 	/// Creates a new shader
-	pub fn new(geometries: Vec<panel::Geometry>, background_color: [f32; 4]) -> Self {
+	pub fn new(geometries: Vec<Geometry>, background_color: [f32; 4]) -> Self {
 		Self {
 			geometries,
 			background_color,
@@ -54,10 +54,12 @@ impl Shader {
 		surface_geometry: Rect<i32, u32>,
 		render_pass: &mut wgpu::RenderPass<'_>,
 	) {
-		for panel_geometry in &mut self.geometries {
-			let geometry_uniforms = panel_geometry.shared.none_or_insert_default().uniforms(wgpu, shared);
+		for geometry in &mut self.geometries {
+			let geometry_uniforms = geometry
+				.uniforms
+				.get_or_insert_with(|| self::create_geometry_uniforms(wgpu, shared));
 
-			let pos_matrix = geometry::pos_matrix(panel_geometry.rect, surface_geometry);
+			let pos_matrix = geometry::pos_matrix(geometry.rect, surface_geometry);
 			wgpu.write_buffer(&geometry_uniforms.buffer, &uniform::None {
 				pos_matrix:       uniform::Matrix4x4(pos_matrix.to_arrays()),
 				background_color: uniform::Vec4(self.background_color),
@@ -71,18 +73,16 @@ impl Shader {
 	}
 }
 
-/// Panel none geometry shared
-#[derive(Default, Debug)]
-pub struct GeometryShared {
-	/// Uniforms
-	pub uniforms: Option<GeometryUniforms>,
+/// Panel none geometry
+#[derive(Debug)]
+pub struct Geometry {
+	rect:     Rect<i32, u32>,
+	uniforms: Option<GeometryUniforms>,
 }
 
-impl GeometryShared {
-	/// Returns this geometry's uniforms
-	pub fn uniforms(&mut self, wgpu: &Wgpu, shared: &PanelNoneShared) -> &mut GeometryUniforms {
-		self.uniforms
-			.get_or_insert_with(|| self::create_geometry_uniforms(wgpu, shared))
+impl Geometry {
+	pub fn new(rect: Rect<i32, u32>) -> Self {
+		Self { rect, uniforms: None }
 	}
 }
 
