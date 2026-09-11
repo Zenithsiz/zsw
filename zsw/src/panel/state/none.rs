@@ -16,6 +16,9 @@ pub struct PanelNoneState {
 
 	/// Background color
 	background_color: [f32; 4],
+
+	/// Shader
+	shader: PanelNoneShader,
 }
 
 impl PanelNoneState {
@@ -24,7 +27,13 @@ impl PanelNoneState {
 		Self {
 			geometries,
 			background_color,
+			shader: PanelNoneShader::Basic,
 		}
+	}
+
+	/// Returns the shader of this state
+	pub fn shader(&self) -> PanelNoneShader {
+		self.shader
 	}
 
 	/// Returns if any geometries in this panel intersects `rect`
@@ -35,11 +44,6 @@ impl PanelNoneState {
 	/// Returns if any geometries in this panel contain `pos`
 	pub fn any_contain(&self, pos: Point2D<i32>) -> bool {
 		self.geometries.iter().any(|geometry| geometry.rect.contains(pos))
-	}
-
-	/// Returns the background color
-	pub fn background_color(&self) -> [f32; 4] {
-		self.background_color
 	}
 
 	/// Renders a geometry of this panel
@@ -112,6 +116,30 @@ pub struct PanelNoneGeometryUniforms {
 	/// Bind group
 	pub bind_group: wgpu::BindGroup,
 }
+
+
+/// Panel none shader
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum PanelNoneShader {
+	Basic,
+}
+
+impl PanelNoneShader {
+	/// Returns this shader's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::Basic => "None",
+		}
+	}
+
+	/// Returns this shader's module as json
+	pub fn module_json(self) -> &'static str {
+		match self {
+			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/none.json")),
+		}
+	}
+}
+
 
 /// Creates the geometry uniforms bind group layout
 fn create_geometry_uniforms_bind_group_layout(wgpu: &Wgpu) -> wgpu::BindGroupLayout {

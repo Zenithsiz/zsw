@@ -8,7 +8,7 @@ pub mod state;
 pub use self::{
 	geometry::PanelGeometry,
 	panels::Panels,
-	renderer::{PanelFadeShader, PanelShader, PanelSlideShader, PanelsRenderer},
+	renderer::{PanelShader, PanelsRenderer},
 };
 
 use {
@@ -38,9 +38,7 @@ impl Panel {
 	/// Returns the shader of this panel
 	pub fn shader(&self) -> PanelShader {
 		match self {
-			Self::None(state) => PanelShader::None {
-				background_color: state.background_color(),
-			},
+			Self::None(state) => PanelShader::None(state.shader()),
 			Self::Fade(state) => PanelShader::Fade(state.shader()),
 			Self::Slide(state) => PanelShader::Slide(state.shader()),
 		}

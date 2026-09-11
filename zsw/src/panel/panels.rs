@@ -1,13 +1,13 @@
 //! Panels
 
 use {
-	super::{Panel, PanelGeometry, state::slide::PanelSlideDir},
+	super::{
+		Panel,
+		PanelGeometry,
+		state::{PanelFadeShader, PanelSlideShader, slide::PanelSlideDir},
+	},
 	crate::{
-		panel::{
-			PanelFadeShader,
-			PanelSlideShader,
-			state::{PanelFadeState, PanelNoneState, PanelSlideState},
-		},
+		panel::state::{PanelFadeState, PanelNoneState, PanelSlideState},
 		playlist::{PlaylistPlayer, Playlists},
 		profile::{
 			Profile,

@@ -7,7 +7,7 @@ pub use self::images::{PanelFadeImage, PanelFadeImageSlot, PanelFadeImages, Pane
 use {
 	self::images::PanelFadeImagesGeometryShared,
 	crate::{
-		panel::{PanelFadeShader, PanelGeometry, geometry, renderer::uniform},
+		panel::{PanelGeometry, geometry, renderer::uniform},
 		playlist::PlaylistPlayer,
 	},
 	chrono::TimeDelta,
@@ -406,6 +406,30 @@ impl PanelFadeShared {
 	}
 }
 
+/// Panel fade shader
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum PanelFadeShader {
+	Basic,
+	Out { strength: f32 },
+}
+
+impl PanelFadeShader {
+	/// Returns this shader's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::Basic => "Fade",
+			Self::Out { .. } => "Fade out",
+		}
+	}
+
+	/// Returns this shader's module as json
+	pub fn module_json(self) -> &'static str {
+		match self {
+			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade.json")),
+			Self::Out { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-out.json")),
+		}
+	}
+}
 
 /// Converts a chrono time delta into a duration, indicating whether it's positive or negative
 fn time_delta_to_duration(delta: TimeDelta) -> (Duration, bool) {

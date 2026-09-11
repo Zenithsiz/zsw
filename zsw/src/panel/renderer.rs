@@ -9,7 +9,14 @@ use {
 	super::{
 		Panel,
 		Panels,
-		state::{fade::PanelFadeShared, none::PanelNoneShared, slide::PanelSlideShared},
+		state::{
+			PanelFadeShader,
+			PanelNoneShader,
+			PanelSlideShader,
+			fade::PanelFadeShared,
+			none::PanelNoneShared,
+			slide::PanelSlideShared,
+		},
 	},
 	app_error::Context,
 	euclid::default::Vector2D,
@@ -433,7 +440,7 @@ fn create_msaa_framebuffer(
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum PanelShader {
 	/// None shader
-	None { background_color: [f32; 4] },
+	None(PanelNoneShader),
 
 	/// Fade shader
 	Fade(PanelFadeShader),
@@ -446,65 +453,18 @@ impl PanelShader {
 	/// Returns this shader's name
 	pub fn name(self) -> &'static str {
 		match self {
-			Self::None { .. } => "None",
-			Self::Fade(fade) => fade.name(),
-			Self::Slide(slide) => slide.name(),
+			Self::None(shader) => shader.name(),
+			Self::Fade(shader) => shader.name(),
+			Self::Slide(shader) => shader.name(),
 		}
 	}
 
 	/// Returns this shader's module as json
 	pub fn module_json(self) -> &'static str {
 		match self {
-			Self::None { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/none.json")),
-			Self::Fade(fade) => fade.module_json(),
-			Self::Slide(slide) => slide.module_json(),
-		}
-	}
-}
-
-/// Panel fade shader
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub enum PanelFadeShader {
-	Basic,
-	Out { strength: f32 },
-}
-
-impl PanelFadeShader {
-	/// Returns this shader's name
-	pub fn name(self) -> &'static str {
-		match self {
-			Self::Basic => "Fade",
-			Self::Out { .. } => "Fade out",
-		}
-	}
-
-	/// Returns this shader's module as json
-	pub fn module_json(self) -> &'static str {
-		match self {
-			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade.json")),
-			Self::Out { .. } => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/fade-out.json")),
-		}
-	}
-}
-
-/// Panel slide shader
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum PanelSlideShader {
-	Basic,
-}
-
-impl PanelSlideShader {
-	/// Returns this shader's name
-	pub fn name(self) -> &'static str {
-		match self {
-			Self::Basic => "Slide",
-		}
-	}
-
-	/// Returns this shader's module as json
-	pub fn module_json(self) -> &'static str {
-		match self {
-			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/slide.json")),
+			Self::None(shader) => shader.module_json(),
+			Self::Fade(shader) => shader.module_json(),
+			Self::Slide(shader) => shader.module_json(),
 		}
 	}
 }

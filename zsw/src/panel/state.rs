@@ -4,7 +4,11 @@ pub mod fade;
 pub mod none;
 pub mod slide;
 
-pub use self::{fade::PanelFadeState, none::PanelNoneState, slide::PanelSlideState};
+pub use self::{
+	fade::{PanelFadeShader, PanelFadeState},
+	none::{PanelNoneShader, PanelNoneState},
+	slide::{PanelSlideShader, PanelSlideState},
+};
 
 use self::{fade::PanelFadeGeometryShared, none::PanelNoneGeometryShared, slide::PanelSlideGeometryShared};
 

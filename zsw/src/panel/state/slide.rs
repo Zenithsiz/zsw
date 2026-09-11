@@ -4,7 +4,7 @@
 
 use {
 	crate::{
-		panel::{PanelGeometry, PanelSlideShader, geometry, renderer::uniform},
+		panel::{PanelGeometry, geometry, renderer::uniform},
 		playlist::PlaylistPlayer,
 	},
 	app_error::Context,
@@ -441,6 +441,30 @@ impl PanelSlideDir {
 		matches!(self, Self::UpDown | Self::DownUp)
 	}
 }
+
+
+/// Panel slide shader
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum PanelSlideShader {
+	Basic,
+}
+
+impl PanelSlideShader {
+	/// Returns this shader's name
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::Basic => "Slide",
+		}
+	}
+
+	/// Returns this shader's module as json
+	pub fn module_json(self) -> &'static str {
+		match self {
+			Self::Basic => include_str!(concat!(env!("OUT_DIR"), "/shaders/panels/slide.json")),
+		}
+	}
+}
+
 
 /// Creates the geometry uniforms bind group layout
 fn create_geometry_uniforms_bind_group_layout(wgpu: &Arc<Wgpu>) -> wgpu::BindGroupLayout {
