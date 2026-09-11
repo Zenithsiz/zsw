@@ -6,7 +6,7 @@ use {
 		menu::Menu,
 		panel::{self, Panel, Panels},
 		playlist::Playlists,
-		profile::{ProfileName, Profiles},
+		profile::Profiles,
 	},
 	app_error::Context,
 	chrono::TimeDelta,
@@ -24,7 +24,6 @@ pub struct SurfaceRenderer {
 	surface_geometry: Rect<i32, u32>,
 
 	wgpu_renderer:   WgpuRenderer,
-	panels:          Panels,
 	panels_renderer: panel::Renderer,
 	egui:            Egui,
 	menu:            Menu,
@@ -38,9 +37,6 @@ impl SurfaceRenderer {
 		wgpu: &Wgpu,
 		target: zsw_wgpu::SurfaceTarget,
 		surface_geometry: Rect<i32, u32>,
-		profiles: &Profiles,
-		profile_name: &ProfileName,
-		playlists: &Playlists,
 	) -> Result<Self, AppError> {
 		let wgpu_renderer =
 			WgpuRenderer::new(wgpu, target, surface_geometry.size).context("Unable to create wgpu renderer")?;
@@ -50,18 +46,9 @@ impl SurfaceRenderer {
 			panel::Renderer::new(wgpu, &wgpu_renderer, msaa_samples).context("Unable to create panels renderer")?;
 		let egui = Egui::new(wgpu, &wgpu_renderer);
 
-		let mut panels = Panels::new();
-		let profile = profiles
-			.get(profile_name)
-			.with_context(|| format!("Unknown profile {profile_name:?}"))?;
-		panels
-			.set_profile(profile_name.clone(), profile, playlists)
-			.context("Unable to set profile")?;
-
 		Ok(Self {
 			surface_geometry,
 			wgpu_renderer,
-			panels,
 			panels_renderer,
 			egui,
 			menu: Menu::new(),
@@ -100,19 +87,13 @@ impl SurfaceRenderer {
 		wayland_data: &mut WaylandData<Zsw>,
 		playlists: &Playlists,
 		profiles: &Profiles,
+		panels: &mut Panels,
 		egui_input: egui::RawInput,
 		frame: &mut FrameRender,
 		delta: Duration,
 	) -> Result<egui::PlatformOutput, AppError> {
 		self.panels_renderer
-			.render(
-				wgpu,
-				&self.wgpu_renderer,
-				self.surface_geometry,
-				frame,
-				&mut self.panels,
-				delta,
-			)
+			.render(wgpu, &self.wgpu_renderer, self.surface_geometry, frame, panels, delta)
 			.context("Unable to render panels")?;
 
 		let egui_output = self.render_egui(
@@ -121,6 +102,7 @@ impl SurfaceRenderer {
 			self.surface_geometry,
 			playlists,
 			profiles,
+			panels,
 			egui_input,
 			frame,
 		);
@@ -153,20 +135,14 @@ impl SurfaceRenderer {
 		surface_geometry: Rect<i32, u32>,
 		playlists: &Playlists,
 		profiles: &Profiles,
+		panels: &mut Panels,
 		egui_input: egui::RawInput,
 		frame: &mut FrameRender,
 	) -> egui::PlatformOutput {
 		let output = self.egui.paint(egui_input, |ctx| {
 			// Draw the menu
-			self.menu.draw(
-				ctx,
-				wayland_data,
-				wgpu,
-				playlists,
-				profiles,
-				&mut self.panels,
-				surface_geometry,
-			);
+			self.menu
+				.draw(ctx, wayland_data, wgpu, playlists, profiles, panels, surface_geometry);
 
 			// Then go through all panels checking for interactions with their geometries
 			// TODO: Should this be done here and not somewhere else?
@@ -174,7 +150,7 @@ impl SurfaceRenderer {
 				return;
 			};
 			let pointer_pos = Point2D::new(pointer_pos.x as i32, pointer_pos.y as i32);
-			for panel in self.panels.get_all() {
+			for panel in panels.get_all() {
 				// If we're over an egui area, or none of the geometries are underneath the cursor, skip the panel
 				let pointer_pos_on_surface = pointer_pos + surface_geometry.pos.to_vector();
 				if ctx.is_pointer_over_egui() || !panel.any_contain(pointer_pos_on_surface) {

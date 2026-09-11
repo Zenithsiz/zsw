@@ -27,8 +27,9 @@ use {
 		args::Args,
 		config::Config,
 		dirs::Dirs,
+		panel::Panels,
 		playlist::Playlists,
-		profile::{Profile, ProfileName, Profiles},
+		profile::{Profile, Profiles},
 		renderer::SurfaceRenderer,
 	},
 	app_error::Context,
@@ -68,6 +69,7 @@ fn main() -> ExitCode {
 	}
 }
 
+#[expect(clippy::too_many_lines, reason = "TODO: Split it")]
 fn run() -> Result<(), AppError> {
 	let logger = Logger::builder()
 		.filter("wgpu", "warn")
@@ -97,13 +99,22 @@ fn run() -> Result<(), AppError> {
 	let profiles = zsw_util::read_dir_all_toml::<_, Arc<Profile>, BTreeMap<_, _>>(&dirs.profiles)
 		.context("Unable to create profiles")?;
 
+	let mut panels = Panels::new();
+	let profile = profiles
+		.get(&args.profile)
+		.with_context(|| format!("Unknown profile {:?}", args.profile))?;
+	panels
+		.set_profile(args.profile, profile, &playlists)
+		.context("Unable to set profile")?;
+
 	let wgpu = Wgpu::new().block_on().context("Unable to create wgpu")?;
 	let zsw = Zsw {
 		wgpu: Arc::new(wgpu),
 
 		playlists,
 		profiles,
-		profile_name: args.profile,
+
+		panels,
 
 		surfaces: HashMap::new(),
 	};
@@ -166,6 +177,7 @@ fn run() -> Result<(), AppError> {
 				&mut wayland_state.data,
 				&wayland_state.app.playlists,
 				&wayland_state.app.profiles,
+				&mut wayland_state.app.panels,
 				egui_input,
 				&mut frame,
 				frame_delta,
@@ -210,9 +222,10 @@ struct ZswSurface {
 struct Zsw {
 	wgpu: Arc<Wgpu>,
 
-	playlists:    Playlists,
-	profiles:     Profiles,
-	profile_name: ProfileName,
+	playlists: Playlists,
+	profiles:  Profiles,
+
+	panels: Panels,
 
 	surfaces: HashMap<SurfaceId, ZswSurface>,
 }
@@ -289,14 +302,7 @@ impl WaylandApp for Zsw {
 					size: surface_size,
 				};
 
-				match SurfaceRenderer::new(
-					&self.wgpu,
-					target,
-					surface_geometry,
-					&self.profiles,
-					&self.profile_name,
-					&self.playlists,
-				) {
+				match SurfaceRenderer::new(&self.wgpu, target, surface_geometry) {
 					Ok(renderer) => {
 						surface.egui_state.update_wgpu(&self.wgpu);
 						surface.renderer = Some(renderer);
