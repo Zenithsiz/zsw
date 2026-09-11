@@ -53,7 +53,7 @@ pub struct PanelSlideState {
 	max_images: usize,
 
 	/// Image sampler
-	image_sampler: wgpu::Sampler,
+	image_sampler: OnceLock<wgpu::Sampler>,
 
 	/// Playlist player
 	playlist_player: PlaylistPlayer,
@@ -68,7 +68,6 @@ pub struct PanelSlideState {
 impl PanelSlideState {
 	/// Creates new state
 	pub fn new(
-		wgpu_renderer: &WgpuRenderer,
 		duration: Duration,
 		playlist_player: PlaylistPlayer,
 		dir: PanelSlideDir,
@@ -84,7 +83,7 @@ impl PanelSlideState {
 			images: VecDeque::new(),
 			// TODO: Adjust this?
 			max_images: 3,
-			image_sampler: self::create_image_sampler(wgpu_renderer),
+			image_sampler: OnceLock::new(),
 			playlist_player,
 			prev_image: Loadable::new(),
 			next_image: Loadable::new(),
@@ -117,8 +116,9 @@ impl PanelSlideState {
 	}
 
 	/// Returns the sampler
-	pub fn image_sampler(&self) -> &wgpu::Sampler {
-		&self.image_sampler
+	pub fn image_sampler(&self, wgpu_renderer: &WgpuRenderer) -> &wgpu::Sampler {
+		self.image_sampler
+			.get_or_init(|| self::create_image_sampler(wgpu_renderer))
 	}
 
 	/// Schedules a previous next image.

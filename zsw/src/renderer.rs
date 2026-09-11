@@ -53,7 +53,7 @@ impl SurfaceRenderer {
 			.get(profile_name)
 			.with_context(|| format!("Unknown profile {profile_name:?}"))?;
 		panels
-			.set_profile(&wgpu_renderer, profile_name.clone(), profile, playlists)
+			.set_profile(profile_name.clone(), profile, playlists)
 			.context("Unable to set profile")?;
 
 		Ok(Self {

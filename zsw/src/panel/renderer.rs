@@ -502,7 +502,7 @@ impl PanelsRenderer {
 
 			cur_global_offset += ratio * 2.0;
 
-			let sampler = state.image_sampler();
+			let sampler = state.image_sampler(wgpu_renderer);
 			render_pass.set_bind_group(1, image.bind_group(wgpu_renderer, sampler, &self.slide_shared), &[]);
 
 			render_pass.draw_indexed(0..6, 0, 0..1);
